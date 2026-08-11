@@ -33,7 +33,7 @@ Working project document. Update this document when project decisions change.
 |-----------------------------------------------|--------------------------------------------------------------------------------|
 | Existing active Stripe member logs in         | Sees active membership and correct professional role; no repurchase requested. |
 | Existing Stripe member canceled at period end | Sees active through valid-until date and non-renewing billing state.           |
-| Stripe renewal succeeds                       | One payment recorded; membership extended once.                                |
+| Stripe renewal succeeds                       | One payment recorded; membership extended once.                                |\n| One-time €80 Stripe payment succeeds           | Payment-mode Checkout and verified webhook record one payment; a new 12-month term is granted once. |
 | Stripe webhook delivered twice                | No duplicate payment or duplicate extension.                                   |
 | Stripe payment fails                          | Configured grace/notification behavior occurs.                                 |
 | Automatic renewal fails                       | Stripe retry occurs; member remains active for five days, then becomes expired if unpaid. |
@@ -51,7 +51,7 @@ Working project document. Update this document when project decisions change.
 | Member changes email/username                 | New address must be verified; Stripe Customer email is updated without changing Customer/Subscription linkage. |
 | Member guesses another member ID              | Private data remains inaccessible.                                             |
 | Unmatched legacy Stripe subscription          | Appears in migration exception report, not silently discarded.                 |
-| Expired legacy member                         | Account can exist but restricted member entitlement is denied.                 |
+| Expired legacy member                         | Account can exist but restricted member entitlement is denied.                 |\n| CMS/seminar audience set to Match any          | A member with any selected classification is eligible.                         |\n| CMS/seminar audience set to Match all          | Only a member holding every selected classification is eligible.               |
 
 # 3. Migration rehearsal requirements
 
@@ -91,7 +91,7 @@ Working project document. Update this document when project decisions change.
 
 11. Run immediate post-cutover membership and Stripe reconciliation.
 
-12. Preserve the approved archival backup/export, complete stabilization checks, then retire the legacy IDOC WordPress/MemberPress site after launch acceptance.
+12. Keep the legacy IDOC WordPress/MemberPress interface runnable and read-only throughout the stabilization period so routing rollback is immediately possible. After the complete-project public launch is accepted and rollback closure is approved, preserve the archival backup/export and retire the legacy site.
 
 # 5. Rollback triggers
 
