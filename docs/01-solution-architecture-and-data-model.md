@@ -42,6 +42,8 @@ Working project document. Update this document when project decisions change.
 
 # 3. Logical data model
 
+Release 1 implements these concepts in the `idoc` schema. Authentication users now have a one-to-one profile, time-bounded professional-role rows, independent membership-entitlement rows, server-managed application-role grants, append-only profile history and audit rows, an administrator-notification outbox, hashed email-verification tokens, migration traceability, and Stripe event IDs reserved for later idempotent billing processing. Legacy starter team tables remain temporarily for compatibility with billing code scheduled for Release 2; they are not an IDOC authorization or entitlement source.
+
 | **Entity**             | **Purpose**                                                                        | **Important fields**                                                                      |
 |------------------------|------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | profiles               | One application profile per authenticated person.                                  | id, auth_user_id, email, first_name, last_name, address_1, address_2, city, state_province, zip, country_code, legacy_wp_user_id |

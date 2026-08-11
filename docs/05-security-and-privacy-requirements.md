@@ -36,6 +36,8 @@ Protect member identity, professional information, membership entitlement and bi
 
 # 3. Member data isolation objectives
 
+Release 1 data-access functions resolve the actor from the server session, load server-managed active application-role grants, and then apply owner-or-administrator checks before private profile, role, membership, audit, or entitlement access. Email verification stores only a SHA-256 token digest; raw tokens are returned once to the future notification boundary. Database triggers reject updates and deletes to audit and profile-change history.
+
 - A normal member can read only their own private profile, membership, professional roles and approved payment summary.
 
 - A normal member cannot write membership status, validity dates, payment records, administrator flags, or audit records. Members may update approved signup and professional fields only through the server-side validation/history workflow.

@@ -15,6 +15,20 @@
       "when": 1786469907519,
       "tag": "0001_modern_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786487503988,
+      "tag": "0002_blue_the_anarchist",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786487568398,
+      "tag": "0003_parched_gateway",
+      "breakpoints": true
     }
   ]
 }

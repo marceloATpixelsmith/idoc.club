@@ -29,6 +29,8 @@ Working project document. Update this document when project decisions change.
 
 # 2. Test matrix
 
+The initial Release 1 automated suite covers cross-account denial, administrator and Super Admin escalation denial, canonical-country and conditional-official-field validation, classification combinations, and normalized email usernames. Database-backed integration tests for transaction rollback and migration execution remain an environment gate before production import.
+
 | **Scenario**                                  | **Expected result**                                                            |
 |-----------------------------------------------|--------------------------------------------------------------------------------|
 | Existing active Stripe member logs in         | Sees active membership and correct professional role; no repurchase requested. |

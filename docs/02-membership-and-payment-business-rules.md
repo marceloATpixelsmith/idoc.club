@@ -156,6 +156,8 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 # 7. Member account and profile changes
 
+The Release 1 persistence workflow closes the current professional-role rows and inserts newly validated rows instead of overwriting role history. The profile update, role history, profile-change history, audit entry, and administrator-notification outbox entry are committed in one database transaction. Notification delivery through Mailchimp Transactional remains Release 2 scope.
+
 - A member may update every signup/profile field, including professional classification, National Federation, IDOC Region, FEI ID, official status and Technical Delegate answer.
 
 - The system validates the fields required by the resulting classification before saving. A Judge + Steward must always retain the required fields for both active roles.
