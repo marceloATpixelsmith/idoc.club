@@ -35,17 +35,21 @@ This runbook defines normal administrative actions, exception handling and escal
 
 3. Choose payment source.
 
-4. Enter €80 unless an approved exception applies.
+4. Enter €80 in EUR. Do not enter partial, discounted, or waived payments.
 
 5. Enter actual paid date and reference/transaction evidence.
 
 6. Review the proposed membership validity change.
 
-7. Submit with administrator reason if required.
+7. Submit with a reason; every administrator action is audited.
 
 8. Confirm the new payment and audit entry appear.
 
-# 4. Change judge/steward level
+# 4. Review a member classification or profile change
+
+Members may change every signup/profile field themselves. Administrators receive a notification and can review the complete history of the change. Do not alter the member's paid-through date or billing relationship merely because classification information changed.
+
+# 5. Change judge/steward level
 
 1. Verify the official IDOC source/authorization for the level change.
 
@@ -59,33 +63,33 @@ This runbook defines normal administrative actions, exception handling and escal
 
 6. Confirm the audit entry.
 
-# 5. Convert professional category
+# 6. Convert professional category
 
 Do not overwrite unrelated roles. For a member becoming Judge + Steward, retain the Judge role and add a Steward role with its own level. For a role that genuinely ends, close/end-date that role rather than erasing history.
 
 Before approving a classification change, confirm that every field required by the target classification is present and valid under the approved field dictionary. A Steward becoming a Judge must supply a valid Judge status and Technical Delegate answer. A member becoming Judge + Steward must have both valid Judge and Steward statuses. Veterinarians require only the common member fields. Professional changes do not create a new membership or alter the €80 billing cycle.
 
-# 6. Stripe billing issue
+# 7. Stripe billing issue
 
 | **Situation**                | **Action**                                                                                                           |
 |------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| Payment failed               | Check local event record and Stripe status; follow grace policy; do not manually mark paid without payment evidence. |
+| Payment failed               | Check local event record and Stripe status; Stripe retries automatically; member remains active for five days, then expires if unpaid. Do not manually mark paid without evidence. |
 | Member updated card          | Normally no local action; Stripe Customer Portal/next invoice handles it.                                            |
 | Member canceled auto-renew   | Confirm cancel-at-period-end; membership remains active through paid-through date.                                   |
 | Subscription missing locally | Do not create a second subscription. Reconcile by verified Stripe Customer/Subscription ID.                          |
 | Duplicate charge concern     | Inspect Stripe invoices/payments and local idempotency/audit records before changing membership.                     |
 
-# 7. Manual correction policy
+# 8. Manual correction policy
 
 - Never edit production database rows directly for routine membership corrections.
 
-- Use the admin interface so validation and audit logging are applied.
+- Use the admin interface so validation, reason capture and audit logging are applied.
 
 - If an emergency database correction is unavoidable, document the incident, exact rows changed, actor, reason and before/after values.
 
 - Do not delete payment history to make a screen look correct; correct the relationship/status and preserve evidence.
 
-# 8. Member says they cannot log in
+# 9. Member says they cannot log in
 
 1. Confirm the member exists and the email address on record is correct.
 
@@ -97,7 +101,7 @@ Before approving a classification change, confirm that every field required by t
 
 5. If email delivery is failing, investigate provider logs and account email rather than creating a duplicate account.
 
-# 9. Member says membership is incorrectly expired
+# 10. Member says membership is incorrectly expired
 
 1. Check valid-through date and status.
 
@@ -109,7 +113,7 @@ Before approving a classification change, confirm that every field required by t
 
 5. Record reason/source for any manual extension.
 
-# 10. Security incident escalation
+# 11. Security incident escalation
 
 - Suspected unauthorized administrator access: revoke affected sessions/credentials and escalate immediately.
 
@@ -121,7 +125,7 @@ Before approving a classification change, confirm that every field required by t
 
 - Database integrity anomaly: preserve evidence/backups before attempting broad corrective writes.
 
-# 11. Routine operational checks
+# 12. Routine operational checks
 
 | **Frequency**      | **Check**                                                                                                                       |
 |--------------------|---------------------------------------------------------------------------------------------------------------------------------|
@@ -131,13 +135,13 @@ Before approving a classification change, confirm that every field required by t
 | Quarterly          | Dependency/security updates, authorization and member-data-isolation spot-check, and Render PostgreSQL backup/recovery posture. |
 | When staff changes | Immediately remove or adjust administrative access.                                                                             |
 
-# 12. Data export and reporting
+# 13. Data export and reporting
 
 Administrative exports should be generated through authorized server-side reporting functions. Export only the fields necessary for the stated business purpose and avoid distributing raw migration exports or unnecessary billing identifiers.
 
-# 13. Decommissioning legacy IDOC WordPress membership
+# 14. Decommissioning legacy IDOC WordPress membership
 
-1. Keep the legacy membership source read-only through the agreed stabilization period.
+1. Keep the archival legacy export/backup available through the agreed stabilization period.
 
 2. Confirm all post-cutover discrepancies are resolved.
 
@@ -145,6 +149,6 @@ Administrative exports should be generated through authorized server-side report
 
 4. Remove obsolete MemberPress/IDOC payment webhooks and scheduled jobs only after confirming the new platform is authoritative.
 
-5. Do not affect unrelated sites in the WordPress Multisite network when removing IDOC-specific functionality.
+5. The other former multisite sites will already have been retired independently; retire the IDOC WordPress site only after acceptance is complete.
 
 6. Document the final decommission date and retained archive location.
