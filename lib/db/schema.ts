@@ -1,5 +1,5 @@
 import {
-  pgTable,
+  pgSchema,
   serial,
   varchar,
   text,
@@ -8,7 +8,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-export const users = pgTable('users', {
+export const idocSchema = pgSchema('idoc');
+
+export const users = idocSchema.table('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
@@ -19,7 +21,7 @@ export const users = pgTable('users', {
   deletedAt: timestamp('deleted_at'),
 });
 
-export const teams = pgTable('teams', {
+export const teams = idocSchema.table('teams', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -31,7 +33,7 @@ export const teams = pgTable('teams', {
   subscriptionStatus: varchar('subscription_status', { length: 20 }),
 });
 
-export const teamMembers = pgTable('team_members', {
+export const teamMembers = idocSchema.table('team_members', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
     .notNull()
@@ -43,7 +45,7 @@ export const teamMembers = pgTable('team_members', {
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
 
-export const activityLogs = pgTable('activity_logs', {
+export const activityLogs = idocSchema.table('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()
@@ -54,7 +56,7 @@ export const activityLogs = pgTable('activity_logs', {
   ipAddress: varchar('ip_address', { length: 45 }),
 });
 
-export const invitations = pgTable('invitations', {
+export const invitations = idocSchema.table('invitations', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()

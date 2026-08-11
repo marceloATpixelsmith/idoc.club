@@ -4,6 +4,7 @@ export default {
   schema: './lib/db/schema.ts',
   out: './lib/db/migrations',
   dialect: 'postgresql',
+  schemaFilter: ['idoc'],
   dbCredentials: {
     url: process.env.POSTGRES_URL!,
   },
