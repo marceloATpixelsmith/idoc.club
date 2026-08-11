@@ -25,6 +25,8 @@ import {
   validatedAction,
   validatedActionWithUser
 } from '@/lib/auth/middleware';
+import { normalizeEmail } from '@/lib/membership/validation';
+import { issueEmailVerification } from '@/lib/membership/email-verification';
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -50,7 +52,8 @@ const signInSchema = z.object({
 });
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
-  const { email, password } = data;
+  const { password } = data;
+  const email = normalizeEmail(data.email);
 
   const userWithTeam = await db
     .select({
@@ -72,6 +75,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   const { user: foundUser, team: foundTeam } = userWithTeam[0];
+
+  if (!foundUser.emailVerifiedAt) {
+    return { error: 'Verify your email before signing in.', email, password };
+  }
 
   const isPasswordValid = await comparePasswords(
     password,
@@ -107,7 +114,8 @@ const signUpSchema = z.object({
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId } = data;
+  const { password, inviteId } = data;
+  const email = normalizeEmail(data.email);
 
   const existingUser = await db
     .select()
@@ -128,7 +136,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const newUser: NewUser = {
     email,
     passwordHash,
-    role: 'owner' // Default role, will be overridden if there's an invitation
+    role: 'member'
   };
 
   const [createdUser] = await db.insert(users).values(newUser).returning();
@@ -209,7 +217,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   await Promise.all([
     db.insert(teamMembers).values(newTeamMember),
     logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser)
+    issueEmailVerification(createdUser.id, email)
   ]);
 
   const redirectTo = formData.get('redirect') as string | null;
@@ -218,7 +226,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  redirect('/dashboard');
+  return { success: 'Check your email to verify your account before signing in.' };
 });
 
 export async function signOut() {

@@ -29,7 +29,7 @@ export async function getUser() {
     .where(and(eq(users.id, sessionData.user.id), isNull(users.deletedAt)))
     .limit(1);
 
-  if (user.length === 0) {
+  if (user.length === 0 || !user[0].emailVerifiedAt) {
     return null;
   }
 

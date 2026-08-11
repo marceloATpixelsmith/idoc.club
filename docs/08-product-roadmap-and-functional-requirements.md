@@ -61,6 +61,8 @@ All core membership-policy decisions in this section are approved. No production
 
 # 4. Release 1 - membership foundation
 
+Implementation status: the first foundation batch establishes the IDOC schema, validation, ownership/administrator authorization helpers, transactional member profile and professional-role updates, entitlement reads, immutable audit/history enforcement, administrator notification outbox boundary, hashed email verification, migration mapping, and Stripe-event idempotency boundary. UI completion, notification delivery, migrated-member activation, neutral recovery/reset, and full database integration coverage remain within Release 1 and must be completed before its exit gate.
+
 1.  Remove or adapt generic team/invitation concepts that do not represent IDOC.
 
 2.  Implement profiles, memberships, professional role history, change requests, administrator permissions, audit log, migration map, and Stripe-event idempotency records in the Render idoc schema.
