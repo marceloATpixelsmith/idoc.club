@@ -38,10 +38,10 @@ This document translates the approved project direction into an ordered product 
 | Release 0   | Approved specification            | Business rules, complete field dictionary, renewal/grace/notice policy, roles and permissions.                                                  |
 | Release 1   | Membership foundation             | IDOC schema, authorization, account lifecycle, profiles, professional roles/history, membership entitlement, audit and automated tests.       |
 | Release 2   | Membership billing and operations | €80 Stripe enrollment, renewal controls, Customer Portal, manual payments, Mailchimp Transactional notifications, dashboard, administration and reconciliation. |
-| Release 3   | Migrated membership launch        | Repeatable IDOC-only import, staging rehearsal, reconciliation, activation, cutover, monitoring and legacy retirement.                         |
+| Release 3   | Migrated membership readiness     | Repeatable IDOC-only import, staging rehearsal, reconciliation, activation and internal acceptance. No public routing cutover occurs until Releases 4–6 are complete. |
 | Release 4   | Restricted CMS                    | Page authoring, revisions, publishing, media/SEO data and audience access.                                                                    |
 | Release 5   | Seminars                          | Seminar authoring, eligibility/capacity, registration, Stripe/manual payments, attendance, refunds, reminders and reports.                    |
-| Release 6   | News and blog                     | President/editor publishing, drafts, scheduling, taxonomy, featured media, SEO and optional restrictions.                                     |
+| Release 6   | Complete-project public launch     | News/blog publishing plus final whole-product acceptance, production routing cutover, monitoring and post-stabilization legacy retirement. |
 
 # 3. Phase 0 - decisions and data dictionary
 
@@ -77,9 +77,9 @@ All core membership-policy decisions in this section are approved. No production
 
 # 5. Release 2 - billing, manual payments, dashboard, and administration
 
-8.  Create/use one canonical €80 annual Stripe Price for new recurring memberships; retain historical Price IDs for valid imported subscriptions.
+8.  Create/use two required €80 annual Stripe Prices for new memberships: one recurring annual Price for auto-renewal and one non-recurring Price for the member-selectable one-time path. Retain historical Price IDs for valid imported subscriptions.
 
-9.  Implement Stripe Checkout, verified idempotent webhooks, local subscription/payment projection, failed-payment behavior, cancel-at-period-end, and reconciliation.
+9.  Implement both required Stripe Checkout modes: subscription for auto-renewal and payment for one-time membership. Verify idempotent webhooks, project subscriptions/payments locally, and implement failed-payment behavior, cancel-at-period-end, and reconciliation.
 
 10. Provide an ownership-verified Stripe Customer Portal for payment-method and permitted subscription changes.
 
@@ -103,17 +103,17 @@ All core membership-policy decisions in this section are approved. No production
 
 19. Run a full staging rehearsal and reconcile member counts, classifications, entitlement, Stripe subscriptions, manual payments, duplicates and exceptions.
 
-20. Obtain IDOC acceptance; freeze legacy IDOC membership changes; take final backups/exports; rerun the idempotent import; switch the production webhook; launch.
+20. Obtain IDOC internal acceptance; freeze legacy IDOC membership changes; take final backups/exports; rerun the idempotent import; and switch the production webhook. Do not switch public routing or announce launch until Releases 4–6 meet their acceptance gates.
 
 21. Monitor errors, webhooks, notifications and discrepancies through the approved stabilization period.
 
-22. After launch acceptance and archival backup, retire the legacy IDOC WordPress/MemberPress site and its jobs/webhooks. The other former multisite sites will already have been retired independently.
+22. Retain the legacy IDOC interface as a runnable, read-only rollback target throughout stabilization. After complete-project public-launch acceptance, rollback closure, and archival backup, retire it and its jobs/webhooks. The other former multisite sites will already have been retired independently.
 
 # 7. Release 4 - restricted CMS
 
 - Page fields: title, slug, structured/rich body, summary, status, author, revision, publish/schedule dates, featured media, SEO title/description and audit metadata.
 
-- Audiences: public plus any checklist combination of active member, Judge, Steward and Veterinarian. Administrators see all published content.
+- Audiences: public plus a checklist of active member, Judge, Steward and Veterinarian. Each restricted CMS item must explicitly select either Match any selected audience (union) or Match all selected audiences (intersection). Administrators see all published content.
 
 - Access is evaluated server-side from current membership and active professional roles. Restricted content must not leak through public caches, previews, feeds, sitemaps, APIs, or search indexing.
 
@@ -121,7 +121,7 @@ All core membership-policy decisions in this section are approved. No production
 
 # 8. Release 5 - seminars
 
-- Seminar data: title, description, presenter, dates/times/time zone, venue/online details, capacity, registration window, eligibility, prices, cancellation/refund policy and communications.
+- Seminar data: title, description, presenter, dates/times/time zone, venue/online details, capacity, registration window, eligibility, prices, cancellation/refund policy and communications. Eligibility uses the same explicit Match any selected audience or Match all selected audiences setting as CMS.
 
 - Registration: authenticated member or optional guest/public path, eligibility validation, concurrency-safe capacity, optional waitlist, consent fields, payment state, confirmation and attendance.
 
@@ -177,4 +177,4 @@ The starter must be hardened before production data is imported. The required tr
 
 # 12. Immediate next action
 
-The required signup fields, permitted status values, rolling membership calendar, billing, self-service, notification, administrator, CMS, seminar and publishing rules are approved in document 02. Begin Release 1. The complete project scope is required for launch, while implementation must follow the defined gates rather than being developed against assumptions.
+The required signup fields, permitted status values, rolling membership calendar, billing, self-service, notification, administrator, CMS, seminar and publishing rules are approved in document 02. Begin Release 1. Release 3 establishes migrated membership readiness only; the public IDOC launch occurs after Releases 4–6 and complete-project acceptance.
