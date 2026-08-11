@@ -104,7 +104,7 @@ Standard annual membership fee: €80. Professional role and level do not determ
 | **Source**             | **Automation**                   | **Required stored evidence**                                                  |
 |------------------------|----------------------------------|-------------------------------------------------------------------------------|
 | Stripe recurring       | Webhook-driven                   | Customer ID, Subscription ID, invoice/payment identifiers, status, period end |
-| Stripe one-time        | Webhook-driven if supported      | Customer/payment identifier, amount, paid date                                |
+| Stripe one-time        | Required webhook-driven flow     | Customer/payment identifier, amount, paid date, Checkout Session and one-time Price ID |
 | PayPal                 | Manual                           | Transaction/reference, paid date, amount, administrator                       |
 | Bank transfer          | Manual                           | Reference, paid date, amount, administrator                                   |
 | Cash / in person       | Manual                           | Receipt/reference if available, paid date, amount, administrator              |
@@ -134,7 +134,7 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 # 5.1 Online renewal choice, notices and failed payments
 
-- New members choose either automatic annual renewal through Stripe or a one-time €80 Stripe payment. Automatic renewal is selected by default but the member may choose the one-time option.
+- New members choose either automatic annual renewal through Stripe or a one-time €80 Stripe payment. Automatic renewal is selected by default but the member may choose the one-time option. Both paths are required: auto-renewal uses the recurring €80 annual Stripe Price with Checkout in subscription mode; one-time membership uses a distinct non-recurring €80 Price with Checkout in payment mode.\n\n- The server grants one-time membership only after a verified, idempotent successful-payment webhook tied to the authenticated IDOC member and the expected one-time Price. A one-time payment creates no Stripe subscription.
 
 - Send an automatic-renewal notice 15 days before the scheduled renewal date.
 
@@ -206,9 +206,9 @@ Existing migrated users should encounter an account-access/activation flow, not 
 
 # 12. Content, seminars and publishing
 
-- CMS content may be public or assigned through a checklist to any combination of active-member, Judge, Steward and Veterinarian classifications. Administrators can view every published item. An expired member sees only public content.
+- CMS content may be public or assigned through a checklist to active-member, Judge, Steward and Veterinarian classifications. Every restricted item must explicitly use either Match any selected classifications (union) or Match all selected classifications (intersection); an administrator cannot rely on an implied default. Administrators can view every published item. An expired member sees only public content.
 
-- Each seminar may be public or assigned to any combination of classifications; it may offer a distinct price, including free, to public registrants, each classification, or a combination of classifications. Each seminar independently enables guest registration, manual payments, capacity limits, waitlists, cancellation and refunds as applicable.
+- Each seminar may be public or assigned through the same explicit Match any selected classifications or Match all selected classifications rule as CMS. It may offer a distinct price, including free, to public registrants, each classification, or a combination of classifications. When a registrant qualifies for multiple prices, the system applies the lowest eligible price and shows the basis before payment. Each seminar independently enables guest registration, manual payments, capacity limits, waitlists, cancellation and refunds as applicable.
 
 - Each seminar has an administrator-defined cancellation/refund policy that is shown before registration/payment.
 
