@@ -38,7 +38,7 @@ Working project document. Update this document when project decisions change.
 | Render PostgreSQL                        | Canonical membership, profile, professional classification, payment and audit data in the dedicated idoc schema of the shared Render PostgreSQL database.    |
 | Server-side data access layer            | All application database access remains server-side and enforces authenticated-user ownership and administrator permissions before querying the idoc schema. |
 | Stripe                                   | New checkout, existing subscription billing, invoices, payment methods, customer portal and webhook events.                                                  |
-| Legacy WordPress Multisite + MemberPress | Migration source only after cutover; retained temporarily as a read-only reference/rollback source.                                                          |
+| Legacy WordPress Multisite + MemberPress | Migration source before cutover; preserved as an archival backup/export during stabilization, then retired after launch acceptance.                               |
 
 # 3. Logical data model
 
@@ -85,9 +85,8 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | Anonymous                | Public pages; no membership or private member data.                                                                                      |
 | Member                   | Read own profile, membership, professional role, payment summary and Stripe portal link; update explicitly allowed own-profile fields.   |
-| Membership administrator | Search members, correct profile data, record manual payment, extend membership, update professional role/level, place records in review. |
-| Billing administrator    | Reconcile Stripe billing and view payment/subscription detail; no unrestricted role escalation.                                          |
-| System administrator     | Full application administration, security/configuration operations and migration tools.                                                  |
+| Administrator            | Full application administration: member records, payments, entitlements, roles, content, seminars, publishing and audit access.          |
+| Super Admin              | All Administrator capabilities plus restricted application settings and functions reserved for the project owner.                         |
 
 # 7. Data integrity constraints
 
@@ -95,7 +94,7 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 
 - Stripe Customer IDs and Subscription IDs must be unique when present.
 
-- Every administrative membership change requires actor, timestamp and reason.
+- Every administrator action and every member-initiated profile/classification change requires immutable history. Administrator actions include actor, timestamp, reason, and before/after values where applicable.
 
 - A payment record must never directly overwrite professional classification.
 
