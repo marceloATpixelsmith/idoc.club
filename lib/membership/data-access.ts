@@ -36,6 +36,21 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
+export async function createOwnMemberProfile(untrustedInput: unknown) {
+  const input = memberProfileSchema.parse(untrustedInput);
+  const actor = await authenticatedActor();
+  return db.transaction(async (tx) => {
+    const [existing] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+    if (existing) throw new Error('A member profile already exists for this account.');
+    const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
+    await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
+    const after = { profile, roles: input.roles };
+    await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: {}, profileId: profile.id });
+    await tx.insert(auditLog).values({ action: 'member.profile.created', actorId: actor.id, afterJson: after, entityId: String(profile.id), entityType: 'profile' });
+    return profile;
+  });
+}
+
 export async function updateMemberProfile(profileId: number, untrustedInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
   const actor = await authenticatedActor();

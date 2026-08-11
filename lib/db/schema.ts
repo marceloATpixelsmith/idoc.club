@@ -249,6 +249,13 @@ export const emailVerificationTokens = idocSchema.table('email_verification_toke
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const billingAccounts = idocSchema.table('billing_accounts', {
+  id: serial('id').primaryKey(),
+  profileId: integer('profile_id').notNull().unique().references(() => profiles.id),
+  provider: varchar('provider', { length: 30 }).notNull().default('stripe'),
+  externalCustomerId: varchar('external_customer_id', { length: 255 }).notNull().unique(),
+});
+
 export const migrationMap = idocSchema.table('migration_map', {
   id: serial('id').primaryKey(),
   legacyType: varchar('legacy_type', { length: 50 }).notNull(),

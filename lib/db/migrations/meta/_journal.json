@@ -29,6 +29,13 @@
       "when": 1786487568398,
       "tag": "0003_parched_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786496400000,
+      "tag": "0004_member_billing_accounts",
+      "breakpoints": true
     }
   ]
 }
