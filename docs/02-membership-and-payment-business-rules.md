@@ -24,7 +24,7 @@ Working project document. Update this document when project decisions change.
 
 ## 1.1 Approved signup field dictionary
 
-All fields listed below are required. Email is also the member's username. Country and National Federation must use the same canonical, complete country list throughout signup, account administration, migration, and reporting.
+All fields listed below are required unless marked optional. Email is also the member's username. Country and National Federation must use the same canonical, complete country list throughout signup, account administration, migration, and reporting.
 
 ### Every member
 
@@ -32,7 +32,7 @@ All fields listed below are required. Email is also the member's username. Count
 - First Name
 - Last Name
 - Address 1
-- Address 2
+- Address 2 (optional)
 - City
 - State/Province
 - Zip
@@ -89,7 +89,7 @@ Standard annual membership fee: €80. Professional role and level do not determ
 
 - Membership entitlement is represented by the IDOC membership record.
 
-- A successful eligible payment may create or extend entitlement, but entitlement can also be created by an authorized manual/complimentary action.
+- A successful eligible payment may create or extend entitlement. An administrator may also grant or extend entitlement through the approved manual-payment/adjustment workflow.
 
 - Canceling auto-renewal does not necessarily terminate access immediately; access normally continues through the paid-through date.
 
@@ -104,11 +104,11 @@ Standard annual membership fee: €80. Professional role and level do not determ
 | **Source**             | **Automation**                   | **Required stored evidence**                                                  |
 |------------------------|----------------------------------|-------------------------------------------------------------------------------|
 | Stripe recurring       | Webhook-driven                   | Customer ID, Subscription ID, invoice/payment identifiers, status, period end |
-| Stripe one-time        | Webhook-driven if supported      | Customer/payment identifier, amount, paid date                                |
-| PayPal                 | Manual or future API integration | Transaction/reference, paid date, amount, administrator                       |
+| Stripe one-time        | Required webhook-driven flow     | Customer/payment identifier, amount, paid date, Checkout Session and one-time Price ID |
+| PayPal                 | Manual                           | Transaction/reference, paid date, amount, administrator                       |
 | Bank transfer          | Manual                           | Reference, paid date, amount, administrator                                   |
 | Cash / in person       | Manual                           | Receipt/reference if available, paid date, amount, administrator              |
-| Complimentary / waived | Manual administrator action      | Reason, approver, effective dates                                             |
+| Complimentary          | Manual administrator action      | Reason, approver, effective dates                                             |
 
 # 5. Renewal logic
 
@@ -120,7 +120,29 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - Stripe and manual-payment workflows must use the same rolling-calendar policy.
 
-- The exact calculations for early renewals, late renewals after expiration and exceptional manual extensions remain to be approved before implementation.
+- An early renewal adds 12 months to the current paid-through date. The member never loses the unused part of an active term.
+
+- A renewal paid after membership has expired starts a new 12-month term on its actual successful payment date.
+
+- A manual payment entered after the fact uses its actual payment date. If that date was before expiration, it follows the early-renewal rule; if it was after expiration, it starts a new 12-month term from that date.
+
+- A normal manual payment is €80 and grants 12 months. All manual payments are in EUR. No discounted, partial, or waived paid memberships are allowed.
+
+- Any administrator may grant a complimentary membership. It must have a reason, granted term, actor and full audit entry.
+
+- Administrators may set or correct a paid-through date to reflect the real payment date or a justified entitlement correction. This is an audited override and must require a reason.
+
+# 5.1 Online renewal choice, notices and failed payments
+
+- New members choose either automatic annual renewal through Stripe or a one-time €80 Stripe payment. Automatic renewal is selected by default but the member may choose the one-time option. Both paths are required: auto-renewal uses the recurring €80 annual Stripe Price with Checkout in subscription mode; one-time membership uses a distinct non-recurring €80 Price with Checkout in payment mode.\n\n- The server grants one-time membership only after a verified, idempotent successful-payment webhook tied to the authenticated IDOC member and the expected one-time Price. A one-time payment creates no Stripe subscription.
+
+- Send an automatic-renewal notice 15 days before the scheduled renewal date.
+
+- Send a non-auto-renewal expiration notice 30 days before the paid-through date.
+
+- On an automatic-renewal failure, Stripe retries automatically. The member remains active for five calendar days from the failed scheduled renewal date. If still unpaid at the end of that grace period, membership expires.
+
+- An expired member retains an account and may update profile information, manage payment information where Stripe-backed, and renew. They otherwise see only public content and cannot access member, role-restricted, or administrative content.
 
 # 6. Stripe subscription status mapping
 
@@ -132,7 +154,17 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 | customer.subscription.deleted            | Mark subscription ended; preserve membership until valid_until unless administratively overridden.               |
 | Subscription cancel_at_period_end = true | Show non-renewing status; retain entitlement through paid-through date.                                          |
 
-# 7. Administrator rules for manual payments
+# 7. Member account and profile changes
+
+- A member may update every signup/profile field, including professional classification, National Federation, IDOC Region, FEI ID, official status and Technical Delegate answer.
+
+- The system validates the fields required by the resulting classification before saving. A Judge + Steward must always retain the required fields for both active roles.
+
+- Every member-initiated profile or classification change creates history visible only to administrators and notifies administrators. Member changes do not alter billing or membership dates.
+
+- One normalized email address belongs to one account only. A member may change the email/username only after verifying the new address. The existing Stripe Customer email is then updated server-side; Stripe Customer and Subscription IDs, not email, preserve the billing relationship.
+
+# 8. Administrator rules for manual payments and membership actions
 
 1. Administrator finds the existing member rather than creating a duplicate.
 
@@ -144,9 +176,15 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 5. System writes the payment, membership change and audit entry in one transaction.
 
-6. Any backdated or unusually long extension requires a reason and elevated permission.
+6. Any manual payment, complementary grant, paid-through correction, suspension, refund decision or other administrator action requires a reason and audit entry.
 
-# 8. Duplicate prevention
+7. Administrators have full application access. Super Admin has all administrator access plus restricted application settings and functions reserved for the project owner.
+
+8. A manual suspension blocks all account access regardless of paid-through date. It is distinct from an expired membership, which receives the limited expired-account view described above.
+
+9. A refund never automatically changes entitlement. The administrator deciding the refund must choose and record its membership consequence.
+
+# 9. Duplicate prevention
 
 - Use normalized email, legacy WordPress user ID and external billing identifiers during migration matching.
 
@@ -156,6 +194,22 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - Provide an administrator merge workflow or migration-only merge tool for verified duplicates.
 
-# 9. Member-facing wording requirement
+# 10. Member-facing wording requirement
 
 Existing migrated users should encounter an account-access/activation flow, not language suggesting they must purchase or create a new membership. Their existing entitlement and billing relationship must already exist before they first log in.
+
+# 11. Communications
+
+- Use Mailchimp Transactional for application notifications, from accounts@idoc.club.
+
+- Members may opt out of event notifications and marketing email. They may not opt out of account-standing, payment, security, renewal, expiration, or other messages necessary to operate their account.
+
+# 12. Content, seminars and publishing
+
+- CMS content may be public or assigned through a checklist to active-member, Judge, Steward and Veterinarian classifications. Every restricted item must explicitly use either Match any selected classifications (union) or Match all selected classifications (intersection); an administrator cannot rely on an implied default. Administrators can view every published item. An expired member sees only public content.
+
+- Each seminar may be public or assigned through the same explicit Match any selected classifications or Match all selected classifications rule as CMS. It may offer a distinct price, including free, to public registrants, each classification, or a combination of classifications. When a registrant qualifies for multiple prices, the system applies the lowest eligible price and shows the basis before payment. Each seminar independently enables guest registration, manual payments, capacity limits, waitlists, cancellation and refunds as applicable.
+
+- Each seminar has an administrator-defined cancellation/refund policy that is shown before registration/payment.
+
+- Administrators may publish news and blog posts; the president is an administrator.

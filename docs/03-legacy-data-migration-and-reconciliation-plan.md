@@ -50,7 +50,7 @@ IDOC already uses member-specific rolling expiration dates. The migration must p
 
 9. Cutover reconciliation: compare legacy counts, new counts, Stripe active subscriptions, expiration distributions and exception list.
 
-10. Legacy read-only period: keep the old system available to administrators as a reference until acceptance criteria are met.
+10. Stabilization and retirement: retain an archival export/backup through the agreed stabilization period, then retire the legacy IDOC WordPress/MemberPress site after launch acceptance.
 
 # 4. Source-to-target mapping worksheet
 
@@ -92,6 +92,7 @@ IDOC already uses member-specific rolling expiration dates. The migration must p
 | MemberPress says active, Stripe says canceled/ended     | Use paid-through and approved business rule; flag discrepancy.                           |
 | Stripe active subscription with no clear WordPress user | Review Stripe customer metadata/email and legacy history; no automatic attachment.       |
 | Manual active member with no recent transaction         | Require administrator validation or documented legacy rule.                              |
+| Imported member with no confident Stripe match          | Retain the imported membership paid-through date and default the account to non-auto-renew; offer auto-renewal when renewal is due. |
 | Unknown judge/steward level value                       | Import original value to migration note; do not silently coerce.                         |
 | Required approved profile or role field missing         | Preserve the source value where available, mark the record review_required, and do not invent a value. |
 | Multiple Stripe subscriptions for one person            | Review whether duplicate, historical, or legitimate; avoid double entitlement extension. |
@@ -123,4 +124,4 @@ All known members should be represented in the target database before launch. Au
 
 # 9. Rollback rule
 
-The final migration must avoid destructive changes to existing Stripe subscriptions and avoid deleting the WordPress source during the initial production period. This makes application rollback possible: DNS/application routing can be reverted while the new database remains preserved for diagnosis. Any post-cutover writes that affect billing must be separately audited so they can be reconciled if rollback occurs.
+The final migration must avoid destructive changes to existing Stripe subscriptions. Preserve an archival legacy export/backup during the stabilization period so application routing can be reverted if necessary while the new database remains preserved for diagnosis. Any post-cutover writes that affect billing must be separately audited so they can be reconciled if rollback occurs.
