@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, billingAccounts, emailVerificationTokens, profiles, users } from '@/lib/db/schema';
+import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
 import { updateStripeCustomerEmail } from '@/lib/payments/customer-email';
 import { normalizeEmail } from './validation';
@@ -24,17 +24,23 @@ export async function issueEmailVerification(userId: number, untrustedEmail: str
   const baseUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
   baseUrl.pathname = '/verify-email';
   baseUrl.searchParams.set('token', token);
-  await sendTransactionalEmail({
-    html: `<p>Verify your IDOC email address:</p><p><a href="${baseUrl.toString()}">Verify email</a></p>`,
-    subject: 'Verify your IDOC email address', to: pendingEmail,
-  });
+  try {
+    await sendTransactionalEmail({
+      html: `<p>Verify your IDOC email address:</p><p><a href="${baseUrl.toString()}">Verify email</a></p>`,
+      subject: 'Verify your IDOC email address', to: pendingEmail,
+    });
+    return { delivered: true };
+  } catch {
+    //THE TOKEN REMAINS VALID SO A MEMBER CAN REQUEST A NEW DELIVERY.
+    return { delivered: false };
+  }
 }
 
 export type VerificationResult = { status: 'invalid' } | { status: 'verified'; userId: number };
 
 export async function consumeEmailVerification(token: string): Promise<VerificationResult> {
   if (token.length < 32 || token.length > 100) return { status: 'invalid' };
-  const result = await db.transaction(async (tx): Promise<VerificationResult & { customerId?: string; email?: string }> => {
+  const result = await db.transaction(async (tx): Promise<VerificationResult & { customerId?: string; email?: string; profileId?: number }> => {
     const [record] = await tx.select().from(emailVerificationTokens).where(and(
       eq(emailVerificationTokens.tokenHash, hashToken(token)),
       isNull(emailVerificationTokens.consumedAt), gt(emailVerificationTokens.expiresAt, new Date()),
@@ -50,11 +56,26 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
     const [profile] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
     const [billing] = profile ? await tx.select({ externalCustomerId: billingAccounts.externalCustomerId }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1) : [];
     await tx.update(users).set({ email: record.pendingEmail, emailVerifiedAt: now, updatedAt: now }).where(eq(users.id, record.userId));
+    if (billing?.externalCustomerId && profile) {
+      await tx.insert(notificationOutbox).values({
+        kind: 'stripe.customer_email_sync',
+        payload: { customerId: billing.externalCustomerId, email: record.pendingEmail },
+        profileId: profile.id,
+      });
+    }
     await tx.insert(auditLog).values({ actorId: record.userId, action: 'account.email.verified', entityId: String(record.userId), entityType: 'user' });
-    return { customerId: billing?.externalCustomerId, email: record.pendingEmail, status: 'verified', userId: record.userId };
+    return { customerId: billing?.externalCustomerId, email: record.pendingEmail, profileId: profile?.id, status: 'verified', userId: record.userId };
   });
-  if (result.status === 'verified' && result.customerId && result.email) {
-    await updateStripeCustomerEmail(result.customerId, result.email);
+  if (result.status === 'verified' && result.customerId && result.email && result.profileId) {
+    try {
+      await updateStripeCustomerEmail(result.customerId, result.email);
+      await db.update(notificationOutbox).set({ sentAt: new Date() }).where(and(
+        eq(notificationOutbox.kind, 'stripe.customer_email_sync'),
+        eq(notificationOutbox.profileId, result.profileId),
+      ));
+    } catch {
+      //THE OUTBOX RECORD RETAINS THE JOB FOR A RETRYING WORKER.
+    }
   }
   return result.status === 'verified' ? { status: 'verified', userId: result.userId } : result;
 }
