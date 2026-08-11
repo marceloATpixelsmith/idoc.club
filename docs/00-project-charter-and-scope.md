@@ -23,7 +23,7 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 - Preserve existing Stripe subscriptions in place wherever possible, rather than canceling and recreating them.
 
-- Support members who paid by Stripe, PayPal, bank transfer, cash/in person, or other manually recorded methods.
+- Support Stripe payments and auditable manual records for PayPal, bank transfer and cash/in-person payments.
 
 - Represent dressage judges, stewards, combined judge/stewards, and veterinarians, including their respective levels where applicable.
 
@@ -78,7 +78,7 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 - Requiring members to repeat profile data already available and trustworthy in the legacy system.
 
-- A full replacement of unrelated WordPress Multisite sites on the same network.
+- Operation or migration of unrelated WordPress Multisite sites; those sites will be retired independently before IDOC launch.
 
 - Features unrelated to membership that are not identified during discovery.
 
@@ -106,19 +106,9 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 # 8. Required decisions before production migration
 
-1. Define the remaining edge-case calculations within the approved rolling 12-month membership policy, including early, late and exceptional manual renewals. New memberships begin on their successful payment/effective date, and migration must preserve each existing member's current paid-through/expiration date.
+1. Confirm the legacy MemberPress status mapping for active, expired, canceled, complimentary, suspended, and review-required records during migration.
 
-2. Confirm how grace periods and failed Stripe payments affect access.
-
-3. Confirm which legacy MemberPress statuses should map to active, expired, canceled, complimentary, suspended, or review-required.
-
-4. Confirm the allowed judge and steward level values and whether historical level changes need to be retained.
-
-5. Confirm whether veterinarians have any level/certification fields.
-
-6. Confirm whether PayPal will remain a supported new-payment method or only be preserved as a historical/manual payment source.
-
-7. Confirm the administrative roles and which actions each role is permitted to perform.
+2. Complete the source-field mapping and reconciliation acceptance thresholds for legacy data.
 
 # 9. Deliverables
 
