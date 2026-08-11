@@ -21,7 +21,7 @@ Protect member identity, professional information, membership entitlement and bi
 
 | **Control**                   | **Requirement**                                                                                                                                                                                                                      |
 |-------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Authentication                | Use the application's authentication system with verified email flows, secure session handling and documented account-lifecycle controls.                                                                                            |
+| Authentication                | Use the application's authentication system with verified email changes, secure session handling and documented account-lifecycle controls.                                                                                            |
 | Authorization                 | Every sensitive server action/route checks the authenticated actor and required role/permission.                                                                                                                                     |
 | Member data isolation         | Keep the Render PostgreSQL database inaccessible to browsers. Enforce authenticated-user ownership and administrator permissions in every server-side data operation, using default-deny behavior.                                   |
 | Database credential isolation | The Render PostgreSQL connection URL and credentials are server-only Vercel environment variables; never expose them through NEXT_PUBLIC\_\* variables, client bundles or browser responses. Production connections require TLS/SSL. |
@@ -38,7 +38,7 @@ Protect member identity, professional information, membership entitlement and bi
 
 - A normal member can read only their own private profile, membership, professional roles and approved payment summary.
 
-- A normal member cannot write membership status, validity dates, professional verification fields, payment records, role/level fields requiring administrator approval, or administrator flags.
+- A normal member cannot write membership status, validity dates, payment records, administrator flags, or audit records. Members may update approved signup and professional fields only through the server-side validation/history workflow.
 
 - Administrator access is not granted solely by a client-controlled profile column.
 
@@ -52,7 +52,7 @@ Protect member identity, professional information, membership entitlement and bi
 
 - Use least privilege: membership administrators should not automatically receive deployment, database or Stripe secret access.
 
-- High-risk actions such as suspending membership, changing paid-through dates substantially, merging identities or changing admin roles require explicit reason and audit entry.
+- Every administrator action requires an audit entry. Sensitive actions such as suspending membership, changing paid-through dates, granting complimentary membership, deciding a refund consequence, merging identities or changing admin roles also require an explicit reason and before/after values where applicable.
 
 - Do not expose migration/import tooling to normal authenticated users.
 
