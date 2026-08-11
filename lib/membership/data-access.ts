@@ -1,10 +1,11 @@
 import 'server-only';
 
-import { and, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   applicationRoles, auditLog, memberships, notificationOutbox,
   professionalRoles, profileChangeHistory, profiles,
+  users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authorization';
@@ -40,6 +41,12 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
   const actor = await authenticatedActor();
   return db.transaction(async (tx) => {
+    const [account] = await tx.execute<{ account_state: string }>(sql`
+      select account_state from idoc.users where id = ${actor.id} for update
+    `);
+    if (!account || account.account_state !== 'onboarding') {
+      throw new Error('This account is not eligible for onboarding.');
+    }
     const [existing] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
     if (existing) throw new Error('A member profile already exists for this account.');
     const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
@@ -47,6 +54,13 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
     const after = { profile, roles: input.roles };
     await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: {}, profileId: profile.id });
     await tx.insert(auditLog).values({ action: 'member.profile.created', actorId: actor.id, afterJson: after, entityId: String(profile.id), entityType: 'profile' });
+    await tx.update(users).set({ accountState: 'active', updatedAt: new Date() })
+      .where(and(eq(users.id, actor.id), eq(users.accountState, 'onboarding')));
+    await tx.insert(auditLog).values({
+      action: 'account.onboarding.completed', actorId: actor.id,
+      afterJson: { accountState: 'active' }, beforeJson: { accountState: 'onboarding' },
+      entityId: String(actor.id), entityType: 'user',
+    });
     return profile;
   });
 }

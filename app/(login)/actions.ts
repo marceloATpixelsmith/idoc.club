@@ -68,16 +68,13 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   const foundUser = matchingUsers[0];
 
-  if (!foundUser.emailVerifiedAt) {
-    return { error: 'Verify your email before signing in. You can request another verification email below.', email };
-  }
-
   const isPasswordValid = await comparePasswords(
     password,
     foundUser.passwordHash
   );
 
-  if (!isPasswordValid) {
+  if (!isPasswordValid || !foundUser.emailVerifiedAt ||
+      !['active', 'onboarding'].includes(foundUser.accountState)) {
     return {
       error: 'Invalid email or password. Please try again.',
       email
@@ -234,6 +231,7 @@ export const deleteAccount = validatedActionWithUser(
     await db
       .update(users)
       .set({
+        accountState: 'deleted',
         deletedAt: sql`CURRENT_TIMESTAMP`,
         email: sql`CONCAT(email, '-', id, '-deleted')` // Ensure email uniqueness
       })

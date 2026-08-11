@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { accountTokens, auditLog, users } from '@/lib/db/schema';
+import { accountTokens, auditLog, billingAccounts, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
 import { hashPassword } from '@/lib/auth/session';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
 import { normalizeEmail } from './validation';
@@ -18,18 +18,20 @@ export async function requestAccountLink(untrustedEmail: string, purpose: Accoun
   const eligible = user && (purpose === 'password_reset' ? user.accountState !== 'migrated_pending' : user.accountState === 'migrated_pending');
   if (!eligible) return;
   const rawToken = randomBytes(32).toString('base64url');
-  await db.transaction(async (tx) => {
-    await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.userId, user.id), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
-    await tx.insert(accountTokens).values({ expiresAt: new Date(Date.now() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id });
-    await tx.insert(auditLog).values({ action: `account.${purpose}.requested`, entityId: String(user.id), entityType: 'user' });
-  });
   const url = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
   url.pathname = purpose === 'password_reset' ? '/reset-password' : '/activate';
   url.searchParams.set('token', rawToken);
   try {
     await sendTransactionalEmail({ html: `<p><a href="${url.toString()}">${purpose === 'password_reset' ? 'Reset your password' : 'Activate your imported IDOC account'}</a></p>`, subject: purpose === 'password_reset' ? 'Reset your IDOC password' : 'Activate your IDOC account', to: email });
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${user.id})`);
+      await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.userId, user.id), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
+      await tx.insert(accountTokens).values({ expiresAt: new Date(Date.now() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id });
+      await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_succeeded`, entityId: String(user.id), entityType: 'user' });
+    });
   } catch {
-    // A fresh request supersedes this still-safe token and retries delivery.
+    await db.insert(auditLog).values({ action: `account.${purpose}.delivery_failed`, entityId: String(user.id), entityType: 'user', reason: 'temporary_delivery_failure' });
+    // Previously delivered tokens remain usable; an anonymous request can retry safely.
   }
 }
 
@@ -40,6 +42,24 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     if (!record) return { status: 'invalid' as const };
     const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);
     if (!user || (purpose === 'migration_activation' && user.accountState !== 'migrated_pending')) return { status: 'invalid' as const };
+    if (purpose === 'migration_activation') {
+      const [profile] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
+      if (!profile) {
+        await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'missing_imported_profile' });
+        return { status: 'invalid' as const };
+      }
+      const [roles, entitlement, mapping] = await Promise.all([
+        tx.select({ id: professionalRoles.id }).from(professionalRoles).where(eq(professionalRoles.profileId, profile.id)).limit(1),
+        tx.select({ id: memberships.id }).from(memberships).where(eq(memberships.profileId, profile.id)).limit(1),
+        tx.select({ id: migrationMap.id }).from(migrationMap).where(eq(migrationMap.newEntityId, String(record.userId))).limit(1),
+      ]);
+      if (roles.length === 0 || entitlement.length === 0 || mapping.length === 0) {
+        await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'incomplete_import_foundation' });
+        return { status: 'invalid' as const };
+      }
+      // Billing linkage, if imported, is intentionally read but never rewritten.
+      await tx.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
+    }
     const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
     if (!claimed) return { status: 'invalid' as const };
     const now = new Date();
