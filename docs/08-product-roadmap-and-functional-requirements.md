@@ -53,7 +53,7 @@ This is the immediate next step. No production membership schema or conditional 
 | Judge fields              | Common official fields, approved Judge status, and Technical Delegate answer as defined in document 02. | Approved; edit/verification rules remain to be confirmed |
 | Steward fields            | Common official fields and approved Steward status as defined in document 02.                          | Approved; edit/verification rules remain to be confirmed |
 | Veterinarian fields       | Only the fields required for every member.                                                             | Approved |
-| Membership calendar       | Rolling 12 months or fixed annual date; late/early/manual renewal calculation.                         | Decision required |
+| Membership calendar       | Rolling 12 months; preserve every existing member's current paid-through/expiration date during migration. Late/early/manual renewal calculations remain to be confirmed. | Approved policy; edge-case calculations remain |
 | Renewal choice            | Whether recurring is default/optional and whether online one-time payment is offered.                  | Decision required |
 | Notices and grace         | Notice timing, failed-payment grace duration, access behavior and escalation.                          | Decision required |
 | Administrator permissions | Membership, billing, content/editor and system roles; high-risk approvals.                             | Decision required |
@@ -177,4 +177,4 @@ The starter must be hardened before production data is imported. The required tr
 
 # 12. Immediate next action
 
-The required signup fields and permitted status values are approved in document 02. Complete the remaining Phase 0 decisions: field edit permissions, migration-source mapping, membership-calendar policy, renewal choice, notice/grace timing, administrator permissions, and manual-payment exception rules. Then begin Release 1. Stripe live integration, production migration, CMS, seminars, and publishing must follow their defined gates rather than being developed against assumptions.
+The required signup fields, permitted status values and rolling 12-month membership calendar are approved in document 02. Complete the remaining Phase 0 decisions: field edit permissions, migration-source mapping, early/late/manual renewal calculations, renewal choice, notice/grace timing, administrator permissions, and manual-payment exception rules. Then begin Release 1. Stripe live integration, production migration, CMS, seminars, and publishing must follow their defined gates rather than being developed against assumptions.

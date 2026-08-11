@@ -17,6 +17,8 @@ Working project document. Update this document when project decisions change.
 
 Move the canonical membership information out of the existing IDOC WordPress/MemberPress implementation while preserving identity, membership status, professional classification, billing history references and recurring Stripe relationships.
 
+IDOC already uses member-specific rolling expiration dates. The migration must preserve each member's current paid-through/expiration date exactly; it must not normalize members to a common annual expiration date or restart a 12-month term on import.
+
 # 2. Source data inventory
 
 | **Source**                   | **Extract**                                                                                                       |

@@ -106,7 +106,7 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 # 8. Required decisions before production migration
 
-1. Confirm the official membership period rule: rolling 12 months from payment/renewal versus a fixed annual membership cycle.
+1. Define the remaining edge-case calculations within the approved rolling 12-month membership policy, including early, late and exceptional manual renewals. New memberships begin on their successful payment/effective date, and migration must preserve each existing member's current paid-through/expiration date.
 
 2. Confirm how grace periods and failed Stripe payments affect access.
 

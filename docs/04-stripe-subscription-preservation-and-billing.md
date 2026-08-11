@@ -35,11 +35,13 @@ Do not cancel and recreate legitimate existing Stripe subscriptions solely becau
 
 # 3. New memberships
 
-Create a current canonical Stripe Product/Price for new standard memberships if one does not already exist. The price should represent the approved €80 annual fee. New checkout sessions should create or reuse the correct Stripe Customer and associate the resulting subscription with the authenticated IDOC profile.
+Create a current canonical Stripe Product/Price for new standard memberships if one does not already exist. The price should represent the approved €80 annual fee and a rolling 12-month term beginning on the successful payment/effective date. New checkout sessions should create or reuse the correct Stripe Customer and associate the resulting subscription with the authenticated IDOC profile.
 
 # 4. Legacy Price IDs
 
 Legacy active subscribers may remain on old Price IDs. The application should determine entitlement from the subscription/payment outcome plus IDOC membership rules, not by requiring one exact Price ID for all historical subscriptions.
+
+Migration must preserve each existing subscriber's current Stripe period end and IDOC paid-through/expiration date. Connecting an existing subscription to the new application must not reset its billing anniversary or membership term.
 
 # 5. Required webhook handling
 
