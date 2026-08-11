@@ -35,7 +35,7 @@ Do not cancel and recreate legitimate existing Stripe subscriptions solely becau
 
 # 3. New memberships
 
-Create a current canonical Stripe Product/Price for new standard memberships if one does not already exist. The price should represent the approved €80 annual fee and a rolling 12-month term beginning on the successful payment/effective date. New checkout sessions should create or reuse the correct Stripe Customer and associate the resulting subscription with the authenticated IDOC profile.
+Create a current canonical Stripe Product/Price for new standard memberships if one does not already exist. The price represents the approved €80 annual fee and rolling 12-month term. New checkout offers automatic annual renewal by default and a member-selectable one-time €80 option. Checkout creates or reuses the correct Stripe Customer and associates the resulting billing relationship with the authenticated IDOC profile.
 
 # 4. Legacy Price IDs
 
@@ -68,9 +68,11 @@ Migration must preserve each existing subscriber's current Stripe period end and
 
 - Support replay/reconciliation from Stripe when an event is missed.
 
-# 7. Customer Portal
+# 7. Customer Portal and email changes
 
 For Stripe-backed members, the member portal can generate a Stripe Customer Portal session server-side, allowing the user to manage payment methods, invoices and permitted subscription actions. The application must verify that the authenticated user owns the Stripe Customer ID before creating the portal session.
+
+After a member verifies an email/username change, update the matching Stripe Customer email server-side. Never use email as the linkage key for a subscription; retain and validate Stripe Customer and Subscription IDs.
 
 # 8. Manual/non-Stripe members
 
