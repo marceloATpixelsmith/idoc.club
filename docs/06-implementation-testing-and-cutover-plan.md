@@ -25,7 +25,7 @@ Working project document. Update this document when project decisions change.
 | 6\. Migration tooling    | Repeatable exporter/transform/importer/reconciliation reports.                                                                                                               | Dry-run deterministic.                              |
 | 7\. Staging rehearsal    | Full representative migration and exception resolution.                                                                                                                      | Counts/reconciliation signed off.                   |
 | 8\. Production migration | Final export, delta handling, production import, Stripe link verification.                                                                                                   | Cutover checklist complete.                         |
-| 9\. Post-launch          | Monitoring, exception cleanup, legacy read-only support.                                                                                                                     | Stabilization acceptance.                           |
+| 9\. Post-launch          | Monitoring, exception cleanup, archival retention and approved legacy retirement.                                                                                              | Stabilization acceptance.                           |
 
 # 2. Test matrix
 
@@ -36,6 +36,9 @@ Working project document. Update this document when project decisions change.
 | Stripe renewal succeeds                       | One payment recorded; membership extended once.                                |
 | Stripe webhook delivered twice                | No duplicate payment or duplicate extension.                                   |
 | Stripe payment fails                          | Configured grace/notification behavior occurs.                                 |
+| Automatic renewal fails                       | Stripe retry occurs; member remains active for five days, then becomes expired if unpaid. |
+| Early renewal                                 | Exactly 12 months is added to the existing paid-through date.                  |
+| Late renewal                                  | New 12-month term begins on the actual successful payment date.                |
 | Bank-transfer member logs in                  | Sees active membership without Stripe subscription.                            |
 | Admin records bank transfer                   | Payment + entitlement change + audit entry committed together.                 |
 | Judge + Steward member                        | Both roles and separate levels display correctly.                              |
@@ -44,7 +47,8 @@ Working project document. Update this document when project decisions change.
 | Invalid Judge/Steward status or IDOC Region    | Rejected by server-side validation even if submitted outside the browser form.  |
 | Country and National Federation                | Use the same complete canonical country list and store valid canonical codes.   |
 | Classification change                         | Revalidates newly required fields, preserves role history, and does not alter membership billing. |
-| Member tries to change own level              | Request rejected unless that field is explicitly self-service.                 |
+| Member changes signup/professional field      | Change is server-validated, history is retained, and administrators are notified. |
+| Member changes email/username                 | New address must be verified; Stripe Customer email is updated without changing Customer/Subscription linkage. |
 | Member guesses another member ID              | Private data remains inaccessible.                                             |
 | Unmatched legacy Stripe subscription          | Appears in migration exception report, not silently discarded.                 |
 | Expired legacy member                         | Account can exist but restricted member entitlement is denied.                 |
@@ -87,7 +91,7 @@ Working project document. Update this document when project decisions change.
 
 11. Run immediate post-cutover membership and Stripe reconciliation.
 
-12. Place legacy WordPress IDOC membership UI in read-only/maintenance state rather than deleting it.
+12. Preserve the approved archival backup/export, complete stabilization checks, then retire the legacy IDOC WordPress/MemberPress site after launch acceptance.
 
 # 5. Rollback triggers
 
