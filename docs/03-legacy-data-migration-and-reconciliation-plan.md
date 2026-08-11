@@ -82,7 +82,7 @@ IDOC already uses member-specific rolling expiration dates. The migration must p
 
 6. Store the verified Stripe Customer and Subscription IDs in the new database.
 
-7. Record a migration_map row containing source IDs, target IDs, match method and confidence/review status.
+7. Record a migration_map row containing source IDs, target IDs, match method and confidence/review status. A successfully imported WordPress identity uses `legacy_type = wp_user` and `disposition = imported`; migrated-account activation requires that exact successful user mapping and cannot be satisfied by a mapping for another entity type.
 
 # 6. Exception categories
 

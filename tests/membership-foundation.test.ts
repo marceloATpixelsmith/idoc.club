@@ -139,6 +139,14 @@ test('migrated activation requires imported profile, role, entitlement, and mapp
   assert.match(recovery, /missing_imported_profile/);
   assert.match(recovery, /incomplete_import_foundation/);
   assert.match(recovery, /migrationMap/);
+  assert.match(recovery, /migrationMap\.legacyType/);
+  assert.match(recovery, /migrationMap\.disposition/);
+});
+
+test('migration 0005 deliberately replaces the normalized-email index from migration 0002', () => {
+  const migration = readFileSync(new URL('../lib/db/migrations/0005_release_one_account_tokens.sql', import.meta.url), 'utf8');
+  assert.match(migration, /DROP INDEX IF EXISTS "idoc"\."users_normalized_email_unique"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "users_normalized_email_unique"/);
 });
 
 test('profile edits are atomic and notification delivery retains retry history', () => {

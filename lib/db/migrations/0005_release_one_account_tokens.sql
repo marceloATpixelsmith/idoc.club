@@ -15,6 +15,7 @@ ALTER TABLE "idoc"."notification_outbox" ADD COLUMN "last_error_code" varchar(50
 ALTER TABLE "idoc"."users" ADD COLUMN "account_state" varchar(30) DEFAULT 'unverified' NOT NULL;--> statement-breakpoint
 ALTER TABLE "idoc"."users" ADD COLUMN "session_version" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "idoc"."account_tokens" ADD CONSTRAINT "account_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "idoc"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+DROP INDEX IF EXISTS "idoc"."users_normalized_email_unique";--> statement-breakpoint
 CREATE UNIQUE INDEX "users_normalized_email_unique" ON "idoc"."users" USING btree (lower("email"));
 --> statement-breakpoint
 ALTER TABLE "idoc"."account_tokens" ADD CONSTRAINT "account_tokens_purpose_check" CHECK ("purpose" IN ('password_reset', 'migration_activation'));

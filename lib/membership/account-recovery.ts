@@ -10,6 +10,8 @@ import { normalizeEmail } from './validation';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 const LIFETIME_MS = 60 * 60 * 1000;
+const SUCCESSFUL_USER_MIGRATION_DISPOSITION = 'imported';
+const USER_MIGRATION_LEGACY_TYPE = 'wp_user';
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 
 export async function requestAccountLink(untrustedEmail: string, purpose: AccountTokenPurpose) {
@@ -53,7 +55,11 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
       const [roles, entitlement, mapping] = await Promise.all([
         tx.select({ id: professionalRoles.id }).from(professionalRoles).where(eq(professionalRoles.profileId, profile.id)).limit(1),
         tx.select({ id: memberships.id }).from(memberships).where(eq(memberships.profileId, profile.id)).limit(1),
-        tx.select({ id: migrationMap.id }).from(migrationMap).where(eq(migrationMap.newEntityId, String(record.userId))).limit(1),
+        tx.select({ id: migrationMap.id }).from(migrationMap).where(and(
+          eq(migrationMap.newEntityId, String(record.userId)),
+          eq(migrationMap.legacyType, USER_MIGRATION_LEGACY_TYPE),
+          eq(migrationMap.disposition, SUCCESSFUL_USER_MIGRATION_DISPOSITION)
+        )).limit(1),
       ]);
       if (roles.length === 0 || entitlement.length === 0 || mapping.length === 0) {
         await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'incomplete_import_foundation' });
