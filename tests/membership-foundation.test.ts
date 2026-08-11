@@ -6,6 +6,7 @@ import {
 } from '../lib/membership/authorization.ts';
 import { memberProfileSchema, normalizeEmail } from '../lib/membership/validation.ts';
 import { isEntitled } from '../lib/membership/entitlement.ts';
+import { mayAccessAccountFunction } from '../lib/membership/account-access.ts';
 
 const judge = {
   feiId: '10012345', idocRegion: 'Western Europe & Africa',
@@ -94,4 +95,33 @@ test('member billing linkage preserves external Stripe identity', () => {
   assert.match(migration, /external_customer_id.*UNIQUE/s);
   assert.match(stripeBoundary, /customers\.update\(customerId, \{ email \}\)/);
   assert.doesNotMatch(stripeBoundary, /customers\.create/);
+});
+
+test('account-state policy blocks suspension and permits expired account maintenance', () => {
+  const actor = { id: 1, roles: ['member'] };
+  assert.equal(mayAccessAccountFunction({ accountState: 'suspended', actor, entitled: true }, 'profile'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: false }, 'profile'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: false }, 'renewal'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'migrated_pending', actor, entitled: true }, 'profile'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: true }, 'administration'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: { id: 2, roles: ['super_admin'] }, entitled: false }, 'administration'), true);
+});
+
+test('recovery and activation store digests, claim once, and revoke sessions', () => {
+  const source = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
+  assert.match(source, /randomBytes\(32\)/);
+  assert.match(source, /createHash\('sha256'\)/);
+  assert.match(source, /isNull\(accountTokens\.consumedAt\)/);
+  assert.match(source, /sessionVersion.*\+ 1/s);
+  assert.doesNotMatch(source, /tokenHash:\s*rawToken/);
+});
+
+test('profile edits are atomic and notification delivery retains retry history', () => {
+  const access = readFileSync(new URL('../lib/membership/data-access.ts', import.meta.url), 'utf8');
+  const delivery = readFileSync(new URL('../lib/notifications/profile-change-delivery.ts', import.meta.url), 'utf8');
+  assert.match(access, /db\.transaction/);
+  assert.match(access, /effectiveTo: now/);
+  assert.match(access, /administrator\.profile_changed/);
+  assert.match(delivery, /temporary_delivery_failure/);
+  assert.match(delivery, /attemptCount/);
 });

@@ -125,3 +125,7 @@ All known members should be represented in the target database before launch. Au
 # 9. Rollback rule
 
 The final migration must avoid destructive changes to existing Stripe subscriptions. Preserve an archival legacy export/backup during the stabilization period so application routing can be reverted if necessary while the new database remains preserved for diagnosis. Any post-cutover writes that affect billing must be separately audited so they can be reconciled if rollback occurs.
+
+## Imported-account activation foundation
+
+The later repeatable importer may create an identity in `migrated_pending` state and issue a `migration_activation` token for that existing user. Activation verifies the purpose-scoped, expiring digest, establishes a password, verifies access, and changes only account authentication state. It does not insert or update the imported profile, professional-role history, membership term/status, billing account, Stripe identifiers, or migration map. Reissuing a link invalidates earlier unconsumed activation links; successful use consumes all outstanding account tokens for the identity.

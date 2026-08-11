@@ -29,7 +29,10 @@ export async function getUser() {
     .where(and(eq(users.id, sessionData.user.id), isNull(users.deletedAt)))
     .limit(1);
 
-  if (user.length === 0 || !user[0].emailVerifiedAt) {
+  if (user.length === 0 || !user[0].emailVerifiedAt ||
+      user[0].accountState === 'suspended' ||
+      user[0].accountState === 'migrated_pending' ||
+      user[0].sessionVersion !== sessionData.user.sessionVersion) {
     return null;
   }
 

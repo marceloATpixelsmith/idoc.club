@@ -23,6 +23,8 @@ import {
 } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
+import { passwordSchema } from '@/lib/auth/password-policy';
+import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -89,7 +91,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
 const signUpSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8)
+  password: passwordSchema
 });
 
 export const signUp = validatedAction(signUpSchema, async (data) => {
@@ -130,6 +132,32 @@ export const signUp = validatedAction(signUpSchema, async (data) => {
   return { success: verification.delivered ? 'Check your email to verify your account before signing in.' : 'Your account was created. Use the resend verification option on the sign-in page if the first email does not arrive.' };
 });
 
+const accountLinkSchema = z.object({ email: z.string().email().max(255) });
+const NEUTRAL_RECOVERY = 'If an eligible account uses this address, an email will be sent.';
+
+export const requestPasswordRecovery = validatedAction(accountLinkSchema, async ({ email }) => {
+  await requestAccountLink(email, 'password_reset');
+  return { success: NEUTRAL_RECOVERY };
+});
+
+export const requestMigrationActivation = validatedAction(accountLinkSchema, async ({ email }) => {
+  await requestAccountLink(email, 'migration_activation');
+  return { success: NEUTRAL_RECOVERY };
+});
+
+const consumeTokenSchema = z.object({ confirmPassword: passwordSchema, password: passwordSchema, token: z.string().max(100) })
+  .refine(({ confirmPassword, password }) => confirmPassword === password, { message: 'Passwords do not match.' });
+
+export const resetPassword = validatedAction(consumeTokenSchema, async ({ password, token }) => {
+  const result = await consumeAccountToken(token, 'password_reset', password);
+  return result.status === 'success' ? { success: 'Your password was reset. Sign in again on every device.' } : { error: 'This reset link is invalid or expired.' };
+});
+
+export const activateMigratedAccount = validatedAction(consumeTokenSchema, async ({ password, token }) => {
+  const result = await consumeAccountToken(token, 'migration_activation', password);
+  return result.status === 'success' ? { success: 'Your account is active. Sign in to review your imported profile.' } : { error: 'This activation link is invalid or expired.' };
+});
+
 const resendVerificationSchema = z.object({ email: z.string().email().max(255) });
 
 export const resendVerification = validatedAction(resendVerificationSchema, async (data) => {
@@ -145,8 +173,8 @@ export async function signOut() {
 
 const updatePasswordSchema = z.object({
   currentPassword: z.string().min(8).max(100),
-  newPassword: z.string().min(8).max(100),
-  confirmPassword: z.string().min(8).max(100)
+  newPassword: passwordSchema,
+  confirmPassword: passwordSchema
 });
 
 export const updatePassword = validatedActionWithUser(

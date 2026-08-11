@@ -61,7 +61,7 @@ All core membership-policy decisions in this section are approved. No production
 
 # 4. Release 1 - membership foundation
 
-Implementation status: the foundation establishes the IDOC schema, validation, ownership/administrator authorization helpers, transactional member profile creation and professional-role updates, entitlement reads, immutable audit/history enforcement, administrator notification outbox boundary, Mailchimp Transactional registration/email-change verification, member-owned Stripe identity linkage, migration mapping, and Stripe-event idempotency boundary. Migrated-member activation, neutral recovery/reset, broader profile-editing UI, and full database integration coverage remain within Release 1 and must be completed before its exit gate.
+Implementation status: the foundation now includes neutral password recovery/reset, session-version revocation, migrated-account activation tokens, complete conditional member profile editing, account-state policy, retryable administrator profile-change delivery evidence, and an isolated database integration harness, in addition to the existing IDOC schema, ownership/administrator authorization, entitlement, immutable history, verification, Stripe identity, migration-map, and webhook boundaries. Release 1 is **not yet closed**: the isolated database suite must run successfully in an environment providing `TEST_DATABASE_URL`, and deployment/UAT gates remain outstanding.
 
 1.  Remove or adapt generic team/invitation concepts that do not represent IDOC.
 
