@@ -34,6 +34,6 @@ Start with document 08 when planning the next development phase, then consult th
 
 Any code change that affects membership rules, fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing must update the governing Markdown document in the same pull request.
 
-Unresolved items must be labeled `Decision required`. Once IDOC approves a decision, replace that marker with the approved rule and update every dependent document in the same pull request.
+Unresolved items must be labeled `Decision required`. Once IDOC approves a decision, replace that marker with the approved rule and update every dependent document in the same pull request. The current approved policy set is recorded in document 02 and reflected in document 08.
 
 Do not add generated Word or PDF exports to this directory unless a release process explicitly requires them.
