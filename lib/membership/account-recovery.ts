@@ -15,16 +15,18 @@ const digest = (token: string) => createHash('sha256').update(token).digest('hex
 export async function requestAccountLink(untrustedEmail: string, purpose: AccountTokenPurpose) {
   const email = normalizeEmail(untrustedEmail);
   const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  const eligible = user && (purpose === 'password_reset' ? user.accountState !== 'migrated_pending' : user.accountState === 'migrated_pending');
+  const eligible = user && (purpose === 'password_reset'
+    ? ['active', 'onboarding'].includes(user.accountState)
+    : user.accountState === 'migrated_pending');
   if (!eligible) return;
   const rawToken = randomBytes(32).toString('base64url');
   const url = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
   url.pathname = purpose === 'password_reset' ? '/reset-password' : '/activate';
   url.searchParams.set('token', rawToken);
   try {
-    await sendTransactionalEmail({ html: `<p><a href="${url.toString()}">${purpose === 'password_reset' ? 'Reset your password' : 'Activate your imported IDOC account'}</a></p>`, subject: purpose === 'password_reset' ? 'Reset your IDOC password' : 'Activate your IDOC account', to: email });
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${user.id})`);
+      await sendTransactionalEmail({ html: `<p><a href="${url.toString()}">${purpose === 'password_reset' ? 'Reset your password' : 'Activate your imported IDOC account'}</a></p>`, subject: purpose === 'password_reset' ? 'Reset your IDOC password' : 'Activate your IDOC account', to: email });
       await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.userId, user.id), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
       await tx.insert(accountTokens).values({ expiresAt: new Date(Date.now() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id });
       await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_succeeded`, entityId: String(user.id), entityType: 'user' });
