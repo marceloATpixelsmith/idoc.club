@@ -1,4 +1,5 @@
 import type { Config } from 'drizzle-kit';
+import { getPostgresConnectionUrl } from './lib/db/connection-url';
 
 export default {
   schema: './lib/db/schema.ts',
@@ -6,6 +7,6 @@ export default {
   dialect: 'postgresql',
   schemaFilter: ['idoc'],
   dbCredentials: {
-    url: process.env.POSTGRES_URL!,
+    url: getPostgresConnectionUrl(),
   },
 } satisfies Config;
