@@ -2,7 +2,9 @@
 
 The Markdown files in `docs/` are the authoritative IDOC project documentation.
 
-Read and follow `docs/09-codex-working-rules.md` for every Codex implementation task.
+For every Codex implementation task, read and follow `docs/09-codex-working-rules.md`.
+
+For every GPT collaboration task—including planning, writing Codex prompts, patching pull requests, handling CI or review feedback, and preparing a handoff—read and follow `docs/10-gpt-collaboration-rules.md`.
 
 When code changes membership rules, member fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing, update the corresponding document in `docs/` in the same pull request. Keep `docs/08-product-roadmap-and-functional-requirements.md` aligned when scope, sequencing, or release gates change.
 
