@@ -1,0 +1,118 @@
+.pixelsmith-language-toggle {
+  --pixelsmith-language-text: currentColor;
+  --pixelsmith-language-current-bg-dark: rgba(17, 17, 17, 0.025);
+  --pixelsmith-language-current-bg-light: rgba(255, 255, 255, 0.05);
+  --pixelsmith-language-bubble-bg: rgba(255, 255, 255, 0.95);
+  --pixelsmith-language-bubble-text: #111111;
+  --pixelsmith-language-ring: rgba(17, 17, 17, 0.12);
+  --pixelsmith-language-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--pixelsmith-language-text);
+  font: inherit;
+  z-index: 50;
+}
+
+.pixelsmith-language-toggle--text-dark {
+  --pixelsmith-language-text: var(--pixelsmith-language-text-dark, #111111);
+}
+
+.pixelsmith-language-toggle--text-light {
+  --pixelsmith-language-text: var(--pixelsmith-language-text-light, #ffffff);
+}
+
+.pixelsmith-language-toggle--text-inherit {
+  --pixelsmith-language-text: currentColor;
+}
+
+.pixelsmith-language-toggle__current,
+.pixelsmith-language-toggle__alternate {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 0 0 0.22em;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pixelsmith-language-toggle--dark .pixelsmith-language-toggle__current {
+  background: var(--pixelsmith-language-current-bg-dark);
+}
+
+.pixelsmith-language-toggle--light .pixelsmith-language-toggle__current {
+  background: var(--pixelsmith-language-current-bg-light);
+}
+
+.pixelsmith-language-toggle__flyout {
+  position: absolute;
+  z-index: 20;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease, visibility 150ms ease;
+}
+
+.pixelsmith-language-toggle[data-direction="down"] .pixelsmith-language-toggle__flyout {
+  top: 100%;
+  left: 50%;
+  padding-top: 0.25rem;
+  transform: translateX(-50%);
+}
+
+.pixelsmith-language-toggle[data-direction="right"] .pixelsmith-language-toggle__flyout {
+  top: 50%;
+  left: 100%;
+  padding-left: 0.25rem;
+  transform: translateY(-50%);
+}
+
+.pixelsmith-language-toggle:hover .pixelsmith-language-toggle__flyout,
+.pixelsmith-language-toggle:focus-within .pixelsmith-language-toggle__flyout {
+  visibility: visible;
+  opacity: 1;
+}
+
+.pixelsmith-language-toggle__bubble {
+  display: flex;
+  border-radius: 999px;
+  background: var(--pixelsmith-language-bubble-bg);
+  color: var(--pixelsmith-language-bubble-text);
+  box-shadow: var(--pixelsmith-language-shadow), 0 0 0 1px var(--pixelsmith-language-ring);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.pixelsmith-language-toggle__alternate {
+  background: transparent;
+  opacity: 0.75;
+  transition: opacity 150ms ease, color 150ms ease;
+}
+
+.pixelsmith-language-toggle__alternate:hover,
+.pixelsmith-language-toggle__alternate:focus-visible {
+  opacity: 1;
+}
+
+.pixelsmith-language-toggle__current:focus-visible,
+.pixelsmith-language-toggle__alternate:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixelsmith-language-toggle__flyout,
+  .pixelsmith-language-toggle__alternate {
+    transition: none;
+  }
+}

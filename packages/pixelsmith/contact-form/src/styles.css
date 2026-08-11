@@ -1,0 +1,184 @@
+.pixelsmith-contact {
+  --pixelsmith-form-fg: #111111;
+  --pixelsmith-form-muted: #666666;
+  --pixelsmith-form-bg: #ffffff;
+  --pixelsmith-form-border: rgba(17, 17, 17, 0.24);
+  --pixelsmith-form-focus: #111111;
+  --pixelsmith-form-error: #9f1d1d;
+  --pixelsmith-form-success: #276227;
+  --pixelsmith-form-radius: 0.45rem;
+  display: grid;
+  gap: 1.25rem;
+  color: var(--pixelsmith-form-fg);
+  font: inherit;
+}
+
+.pixelsmith-contact__sections {
+  display: grid;
+  gap: 2rem;
+}
+
+.pixelsmith-contact__section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pixelsmith-contact__section-title {
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 0 0 0.65rem;
+  border-bottom: 1px solid var(--pixelsmith-form-border);
+  color: var(--pixelsmith-form-fg);
+  font: inherit;
+  font-weight: 600;
+}
+
+.pixelsmith-contact__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.pixelsmith-contact__field {
+  display: grid;
+  min-width: 0;
+  gap: 0.38rem;
+}
+
+.pixelsmith-contact__label {
+  font: inherit;
+  font-weight: 500;
+}
+
+.pixelsmith-contact__control {
+  width: 100%;
+  min-height: 2.85rem;
+  box-sizing: border-box;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--pixelsmith-form-border);
+  border-radius: var(--pixelsmith-form-radius);
+  background: var(--pixelsmith-form-bg);
+  color: var(--pixelsmith-form-fg);
+  font: inherit;
+}
+
+textarea.pixelsmith-contact__control {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.pixelsmith-contact__control:focus {
+  outline: 2px solid var(--pixelsmith-form-focus);
+  outline-offset: 2px;
+}
+
+.pixelsmith-contact__control[aria-invalid="true"] {
+  border-color: var(--pixelsmith-form-error);
+}
+
+.pixelsmith-contact__choice-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pixelsmith-contact__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+
+.pixelsmith-contact__choice input {
+  margin-top: 0.2rem;
+}
+
+.pixelsmith-contact__help,
+.pixelsmith-contact__error,
+.pixelsmith-contact__status {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+.pixelsmith-contact__help {
+  color: var(--pixelsmith-form-muted);
+}
+
+.pixelsmith-contact__error,
+.pixelsmith-contact__configuration-error,
+.pixelsmith-contact__status[data-status="error"] {
+  color: var(--pixelsmith-form-error);
+}
+
+.pixelsmith-contact__status[data-status="success"] {
+  color: var(--pixelsmith-form-success);
+}
+
+.pixelsmith-contact__challenge-wrap {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.pixelsmith-contact__turnstile {
+  min-height: 65px;
+}
+
+.pixelsmith-contact__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  gap: 0.65rem;
+  min-height: 2.85rem;
+  padding: 0.65rem 1.25rem;
+  border: 1px solid currentColor;
+  border-radius: var(--pixelsmith-form-radius);
+  background: var(--pixelsmith-form-fg);
+  color: var(--pixelsmith-form-bg);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pixelsmith-contact__submit-adornment {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixelsmith-contact__submit > span:first-child {
+  flex: 0 0 auto;
+}
+
+.pixelsmith-contact__submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.pixelsmith-contact__submit:focus-visible {
+  outline: 2px solid var(--pixelsmith-form-focus);
+  outline-offset: 3px;
+}
+
+.pixelsmith-contact__honeypot {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  clip-path: inset(50%) !important;
+}
+
+@media (min-width: 640px) {
+  .pixelsmith-contact__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pixelsmith-contact__field[data-width="full"] {
+    grid-column: 1 / -1;
+  }
+}

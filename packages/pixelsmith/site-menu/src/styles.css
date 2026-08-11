@@ -1,0 +1,260 @@
+.pixelsmith-site-menu {
+  --pixelsmith-menu-max-width: 80rem;
+  --pixelsmith-menu-horizontal-padding: 1.5rem;
+  --pixelsmith-menu-horizontal-padding-lg: 2.5rem;
+  --pixelsmith-menu-padding-y: 1.75rem;
+  --pixelsmith-menu-padding-y-lg: 2.25rem;
+  --pixelsmith-menu-foreground: currentColor;
+  --pixelsmith-menu-accent: currentColor;
+  --pixelsmith-menu-background: rgb(255 255 255 / 0.85);
+  --pixelsmith-menu-background-open: rgb(255 255 255 / 0.95);
+  --pixelsmith-menu-border: rgb(127 127 127 / 0.25);
+  --pixelsmith-menu-desktop-gap: 2rem;
+  --pixelsmith-menu-letter-spacing: 0.22em;
+  --pixelsmith-menu-breakpoint: 768px;
+  --pixelsmith-menu-blur: 12px;
+  --pixelsmith-menu-mobile-max-height: 80vh;
+  --pixelsmith-menu-hover-muted-opacity: 0.55;
+  --pixelsmith-menu-hover-scale: 1.025;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  color: var(--pixelsmith-menu-foreground);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--pixelsmith-menu-background) 82%, transparent), transparent);
+  transition: background-color 500ms ease, border-color 500ms ease, backdrop-filter 500ms ease;
+}
+
+.pixelsmith-site-menu[data-scrolled='true'],
+.pixelsmith-site-menu[data-open='true'] {
+  border-bottom: 1px solid var(--pixelsmith-menu-border);
+  background: var(--pixelsmith-menu-background);
+  -webkit-backdrop-filter: blur(var(--pixelsmith-menu-blur));
+  backdrop-filter: blur(var(--pixelsmith-menu-blur));
+}
+
+.pixelsmith-site-menu__bar {
+  width: min(100%, var(--pixelsmith-menu-max-width));
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: var(--pixelsmith-menu-padding-y) var(--pixelsmith-menu-horizontal-padding);
+}
+
+.pixelsmith-site-menu__brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.pixelsmith-site-menu__desktop {
+  display: none;
+  align-items: center;
+}
+
+.pixelsmith-site-menu__desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--pixelsmith-menu-desktop-gap);
+}
+
+.pixelsmith-site-menu__desktop-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: color-mix(in srgb, var(--pixelsmith-menu-foreground) 80%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: var(--pixelsmith-menu-letter-spacing);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 300ms ease-out, opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.pixelsmith-site-menu__desktop-nav:hover .pixelsmith-site-menu__desktop-link {
+  opacity: var(--pixelsmith-menu-hover-muted-opacity);
+}
+
+.pixelsmith-site-menu__desktop-nav .pixelsmith-site-menu__desktop-link:hover,
+.pixelsmith-site-menu__desktop-nav .pixelsmith-site-menu__desktop-link:focus-visible {
+  color: var(--pixelsmith-menu-accent);
+  opacity: 1;
+  transform: scale(var(--pixelsmith-menu-hover-scale));
+}
+
+.pixelsmith-site-menu__desktop-link[data-active='true'] {
+  color: var(--pixelsmith-menu-accent);
+}
+
+.pixelsmith-site-menu__underline {
+  position: absolute;
+  left: 0;
+  bottom: -0.4rem;
+  width: 0;
+  height: 1px;
+  background: var(--pixelsmith-menu-accent);
+  transition: width 300ms ease;
+}
+
+.pixelsmith-site-menu__desktop-link:hover .pixelsmith-site-menu__underline,
+.pixelsmith-site-menu__desktop-link:focus-visible .pixelsmith-site-menu__underline,
+.pixelsmith-site-menu__desktop-link[data-active='true'] .pixelsmith-site-menu__underline {
+  width: 100%;
+}
+
+.pixelsmith-site-menu__utility {
+  display: flex;
+  align-items: center;
+  margin-left: var(--pixelsmith-menu-desktop-gap);
+  padding-left: var(--pixelsmith-menu-desktop-gap);
+  border-left: 1px solid var(--pixelsmith-menu-border);
+}
+
+.pixelsmith-site-menu__desktop-overlay {
+  display: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+}
+
+.pixelsmith-site-menu__mobile-controls,
+.pixelsmith-site-menu__mobile-header-utility {
+  display: flex;
+  align-items: center;
+}
+
+.pixelsmith-site-menu__mobile-controls {
+  margin-left: auto;
+}
+
+.pixelsmith-site-menu__trigger {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pixelsmith-site-menu__glyph {
+  width: 1.5rem;
+  height: 1.5rem;
+  position: relative;
+  display: block;
+}
+
+.pixelsmith-site-menu__glyph > span {
+  position: absolute;
+  left: 0.15rem;
+  width: 1.2rem;
+  height: 1.5px;
+  background: currentColor;
+  transform-origin: center;
+  transition: transform 300ms ease, opacity 200ms ease, top 300ms ease;
+}
+
+.pixelsmith-site-menu__glyph > span:nth-child(1) { top: 0.4rem; }
+.pixelsmith-site-menu__glyph > span:nth-child(2) { top: 0.75rem; }
+.pixelsmith-site-menu__glyph > span:nth-child(3) { top: 1.1rem; }
+.pixelsmith-site-menu__glyph[data-open='true'] > span:nth-child(1) { top: 0.75rem; transform: rotate(45deg); }
+.pixelsmith-site-menu__glyph[data-open='true'] > span:nth-child(2) { opacity: 0; }
+.pixelsmith-site-menu__glyph[data-open='true'] > span:nth-child(3) { top: 0.75rem; transform: rotate(-45deg); }
+
+.pixelsmith-site-menu__mobile-panel {
+  max-height: 0;
+  overflow: hidden;
+  background: var(--pixelsmith-menu-background-open);
+  -webkit-backdrop-filter: blur(var(--pixelsmith-menu-blur));
+  backdrop-filter: blur(var(--pixelsmith-menu-blur));
+  transition: max-height 500ms ease;
+}
+
+.pixelsmith-site-menu__mobile-panel[data-open='true'] {
+  max-height: var(--pixelsmith-menu-mobile-max-height);
+  border-top: 1px solid var(--pixelsmith-menu-border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pixelsmith-site-menu__mobile-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem var(--pixelsmith-menu-horizontal-padding);
+}
+
+.pixelsmith-site-menu__mobile-link,
+.pixelsmith-site-menu__mobile-extra,
+.pixelsmith-site-menu__mobile-utility {
+  border-bottom: 1px solid var(--pixelsmith-menu-border);
+}
+
+.pixelsmith-site-menu__mobile-link {
+  padding: 1rem 0;
+  color: color-mix(in srgb, var(--pixelsmith-menu-foreground) 85%, transparent);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: var(--pixelsmith-menu-letter-spacing);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 200ms ease;
+}
+
+.pixelsmith-site-menu__mobile-link:hover,
+.pixelsmith-site-menu__mobile-link:focus-visible,
+.pixelsmith-site-menu__mobile-link[data-active='true'] {
+  color: var(--pixelsmith-menu-accent);
+}
+
+.pixelsmith-site-menu__mobile-extra,
+.pixelsmith-site-menu__mobile-utility {
+  padding: 1rem 0;
+}
+
+.pixelsmith-site-menu__mobile-utility {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .pixelsmith-site-menu__bar {
+    padding: var(--pixelsmith-menu-padding-y-lg) var(--pixelsmith-menu-horizontal-padding-lg);
+  }
+
+  .pixelsmith-site-menu__desktop,
+  .pixelsmith-site-menu__desktop-overlay {
+    display: flex;
+  }
+
+  .pixelsmith-site-menu__desktop-overlay {
+    flex-direction: column;
+  }
+
+  .pixelsmith-site-menu__mobile-controls,
+  .pixelsmith-site-menu__mobile-panel {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixelsmith-site-menu,
+  .pixelsmith-site-menu__desktop-link,
+  .pixelsmith-site-menu__underline,
+  .pixelsmith-site-menu__glyph > span,
+  .pixelsmith-site-menu__mobile-panel {
+    transition-duration: 0.01ms !important;
+  }
+
+  .pixelsmith-site-menu__desktop-link:hover,
+  .pixelsmith-site-menu__desktop-link:focus-visible {
+    transform: none;
+  }
+}
