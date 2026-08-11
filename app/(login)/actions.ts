@@ -4,14 +4,11 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  User,
   users,
   teams,
   teamMembers,
   activityLogs,
   type NewUser,
-  type NewTeam,
-  type NewTeamMember,
   type NewActivityLog,
   ActivityType,
   invitations
@@ -19,8 +16,7 @@ import {
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { createCheckoutSession } from '@/lib/payments/stripe';
-import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
   validatedActionWithUser
@@ -55,29 +51,23 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { password } = data;
   const email = normalizeEmail(data.email);
 
-  const userWithTeam = await db
-    .select({
-      user: users,
-      team: teams
-    })
+  const matchingUsers = await db
+    .select()
     .from(users)
-    .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
-    .leftJoin(teams, eq(teamMembers.teamId, teams.id))
     .where(eq(users.email, email))
     .limit(1);
 
-  if (userWithTeam.length === 0) {
+  if (matchingUsers.length === 0) {
     return {
       error: 'Invalid email or password. Please try again.',
-      email,
-      password
+      email
     };
   }
 
-  const { user: foundUser, team: foundTeam } = userWithTeam[0];
+  const foundUser = matchingUsers[0];
 
   if (!foundUser.emailVerifiedAt) {
-    return { error: 'Verify your email before signing in.', email, password };
+    return { error: 'Verify your email before signing in.', email };
   }
 
   const isPasswordValid = await comparePasswords(
@@ -88,33 +78,22 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   if (!isPasswordValid) {
     return {
       error: 'Invalid email or password. Please try again.',
-      email,
-      password
+      email
     };
   }
 
-  await Promise.all([
-    setSession(foundUser),
-    logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN)
-  ]);
-
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: foundTeam, priceId });
-  }
+  await setSession(foundUser);
 
   redirect('/dashboard');
 });
 
 const signUpSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
-  inviteId: z.string().optional()
+  password: z.string().min(8)
 });
 
-export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { password, inviteId } = data;
+export const signUp = validatedAction(signUpSchema, async (data) => {
+  const { password } = data;
   const email = normalizeEmail(data.email);
 
   const existingUser = await db
@@ -126,8 +105,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   if (existingUser.length > 0) {
     return {
       error: 'Failed to create user. Please try again.',
-      email,
-      password
+      email
     };
   }
 
@@ -144,95 +122,15 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   if (!createdUser) {
     return {
       error: 'Failed to create user. Please try again.',
-      email,
-      password
+      email
     };
   }
-
-  let teamId: number;
-  let userRole: string;
-  let createdTeam: typeof teams.$inferSelect | null = null;
-
-  if (inviteId) {
-    // Check if there's a valid invitation
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.id, parseInt(inviteId)),
-          eq(invitations.email, email),
-          eq(invitations.status, 'pending')
-        )
-      )
-      .limit(1);
-
-    if (invitation) {
-      teamId = invitation.teamId;
-      userRole = invitation.role;
-
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
-
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-      [createdTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, teamId))
-        .limit(1);
-    } else {
-      return { error: 'Invalid or expired invitation.', email, password };
-    }
-  } else {
-    // Create a new team if there's no invitation
-    const newTeam: NewTeam = {
-      name: `${email}'s Team`
-    };
-
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
-
-    if (!createdTeam) {
-      return {
-        error: 'Failed to create team. Please try again.',
-        email,
-        password
-      };
-    }
-
-    teamId = createdTeam.id;
-    userRole = 'owner';
-
-    await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-  }
-
-  const newTeamMember: NewTeamMember = {
-    userId: createdUser.id,
-    teamId: teamId,
-    role: userRole
-  };
-
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    issueEmailVerification(createdUser.id, email)
-  ]);
-
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: createdTeam, priceId });
-  }
+  await issueEmailVerification(createdUser.id, email);
 
   return { success: 'Check your email to verify your account before signing in.' };
 });
 
 export async function signOut() {
-  const user = (await getUser()) as User;
-  const userWithTeam = await getUserWithTeam(user.id);
-  await logActivity(userWithTeam?.teamId, user.id, ActivityType.SIGN_OUT);
   (await cookies()).delete('session');
 }
 
@@ -254,41 +152,24 @@ export const updatePassword = validatedActionWithUser(
 
     if (!isPasswordValid) {
       return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
         error: 'Current password is incorrect.'
       };
     }
 
     if (currentPassword === newPassword) {
       return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
         error: 'New password must be different from the current password.'
       };
     }
 
     if (confirmPassword !== newPassword) {
       return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
         error: 'New password and confirmation password do not match.'
       };
     }
 
     const newPasswordHash = await hashPassword(newPassword);
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    await Promise.all([
-      db
-        .update(users)
-        .set({ passwordHash: newPasswordHash })
-        .where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_PASSWORD)
-    ]);
+    await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, user.id));
 
     return {
       success: 'Password updated successfully.'
@@ -308,18 +189,9 @@ export const deleteAccount = validatedActionWithUser(
     const isPasswordValid = await comparePasswords(password, user.passwordHash);
     if (!isPasswordValid) {
       return {
-        password,
         error: 'Incorrect password. Account deletion failed.'
       };
     }
-
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    await logActivity(
-      userWithTeam?.teamId,
-      user.id,
-      ActivityType.DELETE_ACCOUNT
-    );
 
     // Soft delete
     await db
@@ -329,17 +201,6 @@ export const deleteAccount = validatedActionWithUser(
         email: sql`CONCAT(email, '-', id, '-deleted')` // Ensure email uniqueness
       })
       .where(eq(users.id, user.id));
-
-    if (userWithTeam?.teamId) {
-      await db
-        .delete(teamMembers)
-        .where(
-          and(
-            eq(teamMembers.userId, user.id),
-            eq(teamMembers.teamId, userWithTeam.teamId)
-          )
-        );
-    }
 
     (await cookies()).delete('session');
     redirect('/sign-in');
@@ -354,14 +215,15 @@ const updateAccountSchema = z.object({
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
-    const { name, email } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT)
-    ]);
-
+    const name = data.name;
+    const email = normalizeEmail(data.email);
+    await db.update(users).set({ name }).where(eq(users.id, user.id));
+    if (email !== user.email) {
+      const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (duplicate) return { error: 'That email address is unavailable.', name };
+      await issueEmailVerification(user.id, email);
+      return { name, success: 'Check the new address to verify your email change.' };
+    }
     return { name, success: 'Account updated successfully.' };
   }
 );

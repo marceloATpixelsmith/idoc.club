@@ -36,7 +36,7 @@ Protect member identity, professional information, membership entitlement and bi
 
 # 3. Member data isolation objectives
 
-Release 1 data-access functions resolve the actor from the server session, load server-managed active application-role grants, and then apply owner-or-administrator checks before private profile, role, membership, audit, or entitlement access. Email verification stores only a SHA-256 token digest; raw tokens are returned once to the future notification boundary. Database triggers reject updates and deletes to audit and profile-change history.
+Release 1 data-access functions resolve the actor from the server session, load server-managed active application-role grants, and then apply owner-or-administrator checks before private profile, role, membership, audit, or entitlement access. Registration and email-change verification store only a SHA-256 token digest. The raw random token exists only while the server constructs and sends the one-hour Mailchimp Transactional link; it is never returned in action state or persisted. Claiming a token is atomic, single-use, replay-safe, and invalidates earlier outstanding links for the account. Database triggers reject updates and deletes to audit and profile-change history.
 
 - A normal member can read only their own private profile, membership, professional roles and approved payment summary.
 

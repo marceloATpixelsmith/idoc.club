@@ -54,3 +54,28 @@ test('migration makes audit and profile history immutable', () => {
   assert.match(migration, /profile_change_history_immutable/);
   assert.match(migration, /BEFORE UPDATE OR DELETE/);
 });
+
+test('registration does not create starter teams or return password values', () => {
+  const actions = readFileSync(new URL('../app/(login)/actions.ts', import.meta.url), 'utf8');
+  const signUpBody = actions.slice(actions.indexOf('export const signUp'), actions.indexOf('export async function signOut'));
+  assert.doesNotMatch(signUpBody, /insert\(teams\)|insert\(teamMembers\)/);
+  assert.doesNotMatch(actions, /return\s*\{[^}]*\n\s*(currentPassword|newPassword|confirmPassword|password)\s*[,}:]/s);
+});
+
+test('verification uses digests, one-time claims, and the approved sender boundary', () => {
+  const verification = readFileSync(new URL('../lib/membership/email-verification.ts', import.meta.url), 'utf8');
+  const mail = readFileSync(new URL('../lib/notifications/mailchimp-transactional.ts', import.meta.url), 'utf8');
+  assert.match(verification, /createHash\('sha256'\)/);
+  assert.match(verification, /isNull\(emailVerificationTokens\.consumedAt\)/);
+  assert.match(verification, /gt\(emailVerificationTokens\.expiresAt/);
+  assert.doesNotMatch(verification, /return token/);
+  assert.match(mail, /accounts@idoc\.club/);
+});
+
+test('member billing linkage preserves external Stripe identity', () => {
+  const migration = readFileSync(new URL('../lib/db/migrations/0004_member_billing_accounts.sql', import.meta.url), 'utf8');
+  const stripeBoundary = readFileSync(new URL('../lib/payments/customer-email.ts', import.meta.url), 'utf8');
+  assert.match(migration, /external_customer_id.*UNIQUE/s);
+  assert.match(stripeBoundary, /customers\.update\(customerId, \{ email \}\)/);
+  assert.doesNotMatch(stripeBoundary, /customers\.create/);
+});
