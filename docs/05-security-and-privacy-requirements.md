@@ -90,7 +90,27 @@ Public-facing activation/password-recovery requests should return neutral respon
 
 - Use Vercel's platform protections as an additional layer, not as a replacement for application authorization.
 
-# 8. Security acceptance checklist
+# 8. Vercel Pro security and deployment controls
+
+Vercel Pro strengthens the deployment perimeter and operations; it does not replace IDOC server-side authorization, database ownership checks, validation, or Stripe webhook verification.
+
+| **Control** | **Approved IDOC use** | **When to implement** |
+|---|---|---|
+| Environment separation and protected previews | Separate Production, Staging/UAT and Preview values. Preview uses non-production data and Stripe test mode only; protect private feature previews. | Foundation |
+| Firewall / WAF | Use managed protections plus narrowly scoped rate limits for auth, recovery, verification/resend, email changes, contact forms, Stripe webhooks and sensitive admin mutations. | Before public account and admin flows |
+| Sensitive Environment Variables | Store production secrets as sensitive server-only values; never expose them in logs, browser responses, source maps or documentation. | Before entering production secrets |
+| Observability and Runtime Logs | Investigate server errors, latency, failed background work and deployments without logging secrets or unnecessary personal data. | Before UAT |
+| Cron Jobs | Use only as a scheduler for authenticated, idempotent, database-backed jobs. Record outcomes and prevent duplicate effects. | After the related workflows are complete |
+| GitHub deployment integration | Preview each PR; deploy Production only from approved `main` merges. CI remains the merge gate. | Foundation |
+| Fluid Compute | Keep default Vercel server execution; do not place long migrations/imports in requests. | Default |
+| Workflows / Queues | Do not add initially. Re-evaluate only if Cron plus database-backed jobs cannot safely coordinate durable recovery, imports, delivery or wait lists. | When that trigger is reached |
+
+## 8.1 Firewall and Cron verification
+
+- Test normal member sign-in, verification, recovery, administrator operations, Stripe webhook delivery and preview access after material firewall changes.
+- Every scheduled endpoint validates a server-only scheduler secret, is idempotent, writes durable safe run evidence, and alerts on repeated failures or missed expected runs.
+
+# 9. Security acceptance checklist
 
 | **Test**               | **Pass condition**                                                                                                                                                       |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -104,8 +124,11 @@ Public-facing activation/password-recovery requests should return neutral respon
 | Enumeration            | Anonymous activation/recovery flow does not reveal membership existence.                                                                                                 |
 | Admin audit            | Sensitive admin action produces immutable audit evidence.                                                                                                                |
 | Backup restore         | Restore procedure has been tested or provider-supported recovery verified.                                                                                               |
+| Protected preview      | A private PR preview cannot be accessed by an unapproved viewer and uses only non-production data and secrets.                                                          |
+| Firewall/WAF           | Endpoint rules protect abuse paths without blocking legitimate traffic or verified Stripe webhooks.                                                                      |
+| Scheduled jobs         | Each deployed job rejects unauthenticated invocation, is idempotent, records outcome and alerts on repeated failure.                                                    |
 
-# 9. Official references
+# 10. Official references
 
 - Render: PostgreSQL documentation - https://render.com/docs/postgresql
 
@@ -114,3 +137,8 @@ Public-facing activation/password-recovery requests should return neutral respon
 - Stripe: Webhooks - [<u>https://docs.stripe.com/webhooks</u>](https://docs.stripe.com/webhooks)
 
 - Vercel: Stripe Subscription Starter - [<u>https://vercel.com/templates/other/subscription-starter</u>](https://vercel.com/templates/other/subscription-starter)
+
+- Vercel: Security - https://vercel.com/docs/security
+- Vercel: Firewall - https://vercel.com/docs/vercel-firewall
+- Vercel: Cron Jobs - https://vercel.com/docs/cron-jobs
+- Vercel: Observability - https://vercel.com/docs/observability
