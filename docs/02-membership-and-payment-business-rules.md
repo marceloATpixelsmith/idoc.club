@@ -112,12 +112,15 @@ Standard annual membership fee: €80. Professional role and level do not determ
 
 # 5. Renewal logic
 
-Before implementation, IDOC must choose one of the following membership-calendar models. The system should implement exactly one approved policy.
+IDOC uses a rolling 12-month membership calendar. It does not use a common annual expiration date.
 
-| **Model**             | **Description**                                                                   | **Advantages**                                                                 | **Risks**                                                                   |
-|-----------------------|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
-| Rolling anniversary   | Each payment extends the member from the relevant paid-through date for one year. | Simple for individual renewals; naturally matches Stripe annual subscriptions. | Members have different renewal dates.                                       |
-| Fixed membership year | Membership is valid to a common annual date.                                      | Administrative simplicity if IDOC historically works this way.                 | Proration, late renewals and Stripe anniversaries require additional rules. |
+- A new paid membership begins on its successful payment/effective date and runs for 12 months.
+
+- Each migrated member retains the person's existing paid-through/expiration date. Migration must not replace individual dates with a shared anniversary or recalculate them merely because the member is moving systems.
+
+- Stripe and manual-payment workflows must use the same rolling-calendar policy.
+
+- The exact calculations for early renewals, late renewals after expiration and exceptional manual extensions remain to be approved before implementation.
 
 # 6. Stripe subscription status mapping
 
