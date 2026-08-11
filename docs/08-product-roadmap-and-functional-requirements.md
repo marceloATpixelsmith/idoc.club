@@ -8,16 +8,16 @@ From the deployed raw starter to membership launch, restricted content, seminars
 |-------------------|-------------------------------------------------------------------------------------------------------------------|
 | Organization      | International Dressage Officials Club (IDOC)                                                                      |
 | Current platform  | WordPress Multisite + MemberPress                                                                                 |
-| Target platform   | Next.js on Vercel + Render PostgreSQL (dedicated idoc schema) + Stripe + Brevo                                    |
+| Target platform   | Next.js on Vercel + Render PostgreSQL (dedicated idoc schema) + Stripe + Mailchimp Transactional                 |
 | Current state     | Raw subscription starter deployed; database connection and isolated IDOC migrations working                       |
 | Annual membership | €80; one club membership regardless of professional classification                                                |
-| Document status   | Authoritative delivery map; policy items marked Decision required must be approved before affected implementation |
+| Document status   | Authoritative delivery map; approved policy is ready for implementation |
 
 # 1. Purpose and governing principles
 
 This document translates the approved project direction into an ordered product delivery map. It defines what must be built, why the order matters, what each release must prove, and which unresolved decisions block implementation. The original documents continue to govern their specialized subjects; this document governs sequencing and requirement traceability.
 
-- Launch the membership replacement first and stabilize it before expanding the product.
+- Launch the complete project scope together: membership, restricted CMS, seminars, news and blog, following the internal implementation gates below.
 
 - Use one €80 annual membership; professional classification controls data and content access, not price.
 
@@ -35,29 +35,29 @@ This document translates the approved project direction into an ordered product 
 
 | **Release** | **Outcome**                       | **Included scope**                                                                                                                            |
 |-------------|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| Release 0   | Approved specification            | Business rules, complete field dictionary, editable/verified field matrix, renewal/grace/notice policy, roles and permissions.                |
+| Release 0   | Approved specification            | Business rules, complete field dictionary, renewal/grace/notice policy, roles and permissions.                                                  |
 | Release 1   | Membership foundation             | IDOC schema, authorization, account lifecycle, profiles, professional roles/history, membership entitlement, audit and automated tests.       |
-| Release 2   | Membership billing and operations | €80 Stripe enrollment, renewal controls, Customer Portal, manual payments, Brevo notifications, dashboard, administration and reconciliation. |
-| Release 3   | Migrated membership launch        | Repeatable IDOC-only import, staging rehearsal, reconciliation, activation, cutover, monitoring and read-only legacy retention.               |
+| Release 2   | Membership billing and operations | €80 Stripe enrollment, renewal controls, Customer Portal, manual payments, Mailchimp Transactional notifications, dashboard, administration and reconciliation. |
+| Release 3   | Migrated membership launch        | Repeatable IDOC-only import, staging rehearsal, reconciliation, activation, cutover, monitoring and legacy retirement.                         |
 | Release 4   | Restricted CMS                    | Page authoring, revisions, publishing, media/SEO data and audience access.                                                                    |
 | Release 5   | Seminars                          | Seminar authoring, eligibility/capacity, registration, Stripe/manual payments, attendance, refunds, reminders and reports.                    |
 | Release 6   | News and blog                     | President/editor publishing, drafts, scheduling, taxonomy, featured media, SEO and optional restrictions.                                     |
 
 # 3. Phase 0 - decisions and data dictionary
 
-This is the immediate next step. No production membership schema or conditional signup form should be treated as final until these decisions are approved.
+All core membership-policy decisions in this section are approved. No production membership schema or conditional signup form should diverge from them.
 
 | **Decision area**         | **Required output**                                                                                    | **Status**        |
 |---------------------------|--------------------------------------------------------------------------------------------------------|-------------------|
-| Common member fields      | Email/username, name, and complete address as defined in document 02.                                  | Approved; edit permissions and migration source mapping remain to be confirmed |
-| Judge fields              | Common official fields, approved Judge status, and Technical Delegate answer as defined in document 02. | Approved; edit/verification rules remain to be confirmed |
-| Steward fields            | Common official fields and approved Steward status as defined in document 02.                          | Approved; edit/verification rules remain to be confirmed |
+| Common member fields      | Email/username, name, and complete address, with optional Address 2, as defined in document 02.        | Approved |
+| Judge fields              | Common official fields, approved Judge status, and Technical Delegate answer as defined in document 02. | Approved |
+| Steward fields            | Common official fields and approved Steward status as defined in document 02.                          | Approved |
 | Veterinarian fields       | Only the fields required for every member.                                                             | Approved |
-| Membership calendar       | Rolling 12 months; preserve every existing member's current paid-through/expiration date during migration. Late/early/manual renewal calculations remain to be confirmed. | Approved policy; edge-case calculations remain |
-| Renewal choice            | Whether recurring is default/optional and whether online one-time payment is offered.                  | Decision required |
-| Notices and grace         | Notice timing, failed-payment grace duration, access behavior and escalation.                          | Decision required |
-| Administrator permissions | Membership, billing, content/editor and system roles; high-risk approvals.                             | Decision required |
-| Manual exceptions         | Discounts, partial payments, complimentary grants, evidence and approval thresholds.                   | Decision required |
+| Membership calendar       | Rolling 12 months; early renewal extends from current expiry; late renewal starts on actual payment date; preserve imported dates. | Approved |
+| Renewal choice            | Auto-renewal or one-time payment; auto selected by default.                                            | Approved |
+| Notices and grace         | Auto notice 15 days before; non-auto notice 30 days before; five-day active grace after automatic-payment failure. | Approved |
+| Administrator permissions | Administrator has full application access; Super Admin additionally holds restricted settings/functions. | Approved |
+| Manual exceptions         | EUR only; no discount, partial or waived payments; any admin may grant an audited complimentary membership. | Approved |
 
 # 4. Release 1 - membership foundation
 
@@ -71,7 +71,7 @@ This is the immediate next step. No production membership schema or conditional 
 
 5.  Implement the common member form plus conditional Judge, Steward, Judge + Steward, and Veterinarian fields from the approved dictionary.
 
-6.  Implement classification change requests so adding or ending a role preserves history.
+6.  Implement member self-service changes to all signup fields and classifications, preserve history, validate the resulting roles, and notify administrators.
 
 7.  Pass cross-account, role-escalation, validation, audit, and membership-entitlement automated tests.
 
@@ -83,9 +83,9 @@ This is the immediate next step. No production membership schema or conditional 
 
 10. Provide an ownership-verified Stripe Customer Portal for payment-method and permitted subscription changes.
 
-11. Implement renewal preference/status and upcoming renewal/expiration notifications through Brevo, with delivery history.
+11. Implement renewal preference/status and required/optional notification controls through Mailchimp Transactional, with delivery history.
 
-12. Implement manual cash, bank transfer, PayPal, complimentary, waived/discounted, and other approved payment recording. Payment, entitlement change, and audit entry commit together.
+12. Implement EUR manual cash, bank transfer, PayPal and complimentary-membership recording. Payment/adjustment, entitlement change, reason and audit entry commit together.
 
 13. Build member dashboard: membership status, paid-through/renewal date, auto-renew status, portal access, payment history, permitted profile edits, security controls, professional information and change requests.
 
@@ -105,15 +105,15 @@ This is the immediate next step. No production membership schema or conditional 
 
 20. Obtain IDOC acceptance; freeze legacy IDOC membership changes; take final backups/exports; rerun the idempotent import; switch the production webhook; launch.
 
-21. Monitor errors, webhooks, notifications and discrepancies; retain the old IDOC membership function read-only for the approved stabilization period.
+21. Monitor errors, webhooks, notifications and discrepancies through the approved stabilization period.
 
-22. Decommission only IDOC-specific MemberPress/webhook/jobs after acceptance; do not affect any unrelated multisite site.
+22. After launch acceptance and archival backup, retire the legacy IDOC WordPress/MemberPress site and its jobs/webhooks. The other former multisite sites will already have been retired independently.
 
 # 7. Release 4 - restricted CMS
 
 - Page fields: title, slug, structured/rich body, summary, status, author, revision, publish/schedule dates, featured media, SEO title/description and audit metadata.
 
-- Audiences: public, any active member, Judge, Steward, Judge or Steward, Judge and Steward, Veterinarian, administrator, and approved combinations.
+- Audiences: public plus any checklist combination of active member, Judge, Steward and Veterinarian. Administrators see all published content.
 
 - Access is evaluated server-side from current membership and active professional roles. Restricted content must not leak through public caches, previews, feeds, sitemaps, APIs, or search indexing.
 
@@ -123,7 +123,7 @@ This is the immediate next step. No production membership schema or conditional 
 
 - Seminar data: title, description, presenter, dates/times/time zone, venue/online details, capacity, registration window, eligibility, prices, cancellation/refund policy and communications.
 
-- Registration: authenticated member or approved public/nonmember path, eligibility validation, concurrency-safe capacity, waitlist if adopted, consent fields, payment state, confirmation and attendance.
+- Registration: authenticated member or optional guest/public path, eligibility validation, concurrency-safe capacity, optional waitlist, consent fields, payment state, confirmation and attendance.
 
 - Payments: application-created Stripe Checkout and approved manual methods. Seminar payments are classified separately and never alter membership entitlement.
 
@@ -133,7 +133,7 @@ This is the immediate next step. No production membership schema or conditional 
 
 - News and blog article types with author, draft/published/scheduled state, publication date, featured media, categories/tags, SEO fields and revisions.
 
-- President and approved editors receive least-privilege authoring/publishing permissions.
+- Administrators receive authoring/publishing permissions; the president is an administrator.
 
 - Articles are public by default when intended, with optional use of the same audience restriction system as CMS pages.
 
@@ -141,7 +141,7 @@ This is the immediate next step. No production membership schema or conditional 
 
 | **Gate**            | **Pass condition**                                                                                                                          |
 |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| Architecture        | Production uses Vercel, Render PostgreSQL idoc schema with isolated Drizzle ledger/TLS, server-only credentials, Stripe and Brevo.          |
+| Architecture        | Production uses Vercel, Render PostgreSQL idoc schema with isolated Drizzle ledger/TLS, server-only credentials, Stripe and Mailchimp Transactional. |
 | Authorization       | Cross-member reads/writes and client-driven privilege escalation fail; restricted content is not cached publicly.                           |
 | Billing integrity   | Webhook replay cannot duplicate payment or entitlement; manual payment commits atomically; seminar billing cannot affect membership.        |
 | Migration integrity | Every in-scope legacy record has a disposition; counts and financial/entitlement totals reconcile; unrelated multisite sites are unchanged. |
@@ -155,7 +155,7 @@ The starter must be hardened before production data is imported. The required tr
 
 - Every Server Action, Route Handler, API endpoint, background job, and private server-rendered read enforces ownership or administrator permissions server-side.
 
-- Browsers never receive database/authentication/Stripe/Brevo secrets and never supply trusted active-subscription, membership, professional-level, or administrator state.
+- Browsers never receive database/authentication/Stripe/Mailchimp Transactional secrets and never supply trusted active-subscription, membership, professional-level, or administrator state.
 
 - Input validation, rate limiting, security headers, secure sessions/cookies, audit logging, enumeration resistance, webhook verification/idempotency, least-privilege database access, backups/recovery, and time-bounded migration tooling are launch requirements.
 
@@ -177,4 +177,4 @@ The starter must be hardened before production data is imported. The required tr
 
 # 12. Immediate next action
 
-The required signup fields, permitted status values and rolling 12-month membership calendar are approved in document 02. Complete the remaining Phase 0 decisions: field edit permissions, migration-source mapping, early/late/manual renewal calculations, renewal choice, notice/grace timing, administrator permissions, and manual-payment exception rules. Then begin Release 1. Stripe live integration, production migration, CMS, seminars, and publishing must follow their defined gates rather than being developed against assumptions.
+The required signup fields, permitted status values, rolling membership calendar, billing, self-service, notification, administrator, CMS, seminar and publishing rules are approved in document 02. Begin Release 1. The complete project scope is required for launch, while implementation must follow the defined gates rather than being developed against assumptions.
