@@ -13,8 +13,9 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 7. [Implementation, Testing, and Cutover Plan](06-implementation-testing-and-cutover-plan.md)
 8. [Administrator and Operations Runbook](07-administrator-and-operations-runbook.md)
 9. [Product Roadmap and Functional Requirements](08-product-roadmap-and-functional-requirements.md)
+10. [Codex Working Rules](09-codex-working-rules.md)
 
-Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior.
+Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Every Codex implementation prompt must also follow document 09.
 
 ## Document ownership
 
@@ -29,6 +30,7 @@ Start with document 08 when planning the next development phase, then consult th
 | Delivery phases, testing, rehearsal, cutover, and rollback | 06 |
 | Administrator procedures and ongoing operations | 07 |
 | Functional scope, release order, and requirement traceability | 08 |
+| Mandatory Codex implementation, security, test, and reporting rules | 09 |
 
 ## Maintenance rule
 
