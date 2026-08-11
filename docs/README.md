@@ -14,8 +14,9 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 8. [Administrator and Operations Runbook](07-administrator-and-operations-runbook.md)
 9. [Product Roadmap and Functional Requirements](08-product-roadmap-and-functional-requirements.md)
 10. [Codex Working Rules](09-codex-working-rules.md)
+11. [GPT Collaboration Rules](10-gpt-collaboration-rules.md)
 
-Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Every Codex implementation prompt must also follow document 09.
+Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
 
 ## Document ownership
 
@@ -31,6 +32,7 @@ Start with document 08 when planning the next development phase, then consult th
 | Administrator procedures and ongoing operations | 07 |
 | Functional scope, release order, and requirement traceability | 08 |
 | Mandatory Codex implementation, security, test, and reporting rules | 09 |
+| Mandatory GPT collaboration, Codex-prompt, CI/review-patching, and handoff rules | 10 |
 
 ## Maintenance rule
 
