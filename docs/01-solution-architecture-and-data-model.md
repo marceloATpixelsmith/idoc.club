@@ -116,3 +116,9 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 # 9. Architecture decision: do not normalize legacy Stripe Price IDs during cutover
 
 Legacy subscriptions may remain on their existing Stripe Price objects. New enrollments can use a canonical current €80/year Price. Both can map to the same IDOC membership entitlement. Price normalization, if ever required, should be a separate billing project after the migration is stable.
+
+## Release 1 account-token and session additions
+
+Password recovery and migrated-member activation share a purpose-scoped account-token table. Only SHA-256 token digests are persisted; tokens expire, are claimed atomically once, and all outstanding account tokens are consumed after successful password establishment. `users.account_state` distinguishes unverified, onboarding, active, suspended, and migrated-pending identities, while application roles continue to distinguish Administrator and Super Admin. `users.session_version` is embedded in signed sessions and incremented by password reset so previously issued sessions cease to authenticate. Imported profiles, roles, memberships, billing links, and migration mappings are not rewritten by activation.
+
+The notification outbox records attempt count, last-attempt time, a non-sensitive error code, and successful delivery time. Profile data, active-role replacement, immutable history, audit evidence, and creation of the administrator notification job remain one database transaction.

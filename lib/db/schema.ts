@@ -20,12 +20,14 @@ export const users = idocSchema.table('users', {
   name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
+  sessionVersion: integer('session_version').notNull().default(0),
   role: varchar('role', { length: 20 }).notNull().default('member'),
   emailVerifiedAt: timestamp('email_verified_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
-});
+}, (table) => [uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`)]);
 
 export const teams = idocSchema.table('teams', {
   id: serial('id').primaryKey(),
@@ -229,6 +231,9 @@ export const notificationOutbox = idocSchema.table('notification_outbox', {
   payload: jsonb('payload').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp('sent_at', { withTimezone: true }),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  lastErrorCode: varchar('last_error_code', { length: 50 }),
 });
 
 export const stripeEvents = idocSchema.table('stripe_events', {
@@ -244,6 +249,17 @@ export const emailVerificationTokens = idocSchema.table('email_verification_toke
   userId: integer('user_id').notNull().references(() => users.id),
   tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
   pendingEmail: varchar('pending_email', { length: 255 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Digests for anonymous account-recovery and imported-member activation links. */
+export const accountTokens = idocSchema.table('account_tokens', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

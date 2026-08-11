@@ -142,3 +142,7 @@ Vercel Pro strengthens the deployment perimeter and operations; it does not repl
 - Vercel: Firewall - https://vercel.com/docs/vercel-firewall
 - Vercel: Cron Jobs - https://vercel.com/docs/cron-jobs
 - Vercel: Observability - https://vercel.com/docs/observability
+
+## Release 1 recovery and account-state enforcement
+
+Anonymous recovery and activation requests always return the same neutral response. Eligible accounts receive a Mailchimp Transactional message from `accounts@idoc.club`; delivery failure leaves the flow safely retryable through a fresh request. Raw tokens and passwords are neither persisted nor included in action state, audit payloads, logs, or redirects. Only the necessary inbound link carries the raw token. Successful reset increments the session version, invalidating existing signed sessions. Suspended and migrated-pending identities are rejected during authenticated-user resolution regardless of membership dates; expired members may authenticate only to the documented account-maintenance and future renewal/billing boundaries.
