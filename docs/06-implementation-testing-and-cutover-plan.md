@@ -29,6 +29,16 @@ Working project document. Update this document when project decisions change.
 
 # 2. Test matrix
 
+## 2.1 Vercel Pro rollout checkpoints
+
+| **Checkpoint** | **Scope** | **Verification gate** |
+|---|---|---|
+| Foundation deployment controls | Separate Vercel Production, Staging/UAT and Preview values; Sensitive Environment Variables; protected previews; Observability/Runtime Log access. | Preview uses isolated data and Stripe test mode; production secrets are not available there. |
+| Public account-flow hardening | Endpoint-specific Firewall/WAF protections for authentication, recovery, verification/resend, email changes and contact forms. | Normal and abuse-path tests pass without account enumeration. |
+| Billing/admin hardening | Extend coverage to Stripe webhooks, payment/renewal and sensitive admin operations. | Verified Stripe delivery succeeds; invalid/replayed events remain rejected. |
+| Scheduled jobs | Add Cron-backed database-idempotent notifications, expiry, reconciliation and alerts only after the underlying workflows exist. | Authenticated invocation, duplicate-run handling, durable job records and alerts pass in non-production. |
+| Advanced workflow decision | Consider Workflows/Queues only if Cron plus durable database jobs cannot handle required orchestration. | Written cost, failure, ownership and alternative analysis. |
+
 The Release 1 automated suite covers cross-account denial, administrator and Super Admin escalation denial, canonical-country and conditional-official-field validation, classification combinations, normalized email usernames, password-response redaction, absence of IDOC starter-team creation, verification-token handling, onboarding ownership/history, and Stripe identity preservation boundaries. Database-backed integration tests for transaction rollback and migration execution remain an environment gate before production import.
 
 | **Scenario**                                  | **Expected result**                                                            |

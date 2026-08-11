@@ -67,7 +67,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const foundUser = matchingUsers[0];
 
   if (!foundUser.emailVerifiedAt) {
-    return { error: 'Verify your email before signing in.', email };
+    return { error: 'Verify your email before signing in. You can request another verification email below.', email };
   }
 
   const isPasswordValid = await comparePasswords(
@@ -125,9 +125,18 @@ export const signUp = validatedAction(signUpSchema, async (data) => {
       email
     };
   }
-  await issueEmailVerification(createdUser.id, email);
+  const verification = await issueEmailVerification(createdUser.id, email);
 
-  return { success: 'Check your email to verify your account before signing in.' };
+  return { success: verification.delivered ? 'Check your email to verify your account before signing in.' : 'Your account was created. Use the resend verification option on the sign-in page if the first email does not arrive.' };
+});
+
+const resendVerificationSchema = z.object({ email: z.string().email().max(255) });
+
+export const resendVerification = validatedAction(resendVerificationSchema, async (data) => {
+  const email = normalizeEmail(data.email);
+  const [user] = await db.select({ emailVerifiedAt: users.emailVerifiedAt, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  if (user && !user.emailVerifiedAt) await issueEmailVerification(user.id, email);
+  return { success: 'If an unverified account uses this address, a verification email will be sent.' };
 });
 
 export async function signOut() {

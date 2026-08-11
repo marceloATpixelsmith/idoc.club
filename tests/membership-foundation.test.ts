@@ -72,6 +72,22 @@ test('verification uses digests, one-time claims, and the approved sender bounda
   assert.match(mail, /accounts@idoc\.club/);
 });
 
+test('verification delivery is recoverable and Stripe synchronization remains retryable', () => {
+  const actions = readFileSync(new URL('../app/(login)/actions.ts', import.meta.url), 'utf8');
+  const verification = readFileSync(new URL('../lib/membership/email-verification.ts', import.meta.url), 'utf8');
+  assert.match(actions, /export const resendVerification/);
+  assert.match(actions, /If an unverified account uses this address/);
+  assert.match(verification, /kind: 'stripe\.customer_email_sync'/);
+  assert.match(verification, /THE OUTBOX RECORD RETAINS THE JOB FOR A RETRYING WORKER/);
+});
+
+test('onboarding conditionally renders approved professional fields', () => {
+  const form = readFileSync(new URL('../app/(dashboard)/onboarding/form.tsx', import.meta.url), 'utf8');
+  assert.match(form, /classification !== 'veterinarian'/);
+  assert.match(form, /classification === 'judge' \|\| classification === 'judge_steward'/);
+  assert.match(form, /classification === 'steward' \|\| classification === 'judge_steward'/);
+});
+
 test('member billing linkage preserves external Stripe identity', () => {
   const migration = readFileSync(new URL('../lib/db/migrations/0004_member_billing_accounts.sql', import.meta.url), 'utf8');
   const stripeBoundary = readFileSync(new URL('../lib/payments/customer-email.ts', import.meta.url), 'utf8');

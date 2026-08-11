@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CircleIcon, Loader2 } from 'lucide-react';
-import { signIn, signUp } from './actions';
+import { resendVerification, signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
@@ -17,6 +17,10 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const inviteId = searchParams.get('inviteId');
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     mode === 'signin' ? signIn : signUp,
+    { error: '' }
+  );
+  const [resendState, resendAction, resendPending] = useActionState<ActionState, FormData>(
+    resendVerification,
     { error: '' }
   );
 
@@ -107,6 +111,15 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             </Button>
           </div>
         </form>
+
+        {mode === 'signin' ? <form action={resendAction} className="mt-4 space-y-2">
+          <Label className="block text-sm font-medium text-gray-700" htmlFor="resend-email">Need another verification email?</Label>
+          <div className="flex gap-2">
+            <Input id="resend-email" name="email" placeholder="Email address" required type="email" />
+            <Button disabled={resendPending} type="submit">Resend</Button>
+          </div>
+          {resendState?.success ? <div className="text-sm text-gray-700">{resendState.success}</div> : null}
+        </form> : null}
 
         <div className="mt-6">
           <div className="relative">

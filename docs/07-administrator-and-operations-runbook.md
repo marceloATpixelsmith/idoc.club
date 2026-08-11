@@ -135,6 +135,16 @@ Before approving a classification change, confirm that every field required by t
 | Quarterly          | Dependency/security updates, authorization and member-data-isolation spot-check, and Render PostgreSQL backup/recovery posture. |
 | When staff changes | Immediately remove or adjust administrative access.                                                                             |
 
+## 12.1 Vercel Pro operational controls
+
+| **Area** | **Procedure** |
+|---|---|
+| Preview access | Share protected previews only with current project reviewers; never use Preview to inspect or edit production member data. |
+| Environment variables | Enter, rotate and remove secrets only in approved Vercel project settings and target environment; never paste them in tickets, PRs, logs, screenshots or chat. |
+| Firewall/WAF | Document purpose, scope and rollback before changes, then test affected account, admin and Stripe flows. |
+| Observability/logs | Record deployment, timestamp, safe error ID and affected workflow; do not export unredacted member data or secrets. |
+| Scheduled jobs | Check prior effects before retries; escalate repeated failure, missed runs and duplicate-effect evidence. |
+
 # 13. Data export and reporting
 
 Administrative exports should be generated through authorized server-side reporting functions. Export only the fields necessary for the stated business purpose and avoid distributing raw migration exports or unnecessary billing identifiers.
