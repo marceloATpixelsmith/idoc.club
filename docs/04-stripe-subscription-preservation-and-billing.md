@@ -35,7 +35,7 @@ Do not cancel and recreate legitimate existing Stripe subscriptions solely becau
 
 # 3. New memberships
 
-Create a current canonical Stripe Product/Price for new standard memberships if one does not already exist. The price represents the approved €80 annual fee and rolling 12-month term. New checkout offers automatic annual renewal by default and a member-selectable one-time €80 option. Checkout creates or reuses the correct Stripe Customer and associates the resulting billing relationship with the authenticated IDOC profile.
+Create or retain one Stripe Product with two required €80 prices for new standard memberships: a recurring annual Price for automatic renewal and a distinct non-recurring Price for one-time membership. Both represent the approved 12-month term. New Checkout defaults to automatic renewal but offers the member-selectable one-time option. The recurring path uses Checkout in subscription mode; the one-time path uses Checkout in payment mode. Checkout creates or reuses the correct Stripe Customer and associates the resulting billing relationship with the authenticated IDOC profile.\n\nThe server must carry the authenticated member identifier and intended payment path in server-created Checkout metadata. It grants one-time entitlement only after it verifies a successful, idempotent payment webhook against the expected one-time Price; a completed browser redirect is not sufficient.
 
 # 4. Legacy Price IDs
 
@@ -52,7 +52,7 @@ Migration must preserve each existing subscriber's current Stripe period end and
 | customer.subscription.deleted                                       | Mark recurring billing ended; do not erase payment/membership history.                 |
 | invoice.paid                                                        | Record payment idempotently and update/extend membership according to approved policy. |
 | invoice.payment_failed                                              | Record failure and apply grace/notification rule.                                      |
-| invoice.payment_action_required or equivalent payment-action signal | Notify/admin flag as appropriate without granting unverified payment.                  |
+| invoice.payment_action_required or equivalent payment-action signal | Notify/admin flag as appropriate without granting unverified payment.                  |\n| checkout.session.completed (payment mode)                            | Validate authenticated-member metadata, expected one-time Price and paid status; record the session idempotently. |\n| payment_intent.succeeded                                              | Confirm the one-time payment record where applicable; never create a subscription. |
 
 # 6. Webhook security and reliability
 
