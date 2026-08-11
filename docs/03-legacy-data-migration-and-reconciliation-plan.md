@@ -82,7 +82,7 @@ IDOC already uses member-specific rolling expiration dates. The migration must p
 
 6. Store the verified Stripe Customer and Subscription IDs in the new database.
 
-7. Record a migration_map row containing source IDs, target IDs, match method and confidence/review status.
+7. Record a migration_map row containing source IDs, target IDs, match method and confidence/review status. A successfully imported WordPress identity uses `legacy_type = wp_user` and `disposition = imported`; migrated-account activation requires that exact successful user mapping and cannot be satisfied by a mapping for another entity type.
 
 # 6. Exception categories
 
@@ -128,4 +128,4 @@ The final migration must avoid destructive changes to existing Stripe subscripti
 
 ## Imported-account activation foundation
 
-The later repeatable importer may create an identity in `migrated_pending` state and issue a `migration_activation` token for that existing user. Activation verifies the purpose-scoped, expiring digest, establishes a password, verifies access, and changes only account authentication state. It does not insert or update the imported profile, professional-role history, membership term/status, billing account, Stripe identifiers, or migration map. Reissuing a link invalidates earlier unconsumed activation links; successful use consumes all outstanding account tokens for the identity.
+The later repeatable importer may create an identity in `migrated_pending` state and issue a `migration_activation` token for that existing user. Activation verifies the purpose-scoped, expiring digest, establishes a password, verifies access, and changes only account authentication state. It requires the imported profile, at least one professional role, membership entitlement, and migration mapping to exist; a missing foundation produces auditable reconciliation evidence and leaves the identity pending. It does not insert or update the imported profile, professional-role history, membership term/status, billing account, Stripe identifiers, or migration map. A successfully delivered replacement invalidates earlier unconsumed activation links; delivery failure preserves the earlier usable link. Successful use consumes all outstanding account tokens for the identity.

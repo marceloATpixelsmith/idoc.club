@@ -103,6 +103,7 @@ test('account-state policy blocks suspension and permits expired account mainten
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: false }, 'profile'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: false }, 'renewal'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'migrated_pending', actor, entitled: true }, 'profile'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'deleted', actor, entitled: true }, 'profile'), false);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor, entitled: true }, 'administration'), false);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: { id: 2, roles: ['super_admin'] }, entitled: false }, 'administration'), true);
 });
@@ -114,6 +115,38 @@ test('recovery and activation store digests, claim once, and revoke sessions', (
   assert.match(source, /isNull\(accountTokens\.consumedAt\)/);
   assert.match(source, /sessionVersion.*\+ 1/s);
   assert.doesNotMatch(source, /tokenHash:\s*rawToken/);
+  assert.match(source, /delivery_succeeded/);
+  assert.match(source, /delivery_failed/);
+  assert.match(source, /Previously delivered tokens remain usable/);
+});
+
+test('ordinary sign-in returns a neutral credential failure for blocked account states', () => {
+  const actions = readFileSync(new URL('../app/(login)/actions.ts', import.meta.url), 'utf8');
+  assert.match(actions, /\['active', 'onboarding'\]\.includes\(foundUser\.accountState\)/);
+  assert.doesNotMatch(actions, /Verify your email before signing in/);
+});
+
+test('onboarding profile completion atomically activates only onboarding accounts', () => {
+  const access = readFileSync(new URL('../lib/membership/data-access.ts', import.meta.url), 'utf8');
+  assert.match(access, /for update/);
+  assert.match(access, /account\.account_state !== 'onboarding'/);
+  assert.match(access, /account\.onboarding\.completed/);
+  assert.match(access, /accountState: 'active'/);
+});
+
+test('migrated activation requires imported profile, role, entitlement, and mapping foundations', () => {
+  const recovery = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
+  assert.match(recovery, /missing_imported_profile/);
+  assert.match(recovery, /incomplete_import_foundation/);
+  assert.match(recovery, /migrationMap/);
+  assert.match(recovery, /migrationMap\.legacyType/);
+  assert.match(recovery, /migrationMap\.disposition/);
+});
+
+test('migration 0005 deliberately replaces the normalized-email index from migration 0002', () => {
+  const migration = readFileSync(new URL('../lib/db/migrations/0005_release_one_account_tokens.sql', import.meta.url), 'utf8');
+  assert.match(migration, /DROP INDEX IF EXISTS "idoc"\."users_normalized_email_unique"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "users_normalized_email_unique"/);
 });
 
 test('profile edits are atomic and notification delivery retains retry history', () => {

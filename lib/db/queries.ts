@@ -30,8 +30,7 @@ export async function getUser() {
     .limit(1);
 
   if (user.length === 0 || !user[0].emailVerifiedAt ||
-      user[0].accountState === 'suspended' ||
-      user[0].accountState === 'migrated_pending' ||
+      !['active', 'onboarding'].includes(user[0].accountState) ||
       user[0].sessionVersion !== sessionData.user.sessionVersion) {
     return null;
   }
