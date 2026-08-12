@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
 import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 
 function run(command: string, args: string[], environment = process.env) {
@@ -26,11 +27,18 @@ async function output(command: string, args: string[]) {
 
 async function runSuite(url: string) {
   const validated = validateTestDatabaseUrl(url).toString();
+  const integrationTests = (await readdir('tests'))
+    .filter((name) => name.endsWith('.integration.ts'))
+    .sort()
+    .map((name) => `tests/${name}`);
+  if (integrationTests.length === 0) throw new Error('No PostgreSQL integration tests were discovered.');
   await run(process.execPath, [
     '--experimental-strip-types',
+    '--conditions=react-server',
     '--test',
-    'tests/database-integration.integration.ts',
-  ], { ...process.env, TEST_DATABASE_URL: validated });
+    '--test-concurrency=1',
+    ...integrationTests,
+  ], { ...process.env, NODE_ENV: 'test', TEST_DATABASE_URL: validated });
 }
 
 async function main() {

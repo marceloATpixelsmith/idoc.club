@@ -43,7 +43,7 @@ const stewardRole = officialBase.extend({
   officialStatus: z.enum(STEWARD_STATUSES),
   roleType: z.literal('steward'),
 });
-const veterinarianRole = z.object({ roleType: z.literal('veterinarian') });
+const veterinarianRole = z.object({ roleType: z.literal('veterinarian') }).strict();
 
 export const memberProfileSchema = z.object({
   address1: requiredText('Address 1', 200),
