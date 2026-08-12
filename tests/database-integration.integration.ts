@@ -9,7 +9,9 @@ import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 
 const url = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
-const sql = postgres(url, { max: 1 });
+// A pool larger than one is intentional: lease and token races must use distinct
+// PostgreSQL connections rather than merely interleaving promises in JavaScript.
+const sql = postgres(url, { max: 10 });
 const database = drizzle(sql);
 const migrationsFolder = new URL('../lib/db/migrations', import.meta.url).pathname;
 
@@ -124,8 +126,15 @@ test('token digests are unique and one-time state is database-backed', async () 
 
 test('audit and profile history records are immutable', async () => {
   const [user] = await sql`insert into idoc.users (email,password_hash) values ('audit@idoc.club','hash') returning id`;
-  await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values (${user.id},'test','user',${String(user.id)})`;
+  const [profile] = await sql`insert into idoc.profiles (user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code) values (${user.id},'Audit','Member','1 Road','City','State','1','DE') returning id`;
+  const [audit] = await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values (${user.id},'test','user',${String(user.id)}) returning id`;
+  const [history] = await sql`insert into idoc.profile_change_history(profile_id,actor_id,before_json,after_json) values (${profile.id},${user.id},${sql.json({ firstName: 'Before' })},${sql.json({ firstName: 'After' })}) returning id`;
+  await assert.rejects(sql`update idoc.audit_log set action='changed' where id=${audit.id}`);
   await assert.rejects(sql`delete from idoc.audit_log where actor_id=${user.id}`);
+  await assert.rejects(sql`update idoc.profile_change_history set after_json=${sql.json({ firstName: 'Changed' })} where id=${history.id}`);
+  await assert.rejects(sql`delete from idoc.profile_change_history where id=${history.id}`);
+  assert.equal((await sql`select id from idoc.audit_log where id=${audit.id}`).length, 1);
+  assert.equal((await sql`select id from idoc.profile_change_history where id=${history.id}`).length, 1);
 });
 
 test('rate-limit buckets are purpose-specific and concurrent increments are not lost', async () => {

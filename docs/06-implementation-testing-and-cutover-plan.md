@@ -159,3 +159,5 @@ Because existing Stripe subscriptions are not canceled/recreated, rollback is pr
 ## Release 1 corrective verification
 
 The database suite accepts only a provisioned or explicit PostgreSQL `TEST_DATABASE_URL` whose database name is exactly `idoc_test` or uses a delimited `idoc_test_…`/`…_idoc_test` convention. It rejects malformed URLs, ambiguous hosts/names, Render or production-like targets, and a target matching `POSTGRES_URL` before destructive SQL. The suite includes concurrent rate-limit increments, competing/expired outbox lease claims, migration upgrades and generated snapshot agreement. `pnpm check:release1` is the aggregate local gate; provisioning failure is explicit and never becomes a skipped suite.
+
+The authoritative, requirement-level verification status is maintained in [the Release 1 verification matrix](11-release-1-verification-matrix.md). A unit test or source-text assertion is supplemental evidence only. Any matrix row without a passing PostgreSQL behavioral test remains open and prevents Release 1 closure.
