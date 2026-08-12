@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 
 function run(command: string, args: string[], environment = process.env) {
@@ -25,8 +26,8 @@ async function output(command: string, args: string[]) {
   });
 }
 
-async function runSuite(url: string) {
-  const validated = validateTestDatabaseUrl(url).toString();
+export async function runSuite(url: string, environment = process.env) {
+  const validated = validateTestDatabaseUrl(url, environment.POSTGRES_URL).toString();
   const integrationTests = (await readdir('tests'))
     .filter((name) => name.endsWith('.integration.ts'))
     .sort()
@@ -39,12 +40,16 @@ async function runSuite(url: string) {
     '--test',
     '--test-concurrency=1',
     ...integrationTests,
-  ], { ...process.env, NODE_ENV: 'test', TEST_DATABASE_URL: validated });
+  ], { ...environment, NODE_ENV: 'test', TEST_DATABASE_URL: validated });
 }
 
-async function main() {
-  if (process.env.TEST_DATABASE_URL) {
-    await runSuite(process.env.TEST_DATABASE_URL);
+export async function runIntegrationDatabase(
+  environment = process.env,
+  executeSuite: (url: string, environment: NodeJS.ProcessEnv) => Promise<void> = runSuite
+) {
+  if (environment.TEST_DATABASE_URL) {
+    const validated = validateTestDatabaseUrl(environment.TEST_DATABASE_URL, environment.POSTGRES_URL).toString();
+    await executeSuite(validated, environment);
     return;
   }
 
@@ -77,7 +82,7 @@ async function main() {
     }
     if (!ready) throw new Error('PostgreSQL did not become ready within 30 seconds.');
     const url = `postgres://idoc_test_runner:${password}@127.0.0.1:${port}/${databaseName}`;
-    await runSuite(url);
+    await executeSuite(validateTestDatabaseUrl(url, environment.POSTGRES_URL).toString(), environment);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown provisioning error';
     throw new Error(
@@ -88,4 +93,4 @@ async function main() {
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await runIntegrationDatabase();

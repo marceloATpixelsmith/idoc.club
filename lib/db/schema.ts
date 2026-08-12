@@ -9,6 +9,8 @@ import {
   date,
   jsonb,
   uniqueIndex,
+  index,
+  check,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
@@ -159,7 +161,10 @@ export const applicationRoles = idocSchema.table('application_roles', {
   grantedBy: integer('granted_by').references(() => users.id),
   grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-}, (table) => [uniqueIndex('application_roles_active_unique').on(table.userId, table.role).where(sql`${table.revokedAt} is null`)]);
+}, (table) => [
+  uniqueIndex('application_roles_active_unique').on(table.userId, table.role).where(sql`${table.revokedAt} is null`),
+  check('application_roles_role_check', sql`${table.role} in ('member', 'administrator', 'super_admin')`),
+]);
 
 export const profiles = idocSchema.table('profiles', {
   id: serial('id').primaryKey(),
@@ -188,7 +193,7 @@ export const professionalRoles = idocSchema.table('professional_roles', {
   effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
   effectiveTo: timestamp('effective_to', { withTimezone: true }),
   verifiedBy: integer('verified_by').references(() => users.id),
-});
+}, (table) => [check('professional_roles_type_check', sql`${table.roleType} in ('judge', 'steward', 'veterinarian')`)]);
 
 export const memberships = idocSchema.table('memberships', {
   id: serial('id').primaryKey(),
@@ -201,7 +206,10 @@ export const memberships = idocSchema.table('memberships', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  check('memberships_status_check', sql`${table.status} in ('active', 'grace', 'expired', 'canceled', 'suspended', 'complimentary', 'review_required')`),
+  check('memberships_dates_check', sql`${table.validUntil} >= ${table.startsOn}`),
+]);
 
 export const profileChangeHistory = idocSchema.table('profile_change_history', {
   id: serial('id').primaryKey(),
@@ -238,7 +246,7 @@ export const notificationOutbox = idocSchema.table('notification_outbox', {
   leaseOwner: varchar('lease_owner', { length: 100 }),
   leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
   deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
-});
+}, (table) => [index('notification_claim_idx').on(table.availableAt, table.id).where(sql`${table.sentAt} is null and ${table.deadLetteredAt} is null`)]);
 
 export const stripeEvents = idocSchema.table('stripe_events', {
   id: serial('id').primaryKey(),
@@ -267,7 +275,10 @@ export const accountTokens = idocSchema.table('account_tokens', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  check('account_tokens_purpose_check', sql`${table.purpose} in ('password_reset', 'migration_activation')`),
+  index('account_tokens_claim_idx').on(table.tokenHash, table.purpose, table.expiresAt).where(sql`${table.consumedAt} is null`),
+]);
 
 export const accountDeliveryOutbox = idocSchema.table('account_delivery_outbox', {
   id: serial('id').primaryKey(),
@@ -288,7 +299,7 @@ export const accountDeliveryOutbox = idocSchema.table('account_delivery_outbox',
   terminalAt: timestamp('terminal_at', { withTimezone: true }),
   terminalReason: varchar('terminal_reason', { length: 50 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index('account_delivery_claim_idx').on(table.availableAt, table.id).where(sql`${table.sentAt} is null and ${table.deadLetteredAt} is null`)]);
 
 export const accountRequestLimits = idocSchema.table('account_request_limits', {
   id: serial('id').primaryKey(),

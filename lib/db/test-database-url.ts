@@ -13,12 +13,17 @@ export function validateTestDatabaseUrl(value: string | undefined, productionUrl
   if (!['postgres:', 'postgresql:'].includes(candidate.protocol) || !candidate.hostname || !candidate.username) {
     throw new Error('TEST_DATABASE_URL must be a complete PostgreSQL URL.');
   }
-  const databaseName = decodeURIComponent(candidate.pathname.replace(/^\//, ''));
+  let databaseName: string;
+  try {
+    databaseName = decodeURIComponent(candidate.pathname.replace(/^\//, ''));
+  } catch {
+    throw new Error('TEST_DATABASE_URL database name cannot be decoded safely.');
+  }
   if (!databaseName || databaseName.includes('/') || !TEST_DATABASE_NAME.test(databaseName)) {
     throw new Error('Test database name must be idoc_test or use a delimited idoc_test prefix/suffix.');
   }
   const identity = `${candidate.hostname}.${databaseName}`;
-  if (PRODUCTION_MARKERS.test(identity) || /contest/i.test(candidate.hostname) || /\.render\.com$/i.test(candidate.hostname)) {
+  if (PRODUCTION_MARKERS.test(identity) || /contest/i.test(candidate.hostname) || /render/i.test(candidate.hostname)) {
     throw new Error('Production-like database URLs are forbidden.');
   }
   if (productionUrl) {

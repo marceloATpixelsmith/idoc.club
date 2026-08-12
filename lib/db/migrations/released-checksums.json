@@ -1,0 +1,35 @@
+{
+  "algorithm": "sha256",
+  "releasedThrough": 8,
+  "files": {
+    "lib/db/migrations/0000_soft_the_anarchist.sql": "dbccb9edd48e88b7b55785d4f8aed78ded506540c12c5bf1dc7794179434fde5",
+    "lib/db/migrations/0001_modern_vivisector.sql": "c0d6389286e2b9ddb69c1a0be17239729ee05cf6e4b8c6df4bf79f5240d956bc",
+    "lib/db/migrations/0002_blue_the_anarchist.sql": "1dd3ae7c639fe744a8ddaefa3c357d5fbca84671a87510b580336f372d555ef0",
+    "lib/db/migrations/0003_parched_gateway.sql": "2fd9acfe63541c2c2fb8b963bfc75b84931aa7f9de9305daa0907bb938e5f9ea",
+    "lib/db/migrations/0004_member_billing_accounts.sql": "5c7c32ceab54ae2202c583eeb339402a199d358d9297c621fac0ec3567b2387d",
+    "lib/db/migrations/0005_release_one_account_tokens.sql": "f56500305a49f57fc8cdee6eab4407e34c16287cddf2ce87f72de915f65d7e0b",
+    "lib/db/migrations/0006_durable_account_delivery.sql": "e2e2c47232af318bfadc30ef4b9c800b14a5ed3749b03f0f99e30c055756ce4b",
+    "lib/db/migrations/0007_account_delivery_token_eligibility.sql": "c2fd85af95926b31a6670fea18c65658916bfd34dd89f4ad897ae7ab1f661e38",
+    "lib/db/migrations/0008_reconcile_account_delivery_eligibility.sql": "7e1cd8b4c4d4b946def0295cf3b660f04bb4cbc8434c4935db64b394df2f6410",
+    "lib/db/migrations/meta/0000_snapshot.json": "debf2ec0dc85021b805fc14c59584f6a9401cca8adfc362e2f81fe82c5ac0da7",
+    "lib/db/migrations/meta/0001_snapshot.json": "1a92778d3c31760ed5a66c0be1caa30f5c5527bccc82f4537f56366f6af62357",
+    "lib/db/migrations/meta/0002_snapshot.json": "affee7a04ce208a7c1674cd1bec20204a2f0cece14227ad9b5ac29c2794b7d74",
+    "lib/db/migrations/meta/0003_snapshot.json": "439fd2ee71c64a902c25ab45e5008a0c8e4e015d75c3786a9d7f4b3091cf95ac",
+    "lib/db/migrations/meta/0004_snapshot.json": "a051e8d9dc441c3fde52a78b75e24bd1759146e2439cbe3f52641655d7a75db0",
+    "lib/db/migrations/meta/0005_snapshot.json": "feb12e4fd0166b826d0411301e7080d49a619818ee966c549193e80404a60219",
+    "lib/db/migrations/meta/0006_snapshot.json": "b013ff36c26a7570f644b85cab35f220e117a0e2f32464bf7c908a0e79054870",
+    "lib/db/migrations/meta/0007_snapshot.json": "9f486c0d58cccc95a0bebb6ab73d146c3745dee4dee5d809dad51fce4566d5d5",
+    "lib/db/migrations/meta/0008_snapshot.json": "c360d3d2ed5ed362c0f53a7c36984cc96c40927e2cb6748439166e482a0f0b54"
+  },
+  "journalEntries": {
+    "0000": "ede3423b9a0bc75074b072cbba0503cc0f14dcb440531ddf3de12272131cade1",
+    "0001": "d7b4d09055ee15a3c2a81ffbf8863a6567397947b32c49e725347eae25824be2",
+    "0002": "ac3b673dc06036061c8500a0e3044c44f15a2b71c82ad20bd33c97e6bb7700a7",
+    "0003": "4e81612c1baf5b4f25ce6e3101d18e6dadccbe8e713b1a09094e97f64bbcb4f2",
+    "0004": "74e15494d202814d9bb37ef879cd7e9ffcfb5336844c2e29065b0899997d97ce",
+    "0005": "a9c3d09c713618e1e8ba1d9421d5ebefc053fe3dd53b7fee3e414763fc469b02",
+    "0006": "e639828486ef382986d5b7350ac5b0931a010a7aad8b948fb787ab9a3892729e",
+    "0007": "b76217834afdd4f0f52264aa34256eb56458cbcf3728cd788aa4ecc9717c9e59",
+    "0008": "d65d145ab41bee7b26a23c03eb3ac128c1d8a4bb27e275374c33d158e586fcda"
+  }
+}
