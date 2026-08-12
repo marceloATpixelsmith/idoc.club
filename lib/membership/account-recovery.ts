@@ -4,7 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { hashPassword } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
-import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, billingAccounts, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
+import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
 import { memberProfileSchema, normalizeEmail } from './validation';
@@ -80,14 +80,13 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     if (purpose === 'migration_activation') {
       const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
       if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'missing_imported_profile' }); return { status: 'invalid' as const }; }
-      const [roles, entitlements, mappings, billing] = await Promise.all([
+      const [roles, entitlements, mappings] = await Promise.all([
         tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
         tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
         tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(record.userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
-        tx.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1),
       ]);
       const importedProfile = memberProfileSchema.safeParse({
-        address1: profile.address1, address2: profile.address2, city: profile.city,
+        address1: profile.address1, address2: profile.address2 ?? undefined, city: profile.city,
         countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
         postalCode: profile.postalCode, stateProvince: profile.stateProvince,
         roles: roles.map((role) => ({
@@ -103,8 +102,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
       const entitlement = entitlements.find(({ source }) => source === 'migration');
       const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
         && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
-        && ['active', 'grace', 'complimentary', 'canceled'].includes(entitlement?.status ?? '')
-        && billing.length === 1;
+        && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
       if (!foundationValid) {
         await tx.insert(auditLog).values({
           action: 'account.migration_activation.reconciliation_required',
