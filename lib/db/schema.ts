@@ -234,6 +234,10 @@ export const notificationOutbox = idocSchema.table('notification_outbox', {
   attemptCount: integer('attempt_count').notNull().default(0),
   lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
   lastErrorCode: varchar('last_error_code', { length: 50 }),
+  availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+  leaseOwner: varchar('lease_owner', { length: 100 }),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
 });
 
 export const stripeEvents = idocSchema.table('stripe_events', {
@@ -264,6 +268,35 @@ export const accountTokens = idocSchema.table('account_tokens', {
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const accountDeliveryOutbox = idocSchema.table('account_delivery_outbox', {
+  id: serial('id').primaryKey(),
+  tokenId: integer('token_id').notNull().unique().references(() => accountTokens.id),
+  userId: integer('user_id').notNull().references(() => users.id),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  encryptedPayload: text('encrypted_payload').notNull(),
+  keyVersion: varchar('key_version', { length: 30 }).notNull(),
+  messageId: varchar('message_id', { length: 100 }).notNull().unique(),
+  availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+  leaseOwner: varchar('lease_owner', { length: 100 }),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  lastErrorCode: varchar('last_error_code', { length: 50 }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const accountRequestLimits = idocSchema.table('account_request_limits', {
+  id: serial('id').primaryKey(),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  identifierHash: varchar('identifier_hash', { length: 64 }).notNull(),
+  originHash: varchar('origin_hash', { length: 64 }).notNull(),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull(),
+  requestCount: integer('request_count').notNull().default(1),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('account_request_limits_bucket_unique').on(table.purpose, table.identifierHash, table.originHash, table.windowStartedAt)]);
 
 export const billingAccounts = idocSchema.table('billing_accounts', {
   id: serial('id').primaryKey(),

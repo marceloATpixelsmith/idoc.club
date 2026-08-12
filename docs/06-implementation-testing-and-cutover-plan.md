@@ -147,3 +147,7 @@ Because existing Stripe subscriptions are not canceled/recreated, rollback is pr
 | Security   | Security acceptance checklist passes.                                                                       |
 | Operations | Administrator runbook is usable by the people who will operate the site.                                    |
 | Legacy     | Legacy system is retained only as long as required for rollback/audit, then safely decommissioned for IDOC. |
+
+## Release 1 corrective verification
+
+The database suite accepts only an explicit PostgreSQL `TEST_DATABASE_URL` whose database name is exactly `idoc_test` or uses a delimited `idoc_test_…`/`…_idoc_test` convention. It rejects malformed URLs, ambiguous hosts/names, Render or production-like targets, and a target matching `POSTGRES_URL` before destructive SQL. The suite now includes concurrent rate-limit increments and competing/expired outbox lease claims. `pnpm check:release1` is the aggregate local gate, while `pnpm test:integration-db` remains explicit and fails rather than skips when the isolated database is absent.

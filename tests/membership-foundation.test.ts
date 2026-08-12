@@ -110,14 +110,16 @@ test('account-state policy blocks suspension and permits expired account mainten
 
 test('recovery and activation store digests, claim once, and revoke sessions', () => {
   const source = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
+  const delivery = readFileSync(new URL('../lib/notifications/account-delivery.ts', import.meta.url), 'utf8');
   assert.match(source, /randomBytes\(32\)/);
   assert.match(source, /createHash\('sha256'\)/);
   assert.match(source, /isNull\(accountTokens\.consumedAt\)/);
   assert.match(source, /sessionVersion.*\+ 1/s);
   assert.doesNotMatch(source, /tokenHash:\s*rawToken/);
-  assert.match(source, /delivery_succeeded/);
-  assert.match(source, /delivery_failed/);
-  assert.match(source, /Previously delivered tokens remain usable/);
+  assert.match(source, /delivery_queued/);
+  assert.match(delivery, /delivery_succeeded/);
+  assert.match(delivery, /temporary_delivery_failure/);
+  assert.match(delivery, /ne\(accountTokens\.id, record\.tokenId\)/);
 });
 
 test('ordinary sign-in returns a neutral credential failure for blocked account states', () => {

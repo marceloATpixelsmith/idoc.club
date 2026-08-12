@@ -15,7 +15,7 @@ import {
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
@@ -133,12 +133,16 @@ const accountLinkSchema = z.object({ email: z.string().email().max(255) });
 const NEUTRAL_RECOVERY = 'If an eligible account uses this address, an email will be sent.';
 
 export const requestPasswordRecovery = validatedAction(accountLinkSchema, async ({ email }) => {
-  await requestAccountLink(email, 'password_reset');
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
+  await requestAccountLink(email, 'password_reset', origin);
   return { success: NEUTRAL_RECOVERY };
 });
 
 export const requestMigrationActivation = validatedAction(accountLinkSchema, async ({ email }) => {
-  await requestAccountLink(email, 'migration_activation');
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
+  await requestAccountLink(email, 'migration_activation', origin);
   return { success: NEUTRAL_RECOVERY };
 });
 

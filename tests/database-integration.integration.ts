@@ -6,13 +6,9 @@ import test, { after, before } from 'node:test';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
+import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 
-const url = process.env.TEST_DATABASE_URL;
-if (!url) throw new Error('TEST_DATABASE_URL is required for the isolated database integration suite.');
-const parsed = new URL(url);
-if (!/test/i.test(parsed.pathname) || /prod(uction)?|render\.com/i.test(`${parsed.hostname}${parsed.pathname}`)) {
-  throw new Error('TEST_DATABASE_URL must identify an explicitly named non-production test database.');
-}
+const url = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
 const sql = postgres(url, { max: 1 });
 const database = drizzle(sql);
 const migrationsFolder = new URL('../lib/db/migrations', import.meta.url).pathname;
@@ -25,7 +21,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 6);
+  assert.equal(count, 7);
 });
 
 test('Drizzle applies migration 0005 to a database already at 0004', async () => {
@@ -53,7 +49,7 @@ test('Drizzle applies migration 0005 to a database already at 0004', async () =>
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 6);
+  assert.equal(count, 7);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {
@@ -76,4 +72,27 @@ test('audit and profile history records are immutable', async () => {
   const [user] = await sql`insert into idoc.users (email,password_hash) values ('audit@idoc.club','hash') returning id`;
   await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values (${user.id},'test','user',${String(user.id)})`;
   await assert.rejects(sql`delete from idoc.audit_log where actor_id=${user.id}`);
+});
+
+test('rate-limit buckets are purpose-specific and concurrent increments are not lost', async () => {
+  const values = ['password_reset', 'migration_activation'];
+  await Promise.all(Array.from({ length: 8 }, (_, index) => sql`
+    insert into idoc.account_request_limits(purpose,identifier_hash,origin_hash,window_started_at)
+    values (${values[index % 2]}, ${'a'.repeat(64)}, ${'b'.repeat(64)}, date_trunc('hour',now()))
+    on conflict(purpose,identifier_hash,origin_hash,window_started_at)
+    do update set request_count=idoc.account_request_limits.request_count+1
+  `));
+  const counts = await sql<{ purpose: string; request_count: number }[]>`select purpose,request_count from idoc.account_request_limits order by purpose`;
+  assert.deepEqual(counts.map(({ request_count }) => request_count), [4, 4]);
+});
+
+test('two workers cannot claim one outbox row and an expired lease is reclaimable', async () => {
+  const [user] = await sql`insert into idoc.users(email,password_hash) values('worker@idoc.club','hash') returning id`;
+  const [token] = await sql`insert into idoc.account_tokens(user_id,purpose,token_hash,expires_at) values(${user.id},'password_reset',${'c'.repeat(64)},now()+interval '1 hour') returning id`;
+  await sql`insert into idoc.account_delivery_outbox(token_id,user_id,purpose,encrypted_payload,key_version,message_id) values(${token.id},${user.id},'password_reset','encrypted','v1','message-1')`;
+  const claim = (owner: string) => sql`with candidate as (select id from idoc.account_delivery_outbox where sent_at is null and (lease_expires_at is null or lease_expires_at<now()) for update skip locked limit 1) update idoc.account_delivery_outbox o set lease_owner=${owner},lease_expires_at=now()+interval '5 minutes' from candidate where o.id=candidate.id returning o.id`;
+  const results = await Promise.all([claim('one'), claim('two')]);
+  assert.equal(results.flat().length, 1);
+  await sql`update idoc.account_delivery_outbox set lease_expires_at=now()-interval '1 second'`;
+  assert.equal((await claim('reclaimer')).length, 1);
 });
