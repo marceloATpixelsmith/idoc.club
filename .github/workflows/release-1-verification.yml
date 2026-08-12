@@ -1,0 +1,54 @@
+name: Release 1 Verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Run Release 1 gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: idoc_test
+          POSTGRES_PASSWORD: idoc_test_password
+          POSTGRES_USER: idoc_test_runner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U idoc_test_runner -d idoc_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgres://idoc_test_runner:idoc_test_password@127.0.0.1:5432/idoc_test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Release 1 verification gate
+        run: pnpm check:release1

@@ -46,7 +46,8 @@ The Release 1 automated suite covers cross-account denial, administrator and Sup
 ### Supported isolated PostgreSQL invocation
 
 - Local default: run `pnpm test:integration-db`. The command starts a disposable `postgres:16-alpine` Docker container, creates a uniquely named `idoc_test_<random>` database, validates the resulting URL, runs the suite, and removes only that container.
-- Existing isolated service or future CI service container: set `TEST_DATABASE_URL` to a dedicated PostgreSQL database named exactly `idoc_test`, prefixed `idoc_test_`, or suffixed `_idoc_test`, then run `pnpm test:integration-db`. The validator runs before the suite can drop the `idoc` schema. The value must not match `POSTGRES_URL`.
+- Existing isolated service or CI service container: set `TEST_DATABASE_URL` to a dedicated PostgreSQL database named exactly `idoc_test`, prefixed `idoc_test_`, or suffixed `_idoc_test`, then run `pnpm test:integration-db`. The validator runs before the suite can drop the `idoc` schema. The value must not match `POSTGRES_URL`.
+- GitHub Actions runs `pnpm check:release1` against a disposable PostgreSQL 16 service container with workflow-local test credentials. The workflow has read-only repository contents permission, does not define `POSTGRES_URL`, and never connects to Render.
 - `pnpm check:release1` uses the same provision-or-receive behavior. Missing Docker and a missing explicit test URL is a hard failure, never a skipped database suite.
 
 | **Scenario**                                  | **Expected result**                                                            |
