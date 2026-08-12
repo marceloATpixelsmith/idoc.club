@@ -21,7 +21,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 8);
+  assert.equal(count, 9);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -46,12 +46,49 @@ test('Drizzle applies account-delivery migrations to a database already at 0004'
   }
 });
 
+test('forward migration preserves databases that already applied released migration 0007', async () => {
+  await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
+  const temporary = await mkdtemp(join(tmpdir(), 'idoc-released-0007-'));
+  try {
+    await mkdir(join(temporary, 'meta'));
+    const names = [
+      '0000_soft_the_anarchist.sql',
+      '0001_modern_vivisector.sql',
+      '0002_blue_the_anarchist.sql',
+      '0003_parched_gateway.sql',
+      '0004_member_billing_accounts.sql',
+      '0005_release_one_account_tokens.sql',
+      '0006_durable_account_delivery.sql',
+      '0007_account_delivery_token_eligibility.sql',
+    ];
+    for (let index = 0; index < names.length; index += 1) {
+      await cp(join(migrationsFolder, names[index]), join(temporary, names[index]));
+      await cp(join(migrationsFolder, 'meta', `000${index}_snapshot.json`), join(temporary, 'meta', `000${index}_snapshot.json`));
+    }
+    const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+    journal.entries = journal.entries.slice(0, 8);
+    await writeFile(join(temporary, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+
+    await migrate(database, { migrationsFolder: temporary, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_at'`).length, 1);
+
+    await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
+    assert.equal(count, 9);
+    assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
+  } finally {
+    await rm(temporary, { force: true, recursive: true });
+  }
+});
+
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
-  assert.ok(journal.entries[7].when > journal.entries[6].when, 'migration 0007 must follow migration 0006');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0007_snapshot.json'), 'utf8'));
+  assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
+  assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
+  assert.ok(journal.entries[8].when > journal.entries[6].when, 'forward reconciliation must follow migration 0006');
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0008_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {
     const [schemaName, name] = tableName.split('.');
     const rows = await sql`select column_name from information_schema.columns where table_schema=${schemaName} and table_name=${name}`;
@@ -66,7 +103,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 8);
+  assert.equal(count, 9);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

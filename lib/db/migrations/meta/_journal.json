@@ -54,8 +54,15 @@
     {
       "idx": 7,
       "version": "7",
-      "when": 1786496700000,
+      "when": 1786495321357,
       "tag": "0007_account_delivery_token_eligibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786496800000,
+      "tag": "0008_reconcile_account_delivery_eligibility",
       "breakpoints": true
     }
   ]
