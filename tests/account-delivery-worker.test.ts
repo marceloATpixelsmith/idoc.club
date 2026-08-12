@@ -27,14 +27,15 @@ test('valid cron authentication invokes delivery and returns only its summary', 
 });
 
 test('bounded batches process multiple records, continue after retry, and stop on empty', async () => {
-  const results = ['delivered', 'retryable', 'delivered', 'empty'] as const;
+  const results = ['delivered', 'ineligible', 'retryable', 'delivered', 'empty'] as const;
   let calls = 0;
   const summary = await processDeliveryBatch(async () => ({ status: results[calls++] ?? 'empty' }));
-  assert.deepEqual(summary, { deadLettered: 0, delivered: 2, ineligible: 0, leaseLost: 0, retryable: 1 });
-  assert.equal(calls, 4);
+  assert.deepEqual(summary, { deadLettered: 0, delivered: 2, ineligible: 1, leaseLost: 0, retryable: 1 });
+  assert.equal(calls, 5);
   calls = 0;
-  await processDeliveryBatch(async () => { calls += 1; return { status: 'delivered' }; });
+  const bounded = await processDeliveryBatch(async () => { calls += 1; return { status: 'ineligible' }; });
   assert.equal(calls, ACCOUNT_DELIVERY_BATCH_LIMIT);
+  assert.equal(bounded.ineligible, ACCOUNT_DELIVERY_BATCH_LIMIT);
 });
 
 test('failure evidence and public responses contain no sensitive values', async () => {

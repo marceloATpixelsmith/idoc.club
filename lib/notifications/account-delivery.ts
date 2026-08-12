@@ -12,10 +12,9 @@ const MAX_ATTEMPTS = 6;
 const LEASE_MS = 5 * 60 * 1000;
 const retrySeconds = (attempt: number) => Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1));
 
-/** Atomically leases an eligible row and terminalizes invalid rows encountered ahead of it. */
+/** Atomically leases one eligible row or terminalizes one invalid row. */
 export async function claimAccountDelivery(owner = randomUUID()) {
-  for (;;) {
-    const rows = await db.execute<(typeof accountDeliveryOutbox.$inferSelect) & { eligible: boolean }>(sql`
+  const rows = await db.execute<(typeof accountDeliveryOutbox.$inferSelect) & { eligible: boolean }>(sql`
       with candidate as (
         select o.id,
           (t.id is not null and t.user_id=o.user_id and t.purpose=o.purpose
@@ -39,15 +38,16 @@ export async function claimAccountDelivery(owner = randomUUID()) {
         terminal_at=case when candidate.eligible then null else now() end,
         terminal_reason=case when candidate.eligible then null else candidate.terminal_reason end
       from candidate where outbox.id=candidate.id returning outbox.*, candidate.eligible
-    `);
-    if (!rows[0]) return null;
-    if (rows[0].eligible) return { owner, record: rows[0] };
-  }
+  `);
+  if (!rows[0]) return null;
+  if (!rows[0].eligible) return { status: 'ineligible' as const };
+  return { owner, record: rows[0], status: 'claimed' as const };
 }
 
 export async function deliverNextAccountLink(owner = randomUUID()) {
   const claimed = await claimAccountDelivery(owner);
   if (!claimed) return { status: 'empty' as const };
+  if (claimed.status === 'ineligible') return claimed;
   const { record } = claimed;
   try {
     const finalized = await db.transaction(async (tx) => {
