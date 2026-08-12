@@ -12,9 +12,13 @@ import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authori
 import { memberProfileSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
+import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
 async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
-  const user = await getUser();
+  const injectedActor = testBoundaryActor();
+  const user = injectedActor
+    ? (await db.select().from(users).where(eq(users.id, injectedActor.id)).limit(1))[0]
+    : await getUser();
   if (!user) throw new Error('Authentication required.');
   const [grants, profile] = await Promise.all([
     db.select({ role: applicationRoles.role }).from(applicationRoles)
@@ -73,12 +77,17 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
     const [existing] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
     if (existing) throw new Error('A member profile already exists for this account.');
     const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
+    injectProfileTransactionFailure('profile-write');
     await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
+    injectProfileTransactionFailure('role-insertion');
     const after = { profile, roles: input.roles };
     await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: {}, profileId: profile.id });
+    injectProfileTransactionFailure('profile-history-insertion');
     await tx.insert(auditLog).values({ action: 'member.profile.created', actorId: actor.id, afterJson: after, entityId: String(profile.id), entityType: 'profile' });
+    injectProfileTransactionFailure('audit-insertion');
     await tx.update(users).set({ accountState: 'active', updatedAt: new Date() })
       .where(and(eq(users.id, actor.id), eq(users.accountState, 'onboarding')));
+    injectProfileTransactionFailure('account-state-transition');
     await tx.insert(auditLog).values({
       action: 'account.onboarding.completed', actorId: actor.id,
       afterJson: { accountState: 'active' }, beforeJson: { accountState: 'onboarding' },
@@ -102,24 +111,50 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     const profileValues = profileColumns(input);
     const [updated] = await tx.update(profiles).set({ ...profileValues, updatedAt: now })
       .where(eq(profiles.id, profileId)).returning();
-    await tx.update(professionalRoles).set({ effectiveTo: now })
-      .where(and(eq(professionalRoles.profileId, profileId), isNull(professionalRoles.effectiveTo)));
-    await tx.insert(professionalRoles).values(input.roles.map((role) => ({
-      ...role, profileId, effectiveFrom: now,
-    })));
+    injectProfileTransactionFailure('profile-write');
+    const desiredByType = new Map(input.roles.map((role) => [role.roleType, role]));
+    const retainedRoles = beforeRoles.filter((role) => {
+      const desired = desiredByType.get(role.roleType as MemberProfileInput['roles'][number]['roleType']);
+      return desired !== undefined && roleMatches(role, desired);
+    });
+    const retainedTypes = new Set(retainedRoles.map(({ roleType }) => roleType));
+    const rolesToClose = beforeRoles.filter(({ roleType }) => !retainedTypes.has(roleType));
+    if (rolesToClose.length > 0) {
+      await tx.update(professionalRoles).set({ effectiveTo: now })
+        .where(inArray(professionalRoles.id, rolesToClose.map(({ id }) => id)));
+    }
+    injectProfileTransactionFailure('role-closure');
+    const rolesToInsert = input.roles.filter(({ roleType }) => !retainedTypes.has(roleType));
+    if (rolesToInsert.length > 0) {
+      await tx.insert(professionalRoles).values(rolesToInsert.map((role) => ({
+        ...role, profileId, effectiveFrom: now,
+      })));
+    }
+    injectProfileTransactionFailure('role-insertion');
     const before = { profile: existing, roles: beforeRoles };
     const after = { profile: updated, roles: input.roles };
     await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: before, profileId });
+    injectProfileTransactionFailure('profile-history-insertion');
     await tx.insert(auditLog).values({
       action: actor.id === existing.userId ? 'member.profile.updated' : 'admin.profile.updated',
       actorId: actor.id, afterJson: after, beforeJson: before,
       entityId: String(profileId), entityType: 'profile',
     });
+    injectProfileTransactionFailure('audit-insertion');
     if (actor.id === existing.userId) {
       await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
+    injectProfileTransactionFailure('notification-insertion');
     return updated;
   });
+}
+
+function roleMatches(existing: typeof professionalRoles.$inferSelect, desired: MemberProfileInput['roles'][number]) {
+  return existing.nationalFederationCountryCode === ('nationalFederationCountryCode' in desired ? desired.nationalFederationCountryCode : null)
+    && existing.idocRegion === ('idocRegion' in desired ? desired.idocRegion : null)
+    && existing.feiId === ('feiId' in desired ? desired.feiId : null)
+    && existing.officialStatus === ('officialStatus' in desired ? desired.officialStatus : null)
+    && existing.isTechnicalDelegate === ('isTechnicalDelegate' in desired ? desired.isTechnicalDelegate : null);
 }
 
 export async function listAuditHistory(profileId: number) {

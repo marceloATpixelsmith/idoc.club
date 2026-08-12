@@ -47,32 +47,38 @@ Every item below is `Not yet verified` by a real PostgreSQL behavioral test. Exi
 
 ### Identity, ownership, states, and authorization
 
+Behavioral verification batch 1 adds focused isolated-PostgreSQL suites and the shared
+`tests/postgres-harness.ts` fixture/graph helper. The application boundaries named below
+are invoked directly with a test-only, server-resolved actor context; claimed roles are
+deliberately ignored in favor of persisted `application_roles`. These rows remain open
+until the latest pull-request-head `Run Release 1 gate` workflow reports success.
+
 | Requirement | Needed PostgreSQL behavioral test and boundary | Result |
 |---|---|---|
-| Owner private-profile read/update succeeds; cross-account read/update and lower-level bypass fail | Invoke authorized server functions with two persisted actors (`membership/data-access`, `queries`) | Not yet verified |
+| Owner private-profile read/update succeeds; cross-account read/update and lower-level bypass fail | `real profile boundaries allow owners and deny cross-account reads, writes, and entitlement bypasses` invokes `getOwnPrivateMember`, `getPrivateMember`, `updateMemberProfile`, and `hasCurrentMemberEntitlement` (`membership/data-access`) | Added; latest PR-head GitHub Actions result pending |
 | Email change preserves user/profile/roles/membership/billing/Stripe/history/migration mapping | Seed complete graph, change email through server function, compare every identity (`membership`) | Not yet verified |
 | Activation never duplicates user/profile; registration/onboarding neither creates nor needs starter teams | Invoke flows and count persisted graph (`auth`, `membership`) | Not yet verified |
 | Eligible unverified verification enters onboarding; eligible onboarding profile creation transitions atomically to active | Invoke flows with persisted state (`email-verification`, `data-access`) | Not yet verified |
 | Ineligible first-profile creation is denied | Persist each ineligible state and invoke onboarding (`data-access`) | Not yet verified |
-| Current member access and expired-member limited account/profile/payment/renewal access | Server authorization matrix using persisted entitlement (`authorization`) | Not yet verified |
-| Suspended, migrated-pending, unverified and deleted users are denied as specified | Server authorization matrix (`authorization`) | Not yet verified |
-| Administrator and Super Admin receive only approved access | Server authorization matrix (`authorization`) | Not yet verified |
+| Current member access and expired-member limited account/profile/payment/renewal access | `persisted account-state and entitlement matrix is enforced at the direct server boundary` invokes `requireAccountAccess` (`data-access`, `account-access`) | Added; latest PR-head GitHub Actions result pending |
+| Suspended, migrated-pending, unverified and deleted users are denied as specified | Same table-driven PostgreSQL test invokes `requireAccountAccess` for every access class | Added; latest PR-head GitHub Actions result pending; migrated activation itself remains outside this batch |
+| Administrator and Super Admin receive only approved access | `administrator and Super Admin access comes only from persisted grants` and `server-managed grants permit administrator ownership override and ignore claimed actor roles` invoke `requireAccountAccess`/`getPrivateMember` | Added; latest PR-head GitHub Actions result pending |
 | Member cannot self-escalate | Persist member, submit role mutation, compare grants (`data-access`) | Not yet verified |
-| Browser-supplied state, roles, entitlement, classification, membership, billing, and Stripe values are ignored | Malicious payload through each mutation (`membership`, payments boundary) | Not yet verified |
+| Browser-supplied state, roles, entitlement, classification, membership, billing, and Stripe values are ignored | Persisted-state matrix and claimed-role ownership tests invoke the direct boundary; broader malicious-field mutation coverage remains open | Partially covered; not Verified |
 | Middleware/UI bypass cannot bypass server authorization | Direct server-function invocation (`authorization`, `data-access`) | Not yet verified |
 
 ### Profiles, roles, transactions, and operational evidence
 
 | Requirement | Needed PostgreSQL behavioral test and boundary | Result |
 |---|---|---|
-| Judge, Steward, combined Judge + Steward, and Veterinarian creation/validation | Invoke profile creation for each classification (`validation`, `data-access`) | Not yet verified |
+| Judge, Steward, combined Judge + Steward, and Veterinarian creation/validation | `onboarding validates and atomically creates each approved classification without teams` invokes `createOwnMemberProfile` (`validation`, `data-access`) | Added; latest PR-head GitHub Actions result pending |
 | Country, federation, region, FEI ID, official status and Technical Delegate canonical validation | Valid/invalid persisted mutations (`validation`) | Not yet verified |
-| Every approved classification transition closes only prior active roles, creates required roles, preserves history, and avoids unchanged duplicates | Transition table test (`data-access`) | Not yet verified |
-| Profile edits create before/after history, audit and administrator notification | Persisted transaction assertions (`data-access`) | Not yet verified |
-| Profile edits preserve membership dates/entitlement, billing/payment, and Stripe identifiers | Complete-graph before/after comparison (`data-access`) | Not yet verified |
-| Invalid profile change mutates none of profile, roles, history, audit, notifications, membership or billing | Complete-graph rollback assertion (`data-access`) | Not yet verified |
-| Failures at profile, role, history, audit, notification and account-state stages roll back everything | Injected database failures at each stage (`data-access`) | Not yet verified |
-| Professional-role history is preserved | Role transition test (`data-access`) | Not yet verified |
+| Every approved classification transition closes only prior active roles, creates required roles, preserves history, and avoids unchanged duplicates | `every approved classification transition preserves history and unchanged active role rows` invokes `updateMemberProfile` for the full transition table (`data-access`) | Added; latest PR-head GitHub Actions result pending |
+| Profile edits create before/after history, audit and administrator notification | `successful profile edit commits profile, role history, evidence, and notification atomically` invokes `updateMemberProfile` | Added; latest PR-head GitHub Actions result pending |
+| Profile edits preserve membership dates/entitlement, billing/payment, and Stripe identifiers | The success and transition graph comparisons inspect membership, billing customer linkage, and migration mapping; subscription/payment projections are not yet present in the Release 1 schema | Partially covered; not Verified |
+| Invalid profile change mutates none of profile, roles, history, audit, notifications, membership or billing | `invalid professional payloads persist nothing` invokes `createOwnMemberProfile`; edit-specific invalid graph coverage remains open | Partially covered; not Verified |
+| Failures at profile, role, history, audit, notification and account-state stages roll back everything | `controlled failures at every profile-edit stage roll back the complete persisted graph` invokes `updateMemberProfile`; onboarding account-state injection is available but its graph test remains open | Partially covered; not Verified |
+| Professional-role history is preserved | Full transition-table and successful-transaction tests invoke `updateMemberProfile` and inspect all historical rows | Added; latest PR-head GitHub Actions result pending |
 | Required state changes create audit evidence | State transition test (`membership`) | Not yet verified |
 | Link requests, rate limits, delivery attempts/completion/terminal status and reconciliation failures retain evidence | End-to-end operational evidence test (`auth`, `delivery`) | Not yet verified |
 | All evidence excludes passwords, tokens, payloads, keys, credentials, email/origin, secrets and raw exceptions | Persisted evidence scan after all failure paths (`auth`, `delivery`) | Not yet verified |
