@@ -13,6 +13,14 @@ Day-to-day procedures after the IDOC membership platform goes live
 
 Working project document. Update this document when project decisions change.
 
+## Codex pull-request review gate
+
+The protected `main` branch requires the commit status `codex/review-complete`. Opening, reopening, marking ready, or updating a pull request places that status in `pending`. A submitted review from the `chatgpt-codex-connector` identity changes it to `success` only when the review is attached to the pull request's current head commit. A later push creates a new pending gate, and an older review cannot satisfy it.
+
+After the workflows are present on `main`, configure the repository ruleset for `main` to require `codex/review-complete`. Also require conversation resolution so completing a Codex review does not make unresolved review threads mergeable.
+
+If the Codex review quota is unavailable, a repository administrator or maintainer may run **Codex Review Gate - Quota Waiver** from the Actions tab. Supply the open pull-request number, an audit reason, and the exact confirmation `CODEX_QUOTA_EXHAUSTED`. The workflow resolves the pull request's current head commit, records a successful waiver only for that revision, and posts an audit comment. A later push returns the new revision to pending. Do not use the waiver for ordinary review delays or to avoid actionable review feedback.
+
 # 1. Purpose
 
 This runbook defines normal administrative actions, exception handling and escalation boundaries. It is intended to prevent ad-hoc database edits and preserve a reliable audit trail.
