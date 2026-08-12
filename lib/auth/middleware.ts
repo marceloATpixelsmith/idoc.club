@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
+import { requireAccountAccess } from '@/lib/membership/data-access';
 
 export type ActionState = {
   error?: string;
@@ -43,6 +44,7 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
     if (!user) {
       throw new Error('User is not authenticated');
     }
+    await requireAccountAccess('account');
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {
@@ -64,6 +66,7 @@ export function withTeam<T>(action: ActionWithTeamFunction<T>) {
     if (!user) {
       redirect('/sign-in');
     }
+    await requireAccountAccess('billing_boundary');
 
     const team = await getTeamForUser();
     if (!team) {

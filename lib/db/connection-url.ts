@@ -1,9 +1,7 @@
-export function getPostgresConnectionUrl(): string {
-  const connectionUrl = process.env.POSTGRES_URL;
+import { databaseUrlForServer } from '@/lib/runtime/configuration';
 
-  if (!connectionUrl) {
-    throw new Error('POSTGRES_URL environment variable is not set');
-  }
+export function getPostgresConnectionUrl(): string {
+  const connectionUrl = databaseUrlForServer();
 
   const parsedUrl = new URL(connectionUrl);
   const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '');

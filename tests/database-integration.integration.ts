@@ -24,7 +24,7 @@ test('Drizzle applies every migration to an empty isolated database', async () =
   assert.equal(count, 7);
 });
 
-test('Drizzle applies migration 0005 to a database already at 0004', async () => {
+test('Drizzle applies migrations 0005 and 0006 to a database already at 0004', async () => {
   await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
   const temporary = await mkdtemp(join(tmpdir(), 'idoc-migrations-'));
   try {
@@ -43,6 +43,22 @@ test('Drizzle applies migration 0005 to a database already at 0004', async () =>
     assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name='account_tokens'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
+  }
+});
+
+test('migration 0006 has ordered generated metadata agreeing with the migrated schema', async () => {
+  const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6]);
+  assert.equal(journal.entries[6].tag, '0006_durable_account_delivery');
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0006_snapshot.json'), 'utf8'));
+  for (const tableName of Object.keys(snapshot.tables)) {
+    const [schemaName, name] = tableName.split('.');
+    const rows = await sql`select column_name from information_schema.columns where table_schema=${schemaName} and table_name=${name}`;
+    assert.ok(rows.length > 0, `${tableName} from the Drizzle snapshot must exist`);
+    const migratedColumns = new Set(rows.map(({ column_name }) => column_name));
+    for (const columnName of Object.keys(snapshot.tables[tableName].columns)) {
+      assert.ok(migratedColumns.has(columnName), `${tableName}.${columnName} must exist`);
+    }
   }
 });
 
@@ -95,4 +111,32 @@ test('two workers cannot claim one outbox row and an expired lease is reclaimabl
   assert.equal(results.flat().length, 1);
   await sql`update idoc.account_delivery_outbox set lease_expires_at=now()-interval '1 second'`;
   assert.equal((await claim('reclaimer')).length, 1);
+});
+
+test('outbox lease ownership prevents stale finalization and delivered rows are not reclaimed', async () => {
+  const [user] = await sql`insert into idoc.users(email,password_hash) values('lease-owner@idoc.club','hash') returning id`;
+  const tokens = await Promise.all(['d', 'e'].map(async (character) => {
+    const [token] = await sql`insert into idoc.account_tokens(user_id,purpose,token_hash,expires_at) values(${user.id},'password_reset',${character.repeat(64)},now()+interval '1 hour') returning id`;
+    return token;
+  }));
+  await Promise.all(tokens.map((token, index) => sql`insert into idoc.account_delivery_outbox(token_id,user_id,purpose,encrypted_payload,key_version,message_id) values(${token.id},${user.id},'password_reset','encrypted','v1',${`lease-message-${index}`})`));
+  const claim = (owner: string) => sql`with candidate as (select id from idoc.account_delivery_outbox where sent_at is null and dead_lettered_at is null and available_at<=now() and (lease_expires_at is null or lease_expires_at<now()) order by id for update skip locked limit 1) update idoc.account_delivery_outbox o set lease_owner=${owner},lease_expires_at=now()+interval '5 minutes' from candidate where o.id=candidate.id returning o.id`;
+  const [first, second] = await Promise.all([claim('worker-a'), claim('worker-b')]);
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 1);
+  assert.notEqual(first[0].id, second[0].id);
+  assert.equal((await sql`update idoc.account_delivery_outbox set sent_at=now() where id=${first[0].id} and lease_owner='stale-worker' returning id`).length, 0);
+  assert.equal((await sql`update idoc.account_delivery_outbox set sent_at=now(),lease_owner=null,lease_expires_at=null where id=${first[0].id} and lease_owner='worker-a' returning id`).length, 1);
+  assert.equal((await sql`update idoc.account_delivery_outbox set lease_owner='thief' where id=${second[0].id} and lease_expires_at<now() returning id`).length, 0);
+  await sql`update idoc.account_delivery_outbox set lease_expires_at=now()-interval '1 second' where id=${second[0].id}`;
+  assert.equal((await claim('worker-c')).length, 1);
+  assert.equal((await claim('worker-d')).some(({ id }) => id === first[0].id), false);
+});
+
+test('account states and current entitlement remain independent database facts', async () => {
+  const [user] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state) values('suspended-entitled@idoc.club','hash',now(),'suspended') returning id`;
+  const [profile] = await sql`insert into idoc.profiles(user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code) values(${user.id},'Safe','Member','1 Road','City','State','1','DE') returning id`;
+  await sql`insert into idoc.memberships(profile_id,status,valid_from,valid_until,source) values(${profile.id},'active',current_date,current_date+365,'import')`;
+  const [record] = await sql`select u.account_state,m.status,m.valid_until>=current_date as current from idoc.users u join idoc.profiles p on p.user_id=u.id join idoc.memberships m on m.profile_id=p.id where u.id=${user.id}`;
+  assert.deepEqual(record, { account_state: 'suspended', current: true, status: 'active' });
 });

@@ -23,8 +23,8 @@ export async function deliverProfileChangeNotification(_outboxId?: number, owner
     const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
     if (!to) throw new Error('not_configured');
     await sendTransactionalEmail({ html: '<p>A member profile was changed. Review it in the administrator area.</p>', messageId: `profile-change-${record.id}`, subject: 'IDOC member profile changed', to });
-    await db.update(notificationOutbox).set({ attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(), lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date() }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner), isNull(notificationOutbox.sentAt)));
-    return { status: 'delivered' as const };
+    const finalized = await db.update(notificationOutbox).set({ attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(), lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date() }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner), isNull(notificationOutbox.sentAt))).returning({ id: notificationOutbox.id });
+    return finalized.length ? { status: 'delivered' as const } : { status: 'lease_lost' as const };
   } catch {
     const attempt = record.attemptCount + 1;
     await db.update(notificationOutbox).set({ attemptCount: attempt, availableAt: sql`now() + (${Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1))} * interval '1 second')`, deadLetteredAt: attempt >= MAX_ATTEMPTS ? new Date() : null, lastAttemptAt: new Date(), lastErrorCode: 'temporary_delivery_failure', leaseExpiresAt: null, leaseOwner: null }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner)));
