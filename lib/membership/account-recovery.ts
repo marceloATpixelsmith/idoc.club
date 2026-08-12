@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, billingAccounts, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
-import { normalizeEmail } from './validation';
+import { memberProfileSchema, normalizeEmail } from './validation';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 const LIFETIME_MS = 60 * 60 * 1000;
@@ -78,15 +78,40 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);
     if (!user || (purpose === 'migration_activation' && user.accountState !== 'migrated_pending')) return { status: 'invalid' as const };
     if (purpose === 'migration_activation') {
-      const [profile] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
+      const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
       if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'missing_imported_profile' }); return { status: 'invalid' as const }; }
-      const [roles, entitlement, mapping] = await Promise.all([
-        tx.select({ id: professionalRoles.id }).from(professionalRoles).where(eq(professionalRoles.profileId, profile.id)).limit(1),
-        tx.select({ id: memberships.id }).from(memberships).where(eq(memberships.profileId, profile.id)).limit(1),
-        tx.select({ id: migrationMap.id }).from(migrationMap).where(and(eq(migrationMap.newEntityId, String(record.userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))).limit(1),
+      const [roles, entitlements, mappings, billing] = await Promise.all([
+        tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
+        tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
+        tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(record.userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
+        tx.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1),
       ]);
-      if (!roles.length || !entitlement.length || !mapping.length) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'incomplete_import_foundation' }); return { status: 'invalid' as const }; }
-      await tx.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
+      const importedProfile = memberProfileSchema.safeParse({
+        address1: profile.address1, address2: profile.address2, city: profile.city,
+        countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
+        postalCode: profile.postalCode, stateProvince: profile.stateProvince,
+        roles: roles.map((role) => ({
+          ...(role.roleType === 'veterinarian' ? {} : {
+            feiId: role.feiId, idocRegion: role.idocRegion,
+            nationalFederationCountryCode: role.nationalFederationCountryCode,
+            officialStatus: role.officialStatus,
+          }),
+          ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
+          roleType: role.roleType,
+        })),
+      });
+      const entitlement = entitlements.find(({ source }) => source === 'migration');
+      const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
+        && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
+        && ['active', 'grace', 'complimentary', 'canceled'].includes(entitlement?.status ?? '')
+        && billing.length === 1;
+      if (!foundationValid) {
+        await tx.insert(auditLog).values({
+          action: 'account.migration_activation.reconciliation_required',
+          entityId: String(record.userId), entityType: 'user', reason: 'incomplete_import_foundation',
+        });
+        return { status: 'invalid' as const };
+      }
     }
     const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
     if (!claimed) return { status: 'invalid' as const };

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
-import { createMembership, createProfile, createUser, closeHarness, grantRole, judgeRole, profileInput, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
+import { createMembership, createProfile, createUser, closeHarness, grantRole, judgeRole, persistedGraph, profileInput, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
-import { createOwnMemberProfile, getOwnPrivateMember, requireAccountAccess } from '../lib/membership/data-access.ts';
+import { createOwnMemberProfile, getOwnPrivateMember, requireAccountAccess, updateMemberProfile } from '../lib/membership/data-access.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -65,5 +65,45 @@ test('invalid professional payloads persist nothing', async () => {
     const user = await createUser('onboarding');
     await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
+  }
+});
+
+test('canonical field validation rejects every invalid edit without changing the complete persisted graph', async () => {
+  const invalid = [
+    { ...profileInput(), countryCode: 'XX' },
+    { ...profileInput(), roles: [{ ...judgeRole, nationalFederationCountryCode: 'XX' }] },
+    { ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] },
+    { ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] },
+    { ...profileInput(), roles: [{ ...judgeRole, officialStatus: 'Invented Judge' }] },
+    { ...profileInput(), roles: [{ ...stewardRole, officialStatus: 'Invented Steward' }] },
+    { ...profileInput(), roles: [{ ...judgeRole, isTechnicalDelegate: 'yes' }] },
+    { ...profileInput(), roles: [judgeRole, veterinarianRole] },
+    { ...profileInput(), roles: [{ roleType: 'veterinarian', feiId: 'forbidden' }] },
+  ];
+  for (const payload of invalid) {
+    await resetIdoc();
+    const user = await createUser();
+    const profile = await createProfile(user.id);
+    await createMembership(profile.id);
+    const before = await persistedGraph(user.id);
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => updateMemberProfile(profile.id, payload)));
+    assert.deepEqual(await persistedGraph(user.id), before);
+  }
+});
+
+test('controlled onboarding failures roll back profile, roles, history, audit, and account-state transition', async () => {
+  const stages = ['profile-write', 'role-insertion', 'profile-history-insertion', 'audit-insertion', 'account-state-transition'] as const;
+  for (const stage of stages) {
+    await resetIdoc();
+    const user = await createUser('onboarding');
+    await assert.rejects(withTestMembershipBoundary(
+      { actor: { id: user.id, roles: [] }, failAt: stage },
+      () => createOwnMemberProfile(profileInput()),
+    ));
+    const [persistedUser] = await sql`select account_state from idoc.users where id=${user.id}`;
+    assert.equal(persistedUser.account_state, 'onboarding');
+    for (const table of ['profiles', 'professional_roles', 'profile_change_history', 'audit_log']) {
+      assert.equal((await sql.unsafe(`select count(*)::int as count from idoc.${table}`))[0].count, 0, `${stage}:${table}`);
+    }
   }
 });
