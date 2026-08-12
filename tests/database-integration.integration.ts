@@ -128,10 +128,10 @@ test('audit and profile history records are immutable', async () => {
   const [user] = await sql`insert into idoc.users (email,password_hash) values ('audit@idoc.club','hash') returning id`;
   const [profile] = await sql`insert into idoc.profiles (user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code) values (${user.id},'Audit','Member','1 Road','City','State','1','DE') returning id`;
   const [audit] = await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values (${user.id},'test','user',${String(user.id)}) returning id`;
-  const [history] = await sql`insert into idoc.profile_change_history(profile_id,actor_id,before_json,after_json) values (${profile.id},${user.id},${sql.json({ firstName: 'Before' })},${sql.json({ firstName: 'After' })}) returning id`;
+  const [history] = await sql`insert into idoc.profile_change_history(profile_id,actor_id,before_json,after_json) values (${profile.id},${user.id},${JSON.stringify({ firstName: 'Before' })}::jsonb,${JSON.stringify({ firstName: 'After' })}::jsonb) returning id`;
   await assert.rejects(sql`update idoc.audit_log set action='changed' where id=${audit.id}`);
   await assert.rejects(sql`delete from idoc.audit_log where actor_id=${user.id}`);
-  await assert.rejects(sql`update idoc.profile_change_history set after_json=${sql.json({ firstName: 'Changed' })} where id=${history.id}`);
+  await assert.rejects(sql`update idoc.profile_change_history set after_json=${JSON.stringify({ firstName: 'Changed' })}::jsonb where id=${history.id}`);
   await assert.rejects(sql`delete from idoc.profile_change_history where id=${history.id}`);
   assert.equal((await sql`select id from idoc.audit_log where id=${audit.id}`).length, 1);
   assert.equal((await sql`select id from idoc.profile_change_history where id=${history.id}`).length, 1);
@@ -242,7 +242,7 @@ test('account delivery atomically terminalizes ineligible tokens and leases only
 test('account states and current entitlement remain independent database facts', async () => {
   const [user] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state) values('suspended-entitled@idoc.club','hash',now(),'suspended') returning id`;
   const [profile] = await sql`insert into idoc.profiles(user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code) values(${user.id},'Safe','Member','1 Road','City','State','1','DE') returning id`;
-  await sql`insert into idoc.memberships(profile_id,status,valid_from,valid_until,source) values(${profile.id},'active',current_date,current_date+365,'import')`;
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source) values(${profile.id},'active',current_date,current_date+365,'import')`;
   const [record] = await sql`select u.account_state,m.status,m.valid_until>=current_date as current from idoc.users u join idoc.profiles p on p.user_id=u.id join idoc.memberships m on m.profile_id=p.id where u.id=${user.id}`;
   assert.deepEqual(record, { account_state: 'suspended', current: true, status: 'active' });
 });

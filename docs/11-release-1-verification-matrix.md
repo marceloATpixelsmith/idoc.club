@@ -104,7 +104,7 @@ Cron route unit tests remain supplemental. Behavioral coverage is still required
 
 Build/runtime unit tests are supplemental. Provider-call interception during `pnpm build`, static prerender behavior, production missing-config rejection, build-placeholder runtime rejection, and absence of fake production credentials remain **Not yet verified** as the required build-boundary suite.
 
-The following commands must all pass on this branch before any row may be promoted based on its test: `pnpm install --frozen-lockfile`, `pnpm check`, all targeted suites, `pnpm test:integration-db`, `pnpm build`, `pnpm check:release1`, and `git diff --check`. Database provisioning failure or zero applicable tests is a hard failure. GitHub Actions, latest-head Codex review, actionable-thread resolution, deployment, and UAT have not been claimed by this document.
+The following commands must all pass on this branch before any row may be promoted based on its test: `pnpm install --frozen-lockfile`, `pnpm check`, all targeted suites, `pnpm test:integration-db`, `pnpm build`, `pnpm check:release1`, and `git diff --check`. Database provisioning failure or zero applicable tests is a hard failure. The Release 1 GitHub Actions workflow supplies `pnpm check:release1` with a disposable PostgreSQL 16 service database named `idoc_test`; it does not use Render or `POSTGRES_URL`. A successful workflow run, latest-head Codex review, actionable-thread resolution, deployment, and UAT have not been claimed by this document.
 
 ## Closure decision
 
