@@ -15,7 +15,7 @@ Working project document. Update this document when project decisions change.
 
 ## Codex pull-request review gate
 
-The protected `main` branch requires the commit status `codex/review-complete`. Opening, reopening, marking ready, or updating a pull request places that status in `pending`. A submitted review from the `chatgpt-codex-connector` identity changes it to `success` only when the review is attached to the pull request's current head commit. A later push creates a new pending gate, and an older review cannot satisfy it.
+The protected `main` branch requires the commit status `codex/review-complete`. Opening, reopening, marking ready, or updating a pull request places that status in `pending`. A submitted review from the Codex connector identity (`chatgpt-codex-connector` or GitHub's bot-form login `chatgpt-codex-connector[bot]`) changes it to `success` only when the review is attached to the pull request's current head commit. A later push creates a new pending gate, and an older review cannot satisfy it.
 
 After the workflows are present on `main`, configure the repository ruleset for `main` to require `codex/review-complete`. Also require conversation resolution so completing a Codex review does not make unresolved review threads mergeable.
 
