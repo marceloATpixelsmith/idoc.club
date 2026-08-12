@@ -33,7 +33,8 @@ async function runSuite(url: string) {
     .map((name) => `tests/${name}`);
   if (integrationTests.length === 0) throw new Error('No PostgreSQL integration tests were discovered.');
   await run(process.execPath, [
-    '--experimental-strip-types',
+    '--import',
+    'tsx',
     '--conditions=react-server',
     '--test',
     '--test-concurrency=1',
