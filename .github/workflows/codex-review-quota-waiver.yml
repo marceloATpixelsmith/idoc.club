@@ -1,0 +1,118 @@
+name: Codex Review Gate - Quota Waiver
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number blocked because Codex review quota is unavailable
+        required: true
+        type: number
+      reason:
+        description: Audit reason for waiving the review on this revision
+        required: true
+        type: string
+      confirmation:
+        description: Type CODEX_QUOTA_EXHAUSTED to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  waive-review:
+    name: Authorize and record quota waiver
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate authorization and inputs
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ inputs.reason }}
+          REPOSITORY: ${{ github.repository }}
+          REQUESTING_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          if [[ "${CONFIRMATION}" != "CODEX_QUOTA_EXHAUSTED" ]]
+          then
+              echo "The required confirmation text was not supplied."
+              exit 1
+          fi
+          if (( ${#REASON} < 12 || ${#REASON} > 500 ))
+          then
+              echo "The audit reason must contain between 12 and 500 characters."
+              exit 1
+          fi
+          PERMISSION="$(
+              curl --fail-with-body --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "${GITHUB_API_URL}/repos/${REPOSITORY}/collaborators/${REQUESTING_ACTOR}/permission" \
+                | jq -r '.permission'
+          )"
+          if [[ "${PERMISSION}" != "admin" && "${PERMISSION}" != "maintain" ]]
+          then
+              echo "Only a repository administrator or maintainer may waive the Codex review gate."
+              exit 1
+          fi
+
+      - name: Resolve the current pull request revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PR_DATA="$(
+              curl --fail-with-body --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}"
+          )"
+          if [[ "$(jq -r '.state' <<< "${PR_DATA}")" != "open" ]]
+          then
+              echo "The requested pull request is not open."
+              exit 1
+          fi
+          echo "HEAD_SHA=$(jq -r '.head.sha' <<< "${PR_DATA}")" >> "${GITHUB_ENV}"
+
+      - name: Waive the gate for this exact revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REASON: ${{ inputs.reason }}
+          REPOSITORY: ${{ github.repository }}
+          REQUESTING_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          RUN_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n \
+            --arg state "success" \
+            --arg context "codex/review-complete" \
+            --arg description "Waived by maintainer: Codex quota unavailable" \
+            --arg target_url "${RUN_URL}" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}' > status.json
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+            --data-binary @status.json
+          jq -n \
+            --arg actor "${REQUESTING_ACTOR}" \
+            --arg reason "${REASON}" \
+            --arg sha "${HEAD_SHA}" \
+            --arg run_url "${RUN_URL}" \
+            '{body: ("Codex review quota waiver applied by @" + $actor + " to revision `" + $sha + "`.\n\nReason: " + $reason + "\n\nAudit workflow: " + $run_url)}' > comment.json
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --data-binary @comment.json

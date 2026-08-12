@@ -16,6 +16,7 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 10. Open or update a pull request into `main` when the environment supports it. Do not treat a missing `gh` executable as a blocker when the connected GitHub integration can publish the work.
 11. If PR creation is unavailable, complete the changes and report the changed files, validation results, and exact publishing blocker.
 12. Do not use `[skip ci]`.
+13. Do not merge a pull request until `codex/review-complete` succeeds for its current head commit and all actionable review threads are resolved. If Codex review quota is unavailable, only a repository administrator or maintainer may use the audited quota-waiver workflow for that exact revision.
 
 ## 2. Scope, architecture, and documentation
 
