@@ -50,6 +50,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
   assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
+  assert.ok(journal.entries[7].when > journal.entries[6].when, 'migration 0007 must follow migration 0006');
   const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0007_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {
     const [schemaName, name] = tableName.split('.');
