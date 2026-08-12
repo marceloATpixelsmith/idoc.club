@@ -42,7 +42,8 @@ jobs:
   mark-complete:
     if: >-
       github.event_name == 'pull_request_review' &&
-      github.event.review.user.login == 'chatgpt-codex-connector'
+      (github.event.review.user.login == 'chatgpt-codex-connector' ||
+      github.event.review.user.login == 'chatgpt-codex-connector[bot]')
     name: Accept completed Codex review
     runs-on: ubuntu-latest
     steps:
