@@ -100,12 +100,15 @@ test('password recovery is neutral, purpose-separated, rate-limited, digest-only
   assert.equal(JSON.stringify(await sql`select * from idoc.account_tokens`).includes(raw), false);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt === 0) await sql`update idoc.users set account_state='migrated_pending' where id=${existing.id}`;
     await requestAccountLink(existing.email, 'migration_activation', 'protected-origin', timing);
   }
   const limits = await sql`select purpose,request_count from idoc.account_request_limits order by purpose`;
   assert.deepEqual(limits.map(({ purpose }) => purpose), ['migration_activation', 'password_reset', 'password_reset']);
   assert.equal(limits.find(({ purpose }) => purpose === 'migration_activation')?.request_count, 5);
-  assert.equal((await sql`select count(*)::int as count from idoc.account_tokens`)[0].count, 1);
+  assert.equal((await sql`select count(*)::int as count from idoc.account_tokens`)[0].count, 4);
+  assert.equal((await sql`select count(*)::int as count from idoc.account_tokens where purpose='migration_activation'`)[0].count, 3);
+  assert.equal((await sql`select count(*)::int as count from idoc.account_delivery_outbox`)[0].count, 4);
 });
 
 test('password reset has one concurrent winner, rotates credentials, invalidates sessions, and rejects replay and cross-purpose tokens', async () => {
@@ -164,14 +167,29 @@ test('migrated activation preserves every imported classification and complete R
   }
 });
 
+test('migrated activation accepts an expired imported member without Stripe linkage or Address 2', async () => {
+  const graph = await createCompleteGraph();
+  await sql`update idoc.users set account_state='migrated_pending',email_verified_at=null where id=${graph.user.id}`;
+  await sql`update idoc.profiles set address_2=null where id=${graph.profile.id}`;
+  await sql`update idoc.memberships set status='expired',valid_until='2025-12-31' where profile_id=${graph.profile.id}`;
+  await sql`delete from idoc.billing_accounts where profile_id=${graph.profile.id}`;
+  const raw = 'expired-import-activation-token-1234567890x';
+  await insertToken(graph.user.id, 'migration_activation', raw);
+
+  assert.equal((await consumeAccountToken(raw, 'migration_activation', PASSWORD)).status, 'success');
+  const [activated] = await sql`select account_state,email_verified_at from idoc.users where id=${graph.user.id}`;
+  assert.equal(activated.account_state, 'active');
+  assert.ok(activated.email_verified_at);
+  assert.equal((await sql`select count(*)::int as count from idoc.billing_accounts where profile_id=${graph.profile.id}`)[0].count, 0);
+});
+
 test('migrated activation failure matrix preserves foundations, credentials, session, and token while retaining safe reconciliation evidence', async () => {
   const cases = [
     { name: 'missing mapping', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.migration_map where new_entity_id=${String(graph.user.id)}` },
     { name: 'missing profile', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.billing_accounts where profile_id=${graph.profile.id}`.then(() => sql`delete from idoc.professional_roles where profile_id=${graph.profile.id}`).then(() => sql`delete from idoc.memberships where profile_id=${graph.profile.id}`).then(() => sql`delete from idoc.profiles where id=${graph.profile.id}`) },
     { name: 'malformed profile', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`update idoc.profiles set country_code='XX' where id=${graph.profile.id}` },
     { name: 'missing role', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.professional_roles where profile_id=${graph.profile.id}` },
-    { name: 'invalid membership', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`update idoc.memberships set status='invalid' where profile_id=${graph.profile.id}` },
-    { name: 'missing billing', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.billing_accounts where profile_id=${graph.profile.id}` },
+    { name: 'invalid membership', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`update idoc.memberships set status='review_required' where profile_id=${graph.profile.id}` },
   ];
   for (const scenario of cases) {
     await resetIdoc();
