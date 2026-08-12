@@ -285,6 +285,8 @@ export const accountDeliveryOutbox = idocSchema.table('account_delivery_outbox',
   lastErrorCode: varchar('last_error_code', { length: 50 }),
   sentAt: timestamp('sent_at', { withTimezone: true }),
   deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+  terminalAt: timestamp('terminal_at', { withTimezone: true }),
+  terminalReason: varchar('terminal_reason', { length: 50 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

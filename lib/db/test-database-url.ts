@@ -22,12 +22,27 @@ export function validateTestDatabaseUrl(value: string | undefined, productionUrl
     throw new Error('Production-like database URLs are forbidden.');
   }
   if (productionUrl) {
-    try {
-      const production = new URL(productionUrl);
-      const normalize = (url: URL) => `${url.protocol}//${url.username}@${url.hostname}:${url.port || '5432'}${url.pathname}`;
-      if (normalize(candidate) === normalize(production)) throw new Error('TEST_DATABASE_URL matches POSTGRES_URL.');
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('matches POSTGRES_URL')) throw error;
+    const normalizeTarget = (rawUrl: string | URL, label: string) => {
+      let url: URL;
+      try {
+        url = rawUrl instanceof URL ? rawUrl : new URL(rawUrl);
+      } catch {
+        throw new Error(`${label} cannot be compared safely.`);
+      }
+      if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname) {
+        throw new Error(`${label} cannot be compared safely.`);
+      }
+      let name: string;
+      try {
+        name = decodeURIComponent(url.pathname.replace(/^\//, ''));
+      } catch {
+        throw new Error(`${label} cannot be compared safely.`);
+      }
+      if (!name || name.includes('/')) throw new Error(`${label} cannot be compared safely.`);
+      return `${url.hostname.toLowerCase().replace(/\.$/, '')}:${url.port || '5432'}/${name}`;
+    };
+    if (normalizeTarget(candidate, 'TEST_DATABASE_URL') === normalizeTarget(productionUrl, 'POSTGRES_URL')) {
+      throw new Error('TEST_DATABASE_URL matches POSTGRES_URL.');
     }
   }
   return candidate;
