@@ -39,11 +39,11 @@ Items below retain their explicit row status. PR #21 evidence is now recorded wh
 
 | Requirement | Needed test and implementation boundary | Result |
 |---|---|---|
-| Exact final schema parity, including types, defaults, nullability, constraints, indexes, foreign keys, triggers, and enum/check semantics | Catalog comparison against `schema.ts` and `0008_snapshot.json` (`migration`) | Not yet verified |
-| Released migration and snapshot immutability beyond the recorded `0007` timestamp | Committed checksum manifest (`migration`) | Not yet verified |
-| Destructive SQL occurs only after target validation | Instrumented harness test (`DB guard`) | Not yet verified |
-| Reject production, Render, ambiguous and malformed destinations before mutation | Sentinel-schema PostgreSQL harness test (`DB guard`) | Not yet verified |
-| Credentials, scheme aliases, query/SSL decoration, host case, percent encoding and default/omitted ports cannot bypass same-target detection | Unit coverage exists; destructive sentinel PostgreSQL test is required (`DB guard`) | Not yet verified |
+| Exact final schema parity, including types, defaults, nullability, constraints, indexes, foreign keys, triggers, generated/identity behavior, and enum/check semantics | `final migrated catalog exactly agrees with the authoritative Drizzle snapshot` compares the PostgreSQL catalogs with `schema.ts` and `0009_snapshot.json` (`migration`) | Added; local disposable-PostgreSQL result and latest PR-head GitHub Actions result pending |
+| Released migration and snapshot immutability beyond the recorded `0007` timestamp | `released migrations, snapshots, and journal entries retain their committed checksums` verifies the SHA-256 manifest through released `0008` (`migration`) | Added; local unit test passed; latest PR-head aggregate result pending |
+| Destructive SQL occurs only after target validation | `rejected database destinations preserve real sentinel schema, table, and row data` instruments the destructive suite callback (`DB guard`) | Added; local disposable-PostgreSQL result and latest PR-head GitHub Actions result pending |
+| Reject production, Render, ambiguous and malformed destinations before mutation | Same real sentinel schema/table/row test covers the rejection matrix (`DB guard`) | Added; local disposable-PostgreSQL result and latest PR-head GitHub Actions result pending |
+| Credentials, scheme aliases, query/SSL decoration, fragments, host case, percent encoding, IPv6 brackets, parameter ordering, and default/omitted ports cannot bypass same-target detection | `equivalent destination decoration cannot bypass validation before destructive SQL` (`DB guard`) | Added; local disposable-PostgreSQL result and latest PR-head GitHub Actions result pending |
 
 ### Identity, ownership, states, and authorization
 
@@ -109,9 +109,9 @@ Cron route unit tests remain supplemental. Behavioral coverage is still required
 
 Build/runtime unit tests are supplemental. Provider-call interception during `pnpm build`, static prerender behavior, production missing-config rejection, build-placeholder runtime rejection, and absence of fake production credentials remain **Not yet verified** as the required build-boundary suite.
 
-The following commands must all pass on this branch before any row may be promoted based on its test: `pnpm install --frozen-lockfile`, `pnpm check`, all targeted suites, `pnpm test:integration-db`, `pnpm build`, `pnpm check:release1`, and `git diff --check`. Database provisioning failure or zero applicable tests is a hard failure. The Release 1 GitHub Actions workflow supplies `pnpm check:release1` with a disposable PostgreSQL 16 service database named `idoc_test`; it does not use Render or `POSTGRES_URL`. PR #21’s latest-head workflow and review-thread inspection are confirmed complete. This batch’s latest-head workflow, review, deployment, and UAT have not yet been claimed by this document.
+The following commands must all pass on this branch before any row may be promoted based on its test: `pnpm install --frozen-lockfile`, `pnpm check`, all targeted suites, `pnpm test:integration-db`, `pnpm build`, `pnpm check:release1`, and `git diff --check`. Database provisioning failure or zero applicable tests is a hard failure. The Release 1 GitHub Actions workflow supplies `pnpm check:release1` with a disposable PostgreSQL 16 service database named `idoc_test`; it does not use Render or `POSTGRES_URL`. PR #21’s latest-head workflow and review-thread inspection are confirmed complete. The attached repository contains merged PR #22 revision `f768474`, but no authenticated remote or workflow artifact is available in this environment to prove which final-revision PostgreSQL jobs ran. Therefore the PR #22 batch-2 rows below remain pending rather than being promoted from merge status, source inspection, or local unit evidence. This corrective batch’s latest-head workflow, review, deployment, and UAT have not yet been claimed by this document.
 
-## Behavioral verification batch 2 evidence awaiting latest-head workflow
+## Behavioral verification batch 2 evidence awaiting confirmed latest-head workflow
 
 The following new suites invoke production server-side boundaries and are intentionally **not yet marked Verified** until this pull request’s latest-head `Run Release 1 gate` completes against disposable PostgreSQL:
 
@@ -125,7 +125,7 @@ The following new suites invoke production server-side boundaries and are intent
 | Imported Judge, Steward, Judge + Steward, and Veterinarian activation preservation | `migrated activation preserves every imported classification and complete Release 1 graph without duplicates` | `consumeAccountToken` | Added; latest PR-head GitHub Actions result pending |
 | Imported-foundation reconciliation denial and safe evidence | `migrated activation failure matrix preserves foundations, credentials, session, and token while retaining safe reconciliation evidence` | `consumeAccountToken` | Added; latest PR-head GitHub Actions result pending; additional enumerated conflict cases remain open |
 
-This batch does not claim payment/subscription projections that do not exist in the Release 1 IDOC schema. `billing_accounts.external_customer_id` is preserved and unique; a dedicated Stripe Subscription projection remains later billing scope and has not been invented here. Migration/exact-schema parity, delivery-worker concurrency, Cron-plus-PostgreSQL, and build/runtime interception remain open.
+This batch does not claim payment/subscription projections that do not exist in the Release 1 IDOC schema. `billing_accounts.external_customer_id` is preserved and unique; a dedicated Stripe Subscription projection remains later billing scope and has not been invented here. This corrective batch adds the migration/exact-schema and destructive-target evidence above without predeclaring it successful; delivery-worker concurrency, Cron-plus-PostgreSQL, and build/runtime interception remain open.
 
 ## Closure decision
 
