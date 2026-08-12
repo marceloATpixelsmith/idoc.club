@@ -61,7 +61,7 @@ All core membership-policy decisions in this section are approved. No production
 
 # 4. Release 1 - membership foundation
 
-Implementation status: the foundation now includes neutral password recovery/reset, session-version revocation, migrated-account activation tokens, complete conditional member profile editing, account-state policy, retryable administrator profile-change delivery evidence, and an isolated database integration harness, in addition to the existing IDOC schema, ownership/administrator authorization, entitlement, immutable history, verification, Stripe identity, migration-map, and webhook boundaries. Release 1 is **not yet closed**: the isolated database suite must run successfully in an environment providing `TEST_DATABASE_URL`, and deployment/UAT gates remain outstanding.
+Implementation status: the foundation now additionally includes strict test-database URL validation, purpose-separated persistent recovery/activation limits, deterministic timing equalization, encrypted durable account-link delivery, and lease-based concurrent outbox claiming with bounded retry/dead-letter behavior. Existing password reset, migrated activation, profile editing, account-state policy, session revocation, history, entitlement, and migration foundations remain in place. Release 1 is **not yet closed**: the expanded isolated PostgreSQL suite has not run in the current environment because `TEST_DATABASE_URL` and a PostgreSQL provisioner are unavailable, and the complete prompt-level behavioral matrix, deployment/UAT gates, and latest-head Codex review remain outstanding.
 
 1.  Remove or adapt generic team/invitation concepts that do not represent IDOC.
 

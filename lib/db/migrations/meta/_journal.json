@@ -43,6 +43,13 @@
       "when": 1786496500000,
       "tag": "0005_release_one_account_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786496600000,
+      "tag": "0006_durable_account_delivery",
+      "breakpoints": true
     }
   ]
 }
