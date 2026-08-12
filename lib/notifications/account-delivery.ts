@@ -31,19 +31,20 @@ export async function deliverNextAccountLink(owner = randomUUID()) {
   if (!claimed) return { status: 'empty' as const };
   const { record } = claimed;
   try {
-    const payload = decryptDeliveryPayload(record.encryptedPayload);
+    const payload = decryptDeliveryPayload(record.encryptedPayload, record.keyVersion);
     const activation = record.purpose === 'migration_activation';
     const url = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
     url.pathname = activation ? '/activate' : '/reset-password';
     url.searchParams.set('token', payload.token);
     await sendTransactionalEmail({ html: `<p><a href="${url.toString()}">${activation ? 'Activate your imported IDOC account' : 'Reset your password'}</a></p>`, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email });
-    await db.transaction(async (tx) => {
+    const finalized = await db.transaction(async (tx) => {
       const [done] = await tx.update(accountDeliveryOutbox).set({ attemptCount: sql`${accountDeliveryOutbox.attemptCount} + 1`, lastAttemptAt: new Date(), lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date() }).where(and(eq(accountDeliveryOutbox.id, record.id), eq(accountDeliveryOutbox.leaseOwner, owner), isNull(accountDeliveryOutbox.sentAt))).returning();
-      if (!done) return;
+      if (!done) return false;
       await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, record.purpose), ne(accountTokens.id, record.tokenId), isNull(accountTokens.consumedAt)));
       await tx.insert(auditLog).values({ action: `account.${record.purpose}.delivery_succeeded`, entityId: String(record.userId), entityType: 'user' });
+      return true;
     });
-    return { status: 'delivered' as const };
+    return finalized ? { status: 'delivered' as const } : { status: 'lease_lost' as const };
   } catch {
     const nextAttempt = record.attemptCount + 1;
     await db.update(accountDeliveryOutbox).set({ attemptCount: nextAttempt, availableAt: sql`now() + (${retrySeconds(nextAttempt)} * interval '1 second')`, deadLetteredAt: nextAttempt >= MAX_ATTEMPTS ? new Date() : null, lastAttemptAt: new Date(), lastErrorCode: 'temporary_delivery_failure', leaseExpiresAt: null, leaseOwner: null }).where(and(eq(accountDeliveryOutbox.id, record.id), eq(accountDeliveryOutbox.leaseOwner, owner), isNull(accountDeliveryOutbox.sentAt)));

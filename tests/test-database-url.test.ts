@@ -8,9 +8,12 @@ test('accepts only explicitly and unambiguously named isolated databases', () =>
 });
 
 test('rejects missing, malformed, unsupported, ambiguous, and production-like URLs', () => {
-  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/idoc_test',
+  for (const value of [undefined, '', 'not-a-url', 'postgres://',
+    'postgres://localhost/idoc_test', 'mysql://u:p@localhost/idoc_test',
+    'file:///idoc_test', 'postgres://u:p@localhost/',
     'postgres://u:p@localhost/latest', 'postgres://u:p@contest/latest',
     'postgres://u:p@contest/idoc_test', 'postgres://u:p@production-db/idoc_test',
+    'postgres://u:p@primary-db/idoc_test', 'postgres://u:p@live-db/idoc_test',
     'postgres://u:p@example.render.com/idoc_test']) {
     assert.throws(() => validateTestDatabaseUrl(value));
   }

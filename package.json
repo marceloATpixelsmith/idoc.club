@@ -8,7 +8,7 @@
     "check:release1": "pnpm check && pnpm test:integration-db && pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "test:integration-db": "node --experimental-strip-types --test tests/database-integration.integration.ts",
+    "test:integration-db": "node --experimental-strip-types scripts/run-integration-db.ts",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",

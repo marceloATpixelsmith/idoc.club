@@ -10,17 +10,40 @@ import {
 import { getUser } from '@/lib/db/queries';
 import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
+import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
+import { isEntitled } from './entitlement';
 
-async function authenticatedActor(): Promise<Actor> {
+async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const user = await getUser();
   if (!user) throw new Error('Authentication required.');
-  const grants = await db.select({ role: applicationRoles.role }).from(applicationRoles)
-    .where(and(eq(applicationRoles.userId, user.id), isNull(applicationRoles.revokedAt)));
-  return { id: user.id, roles: grants.map(({ role }) => role) };
+  const [grants, profile] = await Promise.all([
+    db.select({ role: applicationRoles.role }).from(applicationRoles)
+      .where(and(eq(applicationRoles.userId, user.id), isNull(applicationRoles.revokedAt))),
+    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1),
+  ]);
+  const actor = { id: user.id, roles: grants.map(({ role }) => role) };
+  const latest = profile[0]
+    ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
+      .from(memberships).where(eq(memberships.profileId, profile[0].id))
+      .orderBy(desc(memberships.validUntil)).limit(1)
+    : [];
+  const entitled = latest[0]
+    ? isEntitled(latest[0], new Date().toISOString().slice(0, 10))
+    : false;
+  if (!mayAccessAccountFunction({
+    accountState: user.accountState as AccountState,
+    actor,
+    entitled,
+  }, operation)) throw new Error('Account access denied.');
+  return actor;
+}
+
+export async function requireAccountAccess(operation: AccountFunction) {
+  return authenticatedActor(operation);
 }
 
 export async function getPrivateMember(profileId: number) {
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('profile');
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return null;
   requireOwnerOrAdmin(actor, profile.userId);
@@ -32,14 +55,14 @@ export async function getPrivateMember(profileId: number) {
 }
 
 export async function getOwnPrivateMember() {
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('profile');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
   return profile ? getPrivateMember(profile.id) : null;
 }
 
 export async function createOwnMemberProfile(untrustedInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('onboarding');
   return db.transaction(async (tx) => {
     const [account] = await tx.execute<{ account_state: string }>(sql`
       select account_state from idoc.users where id = ${actor.id} for update
@@ -67,7 +90,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
 
 export async function updateMemberProfile(profileId: number, untrustedInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('profile');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
@@ -100,14 +123,14 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
 }
 
 export async function listAuditHistory(profileId: number) {
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('administration');
   requireAdministrator(actor);
   return db.select().from(auditLog).where(and(eq(auditLog.entityType, 'profile'), eq(auditLog.entityId, String(profileId))))
     .orderBy(desc(auditLog.createdAt));
 }
 
 export async function hasCurrentMemberEntitlement(profileId: number): Promise<boolean> {
-  const actor = await authenticatedActor();
+  const actor = await authenticatedActor('profile');
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return false;
   requireOwnerOrAdmin(actor, profile.userId);

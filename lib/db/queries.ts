@@ -81,6 +81,8 @@ export async function getUserWithTeam(userId: number) {
 }
 
 export async function getActivityLogs() {
+  const { requireAccountAccess } = await import('@/lib/membership/data-access');
+  await requireAccountAccess('member');
   const user = await getUser();
   if (!user) {
     throw new Error('User not authenticated');

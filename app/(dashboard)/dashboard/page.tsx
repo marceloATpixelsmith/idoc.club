@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getOwnPrivateMember } from '@/lib/membership/data-access';
+import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
 
 export default async function DashboardPage() {
+  await requireAccountAccess('member');
   const member = await getOwnPrivateMember();
   if (!member) redirect('/onboarding');
   return <main className="flex-1 p-8">

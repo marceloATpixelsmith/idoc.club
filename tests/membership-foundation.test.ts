@@ -108,6 +108,24 @@ test('account-state policy blocks suspension and permits expired account mainten
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: { id: 2, roles: ['super_admin'] }, entitled: false }, 'administration'), true);
 });
 
+test('account-state policy separates onboarding, member, administration, and expired access', () => {
+  const member = { id: 1, roles: ['member'] };
+  const administrator = { id: 2, roles: ['administrator'] };
+  const superAdmin = { id: 3, roles: ['super_admin'] };
+  for (const accountState of ['unverified', 'suspended', 'migrated_pending', 'deleted'] as const) {
+    assert.equal(mayAccessAccountFunction({ accountState, actor: superAdmin, entitled: true }, 'administration'), false);
+    assert.equal(mayAccessAccountFunction({ accountState, actor: member, entitled: true }, 'profile'), false);
+  }
+  assert.equal(mayAccessAccountFunction({ accountState: 'onboarding', actor: member, entitled: false }, 'onboarding'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'onboarding', actor: member, entitled: false }, 'account'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, 'member'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, 'member'), false);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, 'profile'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: administrator, entitled: false }, 'administration'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: superAdmin, entitled: false }, 'administration'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, 'administration'), false);
+});
+
 test('recovery and activation store digests, claim once, and revoke sessions', () => {
   const source = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
   const delivery = readFileSync(new URL('../lib/notifications/account-delivery.ts', import.meta.url), 'utf8');

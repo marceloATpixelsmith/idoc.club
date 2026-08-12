@@ -6,8 +6,9 @@ import {
   getUser,
   updateTeamSubscription
 } from '@/lib/db/queries';
+import { stripeKeyForServer } from '@/lib/runtime/configuration';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+export const stripe = new Stripe(stripeKeyForServer(), {
   apiVersion: '2025-04-30.basil'
 });
 

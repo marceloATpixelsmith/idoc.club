@@ -16,6 +16,14 @@ const MAX_REQUESTS = 3;
 const MINIMUM_RESPONSE_MS = 350;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
+function operationalFailureCategory(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('not configured') || message.includes('configuration')) return 'configuration';
+  if (message.includes('encrypt') || message.includes('key')) return 'encryption';
+  if (message.includes('connect') || message.includes('database')) return 'database';
+  return 'operational';
+}
+
 async function takeAllowance(email: string, purpose: AccountTokenPurpose, origin: string, now: Date) {
   const secret = process.env.RATE_LIMIT_HASH_KEY;
   if (!secret) throw new Error('RATE_LIMIT_HASH_KEY is not configured.');
@@ -43,16 +51,20 @@ export async function requestAccountLink(untrustedEmail: string, purpose: Accoun
     const eligible = allowed && user && (purpose === 'password_reset' ? ['active', 'onboarding'].includes(user.accountState) : user.accountState === 'migrated_pending');
     if (eligible) {
       const rawToken = randomBytes(32).toString('base64url');
-      const encryptedPayload = encryptDeliveryPayload({ email, token: rawToken });
+      const deliveryPayload = encryptDeliveryPayload({ email, token: rawToken });
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
-        await tx.insert(accountDeliveryOutbox).values({ encryptedPayload, keyVersion: process.env.ACCOUNT_DELIVERY_KEY_VERSION ?? 'v1', messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        await tx.insert(accountDeliveryOutbox).values({ ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
         await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_queued`, entityId: String(user.id), entityType: 'user' });
       });
     }
-  } catch {
-    // Anonymous callers always receive the same result; configuration/database errors remain observable server-side.
+  } catch (error) {
+    // Do not include the identifier, origin, token, exception, or environment in logs.
+    console.error('account_link_request_failed', {
+      category: operationalFailureCategory(error),
+      purpose,
+    });
   } finally {
     await equalizeAnonymousResponse(startedAt, timing);
   }
