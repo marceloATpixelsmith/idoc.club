@@ -24,7 +24,7 @@ beforeEach(async () => {
   process.env.BASE_URL = 'https://account.test';
   process.env.CRON_SECRET = RAW_SECRET;
   process.env.IDOC_ADMIN_NOTIFICATION_EMAIL = 'operations@example.test';
-  process.env.MAILCHIMP_TRANSACTIONAL_API_KEY = 'provider-test-double-key';
+  process.env.MAILCHIMP_TRANSACTIONAL_API_KEY = 'provider-test-double-key-at-least-32-chars';
   process.env.RATE_LIMIT_HASH_KEY = 'integration-only-rate-limit-secret';
   await resetIdoc();
 });
@@ -49,14 +49,14 @@ test('account delivery succeeds once with stable identity, safe evidence, and an
   assert.equal(messages[0].messageId, row.message_id);
   const [stored] = await sql`select * from idoc.account_delivery_outbox where id=${row.id}`;
   assert.equal(stored.attempt_count, 1);
-  assert.equal(stored.sent_at.toISOString(), CLOCK.toISOString());
+  assert.equal(new Date(stored.sent_at).toISOString(), CLOCK.toISOString());
   assert.equal(stored.lease_owner, null);
   assert.equal(stored.lease_expires_at, null);
   const [token] = await sql`select * from idoc.account_tokens where id=${row.token_id}`;
   assert.equal(token.consumed_at, null);
   assert.equal(token.user_id, stored.user_id);
   assert.equal(token.purpose, stored.purpose);
-  assert.equal(token.expires_at > CLOCK, true);
+  assert.equal(new Date(token.expires_at) > CLOCK, true);
   const evidence = JSON.stringify(await sql`select * from idoc.audit_log`);
   const rawToken = TOKEN_PATTERN.exec(messages[0].html)?.[1];
   assert.ok(rawToken);
@@ -81,11 +81,11 @@ test('retry uses deterministic bounded backoff, preserves identity and token, an
   assert.equal((await deliverNextAccountLink('later-worker', { now: () => CLOCK, send })).status, 'delivered');
   const [failed] = await sql`select * from idoc.account_delivery_outbox where id=${first.row.id}`;
   assert.equal(failed.attempt_count, 1);
-  assert.equal(failed.available_at.toISOString(), new Date(CLOCK.getTime() + accountDeliveryRetrySeconds(1) * 1000).toISOString());
+  assert.equal(new Date(failed.available_at).toISOString(), new Date(CLOCK.getTime() + accountDeliveryRetrySeconds(1) * 1000).toISOString());
   assert.equal(failed.last_error_code, 'temporary_delivery_failure');
   assert.equal(failed.message_id, first.row.message_id);
   assert.equal((await claimAccountDelivery('too-early', CLOCK)), null);
-  assert.equal((await claimAccountDelivery('eligible-again', failed.available_at))?.status, 'claimed');
+  assert.equal((await claimAccountDelivery('eligible-again', new Date(failed.available_at)))?.status, 'claimed');
   assert.equal((await sql`select count(*)::int count from idoc.account_delivery_outbox`)[0].count, 2);
   assert.equal((await sql`select count(*)::int count from idoc.account_tokens`)[0].count, 2);
   assert.equal((await sql`select consumed_at from idoc.account_tokens where id=${first.row.token_id}`)[0].consumed_at, null);
@@ -101,7 +101,7 @@ test('the sixth failed attempt dead-letters once without consuming or replacing 
   assert.equal((await deliverNextAccountLink('later-worker', { now: () => CLOCK, send: async () => undefined })).status, 'delivered');
   const [dead] = await sql`select * from idoc.account_delivery_outbox where id=${first.row.id}`;
   assert.equal(dead.attempt_count, ACCOUNT_DELIVERY_MAX_ATTEMPTS);
-  assert.equal(dead.dead_lettered_at.toISOString(), CLOCK.toISOString());
+  assert.equal(new Date(dead.dead_lettered_at).toISOString(), CLOCK.toISOString());
   assert.equal(dead.last_error_code, 'temporary_delivery_failure');
   assert.equal(dead.lease_owner, null);
   assert.equal((await claimAccountDelivery('never-again', new Date('2030-01-01'))), null);
@@ -112,10 +112,10 @@ test('the sixth failed attempt dead-letters once without consuming or replacing 
 
 test('eligibility is rechecked after claim and before provider invocation', async () => {
   const cases = [
-    ['expired', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_tokens set expires_at=${new Date(CLOCK.getTime() - 1)} where id=${row.tokenId}`; }],
-    ['consumed', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_tokens set consumed_at=${CLOCK} where id=${row.tokenId}`; }],
+    ['expired', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_tokens set expires_at=${new Date(CLOCK.getTime() - 1).toISOString()} where id=${row.tokenId}`; }],
+    ['consumed', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_tokens set consumed_at=${CLOCK.toISOString()} where id=${row.tokenId}`; }],
     ['account-state', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.users set account_state='suspended' where id=${row.userId}`; }],
-    ['terminal-row', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_delivery_outbox set terminal_at=${CLOCK},terminal_reason='superseded' where id=${row.id}`; }],
+    ['terminal-row', async (row: { id: number; tokenId: number; userId: number }) => { await sql`update idoc.account_delivery_outbox set terminal_at=${CLOCK.toISOString()},terminal_reason='superseded' where id=${row.id}`; }],
   ] as const;
   for (const [caseName, mutate] of cases) {
     await resetIdoc();
@@ -204,7 +204,7 @@ test('database-boundary failures prevent send and finalization failure remains s
     send: async () => { sends += 1; },
   })).status, 'retryable');
   assert.equal(sends, 0);
-  await sql`update idoc.account_delivery_outbox set available_at=${CLOCK} where id=${queued.row.id}`;
+  await sql`update idoc.account_delivery_outbox set available_at=${CLOCK.toISOString()} where id=${queued.row.id}`;
   assert.equal((await deliverNextAccountLink('finalization-failure', {
     beforeFinalize: async () => { throw new Error('injected final-state database failure'); },
     now: () => CLOCK,
