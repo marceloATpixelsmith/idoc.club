@@ -10,6 +10,7 @@ import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } fro
 import { memberProfileSchema, normalizeEmail } from './validation';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
+export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
 const LIFETIME_MS = 60 * 60 * 1000;
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS = 3;
@@ -41,7 +42,14 @@ async function takeAllowance(email: string, purpose: AccountTokenPurpose, origin
 }
 
 /** Neutral anonymous boundary. It persists rate evidence and a deliverable token atomically. */
-export async function requestAccountLink(untrustedEmail: string, purpose: AccountTokenPurpose, origin = 'unknown', timing: TimingDependencies = defaultTiming) {
+export async function requestAccountLink(
+  untrustedEmail: string,
+  purpose: AccountTokenPurpose,
+  origin = 'unknown',
+  timing: TimingDependencies = defaultTiming,
+  testFailureAt?: AccountLinkTransactionStage,
+) {
+  if (testFailureAt && process.env.NODE_ENV !== 'test') throw new Error('Account-link failure injection is test-only.');
   const startedAt = timing.now();
   try {
     const email = normalizeEmail(untrustedEmail);
@@ -55,8 +63,11 @@ export async function requestAccountLink(untrustedEmail: string, purpose: Accoun
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
+        if (testFailureAt === 'after_token_insert') throw new Error('injected transaction failure');
         await tx.insert(accountDeliveryOutbox).values({ ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        if (testFailureAt === 'after_outbox_insert') throw new Error('injected transaction failure');
         await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_queued`, entityId: String(user.id), entityType: 'user' });
+        if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
     }
   } catch (error) {

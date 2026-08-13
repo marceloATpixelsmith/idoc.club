@@ -7,7 +7,7 @@ import { notificationOutbox } from '@/lib/db/schema';
 import { sendTransactionalEmail } from './mailchimp-transactional';
 
 const MAX_ATTEMPTS = 6;
-export async function deliverProfileChangeNotification(_outboxId?: number, owner = randomUUID()) {
+export async function deliverProfileChangeNotification(_outboxId?: number, owner: string = randomUUID()) {
   const rows = await db.execute<typeof notificationOutbox.$inferSelect>(sql`
     with candidate as (select id from idoc.notification_outbox where kind='administrator.profile_changed'
       and sent_at is null and dead_lettered_at is null and available_at <= now()
