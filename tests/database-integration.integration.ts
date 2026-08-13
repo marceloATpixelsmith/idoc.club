@@ -167,7 +167,11 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       if (expected.type === 'f') assert.deepEqual({ target_schema: actual.target_schema, target_table: actual.target_table, target_columns: actual.target_columns, update_action: actual.update_action, delete_action: actual.delete_action }, { target_schema: expected.target_schema, target_table: expected.target_table, target_columns: expected.target_columns, update_action: expected.update_action, delete_action: expected.delete_action }, `${qualifiedName}.${expected.name} foreign-key behavior`);
       if (expected.type === 'c') {
         const declared = expectedTable.checkConstraints[expected.name].value as string;
-        for (const literal of declared.match(/'[^']*'/g) ?? []) assert.ok(actual.definition.includes(literal), `${qualifiedName}.${expected.name} check literal ${literal}`);
+        // Compare the exact set of literals (not just declared ⊆ actual) so an actual constraint
+        // that permits an extra, undeclared value cannot silently pass as "exact parity".
+        const declaredLiterals = (declared.match(/'[^']*'/g) ?? []).sort();
+        const actualLiterals = (actual.definition.match(/'[^']*'/g) ?? []).sort();
+        assert.deepEqual(actualLiterals, declaredLiterals, `${qualifiedName}.${expected.name} check literals`);
         for (const columnName of Object.keys(expectedTable.columns).filter((name) => declared.includes(`"${name}"`))) assert.ok(actual.definition.includes(columnName), `${qualifiedName}.${expected.name} check column ${columnName}`);
         if (declared.includes('>=')) assert.ok(actual.definition.includes('>='), `${qualifiedName}.${expected.name} check operator`);
       }
