@@ -7,10 +7,13 @@ import {
   updateTeamSubscription
 } from '@/lib/db/queries';
 import { stripeKeyForServer } from '@/lib/runtime/configuration';
+import 'server-only';
 
-export const stripe = new Stripe(stripeKeyForServer(), {
-  apiVersion: '2025-04-30.basil'
-});
+let stripeClient: Stripe | undefined;
+export function getStripeServerClient() {
+  stripeClient ??= new Stripe(stripeKeyForServer(), { apiVersion: '2025-04-30.basil' });
+  return stripeClient;
+}
 
 export async function createCheckoutSession({
   team,
@@ -25,7 +28,7 @@ export async function createCheckoutSession({
     redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripeServerClient().checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
       {
@@ -53,6 +56,7 @@ export async function createCustomerPortalSession(team: Team) {
   }
 
   let configuration: Stripe.BillingPortal.Configuration;
+  const stripe = getStripeServerClient();
   const configurations = await stripe.billingPortal.configurations.list();
 
   if (configurations.data.length > 0) {
@@ -108,7 +112,7 @@ export async function createCustomerPortalSession(team: Team) {
     });
   }
 
-  return stripe.billingPortal.sessions.create({
+  return getStripeServerClient().billingPortal.sessions.create({
     customer: team.stripeCustomerId,
     return_url: `${process.env.BASE_URL}/dashboard`,
     configuration: configuration.id
@@ -148,7 +152,7 @@ export async function handleSubscriptionChange(
 }
 
 export async function getStripePrices() {
-  const prices = await stripe.prices.list({
+  const prices = await getStripeServerClient().prices.list({
     expand: ['data.product'],
     active: true,
     type: 'recurring'
@@ -166,7 +170,7 @@ export async function getStripePrices() {
 }
 
 export async function getStripeProducts() {
-  const products = await stripe.products.list({
+  const products = await getStripeServerClient().products.list({
     active: true,
     expand: ['data.default_price']
   });

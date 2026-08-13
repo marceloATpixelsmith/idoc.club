@@ -8,6 +8,7 @@ import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, m
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
 import { memberProfileSchema, normalizeEmail } from './validation';
+import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
@@ -26,8 +27,7 @@ function operationalFailureCategory(error: unknown) {
 }
 
 async function takeAllowance(email: string, purpose: AccountTokenPurpose, origin: string, now: Date) {
-  const secret = process.env.RATE_LIMIT_HASH_KEY;
-  if (!secret) throw new Error('RATE_LIMIT_HASH_KEY is not configured.');
+  const secret = rateLimitHashKeyForServer();
   const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
   const identifierHash = digest(`${secret}:account:${email}`);
   const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);

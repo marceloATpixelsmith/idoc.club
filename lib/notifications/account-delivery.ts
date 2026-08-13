@@ -7,6 +7,7 @@ import { accountDeliveryOutbox, accountTokens, auditLog } from '@/lib/db/schema'
 import { decryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { sendTransactionalEmail } from './mailchimp-transactional';
 import { ACCOUNT_DELIVERY_BATCH_LIMIT, processDeliveryBatch } from './account-delivery-worker-core';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 export const ACCOUNT_DELIVERY_MAX_ATTEMPTS = 6;
 const LEASE_MS = 5 * 60 * 1000;
@@ -91,7 +92,7 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
       }
       const payload = decryptDeliveryPayload(record.encryptedPayload, record.keyVersion);
       const activation = record.purpose === 'migration_activation';
-      const url = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
+      const url = new URL(baseUrlForServer());
       url.pathname = activation ? '/activate' : '/reset-password';
       url.searchParams.set('token', payload.token);
       await dependencies.send({ html: `<p><a href="${url.toString()}">${activation ? 'Activate your imported IDOC account' : 'Reset your password'}</a></p>`, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email });

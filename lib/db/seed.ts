@@ -1,9 +1,10 @@
-import { stripe } from '../payments/stripe';
+import { getStripeServerClient } from '../payments/stripe';
 import { db } from './drizzle';
 import { users, teams, teamMembers } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 
 async function createStripeProducts() {
+  const stripe = getStripeServerClient();
   console.log('Creating Stripe products and prices...');
 
   const baseProduct = await stripe.products.create({
@@ -40,8 +41,9 @@ async function createStripeProducts() {
 }
 
 async function seed() {
-  const email = 'test@test.com';
-  const password = 'admin123';
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) throw new Error('Seed administrator credentials must be supplied explicitly.');
   const passwordHash = await hashPassword(password);
 
   const [user] = await db

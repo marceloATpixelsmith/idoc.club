@@ -1,4 +1,5 @@
 import 'server-only';
+import { mailchimpApiKeyForServer } from '@/lib/runtime/configuration';
 
 const FROM_EMAIL = 'accounts@idoc.club';
 
@@ -10,8 +11,7 @@ export interface TransactionalEmail {
 }
 
 export async function sendTransactionalEmail(message: TransactionalEmail) {
-  const apiKey = process.env.MAILCHIMP_TRANSACTIONAL_API_KEY;
-  if (!apiKey) throw new Error('Mailchimp Transactional is not configured.');
+  const apiKey = mailchimpApiKeyForServer();
   const response = await fetch('https://mandrillapp.com/api/1.0/messages/send.json', {
     body: JSON.stringify({ key: apiKey, message: { from_email: FROM_EMAIL, headers: message.messageId ? { 'X-IDOC-Message-ID': message.messageId } : undefined, html: message.html, subject: message.subject, to: [{ email: message.to, type: 'to' }] } }),
     headers: { 'content-type': 'application/json' }, method: 'POST',

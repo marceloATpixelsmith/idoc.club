@@ -12,3 +12,4 @@ export function encryptDeliveryPayload(value: unknown) {
 export function decryptDeliveryPayload(value: string, keyVersion: string) {
   return decryptDeliveryPayloadWithEnvironment(value, keyVersion, process.env);
 }
+import 'server-only';

@@ -117,3 +117,10 @@ While this template is intentionally minimal and to be used as a learning resour
 - https://makerkit.dev
 - https://zerotoshipped.com
 - https://turbostarter.dev
+
+## Release 1 verification
+
+- `pnpm check` runs type checking and unit tests.
+- `pnpm test:build-boundary` runs a real production build with deterministic external-network interception, route classification, browser-output secret scanning, server-only boundary checks, and fake-credential rejection.
+- `pnpm test:integration-db` requires isolated disposable PostgreSQL and fails rather than skipping if it cannot be provisioned.
+- `pnpm check:release1` is the required fail-fast aggregate of all checks, PostgreSQL evidence, the intercepted build suite, and the ordinary production build.

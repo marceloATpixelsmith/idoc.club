@@ -1,10 +1,11 @@
 import Stripe from 'stripe';
-import { handleSubscriptionChange, stripe } from '@/lib/payments/stripe';
+import { getStripeServerClient, handleSubscriptionChange } from '@/lib/payments/stripe';
 import { NextRequest, NextResponse } from 'next/server';
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
 export async function POST(request: NextRequest) {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) return NextResponse.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  const stripe = getStripeServerClient();
   const payload = await request.text();
   const signature = request.headers.get('stripe-signature') as string;
 
