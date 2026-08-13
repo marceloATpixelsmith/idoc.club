@@ -58,7 +58,17 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
         lease_expires_at=case when candidate.eligible then ${now.toISOString()}::timestamptz + (${LEASE_MS} * interval '1 millisecond') else null end,
         terminal_at=case when candidate.eligible then null else ${now.toISOString()}::timestamptz end,
         terminal_reason=case when candidate.eligible then null else candidate.terminal_reason end
-      from candidate where outbox.id=candidate.id returning outbox.*, candidate.eligible
+      from candidate where outbox.id=candidate.id
+      returning
+        outbox.id, outbox.token_id as "tokenId", outbox.user_id as "userId", outbox.purpose,
+        outbox.encrypted_payload as "encryptedPayload", outbox.key_version as "keyVersion",
+        outbox.message_id as "messageId", outbox.available_at as "availableAt",
+        outbox.lease_owner as "leaseOwner", outbox.lease_expires_at as "leaseExpiresAt",
+        outbox.attempt_count as "attemptCount", outbox.last_attempt_at as "lastAttemptAt",
+        outbox.last_error_code as "lastErrorCode", outbox.sent_at as "sentAt",
+        outbox.dead_lettered_at as "deadLetteredAt", outbox.terminal_at as "terminalAt",
+        outbox.terminal_reason as "terminalReason", outbox.created_at as "createdAt",
+        candidate.eligible
   `);
   if (!rows[0]) return null;
   if (!rows[0].eligible) return { status: 'ineligible' as const };

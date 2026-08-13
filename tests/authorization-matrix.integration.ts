@@ -51,7 +51,10 @@ test('suspended, deleted, and revoked administrator grants are denied even thoug
   await assert.rejects(withTestMembershipBoundary({ actor: { id: revoked.id, roles: [] } }, () => getPrivateMember(ownerProfile.id)));
 });
 
-test('forged actor identity and forged roles cannot reach another account through the direct server boundary', async () => {
+// withTestMembershipBoundary injects the attacker's own genuine, persisted user id (it does not
+// forge session/cookie identity resolution); only the claimed `roles` array is attacker-controlled
+// here, and authenticatedActor() re-derives roles from application_roles regardless of this claim.
+test('forged roles claimed by a genuine attacker account cannot reach another account through the direct server boundary', async () => {
   const { profile: ownerProfile, user: owner } = await createCompleteGraph();
   const attacker = await createUser();
   await createProfile(attacker.id);
