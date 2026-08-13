@@ -11,10 +11,10 @@
     "test:build-boundary": "node --conditions=react-server --experimental-strip-types --test tests/build-runtime-boundary.build.ts",
     "test:integration-db": "node --experimental-strip-types scripts/run-integration-db.ts",
     "db:setup": "npx tsx lib/db/setup.ts",
-    "db:seed": "npx tsx lib/db/seed.ts",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:seed": "node --conditions=react-server --import tsx lib/db/seed.ts",
+    "db:generate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs migrate",
+    "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.1.7",

@@ -94,3 +94,14 @@ test('local and CI Release 1 gates are fail-fast and contain every required boun
   assert.notEqual(failure.status, 0);
   assert.equal(existsSync(marker), false);
 });
+
+test('database CLI entry points preserve server-only import conditions and explicit seed credentials', () => {
+  const scripts = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).scripts as Record<string, string>;
+  for (const name of ['db:generate', 'db:migrate', 'db:studio', 'db:seed']) {
+    assert.match(scripts[name], /--conditions=react-server/, `${name} does not enable the server-only condition`);
+  }
+  const setup = readFileSync(path.join(root, 'lib/db/setup.ts'), 'utf8');
+  assert.match(setup, /SEED_ADMIN_EMAIL/);
+  assert.match(setup, /SEED_ADMIN_PASSWORD/);
+  assert.doesNotMatch(setup, /admin123|test@test\.com/);
+});

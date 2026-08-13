@@ -37,7 +37,8 @@ test('every privileged setting fails closed when missing, empty, or whitespace-o
 
 test('malformed URLs, undersized secrets, and malformed provider settings fail categorically', () => {
   assert.throws(() => databaseUrlForServer({ POSTGRES_URL: 'https://database.invalid' }), /POSTGRES_URL/);
-  assert.throws(() => baseUrlForServer({ BASE_URL: 'http://localhost:3000' }), /BASE_URL/);
+  assert.throws(() => baseUrlForServer({ BASE_URL: 'http://localhost:3000', NODE_ENV: 'production' }), /BASE_URL/);
+  assert.throws(() => baseUrlForServer({ BASE_URL: 'http://idoc.club', NODE_ENV: 'development' }), /BASE_URL/);
   assert.throws(() => authSecretForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: 'sk_fake_value' }), /STRIPE_SECRET_KEY/);
   for (const [name, value] of Object.entries(valid)) {
@@ -46,6 +47,13 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
       assert.doesNotMatch(String(error), /DO_NOT_EXPOSE|database\.internal|sk_live_/);
     }
   }
+});
+
+test('development permits loopback HTTP without weakening production HTTPS', () => {
+  for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
+    assert.equal(baseUrlForServer({ BASE_URL: `http://${hostname}:3000`, NODE_ENV: 'development' }), `http://${hostname}:3000`);
+  }
+  assert.equal(baseUrlForServer({ BASE_URL: 'https://preview.idoc.club', NODE_ENV: 'development' }), 'https://preview.idoc.club');
 });
 
 test('key rings reject malformed mappings and require the active version', () => {

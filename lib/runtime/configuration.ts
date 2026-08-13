@@ -34,7 +34,14 @@ export function stripeKeyForServer(environment: Environment = process.env) {
 }
 
 export function authSecretForServer(environment: Environment = process.env) { return secret(environment, 'AUTH_SECRET'); }
-export function baseUrlForServer(environment: Environment = process.env) { return url(environment, 'BASE_URL', ['https:']); }
+export function baseUrlForServer(environment: Environment = process.env) {
+  const value = url(environment, 'BASE_URL', environment.NODE_ENV === 'production' ? ['https:'] : ['http:', 'https:']);
+  const parsed = new URL(value);
+  if (parsed.protocol === 'http:' && !['127.0.0.1', '[::1]', 'localhost'].includes(parsed.hostname)) {
+    throw new Error('Invalid production configuration: BASE_URL.');
+  }
+  return value;
+}
 export function cronSecretForServer(environment: Environment = process.env) { return secret(environment, 'CRON_SECRET'); }
 export function mailchimpApiKeyForServer(environment: Environment = process.env) { return secret(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }

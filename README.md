@@ -46,17 +46,14 @@ Use the included setup script to create your `.env` file:
 pnpm db:setup
 ```
 
-Run the database migrations and seed the database with a default user and team:
+The setup flow asks for the local seed administrator email and generates a strong seed password in `.env`. Run the database migrations and seed the database with those explicit credentials:
 
 ```bash
 pnpm db:migrate
 pnpm db:seed
 ```
 
-This will create the following user and team:
-
-- User: `test@test.com`
-- Password: `admin123`
+This creates the initial user and team using `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` from `.env`. The repository does not provide default credentials. The database CLI scripts run with Node's `react-server` condition so their server-only imports remain protected while Drizzle and seed commands work outside Next.js.
 
 You can also create new users through the `/sign-up` route.
 
