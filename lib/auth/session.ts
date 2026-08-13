@@ -2,9 +2,11 @@ import { compare, hash } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NewUser } from '@/lib/db/schema';
+import { authSecretForServer } from '@/lib/runtime/configuration';
+import 'server-only';
 
-const key = new TextEncoder().encode(process.env.AUTH_SECRET);
 const SALT_ROUNDS = 10;
+const signingKey = () => new TextEncoder().encode(authSecretForServer());
 
 export async function hashPassword(password: string) {
   return hash(password, SALT_ROUNDS);
@@ -27,11 +29,11 @@ export async function signToken(payload: SessionData) {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1 day from now')
-    .sign(key);
+    .sign(signingKey());
 }
 
 export async function verifyToken(input: string) {
-  const { payload } = await jwtVerify(input, key, {
+  const { payload } = await jwtVerify(input, signingKey(), {
     algorithms: ['HS256'],
   });
   return payload as SessionData;

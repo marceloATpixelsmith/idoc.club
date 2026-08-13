@@ -1,40 +1,16 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { accountDeliveryConfiguration } from '../runtime/configuration.ts';
 
 export type DeliveryPayload = { email: string; token: string };
 
 type Environment = Partial<Record<string, string | undefined>>;
 
 function activeVersion(environment: Environment) {
-  const version = environment.ACCOUNT_DELIVERY_KEY_VERSION;
-  if (!version || !/^[A-Za-z0-9_-]{1,30}$/.test(version)) {
-    throw new Error('Account delivery active key version is not configured.');
-  }
-  return version;
+  return accountDeliveryConfiguration(environment).activeVersion;
 }
 
 function configuredKeys(environment: Environment): Record<string, string> {
-  const serialized = environment.ACCOUNT_DELIVERY_ENCRYPTION_KEYS;
-  if (serialized) {
-    let value: unknown;
-    try {
-      value = JSON.parse(serialized);
-    } catch {
-      throw new Error('Account delivery key ring configuration is invalid.');
-    }
-    if (!value || Array.isArray(value) || typeof value !== 'object') {
-      throw new Error('Account delivery key ring configuration is invalid.');
-    }
-    const entries = Object.entries(value);
-    if (entries.some(([version, material]) =>
-      !/^[A-Za-z0-9_-]{1,30}$/.test(version) || typeof material !== 'string' || material.length < 32
-    )) {
-      throw new Error('Account delivery key ring configuration is invalid.');
-    }
-    return Object.fromEntries(entries) as Record<string, string>;
-  }
-
-  const legacy = environment.ACCOUNT_DELIVERY_ENCRYPTION_KEY;
-  return legacy && legacy.length >= 32 ? { [activeVersion(environment)]: legacy } : {};
+  return accountDeliveryConfiguration(environment).keys;
 }
 
 function resolveKey(version: string, environment: Environment) {

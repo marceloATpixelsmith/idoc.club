@@ -7,6 +7,7 @@ import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox,
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
 import { updateStripeCustomerEmail } from '@/lib/payments/customer-email';
 import { normalizeEmail } from './validation';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000;
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -21,7 +22,7 @@ export async function issueEmailVerification(userId: number, untrustedEmail: str
     expiresAt: new Date(Date.now() + TOKEN_LIFETIME_MS), pendingEmail,
     tokenHash: hashToken(token), userId,
   });
-  const baseUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3000');
+  const baseUrl = new URL(baseUrlForServer());
   baseUrl.pathname = '/verify-email';
   baseUrl.searchParams.set('token', token);
   try {

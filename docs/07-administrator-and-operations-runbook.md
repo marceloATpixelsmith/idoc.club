@@ -176,3 +176,7 @@ Administrative exports should be generated through authorized server-side report
 5. The other former multisite sites will already have been retired independently; retire the IDOC WordPress site only after acceptance is complete.
 
 6. Document the final decommission date and retained archive location.
+
+## Production runtime configuration boundary
+
+Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `MAILCHIMP_TRANSACTIONAL_API_KEY`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`. Secrets must be at least 32 characters where applicable, and the active account-delivery version must name a key in the JSON key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists.
