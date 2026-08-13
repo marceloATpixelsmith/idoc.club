@@ -27,7 +27,7 @@ export async function createUser(accountState: AccountState = 'active') {
   const email = `member-${fixtureSequence}@example.test`;
   const [user] = await sql<{ id: number; email: string }[]>`
     insert into idoc.users (email,password_hash,email_verified_at,account_state)
-    values (${email}, 'fixture-password-hash', ${accountState === 'unverified' ? null : new Date()}, ${accountState})
+    values (${email}, 'fixture-password-hash', ${accountState === 'unverified' ? null : new Date().toISOString()}, ${accountState})
     returning id,email`;
   return user;
 }

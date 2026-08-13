@@ -13,7 +13,7 @@ import { deliverProfileChangeNotification } from '../lib/notifications/profile-c
 import { closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 const CLOCK = new Date(Date.now() + 60_000);
-const RAW_SECRET = 'integration-cron-secret';
+const RAW_SECRET = 'integration-cron-secret-at-least-32-characters';
 const TOKEN_PATTERN = /token=([A-Za-z0-9_-]{43})/;
 const timing = { now: () => 0, random: () => 0, sleep: async () => undefined };
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -265,7 +265,7 @@ test('administrator notifications use distinct leases and stable identities conc
   const secondUser = await createUser();
   const firstProfile = await createProfile(firstUser.id);
   const secondProfile = await createProfile(secondUser.id);
-  await sql`insert into idoc.notification_outbox(profile_id,kind,payload_json) values(${firstProfile.id},'administrator.profile_changed','{}'),(${secondProfile.id},'administrator.profile_changed','{}')`;
+  await sql`insert into idoc.notification_outbox(profile_id,kind,payload) values(${firstProfile.id},'administrator.profile_changed','{}'),(${secondProfile.id},'administrator.profile_changed','{}')`;
   const originalFetch = globalThis.fetch;
   const ids: string[] = [];
   globalThis.fetch = async (_input, init) => { ids.push(JSON.parse(String(init?.body)).message.headers['X-IDOC-Message-ID']); return new Response('[]', { status: 200 }); };
