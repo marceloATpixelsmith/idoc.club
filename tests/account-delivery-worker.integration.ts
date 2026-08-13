@@ -12,7 +12,7 @@ import {
 import { deliverProfileChangeNotification } from '../lib/notifications/profile-change-delivery.ts';
 import { closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
-const CLOCK = new Date('2026-02-03T04:05:06.000Z');
+const CLOCK = new Date(Date.now() + 60_000);
 const RAW_SECRET = 'integration-cron-secret';
 const TOKEN_PATTERN = /token=([A-Za-z0-9_-]{43})/;
 const timing = { now: () => 0, random: () => 0, sleep: async () => undefined };
