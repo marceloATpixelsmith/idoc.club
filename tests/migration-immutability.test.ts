@@ -49,7 +49,7 @@ test('the current schema exports exactly generate the authoritative migration sn
     ], { cwd: fileURLToPath(root) });
 
     const generated = JSON.parse(await readFile(join(temporary, 'meta', '0000_snapshot.json'), 'utf8'));
-    const authoritative = JSON.parse(await readFile(new URL('meta/0009_snapshot.json', migrations), 'utf8'));
+    const authoritative = JSON.parse(await readFile(new URL('meta/0010_snapshot.json', migrations), 'utf8'));
     for (const snapshot of [generated, authoritative]) {
       delete snapshot.id;
       delete snapshot.prevId;
