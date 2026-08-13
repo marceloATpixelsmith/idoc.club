@@ -33,7 +33,7 @@ async function takeAllowance(email: string, purpose: AccountTokenPurpose, origin
   const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
   const rows = await db.execute<{ request_count: number }>(sql`
     insert into idoc.account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
-    values (${purpose}, ${identifierHash}, ${originHash}, ${windowStartedAt})
+    values (${purpose}, ${identifierHash}, ${originHash}, ${windowStartedAt.toISOString()})
     on conflict (purpose, identifier_hash, origin_hash, window_started_at)
     do update set request_count = idoc.account_request_limits.request_count + 1, updated_at = now()
     returning request_count

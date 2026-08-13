@@ -33,7 +33,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
       with candidate as (
         select o.id,
           (t.id is not null and t.user_id=o.user_id and t.purpose=o.purpose
-            and t.consumed_at is null and t.expires_at > ${now}
+            and t.consumed_at is null and t.expires_at > ${now.toISOString()}
             and ((o.purpose='password_reset' and u.account_state in ('active','onboarding'))
               or (o.purpose='migration_activation' and u.account_state='migrated_pending'))) as eligible,
           case
@@ -41,7 +41,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
             when t.user_id<>o.user_id then 'user_mismatch'
             when t.purpose<>o.purpose then 'purpose_mismatch'
             when t.consumed_at is not null then 'consumed_token'
-            when t.expires_at <= ${now} then 'expired_token'
+            when t.expires_at <= ${now.toISOString()} then 'expired_token'
             when not ((o.purpose='password_reset' and u.account_state in ('active','onboarding'))
               or (o.purpose='migration_activation' and u.account_state='migrated_pending')) then 'account_ineligible'
             else 'expired_token'
@@ -50,15 +50,25 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
         left join idoc.account_tokens t on t.id=o.token_id
         left join idoc.users u on u.id=o.user_id
         where o.sent_at is null and o.dead_lettered_at is null and o.terminal_at is null
-          and o.available_at <= ${now} and (o.lease_expires_at is null or o.lease_expires_at < ${now})
+          and o.available_at <= ${now.toISOString()} and (o.lease_expires_at is null or o.lease_expires_at < ${now.toISOString()})
         order by o.available_at, o.id for update of o skip locked limit 1
       )
       update idoc.account_delivery_outbox outbox set
         lease_owner=case when candidate.eligible then ${owner} else null end,
-        lease_expires_at=case when candidate.eligible then ${now} + (${LEASE_MS} * interval '1 millisecond') else null end,
-        terminal_at=case when candidate.eligible then null else ${now} end,
+        lease_expires_at=case when candidate.eligible then ${now.toISOString()}::timestamptz + (${LEASE_MS} * interval '1 millisecond') else null end,
+        terminal_at=case when candidate.eligible then null else ${now.toISOString()}::timestamptz end,
         terminal_reason=case when candidate.eligible then null else candidate.terminal_reason end
-      from candidate where outbox.id=candidate.id returning outbox.*, candidate.eligible
+      from candidate where outbox.id=candidate.id
+      returning
+        outbox.id, outbox.token_id as "tokenId", outbox.user_id as "userId", outbox.purpose,
+        outbox.encrypted_payload as "encryptedPayload", outbox.key_version as "keyVersion",
+        outbox.message_id as "messageId", outbox.available_at as "availableAt",
+        outbox.lease_owner as "leaseOwner", outbox.lease_expires_at as "leaseExpiresAt",
+        outbox.attempt_count as "attemptCount", outbox.last_attempt_at as "lastAttemptAt",
+        outbox.last_error_code as "lastErrorCode", outbox.sent_at as "sentAt",
+        outbox.dead_lettered_at as "deadLetteredAt", outbox.terminal_at as "terminalAt",
+        outbox.terminal_reason as "terminalReason", outbox.created_at as "createdAt",
+        candidate.eligible
   `);
   if (!rows[0]) return null;
   if (!rows[0].eligible) return { status: 'ineligible' as const };
@@ -79,9 +89,9 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
       const eligible = await tx.execute<{ expires_at: Date }>(sql`
         select t.expires_at from idoc.account_tokens t
         join idoc.account_delivery_outbox o on o.token_id=t.id
-        where o.id=${record.id} and o.lease_owner=${owner} and o.lease_expires_at>${dependencies.now()}
+        where o.id=${record.id} and o.lease_owner=${owner} and o.lease_expires_at>${dependencies.now().toISOString()}
           and o.sent_at is null and o.dead_lettered_at is null and o.terminal_at is null and t.user_id=o.user_id
-          and t.purpose=o.purpose and t.consumed_at is null and t.expires_at>${dependencies.now()}
+          and t.purpose=o.purpose and t.consumed_at is null and t.expires_at>${dependencies.now().toISOString()}
           and ((o.purpose='password_reset' and exists(select 1 from idoc.users u where u.id=o.user_id and u.account_state in ('active','onboarding')))
             or (o.purpose='migration_activation' and exists(select 1 from idoc.users u where u.id=o.user_id and u.account_state='migrated_pending')))
         for update of t, o
