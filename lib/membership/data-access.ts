@@ -157,6 +157,18 @@ function roleMatches(existing: typeof professionalRoles.$inferSelect, desired: M
     && existing.isTechnicalDelegate === ('isTechnicalDelegate' in desired ? desired.isTechnicalDelegate : null);
 }
 
+export async function deleteOwnAccount() {
+  const actor = await authenticatedActor('account');
+  return db.transaction(async (tx) => {
+    await tx.update(users).set({
+      accountState: 'deleted',
+      deletedAt: sql`current_timestamp`,
+      email: sql`concat(${users.email}, '-', ${users.id}, '-deleted')`,
+    }).where(eq(users.id, actor.id));
+    await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
+  });
+}
+
 export async function listAuditHistory(profileId: number) {
   const actor = await authenticatedActor('administration');
   requireAdministrator(actor);

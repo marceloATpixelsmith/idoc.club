@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   users,
@@ -22,6 +22,7 @@ import {
   validatedActionWithUser
 } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
+import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordSchema } from '@/lib/auth/password-policy';
 import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
@@ -231,15 +232,7 @@ export const deleteAccount = validatedActionWithUser(
       };
     }
 
-    // Soft delete
-    await db
-      .update(users)
-      .set({
-        accountState: 'deleted',
-        deletedAt: sql`CURRENT_TIMESTAMP`,
-        email: sql`CONCAT(email, '-', id, '-deleted')` // Ensure email uniqueness
-      })
-      .where(eq(users.id, user.id));
+    await deleteOwnAccount();
 
     (await cookies()).delete('session');
     redirect('/sign-in');
