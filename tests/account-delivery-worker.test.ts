@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { ACCOUNT_DELIVERY_BATCH_LIMIT, handleAccountDeliveryCron, processDeliveryBatch } from '../lib/notifications/account-delivery-worker-core.ts';
+import { ACCOUNT_DELIVERY_BATCH_LIMIT, ACCOUNT_DELIVERY_LEASE_MS, handleAccountDeliveryCron, processDeliveryBatch } from '../lib/notifications/account-delivery-worker-core.ts';
 
 const SECRET = 'cron-secret-value';
 const request = (authorization?: string) => new Request('https://idoc.club/api/cron/account-delivery', { headers: authorization ? { authorization } : undefined });
@@ -51,8 +51,15 @@ test('failure evidence and public responses contain no sensitive values', async 
   for (const sensitive of [SECRET, 'member@example.com', 'raw', 'decrypted payload']) assert.equal(visible.includes(sensitive), false);
 });
 
-test('Vercel Cron configuration matches the protected route', () => {
+test('Vercel Cron configuration matches the protected route and its outbox lease duration', () => {
   const configuration = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(configuration.crons, [{ path: '/api/cron/account-delivery', schedule: '*/5 * * * *' }]);
   assert.ok(readFileSync(new URL('../app/api/cron/account-delivery/route.ts', import.meta.url), 'utf8').includes('handleAccountDeliveryCron'));
+
+  const minutes = Number(/^\*\/(\d+) \* \* \* \*$/.exec(configuration.crons[0].schedule)?.[1]);
+  assert.ok(Number.isInteger(minutes) && minutes > 0, 'the schedule must be a simple every-N-minutes cadence for this invariant to apply');
+  assert.equal(
+    ACCOUNT_DELIVERY_LEASE_MS, minutes * 60 * 1000,
+    'the outbox lease duration must equal the Cron interval: a lease shorter than the interval risks two invocations racing the same row between ticks, and a lease longer than the interval delays reclaiming a worker that died mid-delivery past the very next tick',
+  );
 });

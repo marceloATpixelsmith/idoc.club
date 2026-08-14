@@ -6,11 +6,10 @@ import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountTokens, auditLog } from '@/lib/db/schema';
 import { decryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { sendTransactionalEmail } from './mailchimp-transactional';
-import { ACCOUNT_DELIVERY_BATCH_LIMIT, processDeliveryBatch } from './account-delivery-worker-core';
+import { ACCOUNT_DELIVERY_BATCH_LIMIT, ACCOUNT_DELIVERY_LEASE_MS, processDeliveryBatch } from './account-delivery-worker-core';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 export const ACCOUNT_DELIVERY_MAX_ATTEMPTS = 6;
-const LEASE_MS = 5 * 60 * 1000;
 export const accountDeliveryRetrySeconds = (attempt: number) => Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1));
 
 interface DeliveryDependencies {
@@ -55,7 +54,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
       )
       update idoc.account_delivery_outbox outbox set
         lease_owner=case when candidate.eligible then ${owner} else null end,
-        lease_expires_at=case when candidate.eligible then ${now.toISOString()}::timestamptz + (${LEASE_MS} * interval '1 millisecond') else null end,
+        lease_expires_at=case when candidate.eligible then ${now.toISOString()}::timestamptz + (${ACCOUNT_DELIVERY_LEASE_MS} * interval '1 millisecond') else null end,
         terminal_at=case when candidate.eligible then null else ${now.toISOString()}::timestamptz end,
         terminal_reason=case when candidate.eligible then null else candidate.terminal_reason end
       from candidate where outbox.id=candidate.id

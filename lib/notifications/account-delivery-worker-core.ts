@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 
 export const ACCOUNT_DELIVERY_BATCH_LIMIT = 20;
+export const ACCOUNT_DELIVERY_LEASE_MS = 5 * 60 * 1000;
 type DeliveryResult = { status: 'dead_lettered' | 'delivered' | 'empty' | 'ineligible' | 'lease_lost' | 'retryable' };
 
 export async function processDeliveryBatch(deliver: () => Promise<DeliveryResult>, limit = ACCOUNT_DELIVERY_BATCH_LIMIT) {
