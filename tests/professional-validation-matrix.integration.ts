@@ -10,30 +10,43 @@ import { createOwnMemberProfile, getOwnPrivateMember, updateMemberProfile } from
 beforeEach(resetIdoc);
 after(closeHarness);
 
-test('valid onboarding and edit persist exact canonical values for each approved classification', async () => {
-  const classifications = [[judgeRole], [stewardRole], [judgeRole, stewardRole], [veterinarianRole]];
-  for (const roles of classifications) {
+type Role = typeof judgeRole | typeof stewardRole | typeof veterinarianRole;
+type PersistedRole = {
+  feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null;
+  nationalFederationCountryCode: string | null; officialStatus: string | null; roleType: string;
+};
+
+function assertRolesMatchExactly(persistedRoles: PersistedRole[] | undefined, expectedRoles: Role[], label: string) {
+  const sortedPersisted = persistedRoles?.slice().sort((a, b) => a.roleType.localeCompare(b.roleType));
+  const sortedExpected = expectedRoles.slice().sort((a, b) => a.roleType.localeCompare(b.roleType));
+  assert.equal(sortedPersisted?.length, sortedExpected.length, `${label}: role count`);
+  for (const [index, role] of sortedExpected.entries()) {
+    const persisted: PersistedRole | undefined = sortedPersisted?.[index];
+    assert.equal(persisted?.roleType, role.roleType, `${label}: roleType`);
+    assert.equal(persisted?.feiId, 'feiId' in role ? role.feiId : null, `${label}: feiId`);
+    assert.equal(persisted?.idocRegion, 'idocRegion' in role ? role.idocRegion : null, `${label}: idocRegion`);
+    assert.equal(persisted?.nationalFederationCountryCode, 'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null, `${label}: nationalFederationCountryCode`);
+    assert.equal(persisted?.officialStatus, 'officialStatus' in role ? role.officialStatus : null, `${label}: officialStatus`);
+    assert.equal(persisted?.isTechnicalDelegate, 'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null, `${label}: isTechnicalDelegate`);
+  }
+}
+
+test('valid onboarding and edit persist exact canonical values for every approved classification, both as create and edit target', async () => {
+  const classifications: Role[][] = [[judgeRole], [stewardRole], [judgeRole, stewardRole], [veterinarianRole]];
+  for (let index = 0; index < classifications.length; index += 1) {
     await resetIdoc();
+    const roles = classifications[index];
     const user = await createUser('onboarding');
     await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles)));
     const created = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
-    const sortedRoles = created?.roles.slice().sort((a, b) => a.roleType.localeCompare(b.roleType));
-    const expected = roles.slice().sort((a, b) => a.roleType.localeCompare(b.roleType));
-    for (const [index, role] of expected.entries()) {
-      const persisted = sortedRoles?.[index];
-      assert.equal(persisted?.roleType, role.roleType);
-      assert.equal(persisted?.feiId, 'feiId' in role ? role.feiId : null);
-      assert.equal(persisted?.idocRegion, 'idocRegion' in role ? role.idocRegion : null);
-      assert.equal(persisted?.nationalFederationCountryCode, 'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null);
-      assert.equal(persisted?.officialStatus, 'officialStatus' in role ? role.officialStatus : null);
-      assert.equal(persisted?.isTechnicalDelegate, 'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null);
-    }
+    assertRolesMatchExactly(created?.roles, roles, `create:${roles.map((r) => r.roleType).join('+')}`);
 
-    // Edit to a different valid classification succeeds and persists the new roles exactly.
-    const otherRoles = roles === classifications[0] ? classifications[3] : classifications[0];
+    // Rotate to the next classification so every classification in this list is exercised as
+    // both a creation target (above) and an edit destination (below) across the full loop.
+    const otherRoles = classifications[(index + 1) % classifications.length];
     await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => updateMemberProfile(created!.profile.id, profileInput(otherRoles)));
     const edited = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
-    assert.deepEqual(edited?.roles.map(({ roleType }) => roleType).sort(), otherRoles.map(({ roleType }) => roleType).sort());
+    assertRolesMatchExactly(edited?.roles, otherRoles, `edit:${roles.map((r) => r.roleType).join('+')}->${otherRoles.map((r) => r.roleType).join('+')}`);
   }
 });
 
@@ -92,7 +105,7 @@ test('missing or whitespace-only required fields are rejected without mutation o
   }
 });
 
-test('malformed field types are rejected without mutation', async () => {
+test('malformed field types are rejected without mutation on create and edit', async () => {
   const malformed = [
     { ...profileInput(), firstName: 12_345 },
     { ...profileInput(), address1: null },
@@ -104,10 +117,24 @@ test('malformed field types are rejected without mutation', async () => {
     { ...profileInput(), roles: [{ ...judgeRole, feiId: 42 }] },
   ];
   for (const payload of malformed) {
-    const user = await createUser('onboarding');
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)), JSON.stringify(payload));
-    assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
     await resetIdoc();
+    const onboardingUser = await createUser('onboarding');
+    await assert.rejects(withTestMembershipBoundary(
+      { actor: { id: onboardingUser.id, roles: [] } },
+      () => createOwnMemberProfile(payload),
+    ), `create:${JSON.stringify(payload)}`);
+    assert.equal((await sql`select 1 from idoc.profiles where user_id=${onboardingUser.id}`).length, 0);
+
+    await resetIdoc();
+    const editUser = await createUser();
+    const profile = await createProfile(editUser.id);
+    await createMembership(profile.id);
+    const before = await persistedGraph(editUser.id);
+    await assert.rejects(withTestMembershipBoundary(
+      { actor: { id: editUser.id, roles: [] } },
+      () => updateMemberProfile(profile.id, payload),
+    ), `edit:${JSON.stringify(payload)}`);
+    assert.deepEqual(await persistedGraph(editUser.id), before);
   }
 });
 
@@ -156,5 +183,36 @@ test('the classification list rejects duplicates, unsupported combinations, and 
     await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles as never))), JSON.stringify(roles.map((r) => r.roleType)));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
     await resetIdoc();
+  }
+});
+
+test('invalid federation, region, FEI ID, official status, and country values are rejected for every classification that carries them', async () => {
+  const cases = [
+    // National federation: Judge alone, Steward alone, and Steward's half of Judge + Steward.
+    { ...profileInput(), roles: [{ ...judgeRole, nationalFederationCountryCode: 'XX' }] },
+    { ...profileInput(), roles: [{ ...stewardRole, nationalFederationCountryCode: 'XX' }] },
+    { ...profileInput(), roles: [judgeRole, { ...stewardRole, nationalFederationCountryCode: 'XX' }] },
+    // IDOC region.
+    { ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] },
+    { ...profileInput(), roles: [{ ...stewardRole, idocRegion: 'Invented Region' }] },
+    { ...profileInput(), roles: [judgeRole, { ...stewardRole, idocRegion: 'Invented Region' }] },
+    // FEI ID.
+    { ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] },
+    { ...profileInput(), roles: [{ ...stewardRole, feiId: '' }] },
+    { ...profileInput(), roles: [judgeRole, { ...stewardRole, feiId: '' }] },
+    // Official status.
+    { ...profileInput(), roles: [{ ...judgeRole, officialStatus: 'Invented Judge Status' }] },
+    { ...profileInput(), roles: [{ ...stewardRole, officialStatus: 'Invented Steward Status' }] },
+    { ...profileInput(), roles: [judgeRole, { ...stewardRole, officialStatus: 'Invented Steward Status' }] },
+    // Country (a top-level field, independent of classification): Steward and Veterinarian payloads,
+    // not only the default Judge payload used elsewhere in this file.
+    { ...profileInput(), countryCode: 'XX', roles: [stewardRole] },
+    { ...profileInput(), countryCode: 'XX', roles: [veterinarianRole] },
+  ];
+  for (const payload of cases) {
+    await resetIdoc();
+    const user = await createUser('onboarding');
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)), JSON.stringify(payload));
+    assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
   }
 });
