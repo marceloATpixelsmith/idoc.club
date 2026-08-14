@@ -9,6 +9,7 @@ import {
   claimAccountDelivery,
   deliverNextAccountLink,
 } from '../lib/notifications/account-delivery.ts';
+import { ACCOUNT_DELIVERY_BATCH_LIMIT } from '../lib/notifications/account-delivery-worker-core.ts';
 import { deliverProfileChangeNotification } from '../lib/notifications/profile-change-delivery.ts';
 import { closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
@@ -255,6 +256,44 @@ test('real Cron route authenticates before PostgreSQL access and returns only bo
     assert.equal(providerBodies.length, 20);
     assert.equal(body.includes('@'), false);
     assert.equal(body.includes(RAW_SECRET), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('the Cron route shared-secret check rejects wrong case and mismatched length without ever reaching PostgreSQL', async () => {
+  const cases = [
+    ['lowercase bearer prefix', `bearer ${RAW_SECRET}`],
+    ['shorter than the configured secret', 'Bearer too-short'],
+    ['longer than the configured secret', `Bearer ${RAW_SECRET}-and-then-some-more-characters`],
+  ] as const;
+  for (const [caseName, presented] of cases) {
+    const response = await GET(new Request('https://idoc.club/api/cron/account-delivery', { headers: { authorization: presented } }));
+    assert.equal(response.status, 401, caseName);
+    assert.deepEqual(await response.json(), { error: 'Unauthorized' }, caseName);
+  }
+  assert.equal((await sql`select count(*)::int as count from idoc.account_delivery_outbox`)[0].count, 0);
+});
+
+test('a batch bounded by the processing limit counts ineligible rows toward that limit and leaves the remainder for the next invocation', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  try {
+    for (let index = 0; index < 10; index += 1) {
+      const { row } = await queue();
+      await sql`update idoc.account_tokens set expires_at=${new Date(Date.now() - 1000).toISOString()} where id=${row.token_id}`;
+    }
+    for (let index = 0; index < 15; index += 1) await queue();
+
+    const response = await GET(new Request('https://idoc.club/api/cron/account-delivery', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
+    assert.equal(response.status, 200);
+    const summary = await response.json();
+    assert.equal(summary.ineligible, 10, 'the 10 already-expired-token rows must be processed (and terminalized), not skipped for free');
+    assert.equal(summary.delivered, ACCOUNT_DELIVERY_BATCH_LIMIT - 10, 'only enough of the 15 eligible rows to fill the remaining budget may be delivered in this call');
+    assert.equal(summary.ineligible + summary.delivered, ACCOUNT_DELIVERY_BATCH_LIMIT, 'terminal outcomes count toward the same bounded budget as successful deliveries');
+
+    const remaining = await sql`select count(*)::int as count from idoc.account_delivery_outbox where sent_at is null and terminal_at is null and dead_lettered_at is null`;
+    assert.equal(remaining[0].count, 10 + 15 - ACCOUNT_DELIVERY_BATCH_LIMIT, 'rows beyond the bounded budget must remain untouched for the next invocation');
   } finally {
     globalThis.fetch = originalFetch;
   }
