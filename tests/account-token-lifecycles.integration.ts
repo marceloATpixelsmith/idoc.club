@@ -23,7 +23,7 @@ after(closeHarness);
 
 async function insertToken(userId: number, purpose: 'migration_activation' | 'password_reset', rawToken: string, expiresAt = new Date(Date.now() + 60_000)) {
   const [token] = await sql<{ id: number }[]>`insert into idoc.account_tokens(user_id,purpose,token_hash,expires_at)
-    values(${userId},${purpose},${digest(rawToken)},${expiresAt}) returning id`;
+    values(${userId},${purpose},${digest(rawToken)},${expiresAt.toISOString()}) returning id`;
   return token;
 }
 

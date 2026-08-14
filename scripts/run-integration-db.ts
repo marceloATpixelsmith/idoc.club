@@ -93,4 +93,13 @@ export async function runIntegrationDatabase(
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await runIntegrationDatabase();
+// Avoid top-level await here: some importers (e.g. database-target-guard.integration.ts,
+// which imports runIntegrationDatabase directly to test it) get transformed to a CJS
+// output that does not support top-level await, even though this branch never runs
+// for them since process.argv[1] won't match this file's URL in that case.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runIntegrationDatabase().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

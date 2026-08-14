@@ -24,7 +24,7 @@ async function assertRejectedWithoutMutation(testUrl: string | undefined, produc
     }
   ));
   assert.equal(destructiveSuiteEntered, false, 'destructive suite must not start before destination validation');
-  assert.deepEqual(await sql`select id,value from destructive_guard_sentinel.records`, [{ id: 1, value: 'must survive' }]);
+  assert.deepEqual([...(await sql`select id,value from destructive_guard_sentinel.records`)], [{ id: 1, value: 'must survive' }]);
 }
 
 test('rejected database destinations preserve real sentinel schema, table, and row data', async () => {
@@ -34,13 +34,13 @@ test('rejected database destinations preserve real sentinel schema, table, and r
     'postgres://u:p@localhost/customer_idoc_test_backup', 'postgres://u:p@localhost/idoc_testproduction',
     'postgres://u:p@localhost/production', 'postgres://u:p@production-db/idoc_test',
     'postgres://u:p@service.onrender.com/idoc_test', 'postgres://u:p@example.render.com/idoc_test',
-    'postgres://u:p@remote.example/idoc_test_backup', 'postgres://u:p@localhost/not_idoc_test_safe',
+    'postgres://u:p@contest-db.example/idoc_test', 'postgres://u:p@localhost/not_idoc_test_safe',
     'postgres://u:p@localhost/idoc%252Ftest', 'postgres://u:p@localhost/idoc%5Ftest%2Fother',
   ];
   for (const value of rejected) await assertRejectedWithoutMutation(value);
 
   assert.throws(() => validateTestDatabaseUrl(undefined), /explicitly supplied/);
-  assert.deepEqual(await sql`select id,value from destructive_guard_sentinel.records`, [{ id: 1, value: 'must survive' }]);
+  assert.deepEqual([...(await sql`select id,value from destructive_guard_sentinel.records`)], [{ id: 1, value: 'must survive' }]);
 });
 
 test('equivalent destination decoration cannot bypass validation before destructive SQL', async () => {

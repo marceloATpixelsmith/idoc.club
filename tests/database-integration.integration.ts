@@ -23,7 +23,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 10);
+  assert.equal(count, 11);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -76,7 +76,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 10);
+    assert.equal(count, 11);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -85,13 +85,15 @@ test('forward migration preserves databases that already applied released migrat
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
   assert.ok(journal.entries[8].when > journal.entries[6].when, 'forward reconciliation must follow migration 0006');
   assert.equal(journal.entries[9].tag, '0009_great_groot');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0009_snapshot.json'), 'utf8'));
+  assert.equal(journal.entries[10].tag, '0010_workable_dagger');
+  assert.ok(journal.entries[10].when > journal.entries[9].when, 'forward reconciliation must follow migration 0009');
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0010_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {
     const [schemaName, name] = tableName.split('.');
     const rows = await sql`select column_name from information_schema.columns where table_schema=${schemaName} and table_name=${name}`;
@@ -104,7 +106,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0009_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0010_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
@@ -123,10 +125,17 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
       left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
       where n.nspname='idoc' and c.relname=${tableName} and a.attnum>0 and not a.attisdropped order by a.attnum`;
-    assert.deepEqual(columns.map(({ name }) => name), Object.keys(expectedTable.columns), `${qualifiedName} column set/order`);
+    // Column order is not semantically meaningful (Drizzle and this codebase always address columns
+    // by name); a column added by a later ALTER TABLE migration physically appends at the end
+    // regardless of where it's declared in schema.ts, so only the column set is compared here.
+    assert.deepEqual(columns.map(({ name }) => name).sort(), Object.keys(expectedTable.columns).sort(), `${qualifiedName} column set`);
     for (const column of columns) {
       const expected = expectedTable.columns[column.name];
-      const expectedType = expected.type === 'serial' ? 'integer' : expected.type.replace(/^varchar/, 'character varying');
+      const expectedType = expected.type === 'serial'
+        ? 'integer'
+        : expected.type === 'timestamp'
+          ? 'timestamp without time zone'
+          : expected.type.replace(/^varchar/, 'character varying');
       assert.equal(column.type, expectedType, `${qualifiedName}.${column.name} type`);
       assert.equal(column.not_null, expected.notNull, `${qualifiedName}.${column.name} nullability`);
       assert.equal(column.identity, '', `${qualifiedName}.${column.name} identity behavior`);
@@ -158,7 +167,11 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       if (expected.type === 'f') assert.deepEqual({ target_schema: actual.target_schema, target_table: actual.target_table, target_columns: actual.target_columns, update_action: actual.update_action, delete_action: actual.delete_action }, { target_schema: expected.target_schema, target_table: expected.target_table, target_columns: expected.target_columns, update_action: expected.update_action, delete_action: expected.delete_action }, `${qualifiedName}.${expected.name} foreign-key behavior`);
       if (expected.type === 'c') {
         const declared = expectedTable.checkConstraints[expected.name].value as string;
-        for (const literal of declared.match(/'[^']*'/g) ?? []) assert.ok(actual.definition.includes(literal), `${qualifiedName}.${expected.name} check literal ${literal}`);
+        // Compare the exact set of literals (not just declared ⊆ actual) so an actual constraint
+        // that permits an extra, undeclared value cannot silently pass as "exact parity".
+        const declaredLiterals = (declared.match(/'[^']*'/g) ?? []).sort();
+        const actualLiterals = (actual.definition.match(/'[^']*'/g) ?? []).sort();
+        assert.deepEqual(actualLiterals, declaredLiterals, `${qualifiedName}.${expected.name} check literals`);
         for (const columnName of Object.keys(expectedTable.columns).filter((name) => declared.includes(`"${name}"`))) assert.ok(actual.definition.includes(columnName), `${qualifiedName}.${expected.name} check column ${columnName}`);
         if (declared.includes('>=')) assert.ok(actual.definition.includes('>='), `${qualifiedName}.${expected.name} check operator`);
       }
@@ -192,7 +205,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     { table_name: 'audit_log', name: 'audit_log_immutable', function_name: 'reject_immutable_history_change' },
     { table_name: 'profile_change_history', name: 'profile_change_history_immutable', function_name: 'reject_immutable_history_change' },
   ]);
-  for (const trigger of triggers) assert.match(trigger.definition, /BEFORE UPDATE OR DELETE/);
+  for (const trigger of triggers) assert.match(trigger.definition, /BEFORE DELETE OR UPDATE/);
   assert.equal((await sql`select count(*)::int as count from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='idoc' and t.typtype='e'`)[0].count, 0, 'enum semantics are represented by the compared checks');
 });
 
@@ -208,7 +221,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 10);
+  assert.equal(count, 11);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {
@@ -330,12 +343,12 @@ test('account delivery atomically terminalizes ineligible tokens and leases only
   assert.equal((await classifyAndClaim('later')).length, 0);
   assert.equal((await Promise.all([classifyAndClaim('overlap-a'), classifyAndClaim('overlap-b')])).flat().length, 0);
 
-  await sql`alter table idoc.account_delivery_outbox drop constraint account_delivery_token_fk`;
+  await sql`alter table idoc.account_delivery_outbox drop constraint account_delivery_outbox_token_id_account_tokens_id_fk`;
   await sql`insert into idoc.account_delivery_outbox(token_id,user_id,purpose,encrypted_payload,key_version,message_id) values(2147483647,${owner.id},'password_reset','encrypted','v1','missing')`;
   const [missing] = await classifyAndClaim('missing-worker');
   assert.equal(missing.eligible, false);
   assert.equal(missing.terminal_reason, 'missing_token');
-  await sql`alter table idoc.account_delivery_outbox add constraint account_delivery_token_fk foreign key(token_id) references idoc.account_tokens(id) not valid`;
+  await sql`alter table idoc.account_delivery_outbox add constraint account_delivery_outbox_token_id_account_tokens_id_fk foreign key(token_id) references idoc.account_tokens(id) not valid`;
 
   await sql`update idoc.account_delivery_outbox set sent_at=now(),lease_owner=null,lease_expires_at=null where message_id='eligible'`;
   const [{ consumed_at }] = await sql`select consumed_at from idoc.account_tokens where id=${tokens[0].id}`;
