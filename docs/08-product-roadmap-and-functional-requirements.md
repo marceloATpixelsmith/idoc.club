@@ -79,6 +79,8 @@ Implementation status: the foundation now additionally includes generated migrat
 
 # 5. Release 2 - billing, manual payments, dashboard, and administration
 
+Implementation status: Phase 1 (backend billing foundation) is complete — `subscriptions` and `payments` tables (migration `0011`, forward-only and not yet released, matching the `0009`/`0010` precedent), a rolling 12-month renewal calendar (`lib/payments/renewal.ts`), and idempotent webhook processing for every required Stripe event (`lib/payments/webhook-handlers.ts`, using the previously-scaffolded-but-unused `stripe_events` table). Checkout session creation, the €80 pricing page, the Customer Portal, manual payment recording, the member dashboard, and admin tools are not yet built — every Stripe-adjacent file outside the webhook route (`lib/payments/actions.ts`, `app/api/stripe/checkout/route.ts`, `app/(dashboard)/pricing/page.tsx`) remains unmigrated Next.js SaaS-starter code pending later phases. Release 2 is **not yet closed**; only item 9's webhook half is done.
+
 8.  Create/use two required €80 annual Stripe Prices for new memberships: one recurring annual Price for auto-renewal and one non-recurring Price for the member-selectable one-time path. Retain historical Price IDs for valid imported subscriptions.
 
 9.  Implement both required Stripe Checkout modes: subscription for auto-renewal and payment for one-time membership. Verify idempotent webhooks, project subscriptions/payments locally, and implement failed-payment behavior, cancel-at-period-end, and reconciliation.
