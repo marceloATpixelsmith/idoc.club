@@ -1,19 +1,11 @@
 import Stripe from 'stripe';
 import { redirect } from 'next/navigation';
 import { Team } from '@/lib/db/schema';
-import {
-  getTeamByStripeCustomerId,
-  getUser,
-  updateTeamSubscription
-} from '@/lib/db/queries';
-import { stripeKeyForServer } from '@/lib/runtime/configuration';
+import { getUser } from '@/lib/db/queries';
 import 'server-only';
 
-let stripeClient: Stripe | undefined;
-export function getStripeServerClient() {
-  stripeClient ??= new Stripe(stripeKeyForServer(), { apiVersion: '2025-04-30.basil' });
-  return stripeClient;
-}
+export { getStripeServerClient } from './stripe-client';
+import { getStripeServerClient } from './stripe-client';
 
 export async function createCheckoutSession({
   team,
@@ -117,38 +109,6 @@ export async function createCustomerPortalSession(team: Team) {
     return_url: `${process.env.BASE_URL}/dashboard`,
     configuration: configuration.id
   });
-}
-
-export async function handleSubscriptionChange(
-  subscription: Stripe.Subscription
-) {
-  const customerId = subscription.customer as string;
-  const subscriptionId = subscription.id;
-  const status = subscription.status;
-
-  const team = await getTeamByStripeCustomerId(customerId);
-
-  if (!team) {
-    console.error('Team not found for Stripe customer:', customerId);
-    return;
-  }
-
-  if (status === 'active' || status === 'trialing') {
-    const plan = subscription.items.data[0]?.plan;
-    await updateTeamSubscription(team.id, {
-      stripeSubscriptionId: subscriptionId,
-      stripeProductId: plan?.product as string,
-      planName: (plan?.product as Stripe.Product).name,
-      subscriptionStatus: status
-    });
-  } else if (status === 'canceled' || status === 'unpaid') {
-    await updateTeamSubscription(team.id, {
-      stripeSubscriptionId: null,
-      stripeProductId: null,
-      planName: null,
-      subscriptionStatus: status
-    });
-  }
 }
 
 export async function getStripePrices() {

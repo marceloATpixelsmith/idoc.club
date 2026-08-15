@@ -318,6 +318,43 @@ export const billingAccounts = idocSchema.table('billing_accounts', {
   externalCustomerId: varchar('external_customer_id', { length: 255 }).notNull().unique(),
 });
 
+export const subscriptions = idocSchema.table('subscriptions', {
+  id: serial('id').primaryKey(),
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  externalSubscriptionId: varchar('external_subscription_id', { length: 255 }).notNull().unique(),
+  priceId: varchar('price_id', { length: 255 }).notNull(),
+  status: varchar('status', { length: 30 }).notNull(),
+  currentPeriodEnd: date('current_period_end').notNull(),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('subscriptions_status_check', sql`${table.status} in ('active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired')`),
+]);
+
+/** One row per payment event, Stripe-verified or administrator-entered manually. */
+export const payments = idocSchema.table('payments', {
+  id: serial('id').primaryKey(),
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  source: varchar('source', { length: 30 }).notNull(),
+  externalPaymentId: varchar('external_payment_id', { length: 255 }).unique(),
+  amountCents: integer('amount_cents').notNull(),
+  currency: varchar('currency', { length: 3 }).notNull().default('EUR'),
+  paidAt: timestamp('paid_at', { withTimezone: true }).notNull(),
+  reference: text('reference'),
+  administratorId: integer('administrator_id').references(() => users.id),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('payments_source_check', sql`${table.source} in ('stripe_recurring', 'stripe_one_time', 'paypal', 'bank_transfer', 'cash', 'complimentary')`),
+  check('payments_amount_check', sql`${table.amountCents} > 0`),
+  check(
+    'payments_evidence_check',
+    sql`(${table.source} in ('stripe_recurring', 'stripe_one_time') and ${table.externalPaymentId} is not null)
+      or (${table.source} in ('paypal', 'bank_transfer', 'cash', 'complimentary') and ${table.administratorId} is not null)`,
+  ),
+]);
+
 export const migrationMap = idocSchema.table('migration_map', {
   id: serial('id').primaryKey(),
   legacyType: varchar('legacy_type', { length: 50 }).notNull(),
@@ -331,3 +368,5 @@ export const migrationMap = idocSchema.table('migration_map', {
 export type Profile = typeof profiles.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type ProfessionalRole = typeof professionalRoles.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type Payment = typeof payments.$inferSelect;

@@ -1,10 +1,10 @@
 import Stripe from 'stripe';
-import { getStripeServerClient, handleSubscriptionChange } from '@/lib/payments/stripe';
-import { NextRequest, NextResponse } from 'next/server';
+import { getStripeServerClient } from '@/lib/payments/stripe-client';
+import { processStripeEvent } from '@/lib/payments/webhook-handlers';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!webhookSecret) return NextResponse.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  if (!webhookSecret) return Response.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
   const stripe = getStripeServerClient();
   const payload = await request.text();
   const signature = request.headers.get('stripe-signature') as string;
@@ -15,21 +15,13 @@ export async function POST(request: NextRequest) {
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch (err) {
     console.error('Webhook signature verification failed.', err);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Webhook signature verification failed.' },
       { status: 400 }
     );
   }
 
-  switch (event.type) {
-    case 'customer.subscription.updated':
-    case 'customer.subscription.deleted':
-      const subscription = event.data.object as Stripe.Subscription;
-      await handleSubscriptionChange(subscription);
-      break;
-    default:
-      console.log(`Unhandled event type ${event.type}`);
-  }
+  await processStripeEvent(event);
 
-  return NextResponse.json({ received: true });
+  return Response.json({ received: true });
 }
