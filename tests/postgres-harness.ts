@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
+import { client as productionClient } from '../lib/db/drizzle.ts';
 import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 
 export const testUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
@@ -17,6 +18,13 @@ export async function resetIdoc(): Promise<void> {
 export async function closeHarness(): Promise<void> {
   await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
   await sql.end();
+  // Production code (everything under lib/membership, lib/notifications, ...) connects through
+  // lib/db/drizzle.ts's own lazily-created, module-level connection, entirely separate from this
+  // harness's own `sql` above. Left open, that connection has no idle timeout and keeps the process
+  // alive indefinitely after every test in the file finishes — this was silently hanging every
+  // *.integration.ts run (locally and, worse, the real "Run Release 1 gate" CI job) until something
+  // external eventually reset the idle socket, not a genuine test failure.
+  await productionClient.end();
 }
 
 export type AccountState = 'active' | 'deleted' | 'migrated_pending' | 'onboarding' | 'suspended' | 'unverified';
