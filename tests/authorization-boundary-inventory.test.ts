@@ -44,18 +44,17 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     completeOnboarding: 'delegates-to-data-access',
   },
   'lib/payments/actions.ts': {
-    checkoutAction: 'session-boundary',
+    checkoutAction: 'delegates-to-data-access',
     customerPortalAction: 'session-boundary',
   },
 };
 
 // Every Route Handler, and how it authorizes before touching privileged data. `stripe/checkout` is
-// unmigrated legacy-starter code (still writes to the compatibility `teams` table, not the IDOC
-// membership model) and is explicitly out of scope for Release 1; it is inventoried here so it
-// cannot silently gain new behavior without this test being revisited.
+// a stateless return-trip redirect: it never reads Stripe or touches the database, so it needs no
+// authorization boundary of its own (real entitlement is granted by the webhook route instead).
 const routeHandlers: Record<string, string> = {
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
-  'app/api/stripe/checkout/route.ts': 'release-2-unmigrated-legacy',
+  'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
   'app/api/user/route.ts': 'requireAccountAccess',
@@ -95,14 +94,18 @@ test('pre-authentication actions are never wrapped in validatedActionWithUser', 
 });
 
 test('delegates-to-data-access actions call an ownership-enforcing membership data-access function', () => {
-  const expected: Record<string, string> = {
-    'app/(dashboard)/account/actions.ts': 'updateMemberProfile',
-    'app/(dashboard)/onboarding/actions.ts': 'createOwnMemberProfile',
+  const expected: Record<string, { from: string; functionName: string }> = {
+    'app/(dashboard)/account/actions.ts': { from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' },
+    'app/(dashboard)/onboarding/actions.ts': { from: '@/lib/membership/data-access', functionName: 'createOwnMemberProfile' },
+    'lib/payments/actions.ts': { from: './checkout', functionName: 'createMembershipCheckoutSession' },
   };
-  for (const [file, functionName] of Object.entries(expected)) {
+  for (const [file, { from, functionName }] of Object.entries(expected)) {
     const source = readFileSync(path.join(root, file), 'utf8');
-    assert.match(source, new RegExp(`import \\{[^}]*\\b${functionName}\\b[^}]*\\} from '@/lib/membership/data-access'`), `${file} must call ${functionName} from lib/membership/data-access`);
+    assert.match(source, new RegExp(`import \\{[^}]*\\b${functionName}\\b[^}]*\\} from '${from.replaceAll('.', '\\.')}'`), `${file} must call ${functionName} from ${from}`);
   }
+  // createMembershipCheckoutSession itself must self-authenticate, the same guarantee
+  // updateMemberProfile/createOwnMemberProfile already provide via authenticatedActor.
+  assert.match(readFileSync(path.join(root, 'lib/payments/checkout.ts'), 'utf8'), /requireAccountAccess\('billing_boundary'\)/);
 });
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {
@@ -121,7 +124,7 @@ test('the compatibility team Route Handler never touches the database', () => {
 test('the Stripe webhook Route Handler verifies the signature before dispatching any event', () => {
   const source = readFileSync(path.join(root, 'app/api/stripe/webhook/route.ts'), 'utf8');
   const verify = source.indexOf('constructEvent');
-  const dispatch = source.indexOf('processStripeEvent(event)');
+  const dispatch = source.indexOf('processStripeEvent(event, stripe)');
   assert.ok(verify >= 0 && dispatch > verify, 'the signature must be verified before the event is dispatched');
 });
 
@@ -131,9 +134,9 @@ test('the account-delivery Cron Route Handler is gated by the shared secret befo
   assert.match(source, /secret: cronSecretForServer\(\)/);
 });
 
-test('the unmigrated Stripe checkout Route Handler still targets the compatibility teams table, confirming its legacy-scope classification is current', () => {
+test('the Stripe checkout return-trip Route Handler never touches the database or calls Stripe, confirming its stateless classification is current', () => {
   const source = readFileSync(path.join(root, 'app/api/stripe/checkout/route.ts'), 'utf8');
-  assert.match(source, /from '@\/lib\/db\/schema'/);
-  assert.match(source, /\bteams\b/);
-  assert.doesNotMatch(source, /requireAccountAccess/, 'if this route is migrated to call requireAccountAccess, its classification above must be revisited');
+  assert.doesNotMatch(source, /\bdb\./);
+  assert.doesNotMatch(source, /getStripeServerClient/);
+  assert.match(source, /Response\.redirect/);
 });

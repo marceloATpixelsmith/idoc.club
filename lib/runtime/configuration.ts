@@ -29,9 +29,20 @@ export function databaseUrlForServer(environment: Environment = process.env) {
 
 export function stripeKeyForServer(environment: Environment = process.env) {
   const value = required(environment, 'STRIPE_SECRET_KEY');
-  if (!/^sk_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
+  // sk_ = full-access secret key; rk_ = a dashboard-scoped restricted key. Both are legitimate
+  // Stripe API credentials; restricted keys are the more security-conscious choice.
+  if (!/^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
   return value;
 }
+
+function productId(environment: Environment, name: string) {
+  const value = required(environment, name);
+  if (!/^prod_[A-Za-z0-9_-]+$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
+  return value;
+}
+
+export function stripeRecurringProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_RECURRING_PRODUCT_ID'); }
+export function stripeOneTimeProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_ONE_TIME_PRODUCT_ID'); }
 
 export function authSecretForServer(environment: Environment = process.env) { return secret(environment, 'AUTH_SECRET'); }
 export function baseUrlForServer(environment: Environment = process.env) {
@@ -70,6 +81,8 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     cronSecret: secret(environment, 'CRON_SECRET'), databaseUrl: databaseUrlForServer(environment),
     mailchimpApiKey: secret(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
+    stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),
+    stripeRecurringProductId: stripeRecurringProductIdForServer(environment),
     stripeWebhookSecret: secret(environment, 'STRIPE_WEBHOOK_SECRET'),
   };
 }

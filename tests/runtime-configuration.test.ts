@@ -7,6 +7,8 @@ import {
   databaseUrlForServer,
   privilegedProductionConfiguration,
   stripeKeyForServer,
+  stripeOneTimeProductIdForServer,
+  stripeRecurringProductIdForServer,
 } from '../lib/runtime/configuration.ts';
 
 const valid = {
@@ -16,7 +18,8 @@ const valid = {
   IDOC_ADMIN_NOTIFICATION_EMAIL: 'operations@idoc.club',
   MAILCHIMP_TRANSACTIONAL_API_KEY: 'd'.repeat(32),
   POSTGRES_URL: 'postgres://user:password@database.internal:5432/idoc',
-  RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
+  RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_ONE_TIME_PRODUCT_ID: 'prod_one_time_live',
+  STRIPE_RECURRING_PRODUCT_ID: 'prod_recurring_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
   STRIPE_WEBHOOK_SECRET: 'g'.repeat(32),
 };
 
@@ -41,6 +44,10 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
   assert.throws(() => baseUrlForServer({ BASE_URL: 'http://idoc.club', NODE_ENV: 'development' }), /BASE_URL/);
   assert.throws(() => authSecretForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: 'sk_fake_value' }), /STRIPE_SECRET_KEY/);
+  assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: `rk_test_${'h'.repeat(24)}` }), `rk_test_${'h'.repeat(24)}`, 'a restricted key must be accepted alongside a full-access secret key');
+  assert.throws(() => stripeRecurringProductIdForServer({ STRIPE_RECURRING_PRODUCT_ID: 'not-a-product' }), /STRIPE_RECURRING_PRODUCT_ID/);
+  assert.throws(() => stripeOneTimeProductIdForServer({ STRIPE_ONE_TIME_PRODUCT_ID: 'not-a-product' }), /STRIPE_ONE_TIME_PRODUCT_ID/);
+  assert.equal(stripeRecurringProductIdForServer({ STRIPE_RECURRING_PRODUCT_ID: 'prod_fixture123' }), 'prod_fixture123');
   for (const [name, value] of Object.entries(valid)) {
     const supplied = `DO_NOT_EXPOSE_${name}_${value}`;
     try { privilegedProductionConfiguration({ ...valid, [name]: supplied }); } catch (error) {

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await processStripeEvent(event);
+  await processStripeEvent(event, stripe);
 
   return Response.json({ received: true });
 }

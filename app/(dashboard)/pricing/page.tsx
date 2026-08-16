@@ -1,94 +1,56 @@
-import { checkoutAction } from '@/lib/payments/actions';
 import { Check } from 'lucide-react';
-import { getStripePrices, getStripeProducts } from '@/lib/payments/stripe';
-import { SubmitButton } from './submit-button';
+import { CheckoutForm } from './checkout-form';
 
-// Stripe is a runtime-only privileged boundary; never contact it while prerendering.
-export const dynamic = 'force-dynamic';
+const MEMBERSHIP_FEE_EUR = 80;
 
-export default async function PricingPage() {
-  const [prices, products] = await Promise.all([
-    getStripePrices(),
-    getStripeProducts(),
-  ]);
-
-  const basePlan = products.find((product) => product.name === 'Base');
-  const plusPlan = products.find((product) => product.name === 'Plus');
-
-  const basePrice = prices.find((price) => price.productId === basePlan?.id);
-  const plusPrice = prices.find((price) => price.productId === plusPlan?.id);
-
+export default function PricingPage() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="grid md:grid-cols-2 gap-8 max-w-xl mx-auto">
+      <h1 className="text-3xl font-medium text-gray-900 mb-2 text-center">IDOC Membership</h1>
+      <p className="text-gray-600 text-center mb-10">
+        €{MEMBERSHIP_FEE_EUR} per year — the same price for every professional classification.
+      </p>
+      <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
         <PricingCard
-          name={basePlan?.name || 'Base'}
-          price={basePrice?.unitAmount || 800}
-          interval={basePrice?.interval || 'month'}
-          trialDays={basePrice?.trialPeriodDays || 7}
-          features={[
-            'Unlimited Usage',
-            'Unlimited Workspace Members',
-            'Email Support',
-          ]}
-          priceId={basePrice?.id}
+          badge="Default"
+          description="Renews automatically each year. Cancel any time — access continues through your paid-through date."
+          mode="subscription"
+          title="Automatic renewal"
         />
         <PricingCard
-          name={plusPlan?.name || 'Plus'}
-          price={plusPrice?.unitAmount || 1200}
-          interval={plusPrice?.interval || 'month'}
-          trialDays={plusPrice?.trialPeriodDays || 7}
-          features={[
-            'Everything in Base, and:',
-            'Early Access to New Features',
-            '24/7 Support + Slack Access',
-          ]}
-          priceId={plusPrice?.id}
+          description="Pays for a single 12-month term. Renew manually whenever you're ready."
+          mode="payment"
+          title="One-time payment"
         />
       </div>
     </main>
   );
 }
 
-function PricingCard({
-  name,
-  price,
-  interval,
-  trialDays,
-  features,
-  priceId,
-}: {
-  name: string;
-  price: number;
-  interval: string;
-  trialDays: number;
-  features: string[];
-  priceId?: string;
+function PricingCard({ badge, description, mode, title }: {
+  badge?: string; description: string; mode: 'payment' | 'subscription'; title: string;
 }) {
   return (
-    <div className="pt-6">
-      <h2 className="text-2xl font-medium text-gray-900 mb-2">{name}</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        with {trialDays} day free trial
-      </p>
+    <div className="pt-6 border rounded-lg p-6">
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-xl font-medium text-gray-900">{title}</h2>
+        {badge && <span className="text-xs uppercase tracking-wide text-orange-600 font-medium">{badge}</span>}
+      </div>
+      <p className="text-sm text-gray-600 mb-4">{description}</p>
       <p className="text-4xl font-medium text-gray-900 mb-6">
-        ${price / 100}{' '}
-        <span className="text-xl font-normal text-gray-600">
-          per user / {interval}
-        </span>
+        €{MEMBERSHIP_FEE_EUR} <span className="text-xl font-normal text-gray-600">/ year</span>
       </p>
-      <ul className="space-y-4 mb-8">
-        {features.map((feature, index) => (
-          <li key={index} className="flex items-start">
-            <Check className="h-5 w-5 text-orange-500 mr-2 mt-0.5 flex-shrink-0" />
-            <span className="text-gray-700">{feature}</span>
-          </li>
-        ))}
+      <ul className="space-y-2 mb-8 text-sm text-gray-700">
+        <li className="flex items-start">
+          <Check className="h-4 w-4 text-orange-500 mr-2 mt-0.5 flex-shrink-0" />
+          Full member access for Judges, Stewards, and Veterinarians
+        </li>
+        <li className="flex items-start">
+          <Check className="h-4 w-4 text-orange-500 mr-2 mt-0.5 flex-shrink-0" />
+          Restricted content and professional resources
+        </li>
       </ul>
-      <form action={checkoutAction}>
-        <input type="hidden" name="priceId" value={priceId} />
-        <SubmitButton />
-      </form>
+      <CheckoutForm label="Continue to payment" mode={mode} />
     </div>
   );
 }

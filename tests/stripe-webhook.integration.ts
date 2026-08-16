@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { POST } from '../app/api/stripe/webhook/route.ts';
 import { getStripeServerClient } from '../lib/payments/stripe-client.ts';
+import { processStripeEvent } from '../lib/payments/webhook-handlers.ts';
 import {
   closeHarness, createMembership, createProfile, createUser, resetIdoc, sql,
 } from './postgres-harness.ts';
@@ -12,9 +13,19 @@ const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
 beforeEach(async () => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_fixture0000000000000000';
   process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  process.env.STRIPE_ONE_TIME_PRODUCT_ID = 'prod_one_time_fixture';
+  process.env.STRIPE_RECURRING_PRODUCT_ID = 'prod_recurring_fixture';
   await resetIdoc();
 });
 after(closeHarness);
+
+// checkout.session.completed's handler verifies the session's line item against the configured
+// Product via stripe.checkout.sessions.listLineItems — a real network call the real Stripe client
+// would make, which this sandbox cannot reach. Tests that need the handler to actually reach that
+// verification call processStripeEvent directly with this fake instead of going through POST().
+function fakeLineItemsClient(product: string | null, priceId = 'price_line_item_fixture') {
+  return { checkout: { sessions: { listLineItems: async () => ({ data: product ? [{ price: { id: priceId, product } }] : [] }) } } };
+}
 
 function fixtureEvent(type: string, object: Record<string, unknown>, id = `evt_${randomUUID()}`) {
   return {
@@ -161,17 +172,44 @@ test('invoice.payment_action_required changes no entitlement state', async () =>
 test('checkout.session.completed in payment mode records a one-time payment and extends membership using server-set metadata, never trusting a client-supplied profile id directly', async () => {
   const profile = await billedProfile('cus_checkout_fixture');
   const membership = await createMembership(profile.id);
-  const response = await postWebhook(fixtureEvent('checkout.session.completed', {
+  const event = fixtureEvent('checkout.session.completed', {
     amount_total: 8000, currency: 'eur', customer: 'cus_checkout_fixture', id: 'cs_fixture',
     metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_fixture', payment_status: 'paid',
-  }));
-  assert.equal(response.status, 200);
-  const [payment] = await sql`select source, amount_cents, profile_id from idoc.payments where external_payment_id='pi_fixture'`;
+  });
+  const outcome = await processStripeEvent(event as any, fakeLineItemsClient('prod_one_time_fixture'));
+  assert.equal(outcome, 'processed');
+  const [payment] = await sql`select source, amount_cents, profile_id, reference from idoc.payments where external_payment_id='pi_fixture'`;
   assert.equal(payment.source, 'stripe_one_time');
   assert.equal(payment.amount_cents, 8000);
   assert.equal(payment.profile_id, profile.id);
+  assert.match(payment.reference, /cs_fixture/);
+  assert.match(payment.reference, /price_line_item_fixture/);
   const [after] = await sql`select status from idoc.memberships where id=${membership.id}`;
   assert.equal(after.status, 'active');
+});
+
+test('checkout.session.completed whose line item was priced against a different Stripe Product is rejected even when the amount and currency match', async () => {
+  const profile = await billedProfile('cus_checkout_wrong_product');
+  await createMembership(profile.id);
+  const event = fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'eur', customer: 'cus_checkout_wrong_product', id: 'cs_wrong_product_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_wrong_product_fixture', payment_status: 'paid',
+  });
+  const outcome = await processStripeEvent(event as any, fakeLineItemsClient('prod_unexpected'));
+  assert.equal(outcome, 'processed');
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where external_payment_id='pi_wrong_product_fixture'`)[0].count, 0);
+});
+
+test('checkout.session.completed with no line items at all is rejected rather than trusting the amount/currency alone', async () => {
+  const profile = await billedProfile('cus_checkout_no_line_items');
+  await createMembership(profile.id);
+  const event = fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'eur', customer: 'cus_checkout_no_line_items', id: 'cs_no_line_items_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_no_line_items_fixture', payment_status: 'paid',
+  });
+  const outcome = await processStripeEvent(event as any, fakeLineItemsClient(null));
+  assert.equal(outcome, 'processed');
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where external_payment_id='pi_no_line_items_fixture'`)[0].count, 0);
 });
 
 test('checkout.session.completed in subscription mode or with an unpaid status is ignored, since invoice.paid handles the recurring path', async () => {
@@ -184,6 +222,20 @@ test('checkout.session.completed in subscription mode or with an unpaid status i
   await postWebhook(fixtureEvent('checkout.session.completed', {
     amount_total: 8000, currency: 'eur', customer: 'cus_checkout_subscription_mode', id: 'cs_unpaid_fixture',
     metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_unpaid_fixture', payment_status: 'unpaid',
+  }));
+  assert.equal((await sql`select count(*)::int as count from idoc.payments`)[0].count, 0);
+});
+
+test('checkout.session.completed with an amount or currency other than the expected €80 fee is rejected', async () => {
+  const profile = await billedProfile('cus_checkout_wrong_amount');
+  await createMembership(profile.id);
+  await postWebhook(fixtureEvent('checkout.session.completed', {
+    amount_total: 1000, currency: 'eur', customer: 'cus_checkout_wrong_amount', id: 'cs_wrong_amount_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_wrong_amount_fixture', payment_status: 'paid',
+  }));
+  await postWebhook(fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'usd', customer: 'cus_checkout_wrong_amount', id: 'cs_wrong_currency_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_wrong_currency_fixture', payment_status: 'paid',
   }));
   assert.equal((await sql`select count(*)::int as count from idoc.payments`)[0].count, 0);
 });
