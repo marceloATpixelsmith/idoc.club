@@ -41,6 +41,7 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
   assert.throws(() => baseUrlForServer({ BASE_URL: 'http://idoc.club', NODE_ENV: 'development' }), /BASE_URL/);
   assert.throws(() => authSecretForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: 'sk_fake_value' }), /STRIPE_SECRET_KEY/);
+  assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: `rk_test_${'h'.repeat(24)}` }), `rk_test_${'h'.repeat(24)}`, 'a restricted key must be accepted alongside a full-access secret key');
   for (const [name, value] of Object.entries(valid)) {
     const supplied = `DO_NOT_EXPOSE_${name}_${value}`;
     try { privilegedProductionConfiguration({ ...valid, [name]: supplied }); } catch (error) {

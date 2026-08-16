@@ -4,6 +4,7 @@ import type Stripe from 'stripe';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { billingAccounts, memberships, payments, stripeEvents, subscriptions } from '@/lib/db/schema';
+import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -114,7 +115,11 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;
   const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-  if (!paymentIntentId || !session.amount_total || !session.currency) return;
+  if (!paymentIntentId) return;
+  // docs/04 §3: grant entitlement only against the expected one-time fee, not whatever amount the
+  // session happens to report — this is the "expected Price" check now that pricing is inline
+  // price_data rather than a separately managed static Price ID.
+  if (session.amount_total !== MEMBERSHIP_FEE_CENTS || session.currency?.toLowerCase() !== MEMBERSHIP_CURRENCY) return;
   const paidAt = new Date();
   const [inserted] = await tx.insert(payments).values({
     amountCents: session.amount_total,

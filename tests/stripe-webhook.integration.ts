@@ -188,6 +188,20 @@ test('checkout.session.completed in subscription mode or with an unpaid status i
   assert.equal((await sql`select count(*)::int as count from idoc.payments`)[0].count, 0);
 });
 
+test('checkout.session.completed with an amount or currency other than the expected €80 fee is rejected', async () => {
+  const profile = await billedProfile('cus_checkout_wrong_amount');
+  await createMembership(profile.id);
+  await postWebhook(fixtureEvent('checkout.session.completed', {
+    amount_total: 1000, currency: 'eur', customer: 'cus_checkout_wrong_amount', id: 'cs_wrong_amount_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_wrong_amount_fixture', payment_status: 'paid',
+  }));
+  await postWebhook(fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'usd', customer: 'cus_checkout_wrong_amount', id: 'cs_wrong_currency_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_wrong_currency_fixture', payment_status: 'paid',
+  }));
+  assert.equal((await sql`select count(*)::int as count from idoc.payments`)[0].count, 0);
+});
+
 test('payment_intent.succeeded is acknowledged but takes no action, since checkout.session.completed is the authoritative recorder', async () => {
   const profile = await billedProfile('cus_payment_intent_fixture');
   await createMembership(profile.id);

@@ -29,7 +29,9 @@ export function databaseUrlForServer(environment: Environment = process.env) {
 
 export function stripeKeyForServer(environment: Environment = process.env) {
   const value = required(environment, 'STRIPE_SECRET_KEY');
-  if (!/^sk_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
+  // sk_ = full-access secret key; rk_ = a dashboard-scoped restricted key. Both are legitimate
+  // Stripe API credentials; restricted keys are the more security-conscious choice.
+  if (!/^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
   return value;
 }
 
