@@ -124,7 +124,7 @@ test('the compatibility team Route Handler never touches the database', () => {
 test('the Stripe webhook Route Handler verifies the signature before dispatching any event', () => {
   const source = readFileSync(path.join(root, 'app/api/stripe/webhook/route.ts'), 'utf8');
   const verify = source.indexOf('constructEvent');
-  const dispatch = source.indexOf('processStripeEvent(event)');
+  const dispatch = source.indexOf('processStripeEvent(event, stripe)');
   assert.ok(verify >= 0 && dispatch > verify, 'the signature must be verified before the event is dispatched');
 });
 

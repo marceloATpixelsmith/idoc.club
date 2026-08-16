@@ -4,10 +4,22 @@ import type Stripe from 'stripe';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { billingAccounts, memberships, payments, stripeEvents, subscriptions } from '@/lib/db/schema';
+import { stripeOneTimeProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Only the one call this module makes, and only the fields it actually reads back, so tests can
+// inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
+// lib/payments/checkout.ts's CheckoutStripeClient). The real client structurally satisfies this.
+export type WebhookStripeClient = {
+  checkout: {
+    sessions: {
+      listLineItems: (sessionId: string) => Promise<{ data: Array<{ price: { id: string; product: string | { id: string } } | null }> }>;
+    };
+  };
+};
 
 function resolvedCustomerId(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
   if (!value) return null;
@@ -27,7 +39,7 @@ async function latestMembership(tx: Transaction, profileId: number) {
   return membership ?? null;
 }
 
-async function handleSubscriptionCreated(tx: Transaction, event: Stripe.Event) {
+async function handleSubscriptionCreated(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const subscription = event.data.object as Stripe.Subscription;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(subscription.customer));
   if (!profileId) return;
@@ -42,7 +54,7 @@ async function handleSubscriptionCreated(tx: Transaction, event: Stripe.Event) {
   }).onConflictDoNothing({ target: subscriptions.externalSubscriptionId });
 }
 
-async function handleSubscriptionUpdated(tx: Transaction, event: Stripe.Event) {
+async function handleSubscriptionUpdated(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const subscription = event.data.object as Stripe.Subscription;
   const item = subscription.items.data[0];
   await tx.update(subscriptions).set({
@@ -54,7 +66,7 @@ async function handleSubscriptionUpdated(tx: Transaction, event: Stripe.Event) {
   }).where(eq(subscriptions.externalSubscriptionId, subscription.id));
 }
 
-async function handleSubscriptionDeleted(tx: Transaction, event: Stripe.Event) {
+async function handleSubscriptionDeleted(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const subscription = event.data.object as Stripe.Subscription;
   // Recurring billing has ended, but membership access continues through the already-paid
   // valid_until date (docs/02 §3) — nothing in `memberships` changes here.
@@ -62,7 +74,7 @@ async function handleSubscriptionDeleted(tx: Transaction, event: Stripe.Event) {
     .where(eq(subscriptions.externalSubscriptionId, subscription.id));
 }
 
-async function handleInvoicePaid(tx: Transaction, event: Stripe.Event) {
+async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const invoice = event.data.object as Stripe.Invoice;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
@@ -89,7 +101,7 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event) {
   }
 }
 
-async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event) {
+async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const invoice = event.data.object as Stripe.Invoice;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
@@ -105,11 +117,11 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event) 
 // Record/flag only — no entitlement change until a real success or failure event arrives. The
 // stripeEvents row processStripeEvent writes for every event is itself the flag; nothing further
 // to persist here in Phase 1 (admin surfacing of this state is Phase 3 scope).
-async function handleInvoicePaymentActionRequired(_tx: Transaction, _event: Stripe.Event) {
+async function handleInvoicePaymentActionRequired(_tx: Transaction, _event: Stripe.Event, _stripe: WebhookStripeClient) {
   return undefined;
 }
 
-async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Event) {
+async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
   const session = event.data.object as Stripe.Checkout.Session;
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
   const profileId = Number(session.metadata?.profileId);
@@ -120,6 +132,13 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   // session happens to report — this is the "expected Price" check now that pricing is inline
   // price_data rather than a separately managed static Price ID.
   if (session.amount_total !== MEMBERSHIP_FEE_CENTS || session.currency?.toLowerCase() !== MEMBERSHIP_CURRENCY) return;
+  // The amount/currency check above can't distinguish this session from any other Checkout Session
+  // that happens to total the same €80 — confirm the line item was actually priced against the
+  // configured one-time membership Product before granting entitlement.
+  const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+  const price = lineItems.data[0]?.price;
+  const productId = price ? (typeof price.product === 'string' ? price.product : price.product.id) : undefined;
+  if (!price || productId !== stripeOneTimeProductIdForServer()) return;
   const paidAt = new Date();
   const [inserted] = await tx.insert(payments).values({
     amountCents: session.amount_total,
@@ -127,6 +146,7 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     externalPaymentId: paymentIntentId,
     paidAt,
     profileId,
+    reference: `checkout_session:${session.id};price:${price.id}`,
     source: 'stripe_one_time',
   }).onConflictDoNothing({ target: payments.externalPaymentId }).returning({ id: payments.id });
   if (!inserted) return;
@@ -148,11 +168,11 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
 // metadata payment_intent.succeeded does not). This handler intentionally takes no action — it
 // exists so the required event is acknowledged and its stripeEvents row recorded, satisfying
 // docs/04 without double-crediting a payment checkout.session.completed already recorded.
-async function handlePaymentIntentSucceeded(_tx: Transaction, _event: Stripe.Event) {
+async function handlePaymentIntentSucceeded(_tx: Transaction, _event: Stripe.Event, _stripe: WebhookStripeClient) {
   return undefined;
 }
 
-const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event) => Promise<void>>> = {
+const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) => Promise<void>>> = {
   'checkout.session.completed': handleCheckoutSessionCompleted,
   'customer.subscription.created': handleSubscriptionCreated,
   'customer.subscription.deleted': handleSubscriptionDeleted,
@@ -163,13 +183,13 @@ const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event) =>
   'payment_intent.succeeded': handlePaymentIntentSucceeded,
 };
 
-export async function processStripeEvent(event: Stripe.Event): Promise<'duplicate' | 'ignored' | 'processed'> {
+export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'duplicate' | 'ignored' | 'processed'> {
   return db.transaction(async (tx) => {
     const [inserted] = await tx.insert(stripeEvents).values({ eventType: event.type, externalEventId: event.id })
       .onConflictDoNothing({ target: stripeEvents.externalEventId }).returning({ id: stripeEvents.id });
     if (!inserted) return 'duplicate';
     const handler = handlers[event.type];
-    if (handler) await handler(tx, event);
+    if (handler) await handler(tx, event, stripe);
     await tx.update(stripeEvents).set({ processedAt: new Date() }).where(eq(stripeEvents.id, inserted.id));
     return handler ? 'processed' : 'ignored';
   });

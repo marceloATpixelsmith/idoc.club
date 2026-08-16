@@ -77,6 +77,25 @@ test('a member with no profile cannot start checkout', async () => {
   ));
 });
 
+test('a member with an already-open subscription cannot start a second subscription checkout', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id);
+  await sql`insert into idoc.subscriptions(profile_id,external_subscription_id,price_id,status,current_period_end)
+    values(${profile.id},'sub_existing_fixture','price_fixture','active','2099-12-31')`;
+  const { client, calls } = fakeStripeClient();
+
+  await assert.rejects(
+    withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('subscription', client)),
+    /active or pending subscription/,
+  );
+  assert.equal(calls.customersCreate.length, 0, 'no Stripe Customer should be created once the duplicate-subscription guard rejects');
+  assert.equal(calls.sessionsCreate.length, 0);
+
+  const paymentSession = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', client));
+  assert.equal(paymentSession, 'https://checkout.stripe.com/session/fixture', 'one-time payment mode must remain unaffected by an open subscription');
+});
+
 test('a missing product configuration fails closed rather than silently starting checkout against the wrong product', async () => {
   const user = await createUser();
   const profile = await createProfile(user.id);

@@ -1,11 +1,11 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, profiles, users } from '@/lib/db/schema';
+import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { baseUrlForServer } from '@/lib/runtime/configuration';
+import { baseUrlForServer, stripeOneTimeProductIdForServer, stripeRecurringProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { getStripeServerClient } from './stripe-client';
 
@@ -19,11 +19,18 @@ export type CheckoutStripeClient = {
   customers: { create: (params: Stripe.CustomerCreateParams) => Promise<{ id: string }> };
 };
 
+// Statuses under which a subscription is still billing the member (docs/02 §5); a second
+// subscription-mode checkout while one of these is open would double-bill.
+const OPEN_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
 function requiredProductId(mode: CheckoutMode) {
-  const name = mode === 'subscription' ? 'STRIPE_RECURRING_PRODUCT_ID' : 'STRIPE_ONE_TIME_PRODUCT_ID';
-  const value = process.env[name];
-  if (!value) throw new Error(`Invalid production configuration: ${name}.`);
-  return value;
+  return mode === 'subscription' ? stripeRecurringProductIdForServer() : stripeOneTimeProductIdForServer();
+}
+
+async function hasOpenSubscription(profileId: number): Promise<boolean> {
+  const [existing] = await db.select({ id: subscriptions.id }).from(subscriptions)
+    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES))).limit(1);
+  return Boolean(existing);
 }
 
 // A concurrent first-ever checkout from the same member could race here and create two Stripe
@@ -58,6 +65,9 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   const actor = await requireAccountAccess('billing_boundary');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
   if (!profile) throw new Error('A member profile is required before checkout.');
+  if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
+    throw new Error('An active or pending subscription already exists for this membership.');
+  }
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, profile.id);
   const baseUrl = baseUrlForServer();
 
