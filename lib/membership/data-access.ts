@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  applicationRoles, auditLog, memberships, notificationOutbox,
+  applicationRoles, auditLog, billingAccounts, memberships, notificationOutbox,
   professionalRoles, profileChangeHistory, profiles,
   users,
 } from '@/lib/db/schema';
@@ -174,6 +174,26 @@ export async function listAuditHistory(profileId: number) {
   requireAdministrator(actor);
   return db.select().from(auditLog).where(and(eq(auditLog.entityType, 'profile'), eq(auditLog.entityId, String(profileId))))
     .orderBy(desc(auditLog.createdAt));
+}
+
+export async function hasOwnBillingAccount(): Promise<boolean> {
+  const actor = await authenticatedActor('profile');
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) return false;
+  const [billing] = await db.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
+  return Boolean(billing);
+}
+
+export async function searchMembersForAdmin(query: string) {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const pattern = `%${trimmed.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+  return db.select({ email: users.email, firstName: profiles.firstName, lastName: profiles.lastName, profileId: profiles.id })
+    .from(profiles).innerJoin(users, eq(profiles.userId, users.id))
+    .where(or(ilike(users.email, pattern), ilike(profiles.firstName, pattern), ilike(profiles.lastName, pattern)))
+    .orderBy(profiles.lastName).limit(20);
 }
 
 export async function hasCurrentMemberEntitlement(profileId: number): Promise<boolean> {
