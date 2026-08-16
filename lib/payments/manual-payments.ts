@@ -1,11 +1,12 @@
 import 'server-only';
 
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, memberships, payments, profiles } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { lockLatestMembership } from '@/lib/membership/locking';
 import { MANUAL_PAYMENT_SOURCES, MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, type ManualPaymentSource } from './pricing';
 import { nextValidUntil } from './renewal';
 
@@ -36,17 +37,6 @@ const manualPaymentSchema = z.object({
   }
 });
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-// Locks the selected row for the rest of this transaction so a concurrent manual payment or
-// Stripe webhook for the same profile can't read the same pre-update validUntil and derive the
-// same one-year extension, silently dropping one of the two renewals.
-async function latestMembership(tx: Transaction, profileId: number) {
-  const [membership] = await tx.select().from(memberships).where(eq(memberships.profileId, profileId))
-    .orderBy(desc(memberships.validUntil)).limit(1).for('update');
-  return membership ?? null;
-}
-
 /**
  * Records an EUR manual payment (paypal/bank_transfer/cash) or a complimentary grant, and extends
  * membership using the same rolling-calendar rule Stripe payments use (docs/02 §5, §8). Payment,
@@ -75,10 +65,10 @@ export async function recordManualPayment(untrustedInput: unknown) {
       source: input.source,
     }).returning();
 
-    const membership = await latestMembership(tx, input.profileId);
+    const membership = await lockLatestMembership(tx, input.profileId);
     const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: input.paidAt });
-    // A suspended membership stays suspended — reinstatement is a separate, not-yet-built admin
-    // action (docs/08 item 14); a payment alone must not silently lift a suspension.
+    // A suspended membership stays suspended — a payment alone must not silently lift a suspension.
+    // Reinstatement is the dedicated reinstateMembership action (lib/membership/status-actions.ts).
     const status = membership?.status === 'suspended' ? 'suspended' : (input.source === 'complimentary' ? 'complimentary' : 'active');
     const [membershipRow] = membership
       ? await tx.update(memberships).set({ status, updatedAt: new Date(), validUntil })
