@@ -64,7 +64,7 @@ test('network interception fails closed, redacts destinations, and preserves pri
 });
 
 test('production modules contain server-only boundaries and no fake credential fallbacks', () => {
-  const privileged = ['lib/db/drizzle.ts', 'lib/auth/session.ts', 'lib/payments/stripe.ts', 'lib/payments/manual-payments.ts', 'lib/security/encrypted-payload.ts', 'lib/notifications/account-delivery.ts', 'lib/notifications/mailchimp-transactional.ts', 'lib/notifications/profile-change-delivery.ts', 'lib/runtime/configuration.ts', 'app/api/cron/account-delivery/route.ts'];
+  const privileged = ['lib/db/drizzle.ts', 'lib/auth/session.ts', 'lib/payments/stripe.ts', 'lib/payments/manual-payments.ts', 'lib/security/encrypted-payload.ts', 'lib/notifications/account-delivery.ts', 'lib/notifications/mailchimp-transactional.ts', 'lib/notifications/profile-change-delivery.ts', 'lib/notifications/renewal-notices.ts', 'lib/runtime/configuration.ts', 'app/api/cron/account-delivery/route.ts', 'app/api/cron/renewal-notice-scan/route.ts', 'app/api/cron/renewal-notice-delivery/route.ts'];
   for (const file of privileged) assert.match(readFileSync(path.join(root, file), 'utf8'), /import 'server-only'/, `${file} lacks the server-only boundary`);
   const productionFiles = [...filesBelow(path.join(root, 'app')), ...filesBelow(path.join(root, 'lib'))].filter((file) => /\.(?:ts|tsx|js|mjs)$/.test(file) && !file.endsWith('setup.ts'));
   const rules = [

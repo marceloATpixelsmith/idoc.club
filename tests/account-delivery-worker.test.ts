@@ -53,10 +53,11 @@ test('failure evidence and public responses contain no sensitive values', async 
 
 test('Vercel Cron configuration matches the protected route and its outbox lease duration', () => {
   const configuration = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
-  assert.deepEqual(configuration.crons, [{ path: '/api/cron/account-delivery', schedule: '*/5 * * * *' }]);
+  const accountDelivery = configuration.crons.find(({ path }: { path: string }) => path === '/api/cron/account-delivery');
+  assert.deepEqual(accountDelivery, { path: '/api/cron/account-delivery', schedule: '*/5 * * * *' });
   assert.ok(readFileSync(new URL('../app/api/cron/account-delivery/route.ts', import.meta.url), 'utf8').includes('handleAccountDeliveryCron'));
 
-  const minutes = Number(/^\*\/(\d+) \* \* \* \*$/.exec(configuration.crons[0].schedule)?.[1]);
+  const minutes = Number(/^\*\/(\d+) \* \* \* \*$/.exec(accountDelivery.schedule)?.[1]);
   assert.ok(Number.isInteger(minutes) && minutes > 0, 'the schedule must be a simple every-N-minutes cadence for this invariant to apply');
   assert.equal(
     ACCOUNT_DELIVERY_LEASE_MS, minutes * 60 * 1000,

@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/account-delivery",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/renewal-notice-scan",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/renewal-notice-delivery",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

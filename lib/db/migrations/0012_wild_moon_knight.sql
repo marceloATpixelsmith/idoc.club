@@ -1,0 +1,2 @@
+ALTER TABLE "idoc"."notification_outbox" ADD COLUMN "dedupe_key" varchar(150);--> statement-breakpoint
+ALTER TABLE "idoc"."notification_outbox" ADD CONSTRAINT "notification_outbox_dedupe_key_unique" UNIQUE("dedupe_key");

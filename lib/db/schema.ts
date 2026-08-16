@@ -246,6 +246,9 @@ export const notificationOutbox = idocSchema.table('notification_outbox', {
   leaseOwner: varchar('lease_owner', { length: 100 }),
   leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
   deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+  // Stable per-notice-cycle identity (e.g. `membership.renewal_reminder:{profileId}:{currentPeriodEnd}`)
+  // so a re-run scan can't enqueue the same notice twice. Nullable: the two pre-existing kinds never set it.
+  dedupeKey: varchar('dedupe_key', { length: 150 }).unique(),
 }, (table) => [index('notification_claim_idx').on(table.availableAt, table.id).where(sql`${table.sentAt} is null and ${table.deadLetteredAt} is null`)]);
 
 export const stripeEvents = idocSchema.table('stripe_events', {

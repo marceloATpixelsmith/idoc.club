@@ -106,6 +106,6 @@ export async function persistedGraph(userId: number) {
   };
 }
 
-export async function concurrently<T>(left: () => Promise<T>, right: () => Promise<T>) {
+export async function concurrently<L, R>(left: () => Promise<L>, right: () => Promise<R>) {
   return Promise.allSettled([left(), right()]);
 }
