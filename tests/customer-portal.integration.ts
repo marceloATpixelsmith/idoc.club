@@ -12,21 +12,21 @@ beforeEach(async () => {
 });
 after(closeHarness);
 
-function fakePortalClient() {
-  const calls = { configurationsCreate: [] as unknown[], sessionsCreate: [] as unknown[] };
-  let configurations: Array<{ id: string }> = [];
+function fakePortalClient(preexisting: Array<{ id: string; metadata: Record<string, string> | null }> = []) {
+  const calls = { configurationsCreate: [] as unknown[], configurationsList: [] as unknown[], sessionsCreate: [] as unknown[] };
+  const configurations = [...preexisting];
   return {
     calls,
     client: {
       billingPortal: {
         configurations: {
-          create: async (params: unknown) => {
+          create: async (params: any) => {
             calls.configurationsCreate.push(params);
-            const created = { id: `cfg_${calls.configurationsCreate.length}` };
-            configurations = [created];
+            const created = { id: `cfg_${calls.configurationsCreate.length}`, metadata: params.metadata ?? null };
+            configurations.push(created);
             return created;
           },
-          list: async () => ({ data: configurations }),
+          list: async (params: unknown) => { calls.configurationsList.push(params); return { data: configurations }; },
         },
         sessions: { create: async (params: unknown) => { calls.sessionsCreate.push(params); return { url: 'https://billing.stripe.com/session/fixture' }; } },
       },
@@ -68,6 +68,19 @@ test('a second session for the same member reuses the existing Billing Portal Co
   assert.equal(calls.configurationsCreate.length, 1);
   assert.equal(calls.sessionsCreate.length, 2);
   assert.equal((calls.sessionsCreate[1] as any).configuration, 'cfg_1');
+});
+
+test('a pre-existing Configuration not created by this module is never reused, even if it happens to be first in the list', async () => {
+  const { user } = await createCompleteGraph();
+  const { calls, client } = fakePortalClient([
+    { id: 'cfg_unrelated_legacy', metadata: null },
+    { id: 'cfg_unrelated_tagged_elsewhere', metadata: { some_other_integration: 'true' } },
+  ]);
+  const url = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipPortalSession(client));
+  assert.equal(url, 'https://billing.stripe.com/session/fixture');
+  assert.equal(calls.configurationsCreate.length, 1, 'an untagged/differently-tagged configuration must never be reused');
+  const sessionParams = calls.sessionsCreate[0] as any;
+  assert.equal(sessionParams.configuration, 'cfg_1'); // the newly created one, not either pre-existing entry
 });
 
 test('a member with a profile but no Stripe billing account is rejected, and no Stripe call is made', async () => {

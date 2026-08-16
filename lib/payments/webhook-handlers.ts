@@ -33,9 +33,12 @@ async function resolveProfileId(tx: Transaction, externalCustomerId: string | nu
   return billing?.profileId ?? null;
 }
 
+// Locks the selected row for the rest of this transaction so a concurrent webhook event or manual
+// payment for the same profile can't read the same pre-update validUntil and derive the same
+// one-year extension, silently dropping one of the two renewals.
 async function latestMembership(tx: Transaction, profileId: number) {
   const [membership] = await tx.select().from(memberships).where(eq(memberships.profileId, profileId))
-    .orderBy(desc(memberships.validUntil)).limit(1);
+    .orderBy(desc(memberships.validUntil)).limit(1).for('update');
   return membership ?? null;
 }
 

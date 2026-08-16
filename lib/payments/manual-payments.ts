@@ -13,10 +13,21 @@ import { nextValidUntil } from './renewal';
 // complimentary grants may not have one.
 const REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource[] = ['paypal', 'bank_transfer'];
 
+// docs/02 §5/§8: a manual payment always uses "the actual payment date" — a date that hasn't
+// happened yet can never be an actual payment date, so future dates are rejected outright rather
+// than granting entitlement ahead of when the payment supposedly occurred.
+function isRealCalendarDate(value: string): boolean {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 const manualPaymentSchema = z.object({
   profileId: z.coerce.number().int().positive(),
   source: z.enum(MANUAL_PAYMENT_SOURCES),
-  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the paid date as YYYY-MM-DD'),
+  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the paid date as YYYY-MM-DD')
+    .refine(isRealCalendarDate, 'Enter a real calendar date')
+    .refine((value) => value <= new Date().toISOString().slice(0, 10), 'The paid date cannot be in the future'),
   reference: z.string().trim().max(500).optional().transform((value) => value || null),
   reason: z.string().trim().min(1, 'A reason is required').max(1000),
 }).superRefine(({ source, reference }, ctx) => {
@@ -27,9 +38,12 @@ const manualPaymentSchema = z.object({
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+// Locks the selected row for the rest of this transaction so a concurrent manual payment or
+// Stripe webhook for the same profile can't read the same pre-update validUntil and derive the
+// same one-year extension, silently dropping one of the two renewals.
 async function latestMembership(tx: Transaction, profileId: number) {
   const [membership] = await tx.select().from(memberships).where(eq(memberships.profileId, profileId))
-    .orderBy(desc(memberships.validUntil)).limit(1);
+    .orderBy(desc(memberships.validUntil)).limit(1).for('update');
   return membership ?? null;
 }
 
@@ -74,11 +88,14 @@ export async function recordManualPayment(untrustedInput: unknown) {
         startsOn: input.paidAt, status, validUntil,
       }).returning();
 
+    // entityType/entityId are profile-scoped (matching updateMemberProfile's audit entries), not
+    // payment-scoped, so this shows up in the same admin audit trail as every other action taken
+    // against this member (listAuditHistory(profileId) selects entityType='profile').
     await tx.insert(auditLog).values({
       action: 'admin.payment.recorded', actorId: actor.id,
       afterJson: { membership: membershipRow, payment },
       beforeJson: membership ? { membership } : null,
-      entityId: String(input.profileId), entityType: 'payment', reason: input.reason,
+      entityId: String(input.profileId), entityType: 'profile', reason: input.reason,
     });
 
     return { membership: membershipRow, payment };

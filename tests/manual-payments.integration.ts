@@ -40,7 +40,7 @@ test('a paypal payment is recorded with the reference, extends the membership, a
   const [auditRow] = await sql`select action, actor_id, reason, entity_type, entity_id from idoc.audit_log where action='admin.payment.recorded'`;
   assert.equal(auditRow.actor_id, admin.id);
   assert.equal(auditRow.reason, 'Phone request, confirmed by email');
-  assert.equal(auditRow.entity_type, 'payment');
+  assert.equal(auditRow.entity_type, 'profile');
   assert.equal(auditRow.entity_id, String(profile.id));
 });
 
@@ -106,6 +106,46 @@ test('a missing reason is rejected and writes no rows', async () => {
   })));
   assert.equal((await sql`select count(*)::int as count from idoc.payments where profile_id=${profile.id}`)[0].count, 0);
   assert.equal((await sql`select count(*)::int as count from idoc.audit_log where entity_id=${String(profile.id)}`)[0].count, 0);
+});
+
+test('a future paid date is rejected, since it cannot be an actual payment date yet', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+  await assert.rejects(asAdmin(admin.id, () => recordManualPayment({
+    paidAt: tomorrow, profileId: profile.id, reason: 'Backdated incorrectly', source: 'cash',
+  })));
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where profile_id=${profile.id}`)[0].count, 0);
+});
+
+test('an impossible calendar date is rejected rather than silently normalized', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await assert.rejects(asAdmin(admin.id, () => recordManualPayment({
+    paidAt: '2026-02-30', profileId: profile.id, reason: 'Not a real date', source: 'cash',
+  })));
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where profile_id=${profile.id}`)[0].count, 0);
+});
+
+test('concurrent manual payments for the same profile do not lose an extension to a lost update', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true); // valid_until 2099-12-31
+  await Promise.all([
+    asAdmin(admin.id, () => recordManualPayment({ paidAt: '2026-01-01', profileId: profile.id, reason: 'Concurrent payment 1', source: 'cash' })),
+    asAdmin(admin.id, () => recordManualPayment({ paidAt: '2026-01-01', profileId: profile.id, reason: 'Concurrent payment 2', source: 'cash' })),
+  ]);
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where profile_id=${profile.id}`)[0].count, 2, 'both payments must still be recorded');
+  const [after] = await sql`select valid_until from idoc.memberships where profile_id=${profile.id}`;
+  // Without a row lock, both transactions would read the same starting validUntil and derive the
+  // same one-year extension, losing one of the two renewals (final value 2100-12-31 instead of
+  // the correct cumulative 2101-12-31).
+  assert.equal(after.valid_until, '2101-12-31');
 });
 
 test('a non-administrator cannot record a manual payment', async () => {

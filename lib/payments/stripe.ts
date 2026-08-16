@@ -16,20 +16,27 @@ export { getStripeServerClient } from './stripe-client';
 export type PortalStripeClient = {
   billingPortal: {
     configurations: {
-      create: (params: Stripe.BillingPortal.ConfigurationCreateParams) => Promise<{ id: string }>;
-      list: () => Promise<{ data: Array<{ id: string }> }>;
+      create: (params: Stripe.BillingPortal.ConfigurationCreateParams) => Promise<{ id: string; metadata: Record<string, string> | null }>;
+      list: (params: { limit: number }) => Promise<{ data: Array<{ id: string; metadata: Record<string, string> | null }> }>;
     };
     sessions: { create: (params: Stripe.BillingPortal.SessionCreateParams) => Promise<{ url: string }> };
   };
 };
+
+// Stripe's list() has no way to filter by feature set, so blindly reusing existing.data[0] could
+// attach a session to some other, unrelated Configuration in the account (e.g. one with
+// subscription_update enabled) — tag every Configuration this module creates and only ever reuse
+// one carrying that tag, never an arbitrary pre-existing one.
+const PORTAL_CONFIGURATION_METADATA_KEY = 'idoc_membership_portal';
 
 // IDOC prices membership inline (price_data) per Checkout Session rather than from a stable Price
 // catalog, and there is only one flat €80/year offering — there is nothing to expose for
 // subscription_update (plan-swapping), so only the features docs/04 §7 actually asks for
 // (payment methods, invoices, at-period-end cancellation) are enabled.
 async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<string> {
-  const existing = await stripe.billingPortal.configurations.list();
-  if (existing.data[0]) return existing.data[0].id;
+  const existing = await stripe.billingPortal.configurations.list({ limit: 100 });
+  const managed = existing.data.find((configuration) => configuration.metadata?.[PORTAL_CONFIGURATION_METADATA_KEY] === 'true');
+  if (managed) return managed.id;
   const created = await stripe.billingPortal.configurations.create({
     business_profile: { headline: 'Manage your IDOC membership payment method' },
     features: {
@@ -37,6 +44,7 @@ async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<stri
       payment_method_update: { enabled: true },
       subscription_cancel: { enabled: true, mode: 'at_period_end' },
     },
+    metadata: { [PORTAL_CONFIGURATION_METADATA_KEY]: 'true' },
   });
   return created.id;
 }

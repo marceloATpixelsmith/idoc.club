@@ -33,7 +33,7 @@ export function ManualPaymentForm({ currentValidUntil, profileId }: { currentVal
       <div>
         <label className="block text-sm font-medium text-gray-900" htmlFor="paidAt">Paid date</label>
         <input
-          className="mt-1 block w-full rounded-md border-gray-300" id="paidAt" name="paidAt" required type="date"
+          className="mt-1 block w-full rounded-md border-gray-300" id="paidAt" max={today()} name="paidAt" required type="date"
           value={paidAt} onChange={(event) => setPaidAt(event.target.value)}
         />
       </div>
