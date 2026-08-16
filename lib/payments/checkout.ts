@@ -21,7 +21,7 @@ export type CheckoutStripeClient = {
 
 // Statuses under which a subscription is still billing the member (docs/02 §5); a second
 // subscription-mode checkout while one of these is open would double-bill.
-const OPEN_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+export const OPEN_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
 
 function requiredProductId(mode: CheckoutMode) {
   return mode === 'subscription' ? stripeRecurringProductIdForServer() : stripeOneTimeProductIdForServer();

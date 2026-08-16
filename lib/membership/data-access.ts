@@ -176,6 +176,13 @@ export async function listAuditHistory(profileId: number) {
     .orderBy(desc(auditLog.createdAt));
 }
 
+export async function listNotificationHistory(profileId: number) {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  return db.select().from(notificationOutbox).where(eq(notificationOutbox.profileId, profileId))
+    .orderBy(desc(notificationOutbox.createdAt));
+}
+
 export async function hasOwnBillingAccount(): Promise<boolean> {
   const actor = await authenticatedActor('profile');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);

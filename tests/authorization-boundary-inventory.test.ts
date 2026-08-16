@@ -57,6 +57,8 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
 // authorization boundary of its own (real entitlement is granted by the webhook route instead).
 const routeHandlers: Record<string, string> = {
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
+  'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
+  'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
@@ -145,6 +147,14 @@ test('the account-delivery Cron Route Handler is gated by the shared secret befo
   const source = readFileSync(path.join(root, 'app/api/cron/account-delivery/route.ts'), 'utf8');
   assert.match(source, /handleAccountDeliveryCron\(request, \{/);
   assert.match(source, /secret: cronSecretForServer\(\)/);
+});
+
+test('the renewal-notice Cron Route Handlers are gated by the shared secret before batch processing', () => {
+  for (const file of ['app/api/cron/renewal-notice-scan/route.ts', 'app/api/cron/renewal-notice-delivery/route.ts']) {
+    const source = readFileSync(path.join(root, file), 'utf8');
+    assert.match(source, /handleAccountDeliveryCron\(request, \{/, file);
+    assert.match(source, /secret: cronSecretForServer\(\)/, file);
+  }
 });
 
 test('the Stripe checkout return-trip Route Handler never touches the database or calls Stripe, confirming its stateless classification is current', () => {

@@ -159,6 +159,36 @@ test('invoice.payment_failed puts the membership into a five-day grace period an
   assert.equal(after.valid_until, expected.toISOString().slice(0, 10));
 });
 
+test('invoice.payment_failed enqueues a payment-failed notice with the right payload and a stable dedupe key', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values(${profile.id}, 'cus_invoice_failed_notice')`;
+  const membership = await createMembership(profile.id);
+  const response = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_notice', id: 'in_failed_notice_fixture' }));
+  assert.equal(response.status, 200);
+  const [after] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  const [notice] = await sql`select kind, profile_id, payload, dedupe_key from idoc.notification_outbox where kind='membership.payment_failed'`;
+  assert.equal(notice.profile_id, profile.id);
+  assert.equal(notice.payload.to, user.email);
+  assert.equal(notice.payload.graceEndDate, after.valid_until);
+  assert.equal(notice.dedupe_key, `membership.payment_failed:${profile.id}:${after.valid_until}`);
+});
+
+test('a second invoice.payment_failed event while already in grace does not move validUntil or enqueue a second notice', async () => {
+  const profile = await billedProfile('cus_invoice_failed_retry');
+  const membership = await createMembership(profile.id);
+  await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_retry', id: 'in_failed_retry_fixture' }));
+  const [afterFirst] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  // Stripe's Smart Retries fire a distinct event (distinct event.id) for each retry attempt against
+  // the same unpaid invoice; fixtureEvent's default `id` parameter already mints a fresh evt_ id per
+  // call, so this is a faithful simulation of a real retry, not a replayed/duplicate event.
+  await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_retry', id: 'in_failed_retry_fixture' }));
+  const [afterSecond] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  assert.equal(afterSecond.valid_until, afterFirst.valid_until);
+  assert.equal((await sql`select count(*)::int as count from idoc.notification_outbox where kind='membership.payment_failed' and profile_id=${profile.id}`)[0].count, 1);
+  assert.equal((await sql`select count(*)::int as count from idoc.stripe_events where event_type='invoice.payment_failed'`)[0].count, 2);
+});
+
 test('invoice.payment_action_required changes no entitlement state', async () => {
   const profile = await billedProfile('cus_invoice_action_required');
   const membership = await createMembership(profile.id);

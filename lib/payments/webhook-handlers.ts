@@ -3,7 +3,7 @@ import 'server-only';
 import type Stripe from 'stripe';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, memberships, payments, stripeEvents, subscriptions } from '@/lib/db/schema';
+import { billingAccounts, memberships, notificationOutbox, payments, profiles, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeOneTimeProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
@@ -109,12 +109,25 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
   const membership = await latestMembership(tx, profileId);
-  if (!membership) return;
+  // Stripe's Smart Retries fire a distinct invoice.payment_failed event (distinct event.id, so
+  // stripeEvents's dedup doesn't catch it) on every retry attempt for the same unpaid invoice. Only
+  // the transition into grace should move validUntil/send a notice — an already-'grace' membership
+  // means this is a later retry, not a new failure, and must be a no-op.
+  if (!membership || membership.status === 'grace') return;
   // The failed-renewal date is approximated as today (when Stripe reports the failure), which
   // tracks closely with the actual scheduled-renewal attempt date in practice.
   const failedRenewalDate = new Date().toISOString().slice(0, 10);
-  await tx.update(memberships).set({ status: 'grace', updatedAt: new Date(), validUntil: gracePeriodEnd(failedRenewalDate) })
+  const graceEnd = gracePeriodEnd(failedRenewalDate);
+  await tx.update(memberships).set({ status: 'grace', updatedAt: new Date(), validUntil: graceEnd })
     .where(eq(memberships.id, membership.id));
+  const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName })
+    .from(profiles).innerJoin(users, eq(profiles.userId, users.id)).where(eq(profiles.id, profileId)).limit(1);
+  await tx.insert(notificationOutbox).values({
+    dedupeKey: `membership.payment_failed:${profileId}:${graceEnd}`,
+    kind: 'membership.payment_failed',
+    payload: { firstName: contact?.firstName, graceEndDate: graceEnd, to: contact?.email },
+    profileId,
+  }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
 }
 
 // Record/flag only — no entitlement change until a real success or failure event arrives. The
