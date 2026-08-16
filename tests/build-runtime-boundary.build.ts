@@ -36,7 +36,7 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
     assert.equal(existsSync(marker), false, 'Production build attempted network access.');
     assert.match(output, /Generating static pages/);
     for (const route of ['/', '/_not-found', '/pricing', '/recover-password', '/request-activation', '/sign-in', '/sign-up']) assert.match(output, new RegExp(`◐ ${route.replace('/', '\\/')}(?:\\s|$)`));
-    for (const route of ['/activate', '/admin', '/admin/payments', '/api/cron/account-delivery', '/api/stripe/checkout', '/api/stripe/webhook', '/api/team', '/api/user', '/dashboard', '/dashboard/profile', '/onboarding', '/reset-password', '/verify-email']) assert.match(output, new RegExp(`ƒ ${route.replaceAll('/', '\\/')}(?:\\s|$)`));
+    for (const route of ['/activate', '/admin', '/admin/members', '/admin/notifications', '/admin/payments', '/api/cron/account-delivery', '/api/stripe/checkout', '/api/stripe/webhook', '/api/team', '/api/user', '/dashboard', '/dashboard/payments', '/dashboard/profile', '/onboarding', '/reset-password', '/verify-email']) assert.match(output, new RegExp(`ƒ ${route.replaceAll('/', '\\/')}(?:\\s|$)`));
     const browserVisible = [...filesBelow(path.join(outputDirectory, 'static')), ...filesBelow(path.join(outputDirectory, 'server/app')).filter((file) => /\.(?:html|rsc)$/.test(file))];
     assert.ok(browserVisible.length > 0, 'No browser-visible build output was discovered.');
     for (const file of browserVisible) {

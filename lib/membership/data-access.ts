@@ -4,8 +4,8 @@ import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '@/lib/db/drizzle';
 import {
   applicationRoles, auditLog, billingAccounts, memberships, notificationOutbox,
-  professionalRoles, profileChangeHistory, profiles,
-  users,
+  payments, professionalRoles, profileChangeHistory, profiles,
+  subscriptions, users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authorization';
@@ -51,11 +51,13 @@ export async function getPrivateMember(profileId: number) {
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return null;
   requireOwnerOrAdmin(actor, profile.userId);
-  const [roles, entitlement] = await Promise.all([
+  const [roles, entitlement, subscription] = await Promise.all([
     db.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
     db.select().from(memberships).where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1),
+    db.select({ cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd, currentPeriodEnd: subscriptions.currentPeriodEnd, status: subscriptions.status })
+      .from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.createdAt)).limit(1),
   ]);
-  return { entitlement: entitlement[0] ?? null, profile, roles };
+  return { entitlement: entitlement[0] ?? null, profile, roles, subscription: subscription[0] ?? null };
 }
 
 export async function getOwnPrivateMember() {
@@ -97,12 +99,15 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
   });
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
   const actor = await authenticatedActor('profile');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
+  const isAdminEdit = actor.id !== existing.userId;
+  const reason = options?.reason?.trim() ?? '';
+  if (isAdminEdit && reason.length === 0) throw new Error('An administrative reason is required for this correction.');
 
   return db.transaction(async (tx) => {
     const beforeRoles = await tx.select().from(professionalRoles)
@@ -136,12 +141,12 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: before, profileId });
     injectProfileTransactionFailure('profile-history-insertion');
     await tx.insert(auditLog).values({
-      action: actor.id === existing.userId ? 'member.profile.updated' : 'admin.profile.updated',
+      action: isAdminEdit ? 'admin.profile.updated' : 'member.profile.updated',
       actorId: actor.id, afterJson: after, beforeJson: before,
-      entityId: String(profileId), entityType: 'profile',
+      entityId: String(profileId), entityType: 'profile', reason: isAdminEdit ? reason : null,
     });
     injectProfileTransactionFailure('audit-insertion');
-    if (actor.id === existing.userId) {
+    if (!isAdminEdit) {
       await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
     injectProfileTransactionFailure('notification-insertion');
@@ -181,6 +186,14 @@ export async function listNotificationHistory(profileId: number) {
   requireAdministrator(actor);
   return db.select().from(notificationOutbox).where(eq(notificationOutbox.profileId, profileId))
     .orderBy(desc(notificationOutbox.createdAt));
+}
+
+export async function listOwnPaymentHistory() {
+  const actor = await authenticatedActor('profile');
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) return [];
+  return db.select({ amountCents: payments.amountCents, currency: payments.currency, id: payments.id, paidAt: payments.paidAt, source: payments.source })
+    .from(payments).where(eq(payments.profileId, profile.id)).orderBy(desc(payments.paidAt));
 }
 
 export async function hasOwnBillingAccount(): Promise<boolean> {

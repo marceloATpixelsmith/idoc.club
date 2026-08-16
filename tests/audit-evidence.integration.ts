@@ -60,11 +60,25 @@ test('a self-service profile edit writes member.profile.updated; an administrato
   await createMembership(otherProfile.id);
   const administrator = await createUser();
   await grantRole(administrator.id, 'administrator');
-  await withTestMembershipBoundary({ actor: { id: administrator.id, roles: [] } }, () => updateMemberProfile(otherProfile.id, profileInput()));
-  const [adminRow] = await sql`select action, actor_id, entity_type, entity_id from idoc.audit_log where entity_type='profile'`;
+  await withTestMembershipBoundary({ actor: { id: administrator.id, roles: [] } }, () => updateMemberProfile(otherProfile.id, profileInput(), { reason: 'Administrative correction' }));
+  const [adminRow] = await sql`select action, actor_id, entity_type, entity_id, reason from idoc.audit_log where entity_type='profile'`;
   assert.equal(adminRow.action, 'admin.profile.updated');
   assert.equal(adminRow.actor_id, administrator.id);
   assert.equal(adminRow.entity_id, String(otherProfile.id));
+  assert.equal(adminRow.reason, 'Administrative correction');
+  assert.equal((await sql`select count(*)::int as count from idoc.notification_outbox`)[0].count, 0);
+});
+
+test('an administrator edit without a reason is rejected and persists nothing', async () => {
+  const other = await createUser();
+  const otherProfile = await createProfile(other.id);
+  await createMembership(otherProfile.id);
+  const administrator = await createUser();
+  await grantRole(administrator.id, 'administrator');
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: administrator.id, roles: [] } }, () => updateMemberProfile(otherProfile.id, profileInput())));
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: administrator.id, roles: [] } }, () => updateMemberProfile(otherProfile.id, profileInput(), { reason: '   ' })));
+  assert.equal((await sql`select count(*)::int as count from idoc.audit_log where entity_type='profile'`)[0].count, 0);
+  assert.equal((await sql`select count(*)::int as count from idoc.profile_change_history`)[0].count, 0);
 });
 
 test('registration verification for a brand-new member with no profile transitions to onboarding and writes account.email.verified', async () => {

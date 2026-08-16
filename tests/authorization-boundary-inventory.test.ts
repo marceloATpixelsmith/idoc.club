@@ -50,6 +50,9 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/admin/payments/actions.ts': {
     recordManualPaymentForm: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/members/actions.ts': {
+    saveMemberProfileByAdminForm: 'delegates-to-data-access',
+  },
 };
 
 // Every Route Handler, and how it authorizes before touching privileged data. `stripe/checkout` is
@@ -106,6 +109,7 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
       { from: './stripe', functionName: 'createMembershipPortalSession' },
     ],
     'app/(dashboard)/admin/payments/actions.ts': [{ from: '@/lib/payments/manual-payments', functionName: 'recordManualPayment' }],
+    'app/(dashboard)/admin/members/actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' }],
   };
   for (const [file, entries] of Object.entries(expected)) {
     const source = readFileSync(path.join(root, file), 'utf8');

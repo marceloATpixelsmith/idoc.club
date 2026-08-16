@@ -2,20 +2,10 @@ import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { listNotificationHistory } from '../lib/membership/data-access.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
-import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, asAdmin, closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
-
-async function adminUser() {
-  const admin = await createUser();
-  await grantRole(admin.id, 'administrator');
-  return admin;
-}
-
-function asAdmin<T>(adminId: number, operation: () => Promise<T>) {
-  return withTestMembershipBoundary({ actor: { id: adminId, roles: [] } }, operation);
-}
 
 test('listNotificationHistory returns an administrator every row for the member, newest first', async () => {
   const admin = await adminUser();

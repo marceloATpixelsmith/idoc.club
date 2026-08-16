@@ -4,14 +4,10 @@ import { useActionState, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { nextValidUntil } from '@/lib/payments/renewal';
-import { MANUAL_PAYMENT_SOURCES } from '@/lib/payments/pricing';
+import { MANUAL_PAYMENT_SOURCES, PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
 import { recordManualPaymentForm } from './actions';
 
 type ManualPaymentActionState = { error?: string; success?: string };
-
-const SOURCE_LABELS: Record<string, string> = {
-  bank_transfer: 'Bank transfer', cash: 'Cash / in person', complimentary: 'Complimentary', paypal: 'PayPal',
-};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -27,7 +23,7 @@ export function ManualPaymentForm({ currentValidUntil, profileId }: { currentVal
       <div>
         <label className="block text-sm font-medium text-gray-900" htmlFor="source">Payment source</label>
         <select className="mt-1 block w-full rounded-md border-gray-300" id="source" name="source" required>
-          {MANUAL_PAYMENT_SOURCES.map((source) => <option key={source} value={source}>{SOURCE_LABELS[source]}</option>)}
+          {MANUAL_PAYMENT_SOURCES.map((source) => <option key={source} value={source}>{PAYMENT_SOURCE_LABELS[source]}</option>)}
         </select>
       </div>
       <div>

@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { client as productionClient } from '../lib/db/drizzle.ts';
 import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
+import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 
 export const testUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
 export const sql = postgres(testUrl, { max: 10 });
@@ -77,6 +78,16 @@ export async function createMembership(profileId: number, current = true) {
 
 export async function grantRole(userId: number, role: 'administrator' | 'super_admin') {
   await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${userId},${role},${userId})`;
+}
+
+export async function adminUser() {
+  const admin = await createUser();
+  await grantRole(admin.id, 'administrator');
+  return admin;
+}
+
+export function asAdmin<T>(adminId: number, operation: () => Promise<T>) {
+  return withTestMembershipBoundary({ actor: { id: adminId, roles: [] } }, operation);
 }
 
 export async function createCompleteGraph() {
