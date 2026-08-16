@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox, profiles, users } from '@/lib/db/schema';
-import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/checkout';
+import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './mailchimp-transactional';
 import { processDeliveryBatch } from './account-delivery-worker-core';

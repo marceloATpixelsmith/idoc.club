@@ -1,6 +1,7 @@
 'use server';
 
 import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
+import { parseMemberProfileFormData } from '@/lib/membership/validation';
 
 export async function saveOwnMemberProfile(input: unknown) {
   const member = await getOwnPrivateMember();
@@ -15,14 +16,5 @@ export async function saveOwnMemberProfile(input: unknown) {
 }
 
 export async function saveOwnMemberProfileForm(_state: { error?: string; success?: string }, formData: FormData): Promise<{ error?: string; success?: string }> {
-  const classification = String(formData.get('classification') ?? '');
-  const official = {
-    feiId: formData.get('feiId'), idocRegion: formData.get('idocRegion'),
-    nationalFederationCountryCode: formData.get('nationalFederationCountryCode'),
-  };
-  const roles = classification === 'veterinarian' ? [{ roleType: 'veterinarian' }] : [
-    ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatus: formData.get('judgeStatus'), roleType: 'judge' }] : []),
-    ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatus: formData.get('stewardStatus'), roleType: 'steward' }] : []),
-  ];
-  return saveOwnMemberProfile({ address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') });
+  return saveOwnMemberProfile(parseMemberProfileFormData(formData));
 }

@@ -4,21 +4,11 @@ import { recordManualPayment } from '../lib/payments/manual-payments.ts';
 import { searchMembersForAdmin } from '../lib/membership/data-access.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import {
-  closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql,
+  adminUser, asAdmin, closeHarness, createMembership, createProfile, createUser, resetIdoc, sql,
 } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
-
-async function adminUser() {
-  const admin = await createUser();
-  await grantRole(admin.id, 'administrator');
-  return admin;
-}
-
-function asAdmin<T>(adminId: number, operation: () => Promise<T>) {
-  return withTestMembershipBoundary({ actor: { id: adminId, roles: [] } }, operation);
-}
 
 test('a paypal payment is recorded with the reference, extends the membership, and writes a full audit trail', async () => {
   const admin = await adminUser();

@@ -6,7 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeOneTimeProductIdForServer, stripeRecurringProductIdForServer } from '@/lib/runtime/configuration';
-import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
+import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
 import { getStripeServerClient } from './stripe-client';
 
 export type CheckoutMode = 'payment' | 'subscription';
@@ -18,10 +18,6 @@ export type CheckoutStripeClient = {
   checkout: { sessions: { create: (params: Stripe.Checkout.SessionCreateParams) => Promise<{ url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams) => Promise<{ id: string }> };
 };
-
-// Statuses under which a subscription is still billing the member (docs/02 §5); a second
-// subscription-mode checkout while one of these is open would double-bill.
-export const OPEN_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
 
 function requiredProductId(mode: CheckoutMode) {
   return mode === 'subscription' ? stripeRecurringProductIdForServer() : stripeOneTimeProductIdForServer();

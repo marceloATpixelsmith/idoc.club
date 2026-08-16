@@ -64,6 +64,20 @@ export const memberProfileSchema = z.object({
 
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 
+/** Builds the untrusted memberProfileSchema input shape from a submitted profile-edit form. */
+export function parseMemberProfileFormData(formData: FormData): unknown {
+  const classification = String(formData.get('classification') ?? '');
+  const official = {
+    feiId: formData.get('feiId'), idocRegion: formData.get('idocRegion'),
+    nationalFederationCountryCode: formData.get('nationalFederationCountryCode'),
+  };
+  const roles = classification === 'veterinarian' ? [{ roleType: 'veterinarian' }] : [
+    ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatus: formData.get('judgeStatus'), roleType: 'judge' }] : []),
+    ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatus: formData.get('stewardStatus'), roleType: 'steward' }] : []),
+  ];
+  return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
+}
+
 export function normalizeEmail(email: string): string {
   return z.string().trim().email().max(255).parse(email).toLowerCase();
 }
