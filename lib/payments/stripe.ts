@@ -1,147 +1,75 @@
-import Stripe from 'stripe';
-import { redirect } from 'next/navigation';
-import { Team } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
 import 'server-only';
 
-export { getStripeServerClient } from './stripe-client';
+import { eq } from 'drizzle-orm';
+import type Stripe from 'stripe';
+import { db } from '@/lib/db/drizzle';
+import { billingAccounts, profiles } from '@/lib/db/schema';
+import { requireAccountAccess } from '@/lib/membership/data-access';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from './stripe-client';
 
-export async function createCheckoutSession({
-  team,
-  priceId
-}: {
-  team: Team | null;
-  priceId: string;
-}) {
-  const user = await getUser();
+export { getStripeServerClient } from './stripe-client';
 
-  if (!team || !user) {
-    redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
-  }
+// Only the calls this module makes, and only the fields it actually reads back, so tests can
+// inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
+// lib/payments/checkout.ts's CheckoutStripeClient).
+export type PortalStripeClient = {
+  billingPortal: {
+    configurations: {
+      create: (params: Stripe.BillingPortal.ConfigurationCreateParams) => Promise<{ id: string; metadata: Record<string, string> | null }>;
+      list: (params: { limit: number }) => Promise<{ data: Array<{ id: string; metadata: Record<string, string> | null }> }>;
+    };
+    sessions: { create: (params: Stripe.BillingPortal.SessionCreateParams) => Promise<{ url: string }> };
+  };
+};
 
-  const session = await getStripeServerClient().checkout.sessions.create({
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1
-      }
-    ],
-    mode: 'subscription',
-    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.BASE_URL}/pricing`,
-    customer: team.stripeCustomerId || undefined,
-    client_reference_id: user.id.toString(),
-    allow_promotion_codes: true,
-    subscription_data: {
-      trial_period_days: 14
-    }
+// Stripe's list() has no way to filter by feature set, so blindly reusing existing.data[0] could
+// attach a session to some other, unrelated Configuration in the account (e.g. one with
+// subscription_update enabled) — tag every Configuration this module creates and only ever reuse
+// one carrying that tag, never an arbitrary pre-existing one.
+const PORTAL_CONFIGURATION_METADATA_KEY = 'idoc_membership_portal';
+
+// IDOC prices membership inline (price_data) per Checkout Session rather than from a stable Price
+// catalog, and there is only one flat €80/year offering — there is nothing to expose for
+// subscription_update (plan-swapping), so only the features docs/04 §7 actually asks for
+// (payment methods, invoices, at-period-end cancellation) are enabled.
+async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<string> {
+  const existing = await stripe.billingPortal.configurations.list({ limit: 100 });
+  const managed = existing.data.find((configuration) => configuration.metadata?.[PORTAL_CONFIGURATION_METADATA_KEY] === 'true');
+  if (managed) return managed.id;
+  const created = await stripe.billingPortal.configurations.create({
+    business_profile: { headline: 'Manage your IDOC membership payment method' },
+    features: {
+      invoice_history: { enabled: true },
+      payment_method_update: { enabled: true },
+      subscription_cancel: { enabled: true, mode: 'at_period_end' },
+    },
+    metadata: { [PORTAL_CONFIGURATION_METADATA_KEY]: 'true' },
   });
-
-  redirect(session.url!);
+  return created.id;
 }
 
-export async function createCustomerPortalSession(team: Team) {
-  if (!team.stripeCustomerId || !team.stripeProductId) {
-    redirect('/pricing');
-  }
-
-  let configuration: Stripe.BillingPortal.Configuration;
-  const stripe = getStripeServerClient();
-  const configurations = await stripe.billingPortal.configurations.list();
-
-  if (configurations.data.length > 0) {
-    configuration = configurations.data[0];
-  } else {
-    const product = await stripe.products.retrieve(team.stripeProductId);
-    if (!product.active) {
-      throw new Error("Team's product is not active in Stripe");
-    }
-
-    const prices = await stripe.prices.list({
-      product: product.id,
-      active: true
-    });
-    if (prices.data.length === 0) {
-      throw new Error("No active prices found for the team's product");
-    }
-
-    configuration = await stripe.billingPortal.configurations.create({
-      business_profile: {
-        headline: 'Manage your subscription'
-      },
-      features: {
-        subscription_update: {
-          enabled: true,
-          default_allowed_updates: ['price', 'quantity', 'promotion_code'],
-          proration_behavior: 'create_prorations',
-          products: [
-            {
-              product: product.id,
-              prices: prices.data.map((price) => price.id)
-            }
-          ]
-        },
-        subscription_cancel: {
-          enabled: true,
-          mode: 'at_period_end',
-          cancellation_reason: {
-            enabled: true,
-            options: [
-              'too_expensive',
-              'missing_features',
-              'switched_service',
-              'unused',
-              'other'
-            ]
-          }
-        },
-        payment_method_update: {
-          enabled: true
-        }
-      }
-    });
-  }
-
-  return getStripeServerClient().billingPortal.sessions.create({
-    customer: team.stripeCustomerId,
-    return_url: `${process.env.BASE_URL}/dashboard`,
-    configuration: configuration.id
+/**
+ * Creates a real Stripe-hosted Billing Portal session for the authenticated member's own
+ * billing_accounts row (docs/04 §7). Never creates a Stripe Customer — a member without a billing
+ * account has never completed real Stripe Checkout (docs/04 §8) and must not be forced into one
+ * just to reach this button. The Customer ID is derived server-side from the actor's own profile
+ * only; there is no parameter through which a caller could name someone else's Customer.
+ */
+export async function createMembershipPortalSession(testStripeClient?: PortalStripeClient): Promise<string> {
+  if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
+  const stripe = testStripeClient ?? getStripeServerClient();
+  const actor = await requireAccountAccess('billing_boundary');
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) throw new Error('A member profile is required before managing billing.');
+  const [billing] = await db.select({ externalCustomerId: billingAccounts.externalCustomerId })
+    .from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
+  if (!billing) throw new Error('No Stripe billing account exists for this member.');
+  const configurationId = await resolvedConfigurationId(stripe);
+  const session = await stripe.billingPortal.sessions.create({
+    configuration: configurationId,
+    customer: billing.externalCustomerId,
+    return_url: `${baseUrlForServer()}/dashboard`,
   });
-}
-
-export async function getStripePrices() {
-  const prices = await getStripeServerClient().prices.list({
-    expand: ['data.product'],
-    active: true,
-    type: 'recurring'
-  });
-
-  return prices.data.map((price) => ({
-    id: price.id,
-    productId:
-      typeof price.product === 'string' ? price.product : price.product.id,
-    unitAmount: price.unit_amount,
-    currency: price.currency,
-    interval: price.recurring?.interval,
-    trialPeriodDays: price.recurring?.trial_period_days
-  }));
-}
-
-export async function getStripeProducts() {
-  const products = await getStripeServerClient().products.list({
-    active: true,
-    expand: ['data.default_price']
-  });
-
-  return products.data.map((product) => ({
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    defaultPriceId:
-      typeof product.default_price === 'string'
-        ? product.default_price
-        : product.default_price?.id
-  }));
+  return session.url;
 }

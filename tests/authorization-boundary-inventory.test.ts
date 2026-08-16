@@ -45,7 +45,10 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
   'lib/payments/actions.ts': {
     checkoutAction: 'delegates-to-data-access',
-    customerPortalAction: 'session-boundary',
+    manageBillingAction: 'delegates-to-data-access',
+  },
+  'app/(dashboard)/admin/payments/actions.ts': {
+    recordManualPaymentForm: 'delegates-to-data-access',
   },
 };
 
@@ -72,17 +75,16 @@ test('every Route Handler is accounted for in the authorization inventory', () =
   assert.deepEqual(actual.sort(), Object.keys(routeHandlers).sort());
 });
 
-test('session-boundary actions are wrapped in validatedActionWithUser or withTeam before any data access', () => {
+test('session-boundary actions are wrapped in validatedActionWithUser before any data access', () => {
   for (const [file, manifest] of Object.entries(actionFiles)) {
     const source = readFileSync(path.join(root, file), 'utf8');
     for (const [name, kind] of Object.entries(manifest)) {
       if (kind !== 'session-boundary') continue;
-      assert.match(source, new RegExp(`export const ${name} = (?:validatedActionWithUser|withTeam)\\(`), `${file}:${name} must be wrapped in validatedActionWithUser or withTeam`);
+      assert.match(source, new RegExp(`export const ${name} = validatedActionWithUser\\(`), `${file}:${name} must be wrapped in validatedActionWithUser`);
     }
   }
   const authMiddleware = readFileSync(path.join(root, 'lib/auth/middleware.ts'), 'utf8');
   assert.match(authMiddleware, /requireAccountAccess\('account'\)/, 'validatedActionWithUser must call requireAccountAccess before invoking the wrapped action');
-  assert.match(authMiddleware, /requireAccountAccess\('billing_boundary'\)/, 'withTeam must call requireAccountAccess before invoking the wrapped action');
 });
 
 test('pre-authentication actions are never wrapped in validatedActionWithUser', () => {
@@ -94,18 +96,29 @@ test('pre-authentication actions are never wrapped in validatedActionWithUser', 
 });
 
 test('delegates-to-data-access actions call an ownership-enforcing membership data-access function', () => {
-  const expected: Record<string, { from: string; functionName: string }> = {
-    'app/(dashboard)/account/actions.ts': { from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' },
-    'app/(dashboard)/onboarding/actions.ts': { from: '@/lib/membership/data-access', functionName: 'createOwnMemberProfile' },
-    'lib/payments/actions.ts': { from: './checkout', functionName: 'createMembershipCheckoutSession' },
+  const expected: Record<string, Array<{ from: string; functionName: string }>> = {
+    'app/(dashboard)/account/actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' }],
+    'app/(dashboard)/onboarding/actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'createOwnMemberProfile' }],
+    'lib/payments/actions.ts': [
+      { from: './checkout', functionName: 'createMembershipCheckoutSession' },
+      { from: './stripe', functionName: 'createMembershipPortalSession' },
+    ],
+    'app/(dashboard)/admin/payments/actions.ts': [{ from: '@/lib/payments/manual-payments', functionName: 'recordManualPayment' }],
   };
-  for (const [file, { from, functionName }] of Object.entries(expected)) {
+  for (const [file, entries] of Object.entries(expected)) {
     const source = readFileSync(path.join(root, file), 'utf8');
-    assert.match(source, new RegExp(`import \\{[^}]*\\b${functionName}\\b[^}]*\\} from '${from.replaceAll('.', '\\.')}'`), `${file} must call ${functionName} from ${from}`);
+    for (const { from, functionName } of entries) {
+      assert.match(source, new RegExp(`import \\{[^}]*\\b${functionName}\\b[^}]*\\} from '${from.replaceAll('.', '\\.')}'`), `${file} must call ${functionName} from ${from}`);
+    }
   }
-  // createMembershipCheckoutSession itself must self-authenticate, the same guarantee
-  // updateMemberProfile/createOwnMemberProfile already provide via authenticatedActor.
+  // createMembershipCheckoutSession/createMembershipPortalSession/recordManualPayment must each
+  // self-authenticate, the same guarantee updateMemberProfile/createOwnMemberProfile already
+  // provide via authenticatedActor.
   assert.match(readFileSync(path.join(root, 'lib/payments/checkout.ts'), 'utf8'), /requireAccountAccess\('billing_boundary'\)/);
+  assert.match(readFileSync(path.join(root, 'lib/payments/stripe.ts'), 'utf8'), /requireAccountAccess\('billing_boundary'\)/);
+  const manualPayments = readFileSync(path.join(root, 'lib/payments/manual-payments.ts'), 'utf8');
+  assert.match(manualPayments, /requireAccountAccess\('administration'\)/);
+  assert.match(manualPayments, /requireAdministrator\(/);
 });
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
+import { manageBillingAction } from '@/lib/payments/actions';
+import { getOwnPrivateMember, hasOwnBillingAccount, requireAccountAccess } from '@/lib/membership/data-access';
 
 const STATUS_LABELS: Record<string, string> = {
   active: 'Active', canceled: 'Canceled', complimentary: 'Complimentary',
@@ -9,7 +10,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function DashboardPage() {
   await requireAccountAccess('member');
-  const member = await getOwnPrivateMember();
+  const [member, canManageBilling] = await Promise.all([getOwnPrivateMember(), hasOwnBillingAccount()]);
   if (!member) redirect('/onboarding');
   const { entitlement } = member;
   return <main className="flex-1 p-8">
@@ -29,6 +30,11 @@ export default async function DashboardPage() {
       <Link className="mt-3 inline-block underline text-sm" href="/pricing">
         {entitlement ? 'Renew or manage payment' : 'Start your membership'}
       </Link>
+      {entitlement && canManageBilling && (
+        <form action={manageBillingAction}>
+          <button type="submit" className="mt-2 block text-sm underline">Manage payment method</button>
+        </form>
+      )}
     </section>
     <Link className="mt-6 inline-block underline" href="/dashboard/general">Manage account</Link>
   </main>;

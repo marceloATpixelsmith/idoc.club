@@ -4,9 +4,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { getUser } from '@/lib/db/queries';
 import { validatedAction } from '@/lib/auth/middleware';
-import { createCustomerPortalSession } from './stripe';
+import { createMembershipPortalSession } from './stripe';
 import { createMembershipCheckoutSession } from './checkout';
-import { withTeam } from '@/lib/auth/middleware';
 
 const checkoutSchema = z.object({ mode: z.enum(['payment', 'subscription']) });
 
@@ -17,7 +16,7 @@ export const checkoutAction = validatedAction(checkoutSchema, async ({ mode }) =
   redirect(url);
 });
 
-export const customerPortalAction = withTeam(async (_, team) => {
-  const portalSession = await createCustomerPortalSession(team);
-  redirect(portalSession.url);
-});
+export async function manageBillingAction(): Promise<void> {
+  const url = await createMembershipPortalSession();
+  redirect(url);
+}
