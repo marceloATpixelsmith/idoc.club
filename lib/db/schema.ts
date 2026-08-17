@@ -358,6 +358,31 @@ export const payments = idocSchema.table('payments', {
   ),
 ]);
 
+/** Current reconciliation snapshot only — wiped and rewritten on every successful cron run, not accumulated history. */
+export const reconciliationFindings = idocSchema.table('reconciliation_findings', {
+  id: serial('id').primaryKey(),
+  kind: varchar('kind', { length: 30 }).notNull(),
+  profileId: integer('profile_id').references(() => profiles.id),
+  externalCustomerId: varchar('external_customer_id', { length: 255 }),
+  externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
+  summary: text('summary').notNull(),
+  details: jsonb('details'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer')`),
+]);
+
+/** Append-only heartbeat log, one row per cron execution, so a failed run doesn't read as a silent "all clear." */
+export const reconciliationRuns = idocSchema.table('reconciliation_runs', {
+  id: serial('id').primaryKey(),
+  ranAt: timestamp('ran_at', { withTimezone: true }).notNull().defaultNow(),
+  status: varchar('status', { length: 20 }).notNull(),
+  findingsCount: integer('findings_count').notNull().default(0),
+  errorMessage: text('error_message'),
+}, (table) => [
+  check('reconciliation_runs_status_check', sql`${table.status} in ('completed', 'failed')`),
+]);
+
 export const migrationMap = idocSchema.table('migration_map', {
   id: serial('id').primaryKey(),
   legacyType: varchar('legacy_type', { length: 50 }).notNull(),

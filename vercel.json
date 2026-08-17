@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/renewal-notice-delivery",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/reconciliation-scan",
+      "schedule": "0 7 * * *"
     }
   ]
 }

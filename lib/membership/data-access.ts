@@ -5,7 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import {
   applicationRoles, auditLog, billingAccounts, memberships, notificationOutbox,
   payments, professionalRoles, profileChangeHistory, profiles,
-  subscriptions, users,
+  reconciliationFindings, reconciliationRuns, subscriptions, users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authorization';
@@ -186,6 +186,19 @@ export async function listNotificationHistory(profileId: number) {
   requireAdministrator(actor);
   return db.select().from(notificationOutbox).where(eq(notificationOutbox.profileId, profileId))
     .orderBy(desc(notificationOutbox.createdAt));
+}
+
+export async function listReconciliationFindings() {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  return db.select().from(reconciliationFindings).orderBy(reconciliationFindings.kind, desc(reconciliationFindings.createdAt));
+}
+
+export async function getLastReconciliationRun() {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  const [run] = await db.select().from(reconciliationRuns).orderBy(desc(reconciliationRuns.ranAt)).limit(1);
+  return run ?? null;
 }
 
 export async function listOwnPaymentHistory() {

@@ -10,5 +10,6 @@ export default async function AdminPage() {
     <Link className="mt-6 block underline" href="/admin/members">Search members</Link>
     <Link className="mt-2 block underline" href="/admin/payments">Record a manual payment</Link>
     <Link className="mt-2 block underline" href="/admin/exports">Exports</Link>
+    <Link className="mt-2 block underline" href="/admin/reconciliation">Stripe reconciliation</Link>
   </main>;
 }

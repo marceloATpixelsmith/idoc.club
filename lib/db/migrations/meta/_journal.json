@@ -92,6 +92,13 @@
       "when": 1786885601085,
       "tag": "0012_wild_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786984889197,
+      "tag": "0013_tranquil_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }
