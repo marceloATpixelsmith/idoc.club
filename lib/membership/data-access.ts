@@ -8,7 +8,7 @@ import {
   reconciliationFindings, reconciliationRuns, subscriptions, users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
-import { type Actor, requireAdministrator, requireOwnerOrAdmin } from './authorization';
+import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
@@ -19,7 +19,7 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const user = injectedActor
     ? (await db.select().from(users).where(eq(users.id, injectedActor.id)).limit(1))[0]
     : await getUser();
-  if (!user) throw new Error('Authentication required.');
+  if (!user) throw new AuthorizationError();
   const [grants, profile] = await Promise.all([
     db.select({ role: applicationRoles.role }).from(applicationRoles)
       .where(and(eq(applicationRoles.userId, user.id), isNull(applicationRoles.revokedAt))),
@@ -38,7 +38,7 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
     accountState: user.accountState as AccountState,
     actor,
     entitled,
-  }, operation)) throw new Error('Account access denied.');
+  }, operation)) throw new AuthorizationError();
   return actor;
 }
 
