@@ -68,6 +68,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
   'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
+  'app/api/client-error/route.ts': 'log-only-no-data-access',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
@@ -161,6 +162,12 @@ test('the compatibility team Route Handler never touches the database', () => {
   const source = readFileSync(path.join(root, 'app/api/team/route.ts'), 'utf8');
   assert.doesNotMatch(source, /\bdb\./);
   assert.match(source, /status: 404/);
+});
+
+test('the client-error reporting Route Handler never touches the database and requires no authorization', () => {
+  const source = readFileSync(path.join(root, 'app/api/client-error/route.ts'), 'utf8');
+  assert.doesNotMatch(source, /\bdb\./);
+  assert.doesNotMatch(source, /requireAccountAccess|requireAdministrator|requireSuperAdmin/);
 });
 
 test('the Stripe webhook Route Handler verifies the signature before dispatching any event', () => {

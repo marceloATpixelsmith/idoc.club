@@ -162,3 +162,11 @@ Delivery evidence is categorical: stable message and entity identifiers, timesta
 ## Production build and runtime boundary
 
 Production compilation must succeed without privileged configuration and without provider access. Privileged clients initialize only at runtime, their modules use the supported `server-only` boundary, and build-only fake credentials or bypass flags are prohibited. Runtime configuration rejects missing, blank, malformed, and undersized values categorically without echoing supplied values. Browser-visible build output is scanned for privileged names and unique secret sentinels.
+
+## Identity-check endpoint denial semantics
+
+`GET /api/user` reports the current session's identity, or `null`, for header/UI display and must be safely callable by anonymous visitors on every page load. It authorizes through `requireAccountAccess('profile')` exactly like any other privileged read; a denial (anonymous visitor, or an account state — onboarding, suspended, deleted, unverified — that must not display as logged in) is caught and resolved to `null` with a 200, matching what "not logged in" already means everywhere else in the app, rather than a distinct error-shaped body. Only `AuthorizationError` is treated as an expected denial this way; any other exception (a database failure, for example) propagates uncaught to a 500 so an operational failure is never silently reported as "signed out."
+
+## Client-side error reporting
+
+`POST /api/client-error` accepts a best-effort crash report from the client error boundaries (`app/error.tsx`, `app/global-error.tsx`) and writes it to server runtime logs only — it is never persisted to the database. It requires no authorization, since it must remain reachable from a broken or anonymous session; each field (`digest`, `message`, `stack`, `url`) is capped at 2,000 characters and any non-string value is dropped before logging.

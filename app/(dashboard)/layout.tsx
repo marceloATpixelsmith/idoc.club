@@ -29,7 +29,7 @@ function UserMenu() {
     router.push('/');
   }
 
-  if (!user) {
+  if (!user?.email) {
     return (
       <>
         <Link
