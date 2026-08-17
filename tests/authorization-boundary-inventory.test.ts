@@ -52,6 +52,11 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access',
+    suspendMembershipForm: 'delegates-to-data-access',
+    reinstateMembershipForm: 'delegates-to-data-access',
+    correctEntitlementForm: 'delegates-to-data-access',
+    grantRoleForm: 'delegates-to-data-access',
+    revokeRoleForm: 'delegates-to-data-access',
   },
 };
 
@@ -59,6 +64,10 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
 // a stateless return-trip redirect: it never reads Stripe or touches the database, so it needs no
 // authorization boundary of its own (real entitlement is granted by the webhook route instead).
 const routeHandlers: Record<string, string> = {
+  'app/api/admin/export/audit-log/route.ts': 'requireSuperAdmin',
+  'app/api/admin/export/members/route.ts': 'requireAdministrator',
+  'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
+  'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
@@ -109,7 +118,14 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
       { from: './stripe', functionName: 'createMembershipPortalSession' },
     ],
     'app/(dashboard)/admin/payments/actions.ts': [{ from: '@/lib/payments/manual-payments', functionName: 'recordManualPayment' }],
-    'app/(dashboard)/admin/members/actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' }],
+    'app/(dashboard)/admin/members/actions.ts': [
+      { from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' },
+      { from: '@/lib/membership/status-actions', functionName: 'suspendMembership' },
+      { from: '@/lib/membership/status-actions', functionName: 'reinstateMembership' },
+      { from: '@/lib/membership/status-actions', functionName: 'correctEntitlement' },
+      { from: '@/lib/membership/role-grants', functionName: 'grantApplicationRole' },
+      { from: '@/lib/membership/role-grants', functionName: 'revokeApplicationRole' },
+    ],
   };
   for (const [file, entries] of Object.entries(expected)) {
     const source = readFileSync(path.join(root, file), 'utf8');
@@ -125,6 +141,12 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
   const manualPayments = readFileSync(path.join(root, 'lib/payments/manual-payments.ts'), 'utf8');
   assert.match(manualPayments, /requireAccountAccess\('administration'\)/);
   assert.match(manualPayments, /requireAdministrator\(/);
+  const statusActions = readFileSync(path.join(root, 'lib/membership/status-actions.ts'), 'utf8');
+  assert.match(statusActions, /requireAccountAccess\('administration'\)/);
+  assert.match(statusActions, /requireAdministrator\(/);
+  const roleGrants = readFileSync(path.join(root, 'lib/membership/role-grants.ts'), 'utf8');
+  assert.match(roleGrants, /requireAccountAccess\('administration'\)/);
+  assert.match(roleGrants, /requireSuperAdmin\(/);
 });
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {

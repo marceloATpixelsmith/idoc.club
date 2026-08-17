@@ -1,18 +1,24 @@
 import Link from 'next/link';
 import { getPrivateMember, listAuditHistory, requireAccountAccess, searchMembersForAdmin } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { listActiveRoles } from '@/lib/membership/role-grants';
 import { MEMBERSHIP_STATUS_LABELS } from '@/lib/membership/entitlement';
 import { AdminProfileForm } from './admin-profile-form';
+import { EntitlementCorrectionForm } from './entitlement-correction-form';
+import { ReinstateForm, SuspendForm } from './membership-status-form';
+import { RolesSection } from './roles-section';
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; q?: string }> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
+  const isSuperAdmin = actor.roles.includes('super_admin');
   const { profileId: profileIdParam, q } = await searchParams;
   const query = q ?? '';
   const results = query ? await searchMembersForAdmin(query) : [];
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const selected = profileId && Number.isInteger(profileId) ? await getPrivateMember(profileId) : null;
   const auditHistory = profileId && Number.isInteger(profileId) ? await listAuditHistory(profileId) : [];
+  const activeRoles = selected && isSuperAdmin ? await listActiveRoles(selected.profile.userId) : [];
 
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Members</h1>
@@ -46,9 +52,30 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         </section>
 
         <section className="mt-8 max-w-2xl">
+          <h3 className="font-medium text-gray-900">Membership status</h3>
+          {selected.entitlement?.status === 'suspended'
+            ? <ReinstateForm profileId={selected.profile.id} />
+            : selected.entitlement
+              ? <SuspendForm profileId={selected.profile.id} />
+              : <p className="mt-2 text-sm text-gray-500">No membership on file — nothing to suspend.</p>}
+        </section>
+
+        <section className="mt-8 max-w-2xl">
+          <h3 className="font-medium text-gray-900">Correct entitlement</h3>
+          <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} profileId={selected.profile.id} />
+        </section>
+
+        <section className="mt-8 max-w-2xl">
           <h3 className="font-medium text-gray-900">Correct profile / roles &amp; levels</h3>
           <AdminProfileForm member={selected} profileId={selected.profile.id} />
         </section>
+
+        {isSuperAdmin && (
+          <section className="mt-8 max-w-2xl">
+            <h3 className="font-medium text-gray-900">Application roles</h3>
+            <RolesSection activeRoles={activeRoles} userId={selected.profile.userId} />
+          </section>
+        )}
 
         <section className="mt-8 max-w-2xl">
           <h3 className="font-medium text-gray-900">Audit trail</h3>

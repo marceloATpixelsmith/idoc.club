@@ -73,3 +73,23 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
   });
   return session.url;
 }
+
+// Only the one call this module makes for cancellation, so tests can inject a fake without
+// satisfying the entire real Stripe SDK surface (same pattern as PortalStripeClient above).
+export type CancellationStripeClient = {
+  subscriptions: { cancel: (id: string) => Promise<{ id: string; status: string }> };
+};
+
+/**
+ * Cancels a member's Stripe subscription immediately (not at-period-end). No authorization check
+ * of its own — this is an internal helper reachable only from already-authorized admin code
+ * (lib/membership/status-actions.ts's suspendMembership), matching checkout.ts's private
+ * resolveOrCreateBillingAccount. Does not write subscriptions.status itself: that stays the
+ * exclusive job of the customer.subscription.deleted webhook this call triggers, preserving the
+ * app's rule that every Stripe-triggered local write goes through the webhook, never client-side.
+ */
+export async function cancelMemberSubscription(subscriptionId: string, testStripeClient?: CancellationStripeClient): Promise<void> {
+  if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
+  const stripe = testStripeClient ?? getStripeServerClient();
+  await stripe.subscriptions.cancel(subscriptionId);
+}

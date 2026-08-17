@@ -5,10 +5,9 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { billingAccounts, memberships, notificationOutbox, payments, profiles, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeOneTimeProductIdForServer } from '@/lib/runtime/configuration';
+import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
-
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // Only the one call this module makes, and only the fields it actually reads back, so tests can
 // inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
@@ -31,15 +30,6 @@ async function resolveProfileId(tx: Transaction, externalCustomerId: string | nu
   const [billing] = await tx.select({ profileId: billingAccounts.profileId }).from(billingAccounts)
     .where(eq(billingAccounts.externalCustomerId, externalCustomerId)).limit(1);
   return billing?.profileId ?? null;
-}
-
-// Locks the selected row for the rest of this transaction so a concurrent webhook event or manual
-// payment for the same profile can't read the same pre-update validUntil and derive the same
-// one-year extension, silently dropping one of the two renewals.
-async function latestMembership(tx: Transaction, profileId: number) {
-  const [membership] = await tx.select().from(memberships).where(eq(memberships.profileId, profileId))
-    .orderBy(desc(memberships.validUntil)).limit(1).for('update');
-  return membership ?? null;
 }
 
 async function handleSubscriptionCreated(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
@@ -91,7 +81,7 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: 
     source: 'stripe_recurring',
   }).onConflictDoNothing({ target: payments.externalPaymentId }).returning({ id: payments.id });
   if (!inserted) return;
-  const membership = await latestMembership(tx, profileId);
+  const membership = await lockLatestMembership(tx, profileId);
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
     await tx.update(memberships).set({ status: 'active', updatedAt: new Date(), validUntil })
@@ -108,7 +98,7 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   const invoice = event.data.object as Stripe.Invoice;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
-  const membership = await latestMembership(tx, profileId);
+  const membership = await lockLatestMembership(tx, profileId);
   // Stripe's Smart Retries fire a distinct invoice.payment_failed event (distinct event.id, so
   // stripeEvents's dedup doesn't catch it) on every retry attempt for the same unpaid invoice. Only
   // the transition into grace should move validUntil/send a notice — an already-'grace' membership
@@ -166,7 +156,7 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     source: 'stripe_one_time',
   }).onConflictDoNothing({ target: payments.externalPaymentId }).returning({ id: payments.id });
   if (!inserted) return;
-  const membership = await latestMembership(tx, profileId);
+  const membership = await lockLatestMembership(tx, profileId);
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
     await tx.update(memberships).set({ status: 'active', updatedAt: new Date(), validUntil })
