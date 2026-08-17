@@ -6,7 +6,17 @@ import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { GET as reconciliationScanCron } from '../app/api/cron/reconciliation-scan/route.ts';
 import { adminUser, asAdmin, closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
-beforeEach(resetIdoc);
+// CRON_SECRET must be set here, not inherited: each *.integration.ts file runs in its own isolated
+// process under node:test's multi-file runner, so a sibling file's env-var assignment (e.g.
+// account-delivery-worker.integration.ts's own RAW_SECRET) never reaches this file — matching the
+// established convention every other file that invokes a real cron route's GET handler already
+// follows.
+const RAW_SECRET = 'integration-cron-secret-at-least-32-characters';
+
+beforeEach(async () => {
+  process.env.CRON_SECRET = RAW_SECRET;
+  await resetIdoc();
+});
 after(closeHarness);
 
 function fakeStripeClient(data: {
@@ -88,7 +98,7 @@ test('the cron route returns 500 and does not crash when the batch throws', asyn
   const originalKey = process.env.STRIPE_SECRET_KEY;
   process.env.STRIPE_SECRET_KEY = 'invalid-too-short';
   try {
-    const request = new Request('http://localhost/api/cron/reconciliation-scan', { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    const request = new Request('http://localhost/api/cron/reconciliation-scan', { headers: { authorization: `Bearer ${RAW_SECRET}` } });
     const response = await reconciliationScanCron(request);
     assert.equal(response.status, 500);
   } finally {
