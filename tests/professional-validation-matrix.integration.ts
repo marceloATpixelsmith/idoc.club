@@ -6,6 +6,7 @@ import {
 } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { createOwnMemberProfile, getOwnPrivateMember, updateMemberProfile } from '../lib/membership/data-access.ts';
+import { JUDGE_STATUSES } from '../lib/membership/validation.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -13,7 +14,7 @@ after(closeHarness);
 type Role = typeof judgeRole | typeof stewardRole | typeof veterinarianRole;
 type PersistedRole = {
   feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null;
-  nationalFederationCountryCode: string | null; officialStatus: string | null; roleType: string;
+  nationalFederationCountryCode: string | null; officialStatuses: string[] | null; roleType: string;
 };
 
 function assertRolesMatchExactly(persistedRoles: PersistedRole[] | undefined, expectedRoles: Role[], label: string) {
@@ -26,7 +27,7 @@ function assertRolesMatchExactly(persistedRoles: PersistedRole[] | undefined, ex
     assert.equal(persisted?.feiId, 'feiId' in role ? role.feiId : null, `${label}: feiId`);
     assert.equal(persisted?.idocRegion, 'idocRegion' in role ? role.idocRegion : null, `${label}: idocRegion`);
     assert.equal(persisted?.nationalFederationCountryCode, 'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null, `${label}: nationalFederationCountryCode`);
-    assert.equal(persisted?.officialStatus, 'officialStatus' in role ? role.officialStatus : null, `${label}: officialStatus`);
+    assert.deepEqual(persisted?.officialStatuses, 'officialStatuses' in role ? role.officialStatuses : null, `${label}: officialStatuses`);
     assert.equal(persisted?.isTechnicalDelegate, 'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null, `${label}: isTechnicalDelegate`);
   }
 }
@@ -139,11 +140,11 @@ test('malformed field types are rejected without mutation on create and edit', a
 });
 
 test('a status value from another classification cannot be assigned across roles', async () => {
-  const judgeStatus = judgeRole.officialStatus;
-  const stewardStatus = stewardRole.officialStatus;
+  const judgeStatuses = judgeRole.officialStatuses;
+  const stewardStatuses = stewardRole.officialStatuses;
   const cases = [
-    { ...profileInput(), roles: [{ ...stewardRole, officialStatus: judgeStatus }] },
-    { ...profileInput(), roles: [{ ...judgeRole, officialStatus: stewardStatus }] },
+    { ...profileInput(), roles: [{ ...stewardRole, officialStatuses: judgeStatuses }] },
+    { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: stewardStatuses }] },
   ];
   for (const payload of cases) {
     const user = await createUser('onboarding');
@@ -158,7 +159,7 @@ test('Veterinarian restrictions reject every foundation field the classification
     { feiId: judgeRole.feiId },
     { idocRegion: judgeRole.idocRegion },
     { nationalFederationCountryCode: judgeRole.nationalFederationCountryCode },
-    { officialStatus: judgeRole.officialStatus },
+    { officialStatuses: judgeRole.officialStatuses },
     { isTechnicalDelegate: false },
   ];
   for (const extra of forbidden) {
@@ -201,9 +202,12 @@ test('invalid federation, region, FEI ID, official status, and country values ar
     { ...profileInput(), roles: [{ ...stewardRole, feiId: '' }] },
     { ...profileInput(), roles: [judgeRole, { ...stewardRole, feiId: '' }] },
     // Official status.
-    { ...profileInput(), roles: [{ ...judgeRole, officialStatus: 'Invented Judge Status' }] },
-    { ...profileInput(), roles: [{ ...stewardRole, officialStatus: 'Invented Steward Status' }] },
-    { ...profileInput(), roles: [judgeRole, { ...stewardRole, officialStatus: 'Invented Steward Status' }] },
+    { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: ['Invented Judge Status'] }] },
+    { ...profileInput(), roles: [{ ...stewardRole, officialStatuses: ['Invented Steward Status'] }] },
+    { ...profileInput(), roles: [judgeRole, { ...stewardRole, officialStatuses: ['Invented Steward Status'] }] },
+    // Official status: empty selection is rejected (at least one status is required).
+    { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: [] }] },
+    { ...profileInput(), roles: [{ ...stewardRole, officialStatuses: [] }] },
     // Country (a top-level field, independent of classification): Steward and Veterinarian payloads,
     // not only the default Judge payload used elsewhere in this file.
     { ...profileInput(), countryCode: 'XX', roles: [stewardRole] },
@@ -215,4 +219,15 @@ test('invalid federation, region, FEI ID, official status, and country values ar
     await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)), JSON.stringify(payload));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
   }
+});
+
+test('multiple official statuses persist deduplicated and in the same order the source form displays them, regardless of submission order', async () => {
+  const [first, second, third] = JUDGE_STATUSES;
+  const user = await createUser('onboarding');
+  await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({
+    ...profileInput(), roles: [{ ...judgeRole, officialStatuses: [third, first, third, second] }],
+  }));
+  const created = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
+  const judge = created?.roles.find((role) => role.roleType === 'judge');
+  assert.deepEqual(judge?.officialStatuses, [first, second, third]);
 });

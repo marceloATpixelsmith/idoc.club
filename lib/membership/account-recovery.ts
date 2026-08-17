@@ -104,7 +104,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
           ...(role.roleType === 'veterinarian' ? {} : {
             feiId: role.feiId, idocRegion: role.idocRegion,
             nationalFederationCountryCode: role.nationalFederationCountryCode,
-            officialStatus: role.officialStatus,
+            officialStatuses: role.officialStatuses,
           }),
           ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
           roleType: role.roleType,

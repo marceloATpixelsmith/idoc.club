@@ -188,7 +188,7 @@ export const professionalRoles = idocSchema.table('professional_roles', {
   nationalFederationCountryCode: varchar('national_federation_country_code', { length: 2 }),
   idocRegion: varchar('idoc_region', { length: 40 }),
   feiId: varchar('fei_id', { length: 40 }),
-  officialStatus: varchar('official_status', { length: 120 }),
+  officialStatuses: varchar('official_statuses', { length: 120 }).array(),
   isTechnicalDelegate: boolean('is_technical_delegate'),
   effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
   effectiveTo: timestamp('effective_to', { withTimezone: true }),

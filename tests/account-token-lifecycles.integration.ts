@@ -143,8 +143,8 @@ test('migrated activation preserves every imported classification and complete R
     await sql`update idoc.users set account_state='migrated_pending',email_verified_at=null,session_version=4 where id=${graph.user.id}`;
     await sql`delete from idoc.professional_roles where profile_id=${graph.profile.id}`;
     for (const role of roles) {
-      await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_status,is_technical_delegate)
-        values(${graph.profile.id},${role.roleType},${'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null},${'idocRegion' in role ? role.idocRegion : null},${'feiId' in role ? role.feiId : null},${'officialStatus' in role ? role.officialStatus : null},${'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null})`;
+      await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_statuses,is_technical_delegate)
+        values(${graph.profile.id},${role.roleType},${'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null},${'idocRegion' in role ? role.idocRegion : null},${'feiId' in role ? role.feiId : null},${'officialStatuses' in role ? sql.array([...role.officialStatuses]) : null},${'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null})`;
     }
     await sql`insert into idoc.professional_roles(profile_id,role_type,effective_to) values(${graph.profile.id},'judge',now())`;
     const before = await persistedGraph(graph.user.id);

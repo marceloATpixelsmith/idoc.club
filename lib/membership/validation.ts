@@ -34,13 +34,18 @@ const officialBase = z.object({
   idocRegion: z.enum(IDOC_REGIONS),
   nationalFederationCountryCode: countryCode,
 });
+/** Dedupes and sorts selected statuses into the order the source form displays them in. */
+function canonicalStatusOrder<T extends readonly string[]>(reference: T) {
+  const order = new Map(reference.map((value, index) => [value, index]));
+  return (values: T[number][]) => [...new Set(values)].sort((a, b) => order.get(a)! - order.get(b)!);
+}
 const judgeRole = officialBase.extend({
   isTechnicalDelegate: z.boolean(),
-  officialStatus: z.enum(JUDGE_STATUSES),
+  officialStatuses: z.array(z.enum(JUDGE_STATUSES)).min(1).transform(canonicalStatusOrder(JUDGE_STATUSES)),
   roleType: z.literal('judge'),
 });
 const stewardRole = officialBase.extend({
-  officialStatus: z.enum(STEWARD_STATUSES),
+  officialStatuses: z.array(z.enum(STEWARD_STATUSES)).min(1).transform(canonicalStatusOrder(STEWARD_STATUSES)),
   roleType: z.literal('steward'),
 });
 const veterinarianRole = z.object({ roleType: z.literal('veterinarian') }).strict();
@@ -72,8 +77,8 @@ export function parseMemberProfileFormData(formData: FormData): unknown {
     nationalFederationCountryCode: formData.get('nationalFederationCountryCode'),
   };
   const roles = classification === 'veterinarian' ? [{ roleType: 'veterinarian' }] : [
-    ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatus: formData.get('judgeStatus'), roleType: 'judge' }] : []),
-    ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatus: formData.get('stewardStatus'), roleType: 'steward' }] : []),
+    ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatuses: formData.getAll('judgeStatus'), roleType: 'judge' }] : []),
+    ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatuses: formData.getAll('stewardStatus'), roleType: 'steward' }] : []),
   ];
   return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
 }

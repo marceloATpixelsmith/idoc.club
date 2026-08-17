@@ -44,11 +44,11 @@ export async function createUser(accountState: AccountState = 'active') {
 export const judgeRole = {
   feiId: '10000123', idocRegion: 'Western Europe & Africa' as const,
   isTechnicalDelegate: false, nationalFederationCountryCode: 'DE',
-  officialStatus: 'FEI Dressage Judge 1/2**' as const, roleType: 'judge' as const,
+  officialStatuses: ['FEI Dressage Judge 1/2**'] as const, roleType: 'judge' as const,
 };
 export const stewardRole = {
   feiId: '10000456', idocRegion: 'Central & Eastern Europe' as const,
-  nationalFederationCountryCode: 'PL', officialStatus: 'FEI Dressage Steward Level 1' as const,
+  nationalFederationCountryCode: 'PL', officialStatuses: ['FEI Dressage Steward Level 1'] as const,
   roleType: 'steward' as const,
 };
 export const veterinarianRole = { roleType: 'veterinarian' as const };
@@ -64,8 +64,8 @@ export async function createProfile(userId: number, roles = [judgeRole]) {
     insert into idoc.profiles(user_id,first_name,last_name,address_1,address_2,city,state_province,postal_code,country_code)
     values(${userId},${input.firstName},${input.lastName},${input.address1},${input.address2},${input.city},${input.stateProvince},${input.postalCode},${input.countryCode}) returning id`;
   for (const role of roles) {
-    await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_status,is_technical_delegate)
-      values(${profile.id},${role.roleType},${'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null},${'idocRegion' in role ? role.idocRegion : null},${'feiId' in role ? role.feiId : null},${'officialStatus' in role ? role.officialStatus : null},${'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null})`;
+    await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_statuses,is_technical_delegate)
+      values(${profile.id},${role.roleType},${'nationalFederationCountryCode' in role ? role.nationalFederationCountryCode : null},${'idocRegion' in role ? role.idocRegion : null},${'feiId' in role ? role.feiId : null},${'officialStatuses' in role ? sql.array([...role.officialStatuses]) : null},${'isTechnicalDelegate' in role ? role.isTechnicalDelegate : null})`;
   }
   return profile;
 }
