@@ -24,8 +24,8 @@ test('every approved classification transition preserves history and unchanged a
       for (const role of fromRoles) {
         const input = profileInput([role]);
         const value = input.roles[0];
-        await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_status,is_technical_delegate)
-          values(${graph.profile.id},${value.roleType},${'nationalFederationCountryCode' in value ? value.nationalFederationCountryCode : null},${'idocRegion' in value ? value.idocRegion : null},${'feiId' in value ? value.feiId : null},${'officialStatus' in value ? value.officialStatus : null},${'isTechnicalDelegate' in value ? value.isTechnicalDelegate : null})`;
+        await sql`insert into idoc.professional_roles(profile_id,role_type,national_federation_country_code,idoc_region,fei_id,official_statuses,is_technical_delegate)
+          values(${graph.profile.id},${value.roleType},${'nationalFederationCountryCode' in value ? value.nationalFederationCountryCode : null},${'idocRegion' in value ? value.idocRegion : null},${'feiId' in value ? value.feiId : null},${'officialStatuses' in value ? sql.array([...value.officialStatuses]) : null},${'isTechnicalDelegate' in value ? value.isTechnicalDelegate : null})`;
       }
       const before = await persistedGraph(graph.user.id);
       await withTestMembershipBoundary({ actor: { id: graph.user.id, roles: [] } }, () => updateMemberProfile(graph.profile.id, profileInput(toRoles)));

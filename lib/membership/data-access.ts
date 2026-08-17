@@ -154,11 +154,16 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
   });
 }
 
+function statusesMatch(existing: string[] | null, desired: string[] | null) {
+  if (existing === null || desired === null) return existing === desired;
+  return existing.length === desired.length && existing.every((value, index) => value === desired[index]);
+}
+
 function roleMatches(existing: typeof professionalRoles.$inferSelect, desired: MemberProfileInput['roles'][number]) {
   return existing.nationalFederationCountryCode === ('nationalFederationCountryCode' in desired ? desired.nationalFederationCountryCode : null)
     && existing.idocRegion === ('idocRegion' in desired ? desired.idocRegion : null)
     && existing.feiId === ('feiId' in desired ? desired.feiId : null)
-    && existing.officialStatus === ('officialStatus' in desired ? desired.officialStatus : null)
+    && statusesMatch(existing.officialStatuses, 'officialStatuses' in desired ? desired.officialStatuses : null)
     && existing.isTechnicalDelegate === ('isTechnicalDelegate' in desired ? desired.isTechnicalDelegate : null);
 }
 

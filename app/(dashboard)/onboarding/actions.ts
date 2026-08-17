@@ -10,8 +10,8 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
     nationalFederationCountryCode: formData.get('nationalFederationCountryCode'),
   };
   const roles = [];
-  if (kind === 'judge' || kind === 'judge_steward') roles.push({ ...shared, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatus: formData.get('judgeStatus'), roleType: 'judge' });
-  if (kind === 'steward' || kind === 'judge_steward') roles.push({ ...shared, officialStatus: formData.get('stewardStatus'), roleType: 'steward' });
+  if (kind === 'judge' || kind === 'judge_steward') roles.push({ ...shared, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatuses: formData.getAll('judgeStatus'), roleType: 'judge' });
+  if (kind === 'steward' || kind === 'judge_steward') roles.push({ ...shared, officialStatuses: formData.getAll('stewardStatus'), roleType: 'steward' });
   if (kind === 'veterinarian') roles.push({ roleType: 'veterinarian' });
   try {
     await createOwnMemberProfile({

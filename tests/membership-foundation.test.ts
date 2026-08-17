@@ -11,7 +11,7 @@ import { mayAccessAccountFunction } from '../lib/membership/account-access.ts';
 const judge = {
   feiId: '10012345', idocRegion: 'Western Europe & Africa',
   isTechnicalDelegate: false, nationalFederationCountryCode: 'DE',
-  officialStatus: 'FEI Dressage Judge 1/2**', roleType: 'judge',
+  officialStatuses: ['FEI Dressage Judge 1/2**'], roleType: 'judge',
 };
 const common = {
   address1: '1 Main Street', city: 'Aachen', countryCode: 'DE', firstName: 'Ada',
