@@ -10,7 +10,11 @@ import { computeReconciliationFindings, summarizeFinding, type ReconciliationFin
 // lib/payments/stripe.ts's PortalStripeClient/CancellationStripeClient).
 export type ReconciliationStripeClient = {
   customers: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string }>; has_more: boolean }> };
-  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; subscription: string | null }>; has_more: boolean }> };
+  // Stripe API version 2025-04-30.basil moved an invoice's subscription off the top-level
+  // `subscription` field onto `parent.subscription_details.subscription` — this narrows the type
+  // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
+  // regress this back to reading a field that no longer exists.
+  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ customer: string; id: string; status: string }>; has_more: boolean }> };
 };
 
@@ -75,7 +79,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       { billingAccounts: localBillingAccounts, subscriptions: localSubscriptions },
       {
         customers: stripeCustomers,
-        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, subscription: invoice.subscription })),
+        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
         subscriptions: stripeSubscriptions,
       },
     );

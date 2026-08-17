@@ -11,7 +11,11 @@ after(closeHarness);
 
 function fakeStripeClient(data: {
   customers?: Array<{ id: string }>;
-  invoices?: Array<{ attempt_count: number; id: string; subscription: string | null }>;
+  // Deliberately shaped exactly like the real Stripe Invoice under API version 2025-04-30.basil —
+  // subscription lives at invoice.parent.subscription_details.subscription, not a top-level field —
+  // so this fixture exercises the same nested-field read runReconciliationScan performs, catching
+  // any regression back to a flat (wrong) shape.
+  invoices?: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>;
   subscriptions?: Array<{ customer: string; id: string; status: string }>;
 }): ReconciliationStripeClient {
   return {
@@ -19,6 +23,10 @@ function fakeStripeClient(data: {
     invoices: { list: async () => ({ data: data.invoices ?? [], has_more: false }) },
     subscriptions: { list: async () => ({ data: data.subscriptions ?? [], has_more: false }) },
   };
+}
+
+function invoiceFixture(id: string, attemptCount: number, subscriptionId: string | null) {
+  return { attempt_count: attemptCount, id, parent: subscriptionId ? { subscription_details: { subscription: subscriptionId } } : null };
 }
 
 test('runReconciliationScan persists findings and a completed run row', async () => {
@@ -132,4 +140,30 @@ test('a status_conflict finding resolves the member profile via the local subscr
   assert.equal(findings.length, 1);
   assert.equal(findings[0].kind, 'status_conflict');
   assert.equal(findings[0].profileId, profile.id);
+});
+
+test('a repeated_failure finding reads the subscription ID from invoice.parent.subscription_details, not a flat field', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.subscriptions(profile_id, external_subscription_id, price_id, status, current_period_end, cancel_at_period_end)
+    values (${profile.id}, 'sub_failing', 'price_fixture', 'past_due', current_date + 30, false)`;
+
+  await runReconciliationScan(fakeStripeClient({
+    invoices: [invoiceFixture('in_1', 2, 'sub_failing'), invoiceFixture('in_2', 1, 'sub_failing')],
+    subscriptions: [{ customer: 'cus_x', id: 'sub_failing', status: 'past_due' }],
+  }));
+
+  const findings = await asAdmin(admin.id, () => listReconciliationFindings());
+  const repeatedFailure = findings.find((finding) => finding.kind === 'repeated_failure');
+  assert.ok(repeatedFailure, 'a repeated_failure finding must be produced from the 2-attempt invoice');
+  assert.equal(repeatedFailure?.externalSubscriptionId, 'sub_failing');
+  assert.equal(repeatedFailure?.profileId, profile.id);
+});
+
+test('an invoice with no parent (a one-time-payment invoice) is not treated as a repeated failure', async () => {
+  const admin = await adminUser();
+  await runReconciliationScan(fakeStripeClient({ invoices: [invoiceFixture('in_one_time', 5, null)] }));
+  const findings = await asAdmin(admin.id, () => listReconciliationFindings());
+  assert.deepEqual(findings.filter((finding) => finding.kind === 'repeated_failure'), []);
 });

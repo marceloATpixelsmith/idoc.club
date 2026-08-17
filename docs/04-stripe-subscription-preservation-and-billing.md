@@ -86,6 +86,8 @@ Members paid by bank transfer, PayPal, cash/in person or complimentary grant mus
 
 - Never let a browser-submitted Stripe Customer or Subscription ID directly reassign billing ownership.
 
+Implemented (Release 2, Phase 5b): a daily Cron job (`/api/cron/reconciliation-scan`) compares live Stripe data — every Customer, every Subscription (any status), and every open Invoice with two or more failed payment attempts — against the local `subscriptions`/`billing_accounts` tables for the four anomaly categories above. Findings replace a persisted current-snapshot table on every successful run; a separate append-only run-history table records each execution's outcome (including failures, e.g. a Stripe outage) so an administrator can distinguish "ran clean" from "hasn't run." A failed run deliberately leaves the prior snapshot in place rather than clearing it, so a Stripe-side outage never reads as a false "no anomalies." The report is read-only and Administrator-tier (`/admin/reconciliation`); remediation happens through the existing suspend/reinstate/entitlement-correction tools, not on the report itself, so this control never grants an automated write against Stripe data.
+
 # 10. Official references
 
 - Stripe: Using webhooks with subscriptions - [<u>https://docs.stripe.com/billing/subscriptions/webhooks</u>](https://docs.stripe.com/billing/subscriptions/webhooks)
