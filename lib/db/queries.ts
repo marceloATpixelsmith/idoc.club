@@ -10,7 +10,17 @@ export async function getUser() {
     return null;
   }
 
-  const sessionData = await verifyToken(sessionCookie.value);
+  let sessionData;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    // An invalid, expired-by-signature, or otherwise unverifiable token is not a valid
+    // session — treat it the same as no cookie at all rather than letting the throw
+    // propagate into callers that don't expect getUser() to reject (the root layout's
+    // unawaited SWR fallback, and the /api/user route handler both crash the client
+    // otherwise).
+    return null;
+  }
   if (
     !sessionData ||
     !sessionData.user ||
