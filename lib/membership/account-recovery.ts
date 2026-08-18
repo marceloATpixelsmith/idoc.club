@@ -127,11 +127,22 @@ async function validateMigrationActivationFoundation(tx: Tx, userId: number): Pr
 /** Applies the activation effects once the caller has already claimed the identity proof (a
  * single-use token, or a consumed OTP): `accountState` -> `active`, `emailVerifiedAt` set, password
  * rotated, session invalidated, any other outstanding migration-activation tokens invalidated. */
-async function applyMigrationActivationMutation(tx: Tx, userId: number, password: string) {
+/** The `accountState = 'migrated_pending'` condition on this UPDATE is the actual concurrency gate:
+ * two simultaneous activation requests (e.g. a double form submission) both pass the earlier
+ * read-only validation before either commits, but only one of these conditional updates can match a
+ * row, since the first to commit has already flipped the state away from `migrated_pending`. The
+ * second observes zero affected rows and reports failure instead of silently overwriting the first
+ * request's password and double-incrementing `sessionVersion`. */
+async function applyMigrationActivationMutation(tx: Tx, userId: number, password: string): Promise<boolean> {
   const now = new Date();
-  await tx.update(users).set({ accountState: 'active', emailVerifiedAt: now, passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId));
+  const [claimed] = await tx.update(users)
+    .set({ accountState: 'active', emailVerifiedAt: now, passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
+    .where(and(eq(users.id, userId), eq(users.accountState, 'migrated_pending')))
+    .returning({ id: users.id });
+  if (!claimed) return false;
   await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, userId), eq(accountTokens.purpose, 'migration_activation'), isNull(accountTokens.consumedAt)));
   await tx.insert(auditLog).values({ actorId: userId, action: 'account.migration_activation.completed', entityId: String(userId), entityType: 'user' });
+  return true;
 }
 
 /** Login-flow entry point: activates a `migrated_pending` account once its email has already been
@@ -140,7 +151,7 @@ async function applyMigrationActivationMutation(tx: Tx, userId: number, password
 export async function activateMigratedAccountByUserId(userId: number, password: string): Promise<{ status: 'invalid' | 'success' }> {
   return db.transaction(async (tx) => {
     if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };
-    await applyMigrationActivationMutation(tx, userId, password);
+    if (!(await applyMigrationActivationMutation(tx, userId, password))) return { status: 'invalid' };
     return { status: 'success' };
   });
 }
@@ -154,7 +165,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
       if (!(await validateMigrationActivationFoundation(tx, record.userId))) return { status: 'invalid' as const };
       const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
       if (!claimed) return { status: 'invalid' as const };
-      await applyMigrationActivationMutation(tx, record.userId, password);
+      if (!(await applyMigrationActivationMutation(tx, record.userId, password))) return { status: 'invalid' as const };
       return { status: 'success' as const };
     }
     const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);
