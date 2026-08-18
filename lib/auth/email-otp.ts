@@ -21,6 +21,15 @@ const RATE_MAX_REQUESTS = 3;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const generateCode = () => randomInt(0, 10 ** CODE_LENGTH).toString().padStart(CODE_LENGTH, '0');
 
+/** Matches lib/membership/account-recovery.ts's operationalFailureCategory: derives a category from
+ * the exception without ever retaining the exception text itself in logged evidence. */
+function deliveryFailureCategory(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('not configured') || message.includes('configuration')) return 'configuration';
+  if (message.includes('connect') || message.includes('network')) return 'network';
+  return 'operational';
+}
+
 const SUBJECTS: Record<EmailOtpPurpose, string> = {
   login_verification: 'Your IDOC sign-in code',
   password_reset: 'Your IDOC password reset code',
@@ -83,7 +92,9 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   try {
     await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
   } catch (error) {
-    console.error('email_otp_delivery_failed', { category: 'operational', message: error instanceof Error ? error.message : 'unknown', purpose });
+    // Categorical only, matching lib/membership/account-recovery.ts's operational-failure evidence:
+    // the exception text itself is never retained, only which class of problem it was.
+    console.error('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
     return { status: 'delivery_failed' };
   }
   return { status: 'ok' };
