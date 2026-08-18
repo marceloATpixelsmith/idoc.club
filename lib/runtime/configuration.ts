@@ -54,7 +54,11 @@ export function baseUrlForServer(environment: Environment = process.env) {
   return value;
 }
 export function cronSecretForServer(environment: Environment = process.env) { return secret(environment, 'CRON_SECRET'); }
-export function mailchimpApiKeyForServer(environment: Environment = process.env) { return secret(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
+// Not routed through secret()'s 32-character minimum: unlike the self-generated secrets below
+// (CRON_SECRET, RATE_LIMIT_HASH_KEY, TURNSTILE_SECRET_KEY), this is a third-party-issued Mandrill
+// API key in a fixed, shorter format we don't control -- real keys are commonly ~22 characters, so
+// that generic minimum rejected a genuinely valid, correctly configured key as "not configured."
+export function mailchimpApiKeyForServer(environment: Environment = process.env) { return required(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 
@@ -80,7 +84,7 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     accountDelivery: accountDeliveryConfiguration(environment), adminEmail,
     authSecret: authSecretForServer(environment), baseUrl: baseUrlForServer(environment),
     cronSecret: secret(environment, 'CRON_SECRET'), databaseUrl: databaseUrlForServer(environment),
-    mailchimpApiKey: secret(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'),
+    mailchimpApiKey: mailchimpApiKeyForServer(environment),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
     stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),
     stripeRecurringProductId: stripeRecurringProductIdForServer(environment),

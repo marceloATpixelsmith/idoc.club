@@ -5,6 +5,7 @@ import {
   authSecretForServer,
   baseUrlForServer,
   databaseUrlForServer,
+  mailchimpApiKeyForServer,
   privilegedProductionConfiguration,
   stripeKeyForServer,
   stripeOneTimeProductIdForServer,
@@ -16,7 +17,7 @@ const valid = {
   ACCOUNT_DELIVERY_KEY_VERSION: 'current', AUTH_SECRET: 'b'.repeat(32),
   BASE_URL: 'https://idoc.club', CRON_SECRET: 'c'.repeat(32),
   IDOC_ADMIN_NOTIFICATION_EMAIL: 'operations@idoc.club',
-  MAILCHIMP_TRANSACTIONAL_API_KEY: 'd'.repeat(32),
+  MAILCHIMP_TRANSACTIONAL_API_KEY: 'd'.repeat(22),
   POSTGRES_URL: 'postgres://user:password@database.internal:5432/idoc',
   RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_ONE_TIME_PRODUCT_ID: 'prod_one_time_live',
   STRIPE_RECURRING_PRODUCT_ID: 'prod_recurring_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
@@ -71,6 +72,17 @@ test('key rings reject malformed mappings and require the active version', () =>
     { ACCOUNT_DELIVERY_KEY_VERSION: 'current', ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ old: 'x'.repeat(32) }) },
     { ACCOUNT_DELIVERY_KEY_VERSION: 'current', ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ current: 'short' }) },
   ]) assert.throws(() => accountDeliveryConfiguration(environment), /ACCOUNT_DELIVERY/);
+});
+
+test('the Mailchimp Transactional API key is accepted at its real, shorter length and only rejected when actually blank or missing', () => {
+  // Regression test: this key is a third-party-issued Mandrill credential in a fixed, ~22-character
+  // format, not a self-generated secret like AUTH_SECRET/CRON_SECRET/RATE_LIMIT_HASH_KEY that should
+  // be long and random. A blanket 32-character minimum previously rejected genuinely valid,
+  // correctly configured production keys as "not configured."
+  assert.equal(mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: 'md-1234567890abcdefghij' }), 'md-1234567890abcdefghij');
+  for (const value of [undefined, '', '   ']) {
+    assert.throws(() => mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: value }), /MAILCHIMP_TRANSACTIONAL_API_KEY/);
+  }
 });
 
 test('production build phase and NODE_ENV never enable placeholder credentials', () => {
