@@ -83,7 +83,7 @@ test('verification delivery is recoverable and Stripe synchronization remains re
 });
 
 test('onboarding conditionally renders approved professional fields', () => {
-  const form = readFileSync(new URL('../app/(dashboard)/onboarding/form.tsx', import.meta.url), 'utf8');
+  const form = readFileSync(new URL('../app/(dashboard)/onboarding/onboarding-wizard.tsx', import.meta.url), 'utf8');
   assert.match(form, /classification !== 'veterinarian'/);
   assert.match(form, /classification === 'judge' \|\| classification === 'judge_steward'/);
   assert.match(form, /classification === 'steward' \|\| classification === 'judge_steward'/);

@@ -1,10 +1,13 @@
-import { Suspense } from 'react';
-import { Login } from '../login';
+import { getPendingLogin } from '@/lib/auth/pending-login';
+import { ActivatePasswordStep } from './activate-password-step';
+import { EmailStep } from './email-step';
+import { OtpStep } from './otp-step';
+import { PasswordStep } from './password-step';
 
-export default function SignInPage() {
-  return (
-    <Suspense>
-      <Login />
-    </Suspense>
-  );
+export default async function SignInPage() {
+  const pending = await getPendingLogin();
+  if (!pending) return <EmailStep />;
+  if (pending.legacy && !pending.verified) return <OtpStep email={pending.email} />;
+  if (pending.legacy && pending.verified) return <ActivatePasswordStep />;
+  return <PasswordStep email={pending.email} />;
 }
