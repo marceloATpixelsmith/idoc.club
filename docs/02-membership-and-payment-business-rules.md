@@ -81,6 +81,47 @@ The combined signup choice requires all common official fields, the complete Jud
 
 Veterinarians have only the fields required for every member. They do not receive the National Federation, IDOC Region, FEI ID, Judge-status, Steward-status, or Technical Delegate fields unless their professional classification later changes.
 
+## 1.2 Account creation, login, and password-reset flow
+
+### Account creation
+
+1. Member enters an email address and submits.
+2. If the email has no existing account, the system emails a 6-digit verification code.
+3. Member enters the code. Once verified, the member sets a password. No `users` row — and therefore no account — exists before this point, so an abandoned attempt never leaves an orphaned, passwordless account behind; the row is created directly in an unverified-until-this-point state that requires the code before proceeding.
+4. Password set, the member reaches onboarding for demographic and member-type-specific information (§1.1) and the required consent checkboxes (§1.3).
+5. On successful onboarding submission: if the "Keep me updated" checkbox (§1.3) was checked, the member is added to the Mailchimp Marketing events/workshops/certifications audience; the member is then sent to the payment page (§2), not directly to the dashboard — a newly created account reaches the dashboard only after completing (or explicitly deferring, if the product later allows that) the payment step.
+6. After a successful payment, the member is sent to the dashboard.
+7. If the email already has an account, no code is sent. Instead the system emails that address a notice that an account already exists, with a link to the login page, and the signup attempt does not proceed to account creation.
+8. Administrators and Super Admins are never self-service-created; the sole Super Admin invites administrators via invitation link. No signup flow exists for either role.
+
+### Login
+
+1. Member enters email and submits.
+2. The flow locks to that email for the password step (with a visible "use a different email" escape hatch), regardless of whether the email has an account — unlike account creation and password reset, this step does not stay neutral about account existence, matching the ordinary email-first login pattern.
+3. Member enters password.
+4. If the current device is already trusted (§ device-trust cookie, docs/05), the member goes straight to the dashboard.
+5. If the device is not trusted, the system emails a 6-digit verification code (distinct in purpose from the account-creation code — see docs/05's OTP-purpose binding requirement). This code-entry screen includes a "Remember me for 2 weeks" checkbox. Checking it issues a signed, secure, `httpOnly` cookie that lets this device skip the login verification code on the same device for the same account for 2 weeks; leaving it unchecked means the device is not remembered and the next login on that device verifies again. This mechanism is unrelated to the account-creation email-verification code.
+6. Successful code entry sends the member to the dashboard.
+7. Administrators and Super Admins follow the same flow, except the second factor is always an authenticator-app TOTP code (registering one first if none is registered yet) instead of an emailed 6-digit code, and there is no "remember me" option for privileged accounts — every login re-verifies the second factor.
+
+### Password reset
+
+1. Member enters email and submits. This step stays neutral about account existence (unlike login), matching the account-creation and anonymous-recovery pattern documented in docs/05.
+2. The system emails a 6-digit verification code.
+3. Member is sent to the code-entry page. An unsuccessful attempt shows a plain "that code was incorrect" message.
+4. A successful code entry sends the member to a new-password page.
+5. Member sets a new password.
+6. Member is sent to the dashboard.
+7. Administrators and Super Admins follow the same flow, except the code step is their already-registered authenticator-app TOTP code instead of an emailed 6-digit code (a privileged account is expected to already have TOTP registered by this point, since login always requires it).
+
+## 1.3 Required consent (onboarding/demographics form)
+
+The demographics/onboarding form (§1.1) gates its submit action on two required checkboxes, plus one optional checkbox that is checked by default:
+
+- **Required** — "I have read and agree to the Terms Of Service and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time)."
+- **Required** — "This site collects names, emails and other user information. I consent to the terms set forth in the Privacy Policy."
+- **Optional, checked by default** — "Keep me updated on IDOC events, workshops, and certifications" (if left unchecked, the member still receives account-standing, payment, security, and renewal messages per §11 — they only miss event/workshop/certification communications). Checking this subscribes the member to the corresponding Mailchimp Marketing audience; leaving it unchecked (or later opting out) does not affect the account-standing/payment/security/renewal messages members cannot opt out of.
+
 # 2. Pricing
 
 Standard annual membership fee: €80. Professional role and level do not determine price. Billing should therefore use one current canonical Stripe annual Price for new Stripe enrollments, while migrated subscriptions can retain existing Price IDs.
