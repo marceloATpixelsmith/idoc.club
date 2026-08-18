@@ -42,6 +42,13 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     cancelSignup: 'pre-authentication',
     completeSignup: 'pre-authentication',
   },
+  'app/(login)/sign-in/actions.ts': {
+    startLogin: 'pre-authentication',
+    verifyLoginOtp: 'pre-authentication',
+    resendLoginOtp: 'pre-authentication',
+    cancelLogin: 'pre-authentication',
+    activateLegacyAccount: 'pre-authentication',
+  },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfile: 'delegates-to-data-access',
     saveOwnMemberProfileForm: 'delegates-to-data-access',

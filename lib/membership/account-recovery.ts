@@ -81,51 +81,88 @@ export async function requestAccountLink(
   }
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Checks that a `migrated_pending` account's imported profile/roles/entitlement/mapping form a
+ * complete foundation. Read-only except for the audit trail: an incomplete foundation is recorded
+ * and left for reconciliation rather than mutating anything, so the caller's own claim (a token, or
+ * an already-consumed OTP) is never spent on a foundation that can't yet be activated. */
+async function validateMigrationActivationFoundation(tx: Tx, userId: number): Promise<boolean> {
+  const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || user.accountState !== 'migrated_pending') return false;
+  const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(userId), entityType: 'user', reason: 'missing_imported_profile' }); return false; }
+  const [roles, entitlements, mappings] = await Promise.all([
+    tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
+    tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
+    tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
+  ]);
+  const importedProfile = memberProfileSchema.safeParse({
+    address1: profile.address1, address2: profile.address2 ?? undefined, city: profile.city,
+    countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
+    postalCode: profile.postalCode, stateProvince: profile.stateProvince,
+    roles: roles.map((role) => ({
+      ...(role.roleType === 'veterinarian' ? {} : {
+        feiId: role.feiId, idocRegion: role.idocRegion,
+        nationalFederationCountryCode: role.nationalFederationCountryCode,
+        officialStatuses: role.officialStatuses,
+      }),
+      ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
+      roleType: role.roleType,
+    })),
+  });
+  const entitlement = entitlements.find(({ source }) => source === 'migration');
+  const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
+    && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
+    && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
+  if (!foundationValid) {
+    await tx.insert(auditLog).values({
+      action: 'account.migration_activation.reconciliation_required',
+      entityId: String(userId), entityType: 'user', reason: 'incomplete_import_foundation',
+    });
+  }
+  return foundationValid;
+}
+
+/** Applies the activation effects once the caller has already claimed the identity proof (a
+ * single-use token, or a consumed OTP): `accountState` -> `active`, `emailVerifiedAt` set, password
+ * rotated, session invalidated, any other outstanding migration-activation tokens invalidated. */
+async function applyMigrationActivationMutation(tx: Tx, userId: number, password: string) {
+  const now = new Date();
+  await tx.update(users).set({ accountState: 'active', emailVerifiedAt: now, passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, userId));
+  await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, userId), eq(accountTokens.purpose, 'migration_activation'), isNull(accountTokens.consumedAt)));
+  await tx.insert(auditLog).values({ actorId: userId, action: 'account.migration_activation.completed', entityId: String(userId), entityType: 'user' });
+}
+
+/** Login-flow entry point: activates a `migrated_pending` account once its email has already been
+ * proven via a verified, consumed OTP (see lib/auth/pending-login.ts and lib/auth/email-otp.ts),
+ * with no email-link token involved. */
+export async function activateMigratedAccountByUserId(userId: number, password: string): Promise<{ status: 'invalid' | 'success' }> {
+  return db.transaction(async (tx) => {
+    if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };
+    await applyMigrationActivationMutation(tx, userId, password);
+    return { status: 'success' };
+  });
+}
+
 export async function consumeAccountToken(rawToken: string, purpose: AccountTokenPurpose, password: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) return { status: 'invalid' as const };
   return db.transaction(async (tx) => {
     const [record] = await tx.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date()))).limit(1);
     if (!record) return { status: 'invalid' as const };
-    const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);
-    if (!user || (purpose === 'migration_activation' && user.accountState !== 'migrated_pending')) return { status: 'invalid' as const };
     if (purpose === 'migration_activation') {
-      const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
-      if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(record.userId), entityType: 'user', reason: 'missing_imported_profile' }); return { status: 'invalid' as const }; }
-      const [roles, entitlements, mappings] = await Promise.all([
-        tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
-        tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
-        tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(record.userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
-      ]);
-      const importedProfile = memberProfileSchema.safeParse({
-        address1: profile.address1, address2: profile.address2 ?? undefined, city: profile.city,
-        countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
-        postalCode: profile.postalCode, stateProvince: profile.stateProvince,
-        roles: roles.map((role) => ({
-          ...(role.roleType === 'veterinarian' ? {} : {
-            feiId: role.feiId, idocRegion: role.idocRegion,
-            nationalFederationCountryCode: role.nationalFederationCountryCode,
-            officialStatuses: role.officialStatuses,
-          }),
-          ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
-          roleType: role.roleType,
-        })),
-      });
-      const entitlement = entitlements.find(({ source }) => source === 'migration');
-      const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
-        && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
-        && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
-      if (!foundationValid) {
-        await tx.insert(auditLog).values({
-          action: 'account.migration_activation.reconciliation_required',
-          entityId: String(record.userId), entityType: 'user', reason: 'incomplete_import_foundation',
-        });
-        return { status: 'invalid' as const };
-      }
+      if (!(await validateMigrationActivationFoundation(tx, record.userId))) return { status: 'invalid' as const };
+      const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
+      if (!claimed) return { status: 'invalid' as const };
+      await applyMigrationActivationMutation(tx, record.userId, password);
+      return { status: 'success' as const };
     }
+    const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);
+    if (!user) return { status: 'invalid' as const };
     const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
     if (!claimed) return { status: 'invalid' as const };
     const now = new Date();
-    await tx.update(users).set({ accountState: purpose === 'migration_activation' ? 'active' : user.accountState, emailVerifiedAt: purpose === 'migration_activation' ? now : undefined, passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
+    await tx.update(users).set({ passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
     await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
     await tx.insert(auditLog).values({ actorId: record.userId, action: `account.${purpose}.completed`, entityId: String(record.userId), entityType: 'user' });
     return { status: 'success' as const };
