@@ -13,6 +13,7 @@ import { passwordSchema } from '@/lib/auth/password-policy';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingSignup, getPendingSignup, markPendingSignupVerified, startPendingSignup } from '@/lib/auth/pending-signup';
+import { defaultTiming, equalizeAnonymousResponse } from '@/lib/security/response-timing';
 
 async function requestOrigin() {
   const requestHeaders = await headers();
@@ -24,17 +25,27 @@ const startSignupSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
+/** Neutral outward behavior regardless of whether the email already has an account: an existing
+ * account never receives a signup code (issueEmailOtp is skipped), but the response shape and
+ * timing are indistinguishable from a brand-new email, so a caller cannot use this step to probe
+ * account existence. Anyone who actually controls an existing inbox learns nothing new here either
+ * — they simply never receive a code and stay stuck at the same verify screen a wrong email would
+ * produce. */
 export const startSignup = validatedAction(startSignupSchema, async ({ email: rawEmail, turnstileToken }) => {
+  const startedAt = defaultTiming.now();
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
   }
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (existing) return { email, error: 'An account with this email already exists. Sign in instead.' };
-  const result = await issueEmailOtp(email, 'signup_verification', { origin });
-  if (result.status === 'rate_limited') return { email, error: 'Too many attempts. Please try again in a few minutes.' };
-  if (result.status === 'cooldown') { /* a code was already just sent; proceed to the same verify step */ }
+  let rateLimited = false;
+  if (!existing) {
+    const result = await issueEmailOtp(email, 'signup_verification', { origin });
+    rateLimited = result.status === 'rate_limited';
+  }
+  await equalizeAnonymousResponse(startedAt, defaultTiming);
+  if (rateLimited) return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   await startPendingSignup(email);
   redirect('/sign-up');
 });

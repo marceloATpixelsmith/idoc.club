@@ -53,23 +53,23 @@ export function OtpStep({ email }: { email: string }) {
         <Button className="w-full" disabled={pending || code.length !== 6} size="lg" type="submit">
           {pending ? 'Verifying…' : 'Verify'}
         </Button>
-        <div className="space-y-1 text-sm">
-          <p className="text-gray-600">
-            Didn&apos;t get the code?{' '}
-            {secondsLeft > 0 ? (
-              <span className="text-gray-400">Resend in 0:{secondsLeft.toString().padStart(2, '0')}</span>
-            ) : (
-              <form action={resendAction} className="inline">
-                <button className="font-medium text-gray-900 underline disabled:opacity-50" disabled={resendPending} type="submit">Resend</button>
-              </form>
-            )}
-          </p>
-          {resendState.error ? <p className="text-red-600">{resendState.error}</p> : null}
-          <form action={cancelAction}>
-            <button className="text-gray-600 underline" type="submit">Use a different email address</button>
-          </form>
-        </div>
       </form>
+      <div className="mt-4 space-y-1 text-sm">
+        <p className="text-gray-600">
+          Didn&apos;t get the code?{' '}
+          {secondsLeft > 0 ? (
+            <span className="text-gray-400">Resend in 0:{secondsLeft.toString().padStart(2, '0')}</span>
+          ) : (
+            <form action={resendAction} className="inline">
+              <button className="font-medium text-gray-900 underline disabled:opacity-50" disabled={resendPending} type="submit">Resend</button>
+            </form>
+          )}
+        </p>
+        {resendState.error ? <p className="text-red-600">{resendState.error}</p> : null}
+        <form action={cancelAction}>
+          <button className="text-gray-600 underline" type="submit">Use a different email address</button>
+        </form>
+      </div>
     </AuthShell>
   );
 }
