@@ -54,11 +54,14 @@ async function takeAllowance(email: string, purpose: EmailOtpPurpose, origin: st
   return Boolean(rows[0] && rows[0].request_count <= RATE_MAX_REQUESTS);
 }
 
-export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'rate_limited' };
+export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'delivery_failed' } | { status: 'rate_limited' };
 
 /** Issues (or re-issues) a 6-digit code for the given email/purpose, sending it synchronously.
  * Not queued through the async account-delivery outbox: a 30-minute-lifetime code is only useful
- * delivered immediately, not sitting in a retry queue. */
+ * delivered immediately, not sitting in a retry queue. A delivery failure (provider outage, bad
+ * credentials, network error) is caught here and reported as a distinct status rather than left to
+ * propagate as an unhandled exception — every caller must be able to show the member an actionable
+ * "we couldn't send that" message instead of crashing to a generic error page. */
 export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, options: { origin?: string; userId?: number } = {}): Promise<IssueEmailOtpResult> {
   const email = normalizeEmail(untrustedEmail);
   const now = new Date();
@@ -77,7 +80,12 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
     codeHash: digest(code), email, expiresAt: new Date(now.getTime() + CODE_LIFETIME_MS),
     purpose, userId: options.userId ?? null,
   });
-  await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
+  try {
+    await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
+  } catch (error) {
+    console.error('email_otp_delivery_failed', { category: 'operational', message: error instanceof Error ? error.message : 'unknown', purpose });
+    return { status: 'delivery_failed' };
+  }
   return { status: 'ok' };
 }
 

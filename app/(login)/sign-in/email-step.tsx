@@ -53,7 +53,7 @@ export function EmailStep() {
             {resendState.success ? <p className="text-left text-gray-600">{resendState.success}</p> : null}
           </form>
         ) : (
-          <button className="underline" onClick={() => setShowResend(true)} type="button">
+          <button className="cursor-pointer underline" onClick={() => setShowResend(true)} type="button">
             Changed your email and need a new verification link?
           </button>
         )}

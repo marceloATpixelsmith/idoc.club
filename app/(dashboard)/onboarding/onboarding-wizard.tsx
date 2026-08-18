@@ -34,7 +34,7 @@ export function OnboardingWizard() {
         <div className="grid gap-3 sm:grid-cols-2">
           {TYPE_OPTIONS.map((option) => (
             <button
-              className={`rounded-lg border p-4 text-left transition-colors ${classification === option.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-400'}`}
+              className={`cursor-pointer rounded-lg border p-4 text-left transition-colors ${classification === option.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-400'}`}
               key={option.value} onClick={() => setClassification(option.value)} type="button"
             >
               <div className="font-medium text-gray-900">{option.label}</div>
@@ -106,7 +106,7 @@ export function OnboardingWizard() {
 
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
         <div className="flex items-center gap-3">
-          <button className="text-sm text-gray-600 underline" onClick={() => setStep('type')} type="button">Back</button>
+          <button className="cursor-pointer text-sm text-gray-600 underline" onClick={() => setStep('type')} type="button">Back</button>
           <Button className="flex-1" disabled={pending} size="lg" type="submit">
             {pending ? 'Saving…' : 'Create profile'}
           </Button>

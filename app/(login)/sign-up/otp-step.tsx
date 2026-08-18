@@ -61,13 +61,13 @@ export function OtpStep({ email }: { email: string }) {
             <span className="text-gray-400">Resend in 0:{secondsLeft.toString().padStart(2, '0')}</span>
           ) : (
             <form action={resendAction} className="inline">
-              <button className="font-medium text-gray-900 underline disabled:opacity-50" disabled={resendPending} type="submit">Resend</button>
+              <button className="cursor-pointer font-medium text-gray-900 underline disabled:cursor-not-allowed disabled:opacity-50" disabled={resendPending} type="submit">Resend</button>
             </form>
           )}
         </p>
         {resendState.error ? <p className="text-red-600">{resendState.error}</p> : null}
         <form action={cancelAction}>
-          <button className="text-gray-600 underline" type="submit">Use a different email address</button>
+          <button className="cursor-pointer text-gray-600 underline" type="submit">Use a different email address</button>
         </form>
       </div>
     </AuthShell>
