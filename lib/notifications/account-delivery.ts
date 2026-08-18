@@ -6,6 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountTokens, auditLog } from '@/lib/db/schema';
 import { decryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { sendTransactionalEmail } from './mailchimp-transactional';
+import { emailButton, renderTransactionalEmail } from './email-template';
 import { ACCOUNT_DELIVERY_BATCH_LIMIT, ACCOUNT_DELIVERY_LEASE_MS, processDeliveryBatch } from './account-delivery-worker-core';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 
@@ -104,7 +105,12 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
       const url = new URL(baseUrlForServer());
       url.pathname = activation ? '/activate' : '/reset-password';
       url.searchParams.set('token', payload.token);
-      await dependencies.send({ html: `<p><a href="${url.toString()}">${activation ? 'Activate your imported IDOC account' : 'Reset your password'}</a></p>`, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email });
+      const html = renderTransactionalEmail({
+        bodyHtml: emailButton(url.toString(), activation ? 'Activate your imported IDOC account' : 'Reset your password'),
+        footerNote: 'If you did not request this, you can safely ignore this email.',
+        heading: activation ? 'Activate your account' : 'Reset your password',
+      });
+      await dependencies.send({ html, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email });
       await dependencies.beforeFinalize?.(record);
       const completedAt = dependencies.now();
       const [done] = await tx.update(accountDeliveryOutbox).set({ attemptCount: sql`${accountDeliveryOutbox.attemptCount} + 1`, lastAttemptAt: completedAt, lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: completedAt }).where(and(eq(accountDeliveryOutbox.id, record.id), eq(accountDeliveryOutbox.leaseOwner, owner), isNull(accountDeliveryOutbox.sentAt))).returning();

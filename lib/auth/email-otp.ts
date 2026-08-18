@@ -5,6 +5,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { emailOtpCodes } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
+import { emailCode, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
 import { normalizeEmail } from '@/lib/membership/validation';
 
@@ -32,16 +33,10 @@ function emailHtml(code: string, purpose: EmailOtpPurpose) {
     : purpose === 'login_verification'
       ? 'Use this code to sign in to your IDOC account.'
       : 'Use this code to verify your email address for IDOC.';
-  return `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f9fafb;padding:24px;">
-<table role="presentation" width="100%" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
-  <tr><td style="text-align:center;">
-    <h1 style="font-size:20px;color:#111827;margin:0 0 16px;">IDOC</h1>
-    <p style="color:#374151;font-size:15px;margin:0 0 24px;">${intro}</p>
-    <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#111827;background:#f3f4f6;border-radius:8px;padding:16px 0;margin:0 0 24px;">${code}</div>
-    <p style="color:#6b7280;font-size:13px;margin:0;">This code expires in 30 minutes. If you did not request this, you can safely ignore this email.</p>
-  </td></tr>
-</table>
-</body></html>`;
+  return renderTransactionalEmail({
+    bodyHtml: `<p style="text-align:center;">${intro}</p>${emailCode(code)}`,
+    footerNote: 'This code expires in 30 minutes. If you did not request this, you can safely ignore this email.',
+  });
 }
 
 async function takeAllowance(email: string, purpose: EmailOtpPurpose, origin: string, now: Date) {

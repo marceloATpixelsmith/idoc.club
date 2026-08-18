@@ -7,6 +7,7 @@ import { notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './mailchimp-transactional';
+import { renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
 
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
@@ -136,34 +137,42 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 
 function renderNotice(kind: string, payload: NoticePayload): { html: string; subject: string } {
   const greeting = payload.firstName ? `Hello ${payload.firstName},` : 'Hello,';
-  switch (kind) {
-    case 'membership.renewal_reminder':
-      return {
-        html: `<p>${greeting}</p><p>Your IDOC membership will renew automatically on ${payload.renewalDate}. No action is needed — you can manage your payment method or turn off automatic renewal any time from your account.</p>`,
-        subject: 'Your IDOC membership renews automatically soon',
-      };
-    case 'membership.expiration_reminder':
-      return {
-        html: `<p>${greeting}</p><p>Your IDOC membership expires on ${payload.expirationDate}. Renew before then to keep your access.</p>`,
-        subject: 'Your IDOC membership is expiring soon',
-      };
-    case 'membership.payment_failed':
-      return {
-        html: `<p>${greeting}</p><p>We were unable to process your automatic IDOC membership renewal. You remain active through ${payload.graceEndDate} while payment is retried — please update your payment method to avoid an interruption.</p>`,
-        subject: "We couldn't process your IDOC membership renewal",
-      };
-    case 'membership.grace_reminder':
-      return {
-        html: `<p>${greeting}</p><p>Your IDOC membership will expire on ${payload.graceEndDate} unless your payment method is updated before then.</p>`,
-        subject: 'Action needed: update your IDOC payment method',
-      };
-    case 'membership.grace_expired':
-    default:
-      return {
-        html: `<p>${greeting}</p><p>Your IDOC membership has expired because payment could not be completed. You can renew any time to restore your access.</p>`,
-        subject: 'Your IDOC membership has expired',
-      };
-  }
+  const { bodyHtml, heading, subject } = (() => {
+    switch (kind) {
+      case 'membership.renewal_reminder':
+        return {
+          bodyHtml: `Your IDOC membership will renew automatically on ${payload.renewalDate}. No action is needed — you can manage your payment method or turn off automatic renewal any time from your account.`,
+          heading: 'Your membership renews automatically soon',
+          subject: 'Your IDOC membership renews automatically soon',
+        };
+      case 'membership.expiration_reminder':
+        return {
+          bodyHtml: `Your IDOC membership expires on ${payload.expirationDate}. Renew before then to keep your access.`,
+          heading: 'Your membership is expiring soon',
+          subject: 'Your IDOC membership is expiring soon',
+        };
+      case 'membership.payment_failed':
+        return {
+          bodyHtml: `We were unable to process your automatic IDOC membership renewal. You remain active through ${payload.graceEndDate} while payment is retried — please update your payment method to avoid an interruption.`,
+          heading: 'We could not process your renewal',
+          subject: "We couldn't process your IDOC membership renewal",
+        };
+      case 'membership.grace_reminder':
+        return {
+          bodyHtml: `Your IDOC membership will expire on ${payload.graceEndDate} unless your payment method is updated before then.`,
+          heading: 'Action needed: update your payment method',
+          subject: 'Action needed: update your IDOC payment method',
+        };
+      case 'membership.grace_expired':
+      default:
+        return {
+          bodyHtml: 'Your IDOC membership has expired because payment could not be completed. You can renew any time to restore your access.',
+          heading: 'Your membership has expired',
+          subject: 'Your IDOC membership has expired',
+        };
+    }
+  })();
+  return { html: renderTransactionalEmail({ bodyHtml: `<p>${greeting}</p><p>${bodyHtml}</p>`, heading }), subject };
 }
 
 export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
