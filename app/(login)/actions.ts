@@ -8,7 +8,6 @@ import {
   teams,
   teamMembers,
   activityLogs,
-  type NewUser,
   type NewActivityLog,
   ActivityType,
   invitations
@@ -85,49 +84,6 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   await setSession(foundUser);
 
   redirect('/dashboard');
-});
-
-const signUpSchema = z.object({
-  email: z.string().email(),
-  password: passwordSchema
-});
-
-export const signUp = validatedAction(signUpSchema, async (data) => {
-  const { password } = data;
-  const email = normalizeEmail(data.email);
-
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  if (existingUser.length > 0) {
-    return {
-      error: 'Failed to create user. Please try again.',
-      email
-    };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const newUser: NewUser = {
-    email,
-    passwordHash,
-    role: 'member'
-  };
-
-  const [createdUser] = await db.insert(users).values(newUser).returning();
-
-  if (!createdUser) {
-    return {
-      error: 'Failed to create user. Please try again.',
-      email
-    };
-  }
-  const verification = await issueEmailVerification(createdUser.id, email);
-
-  return { success: verification.delivered ? 'Check your email to verify your account before signing in.' : 'Your account was created. Use the resend verification option on the sign-in page if the first email does not arrive.' };
 });
 
 const accountLinkSchema = z.object({ email: z.string().email().max(255) });

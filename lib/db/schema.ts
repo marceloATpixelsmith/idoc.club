@@ -304,6 +304,25 @@ export const accountDeliveryOutbox = idocSchema.table('account_delivery_outbox',
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('account_delivery_claim_idx').on(table.availableAt, table.id).where(sql`${table.sentAt} is null and ${table.deadLetteredAt} is null`)]);
 
+/** Short-lived 6-digit codes for signup/login/password-reset email verification. Sent
+ * synchronously (not via the async account_delivery_outbox worker) since a 30-minute-lifetime
+ * code shouldn't sit in a delivery queue. user_id is null for signup_verification, where no
+ * user row exists yet until the password step completes. */
+export const emailOtpCodes = idocSchema.table('email_otp_codes', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id),
+  email: varchar('email', { length: 255 }).notNull(),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  codeHash: varchar('code_hash', { length: 64 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('email_otp_codes_purpose_check', sql`${table.purpose} in ('signup_verification', 'login_verification', 'password_reset')`),
+  index('email_otp_codes_lookup_idx').on(table.email, table.purpose, table.expiresAt).where(sql`${table.consumedAt} is null`),
+]);
+
 export const accountRequestLimits = idocSchema.table('account_request_limits', {
   id: serial('id').primaryKey(),
   purpose: varchar('purpose', { length: 30 }).notNull(),

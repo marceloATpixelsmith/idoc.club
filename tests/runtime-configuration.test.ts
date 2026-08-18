@@ -21,6 +21,7 @@ const valid = {
   RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_ONE_TIME_PRODUCT_ID: 'prod_one_time_live',
   STRIPE_RECURRING_PRODUCT_ID: 'prod_recurring_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
   STRIPE_WEBHOOK_SECRET: 'g'.repeat(32),
+  TURNSTILE_SECRET_KEY: 'h'.repeat(32),
 };
 
 test('complete privileged production configuration accepts explicit valid values', () => {

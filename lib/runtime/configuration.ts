@@ -56,6 +56,7 @@ export function baseUrlForServer(environment: Environment = process.env) {
 export function cronSecretForServer(environment: Environment = process.env) { return secret(environment, 'CRON_SECRET'); }
 export function mailchimpApiKeyForServer(environment: Environment = process.env) { return secret(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
+export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 
 export function accountDeliveryConfiguration(environment: Environment = process.env) {
   const activeVersion = required(environment, 'ACCOUNT_DELIVERY_KEY_VERSION');
@@ -84,5 +85,6 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),
     stripeRecurringProductId: stripeRecurringProductIdForServer(environment),
     stripeWebhookSecret: secret(environment, 'STRIPE_WEBHOOK_SECRET'),
+    turnstileSecretKey: turnstileSecretKeyForServer(environment),
   };
 }

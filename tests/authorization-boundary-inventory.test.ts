@@ -23,7 +23,6 @@ function exportedNames(source: string): string[] {
 const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authentication' | 'delegates-to-data-access'>> = {
   'app/(login)/actions.ts': {
     signIn: 'pre-authentication',
-    signUp: 'pre-authentication',
     requestPasswordRecovery: 'pre-authentication',
     requestMigrationActivation: 'pre-authentication',
     resetPassword: 'pre-authentication',
@@ -35,6 +34,13 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     updateAccount: 'session-boundary',
     removeTeamMember: 'session-boundary',
     inviteTeamMember: 'session-boundary',
+  },
+  'app/(login)/sign-up/actions.ts': {
+    startSignup: 'pre-authentication',
+    verifySignupOtp: 'pre-authentication',
+    resendSignupOtp: 'pre-authentication',
+    cancelSignup: 'pre-authentication',
+    completeSignup: 'pre-authentication',
   },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfile: 'delegates-to-data-access',
