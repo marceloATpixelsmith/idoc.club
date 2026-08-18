@@ -39,13 +39,14 @@ export const startSignup = validatedAction(startSignupSchema, async ({ email: ra
     return { email, error: 'Verification challenge failed. Please try again.' };
   }
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  let rateLimited = false;
+  let issueError: string | null = null;
   if (!existing) {
     const result = await issueEmailOtp(email, 'signup_verification', { origin });
-    rateLimited = result.status === 'rate_limited';
+    if (result.status === 'rate_limited') issueError = 'Too many attempts. Please try again in a few minutes.';
+    if (result.status === 'delivery_failed') issueError = 'We could not send that verification code. Please try again in a moment.';
   }
   await equalizeAnonymousResponse(startedAt, defaultTiming);
-  if (rateLimited) return { email, error: 'Too many attempts. Please try again in a few minutes.' };
+  if (issueError) return { email, error: issueError };
   await startPendingSignup(email);
   redirect('/sign-up');
 });
@@ -72,6 +73,7 @@ export const resendSignupOtp = validatedAction(z.object({}), async () => {
   const result = await issueEmailOtp(pending.email, 'signup_verification', { origin });
   if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
+  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
   return { success: 'A new code was sent.' };
 });
 

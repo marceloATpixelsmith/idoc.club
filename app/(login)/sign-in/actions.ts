@@ -40,6 +40,7 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
   if (user.accountState === 'migrated_pending') {
     const result = await issueEmailOtp(email, 'login_verification', { origin, userId: user.id });
     if (result.status === 'rate_limited') return { email, error: 'Too many attempts. Please try again in a few minutes.' };
+    if (result.status === 'delivery_failed') return { email, error: 'We could not send that verification code. Please try again in a moment.' };
     await startPendingLogin(email, true);
     redirect('/sign-in');
   }
@@ -69,6 +70,7 @@ export const resendLoginOtp = validatedAction(z.object({}), async () => {
   const result = await issueEmailOtp(pending.email, 'login_verification', { origin });
   if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
+  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
   return { success: 'A new code was sent.' };
 });
 

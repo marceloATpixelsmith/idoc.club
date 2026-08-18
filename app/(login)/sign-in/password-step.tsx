@@ -27,7 +27,7 @@ export function PasswordStep({ email }: { email: string }) {
               placeholder="Enter your password" required type={visible ? 'text' : 'password'}
             />
             <button
-              aria-label={visible ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
+              aria-label={visible ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex cursor-pointer items-center px-3 text-gray-500 hover:text-gray-700"
               onClick={() => setVisible((value) => !value)} type="button"
             >
               {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -42,7 +42,7 @@ export function PasswordStep({ email }: { email: string }) {
       <div className="mt-4 space-y-1 text-center text-sm">
         <p><a className="font-medium text-gray-900 underline" href="/recover-password">Forgot your password?</a></p>
         <form action={cancelAction}>
-          <button className="text-gray-600 underline" type="submit">Use a different email address</button>
+          <button className="cursor-pointer text-gray-600 underline" type="submit">Use a different email address</button>
         </form>
       </div>
     </AuthShell>

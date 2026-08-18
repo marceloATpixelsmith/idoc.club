@@ -28,7 +28,7 @@ export function ActivatePasswordStep() {
               required type={visible ? 'text' : 'password'} value={password}
             />
             <button
-              aria-label={visible ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
+              aria-label={visible ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex cursor-pointer items-center px-3 text-gray-500 hover:text-gray-700"
               onClick={() => setVisible((value) => !value)} type="button"
             >
               {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

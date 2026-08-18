@@ -21,6 +21,15 @@ const RATE_MAX_REQUESTS = 3;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const generateCode = () => randomInt(0, 10 ** CODE_LENGTH).toString().padStart(CODE_LENGTH, '0');
 
+/** Matches lib/membership/account-recovery.ts's operationalFailureCategory: derives a category from
+ * the exception without ever retaining the exception text itself in logged evidence. */
+function deliveryFailureCategory(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('not configured') || message.includes('configuration')) return 'configuration';
+  if (message.includes('connect') || message.includes('network')) return 'network';
+  return 'operational';
+}
+
 const SUBJECTS: Record<EmailOtpPurpose, string> = {
   login_verification: 'Your IDOC sign-in code',
   password_reset: 'Your IDOC password reset code',
@@ -54,11 +63,14 @@ async function takeAllowance(email: string, purpose: EmailOtpPurpose, origin: st
   return Boolean(rows[0] && rows[0].request_count <= RATE_MAX_REQUESTS);
 }
 
-export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'rate_limited' };
+export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'delivery_failed' } | { status: 'rate_limited' };
 
 /** Issues (or re-issues) a 6-digit code for the given email/purpose, sending it synchronously.
  * Not queued through the async account-delivery outbox: a 30-minute-lifetime code is only useful
- * delivered immediately, not sitting in a retry queue. */
+ * delivered immediately, not sitting in a retry queue. A delivery failure (provider outage, bad
+ * credentials, network error) is caught here and reported as a distinct status rather than left to
+ * propagate as an unhandled exception — every caller must be able to show the member an actionable
+ * "we couldn't send that" message instead of crashing to a generic error page. */
 export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, options: { origin?: string; userId?: number } = {}): Promise<IssueEmailOtpResult> {
   const email = normalizeEmail(untrustedEmail);
   const now = new Date();
@@ -77,7 +89,14 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
     codeHash: digest(code), email, expiresAt: new Date(now.getTime() + CODE_LIFETIME_MS),
     purpose, userId: options.userId ?? null,
   });
-  await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
+  try {
+    await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
+  } catch (error) {
+    // Categorical only, matching lib/membership/account-recovery.ts's operational-failure evidence:
+    // the exception text itself is never retained, only which class of problem it was.
+    console.error('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
+    return { status: 'delivery_failed' };
+  }
   return { status: 'ok' };
 }
 

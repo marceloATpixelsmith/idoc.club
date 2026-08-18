@@ -65,6 +65,7 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async () => 
   const result = await issueEmailOtp(pending.email, 'password_reset', { origin });
   if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
+  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
   return { success: 'A new code was sent.' };
 });
 
