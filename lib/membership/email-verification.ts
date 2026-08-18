@@ -5,6 +5,7 @@ import { and, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
+import { emailButton, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { updateStripeCustomerEmail } from '@/lib/payments/customer-email';
 import { normalizeEmail } from './validation';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
@@ -27,7 +28,11 @@ export async function issueEmailVerification(userId: number, untrustedEmail: str
   baseUrl.searchParams.set('token', token);
   try {
     await sendTransactionalEmail({
-      html: `<p>Verify your IDOC email address:</p><p><a href="${baseUrl.toString()}">Verify email</a></p>`,
+      html: renderTransactionalEmail({
+        bodyHtml: `<p>Confirm this is your new email address for your IDOC account.</p>${emailButton(baseUrl.toString(), 'Verify email')}`,
+        footerNote: 'If you did not request this change, you can safely ignore this email.',
+        heading: 'Verify your email address',
+      }),
       subject: 'Verify your IDOC email address', to: pendingEmail,
     });
     return { delivered: true };
