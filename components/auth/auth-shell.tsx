@@ -12,9 +12,9 @@ export function AuthShell({ children, description, title, wide }: { children: Re
       <div className="flex items-center justify-center px-6 py-12 sm:px-12">
         <div className={wide ? 'w-full max-w-2xl' : 'w-full max-w-md'}>
           {/* eslint-disable-next-line @next/next/no-img-element -- static SVG mark, not a photo */}
-          <img alt="IDOC" className="mb-8 h-14 w-auto" src="/idoc-logo.svg" />
-          <h1 className="mb-2 text-2xl font-bold text-gray-900 sm:text-3xl">{title}</h1>
-          {description ? <p className="mb-6 text-sm text-gray-600">{description}</p> : null}
+          <img alt="IDOC" className="mx-auto mb-8 h-14 w-auto" src="/idoc-logo.svg" />
+          <h1 className="mb-2 text-center text-2xl font-bold text-gray-900 sm:text-3xl">{title}</h1>
+          {description ? <p className="mb-6 text-center text-sm text-gray-600">{description}</p> : null}
           <div className={description ? '' : 'mt-6'}>{children}</div>
           <p className="mt-8 text-center text-xs text-gray-500">
             By continuing, you agree to our{' '}
