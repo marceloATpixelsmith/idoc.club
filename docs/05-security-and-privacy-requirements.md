@@ -167,6 +167,14 @@ Production compilation must succeed without privileged configuration and without
 
 `GET /api/user` reports the current session's identity, or `null`, for header/UI display and must be safely callable by anonymous visitors on every page load. It authorizes through `requireAccountAccess('profile')` exactly like any other privileged read; a denial (anonymous visitor, or an account state — onboarding, suspended, deleted, unverified — that must not display as logged in) is caught and resolved to `null` with a 200, matching what "not logged in" already means everywhere else in the app, rather than a distinct error-shaped body. Only `AuthorizationError` is treated as an expected denial this way; any other exception (a database failure, for example) propagates uncaught to a 500 so an operational failure is never silently reported as "signed out."
 
+## Signup email verification (OTP) and bot-check
+
+Signup is a three-step flow (email, 6-digit code, password) tracked by a signed, 15-minute `idoc_pending_signup` cookie distinct from the real session cookie; no `users` row is created until the password step succeeds. The email step requires a passing Cloudflare Turnstile token, verified server-side against `TURNSTILE_SECRET_KEY` before a code is issued; a missing or failed token is rejected without ever calling the OTP issuer. Codes are 6 digits from a CSPRNG, stored only as a SHA-256 digest with a 30-minute expiry, and reuse the `account_request_limits` table for a purpose-prefixed (`email_otp_<purpose>`) issue/resend rate limit and a 30-second resend cooldown. Verification is capped at 5 attempts per issued code; exceeding it locks that code and requires a fresh one. All of this validation is re-asserted server-side in the Server Action regardless of what the client already checked, so a JavaScript-disabled submission is validated identically to a JavaScript-enabled one. Verification emails are sent through the existing Mailchimp Transactional integration from `accounts@idoc.club`.
+
+## Password policy
+
+Passwords require a minimum of 10 characters with at least one uppercase letter, one lowercase letter, one digit, and one special character, and reject 3+ character sequential runs (e.g. `abcd`, `1234`) and 3+ repeated characters (e.g. `aaaa`). The same `passwordSchema` enforces this identically client-side (for immediate feedback) and server-side (as the actual gate) for every password-setting path — signup, reset, and change.
+
 ## Client-side error reporting
 
 `POST /api/client-error` accepts a best-effort crash report from the client error boundaries (`app/error.tsx`, `app/global-error.tsx`) and writes it to server runtime logs only — it is never persisted to the database. It requires no authorization, since it must remain reachable from a broken or anonymous session; each field (`digest`, `message`, `stack`, `url`) is capped at 2,000 characters and any non-string value is dropped before logging.
