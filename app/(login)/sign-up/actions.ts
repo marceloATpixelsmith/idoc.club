@@ -2,7 +2,6 @@
 
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { users, type NewUser } from '@/lib/db/schema';
@@ -14,11 +13,7 @@ import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingSignup, getPendingSignup, markPendingSignupVerified, startPendingSignup } from '@/lib/auth/pending-signup';
 import { defaultTiming, equalizeAnonymousResponse } from '@/lib/security/response-timing';
-
-async function requestOrigin() {
-  const requestHeaders = await headers();
-  return requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
-}
+import { requestOrigin } from '@/lib/security/rate-limit';
 
 const startSignupSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -56,13 +51,15 @@ const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 
 export const verifySignupOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
   const pending = await getPendingSignup();
   if (!pending) return { error: 'Your signup session expired. Start again.' };
-  const result = await verifyEmailOtp(pending.email, 'signup_verification', code);
+  const origin = await requestOrigin();
+  const result = await verifyEmailOtp(pending.email, 'signup_verification', code, origin);
   if (result === 'verified') {
     await markPendingSignupVerified(pending.email);
     redirect('/sign-up');
   }
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
   if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
+  if (result === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   return { error: 'That code is incorrect.' };
 });
 

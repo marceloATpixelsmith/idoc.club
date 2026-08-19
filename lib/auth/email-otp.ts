@@ -6,7 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { emailOtpCodes } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
 import { emailCode, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
+import { checkRateLimit } from '@/lib/security/rate-limit';
 import { normalizeEmail } from '@/lib/membership/validation';
 
 export type EmailOtpPurpose = 'login_verification' | 'password_reset' | 'signup_verification';
@@ -15,8 +15,6 @@ const CODE_LIFETIME_MS = 30 * 60 * 1000;
 const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX_REQUESTS = 3;
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const generateCode = () => randomInt(0, 10 ** CODE_LENGTH).toString().padStart(CODE_LENGTH, '0');
@@ -48,21 +46,6 @@ function emailHtml(code: string, purpose: EmailOtpPurpose) {
   });
 }
 
-async function takeAllowance(email: string, purpose: EmailOtpPurpose, origin: string, now: Date) {
-  const secret = rateLimitHashKeyForServer();
-  const windowStartedAt = new Date(Math.floor(now.getTime() / RATE_WINDOW_MS) * RATE_WINDOW_MS);
-  const identifierHash = digest(`${secret}:otp:${email}`);
-  const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
-  const rows = await db.execute<{ request_count: number }>(sql`
-    insert into idoc.account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
-    values (${`email_otp_${purpose}`}, ${identifierHash}, ${originHash}, ${windowStartedAt.toISOString()})
-    on conflict (purpose, identifier_hash, origin_hash, window_started_at)
-    do update set request_count = idoc.account_request_limits.request_count + 1, updated_at = now()
-    returning request_count
-  `);
-  return Boolean(rows[0] && rows[0].request_count <= RATE_MAX_REQUESTS);
-}
-
 export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'delivery_failed' } | { status: 'rate_limited' };
 
 /** Issues (or re-issues) a 6-digit code for the given email/purpose, sending it synchronously.
@@ -80,7 +63,7 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   if (latest && now.getTime() - latest.createdAt.getTime() < RESEND_COOLDOWN_MS) {
     return { retryAfterMs: RESEND_COOLDOWN_MS - (now.getTime() - latest.createdAt.getTime()), status: 'cooldown' };
   }
-  const allowed = await takeAllowance(email, purpose, options.origin ?? 'unknown', now);
+  const allowed = await checkRateLimit(`email_otp_${purpose}`, email, options.origin ?? 'unknown', now);
   if (!allowed) return { status: 'rate_limited' };
   const code = generateCode();
   await db.update(emailOtpCodes).set({ consumedAt: now })
@@ -100,14 +83,18 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   return { status: 'ok' };
 }
 
-export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'verified';
+export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'rate_limited' | 'verified';
 
 /** Verifies a submitted code against the latest unconsumed, unexpired code for this email/purpose.
  * Each call against an existing record increments its attempt counter first, so even a crashed or
- * short-circuited request still counts toward the lockout. */
-export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string): Promise<VerifyEmailOtpResult> {
+ * short-circuited request still counts toward the lockout. Verification attempts are additionally
+ * rate-limited (independently by email and by origin, like issuance) so repeatedly requesting fresh
+ * codes cannot be used to grind through more guesses than the per-code lockout alone would allow. */
+export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown'): Promise<VerifyEmailOtpResult> {
   if (!/^\d{6}$/.test(code)) return 'invalid';
   const email = normalizeEmail(untrustedEmail);
+  const allowed = await checkRateLimit(`email_otp_verify_${purpose}`, email, origin);
+  if (!allowed) return 'rate_limited';
   return db.transaction(async (tx) => {
     const [record] = await tx.select().from(emailOtpCodes)
       .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)))
