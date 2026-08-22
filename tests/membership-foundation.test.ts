@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   AuthorizationError, requireAdministrator, requireOwnerOrAdmin, requireSuperAdmin,
 } from '../lib/membership/authorization.ts';
-import { memberProfileSchema, normalizeEmail } from '../lib/membership/validation.ts';
+import { memberProfileSchema, normalizeEmail, onboardingConsentSchema } from '../lib/membership/validation.ts';
 import { isEntitled } from '../lib/membership/entitlement.ts';
 import { mayAccessAccountFunction } from '../lib/membership/account-access.ts';
 
@@ -36,6 +36,14 @@ test('validation enforces official fields and canonical countries', () => {
 
 test('only Judge plus Steward is a valid combined classification', () => {
   assert.equal(memberProfileSchema.safeParse({ ...common, roles: [judge, { roleType: 'veterinarian' }] }).success, false);
+});
+
+test('onboarding consent requires both Terms and Privacy acknowledgment but not the marketing opt-in', () => {
+  const valid = { keepUpdated: false, privacyAccepted: true, termsAccepted: true };
+  assert.equal(onboardingConsentSchema.safeParse(valid).success, true);
+  assert.equal(onboardingConsentSchema.safeParse({ ...valid, termsAccepted: false }).success, false);
+  assert.equal(onboardingConsentSchema.safeParse({ ...valid, privacyAccepted: false }).success, false);
+  assert.equal(onboardingConsentSchema.safeParse({ ...valid, keepUpdated: true }).success, true);
 });
 
 test('email usernames are normalized and validated', () => {

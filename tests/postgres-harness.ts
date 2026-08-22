@@ -58,6 +58,10 @@ export function profileInput(roles: Array<typeof judgeRole | typeof stewardRole 
     firstName: 'Test', lastName: 'Member', postalCode: '10115', roles, stateProvince: 'Berlin' };
 }
 
+export function consentInput() {
+  return { keepUpdated: true, privacyAccepted: true, termsAccepted: true };
+}
+
 export async function createProfile(userId: number, roles = [judgeRole]) {
   const input = profileInput(roles);
   const [profile] = await sql<{ id: number }[]>`

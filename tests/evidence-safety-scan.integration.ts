@@ -8,7 +8,7 @@ import { decryptDeliveryPayload } from '../lib/security/encrypted-payload.ts';
 import { deliverNextAccountLink } from '../lib/notifications/account-delivery.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import {
-  closeHarness, createCompleteGraph, createMembership, createProfile, createUser,
+  closeHarness, consentInput, createCompleteGraph, createMembership, createProfile, createUser,
   judgeRole, profileInput, resetIdoc, sql,
 } from './postgres-harness.ts';
 
@@ -54,13 +54,13 @@ async function rawRequestedToken(userId: number, purpose: 'migration_activation'
 test('a representative sweep across identity, onboarding, profile, recovery, reset, activation, rate limiting, delivery, and provider-failure paths leaves no password, raw token, secret, or raw exception in any persisted evidence', async () => {
   // Onboarding: one success, one rejected invalid payload.
   const onboarding = await createUser('onboarding');
-  await withTestMembershipBoundary({ actor: { id: onboarding.id, roles: [] } }, () => createOwnMemberProfile(profileInput()));
+  await withTestMembershipBoundary({ actor: { id: onboarding.id, roles: [] } }, () => createOwnMemberProfile(profileInput(), consentInput()));
   emails.push(onboarding.email);
   const rejectedOnboarding = await createUser('onboarding');
   emails.push(rejectedOnboarding.email);
   await assert.rejects(withTestMembershipBoundary(
     { actor: { id: rejectedOnboarding.id, roles: [] } },
-    () => createOwnMemberProfile({ ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] }),
+    () => createOwnMemberProfile({ ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] }, consentInput()),
   ));
 
   // Profile edit: one success, one rejected invalid edit.

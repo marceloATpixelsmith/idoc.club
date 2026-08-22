@@ -69,6 +69,26 @@ export const memberProfileSchema = z.object({
 
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 
+/** Kept separate from memberProfileSchema: these consent acknowledgments apply only to the one-time
+ * onboarding/demographics submission (see docs/02 section 1.3), not to later profile corrections an
+ * admin or the member themselves makes through updateMemberProfile. */
+export const onboardingConsentSchema = z.object({
+  keepUpdated: z.boolean(),
+  privacyAccepted: z.boolean().refine((value) => value, 'You must agree to the Privacy Policy.'),
+  termsAccepted: z.boolean().refine((value) => value, 'You must agree to the Terms of Service.'),
+});
+
+export type OnboardingConsentInput = z.infer<typeof onboardingConsentSchema>;
+
+/** Builds the untrusted onboardingConsentSchema input shape from the onboarding form submission. */
+export function parseOnboardingConsentFormData(formData: FormData): unknown {
+  return {
+    keepUpdated: formData.get('keepUpdated') === 'on',
+    privacyAccepted: formData.get('privacyAccepted') === 'on',
+    termsAccepted: formData.get('termsAccepted') === 'on',
+  };
+}
+
 /** Builds the untrusted memberProfileSchema input shape from a submitted profile-edit form. */
 export function parseMemberProfileFormData(formData: FormData): unknown {
   const classification = String(formData.get('classification') ?? '');

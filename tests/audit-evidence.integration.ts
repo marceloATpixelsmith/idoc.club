@@ -7,7 +7,7 @@ import { consumeEmailVerification } from '../lib/membership/email-verification.t
 import { decryptDeliveryPayload } from '../lib/security/encrypted-payload.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import {
-  closeHarness, createCompleteGraph, createMembership, createProfile, createUser,
+  closeHarness, consentInput, createCompleteGraph, createMembership, createProfile, createUser,
   grantRole, profileInput, resetIdoc, sql,
 } from './postgres-harness.ts';
 
@@ -36,7 +36,7 @@ async function rawRequestedToken(userId: number, purpose: 'migration_activation'
 
 test('onboarding writes member.profile.created and account.onboarding.completed with correct actor and entity identity', async () => {
   const user = await createUser('onboarding');
-  const profile = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput()));
+  const profile = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(), consentInput()));
   const rows = [...await sql`select action, actor_id, entity_type, entity_id from idoc.audit_log order by id`];
   assert.deepEqual(rows, [
     { action: 'member.profile.created', actor_id: user.id, entity_type: 'profile', entity_id: String((profile as { id: number }).id) },

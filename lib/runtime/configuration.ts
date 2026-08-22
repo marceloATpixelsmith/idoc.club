@@ -59,6 +59,20 @@ export function cronSecretForServer(environment: Environment = process.env) { re
 // API key in a fixed, shorter format we don't control -- real keys are commonly ~22 characters, so
 // that generic minimum rejected a genuinely valid, correctly configured key as "not configured."
 export function mailchimpApiKeyForServer(environment: Environment = process.env) { return required(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
+// Mailchimp Marketing (audience/list subscriptions) is a separate product from Mailchimp
+// Transactional (Mandrill, above): its API keys carry a trailing "-<datacenter>" suffix (e.g.
+// "...-us21") that every Marketing API request must be routed through, so that shape is validated
+// here rather than left to a runtime fetch failure.
+export function mailchimpMarketingApiKeyForServer(environment: Environment = process.env) {
+  const value = required(environment, 'MAILCHIMP_MARKETING_API_KEY');
+  if (!/^[A-Za-z0-9]+-[a-z]{2,4}\d{1,3}$/.test(value)) throw new Error('Invalid production configuration: MAILCHIMP_MARKETING_API_KEY.');
+  return value;
+}
+export function mailchimpAudienceIdForServer(environment: Environment = process.env) {
+  const value = required(environment, 'MAILCHIMP_AUDIENCE_ID');
+  if (!/^[A-Za-z0-9]{6,20}$/.test(value)) throw new Error('Invalid production configuration: MAILCHIMP_AUDIENCE_ID.');
+  return value;
+}
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 

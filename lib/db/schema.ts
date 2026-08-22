@@ -177,6 +177,9 @@ export const profiles = idocSchema.table('profiles', {
   stateProvince: varchar('state_province', { length: 100 }).notNull(),
   postalCode: varchar('postal_code', { length: 30 }).notNull(),
   countryCode: varchar('country_code', { length: 2 }).notNull(),
+  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }).notNull().defaultNow(),
+  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }).notNull().defaultNow(),
+  keepUpdatedOptIn: boolean('keep_updated_opt_in').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

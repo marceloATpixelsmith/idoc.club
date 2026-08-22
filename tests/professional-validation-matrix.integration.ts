@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import {
-  closeHarness, createMembership, createProfile, createUser, judgeRole, persistedGraph,
+  closeHarness, consentInput, createMembership, createProfile, createUser, judgeRole, persistedGraph,
   profileInput, resetIdoc, sql, stewardRole, veterinarianRole,
 } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
@@ -38,7 +38,7 @@ test('valid onboarding and edit persist exact canonical values for every approve
     await resetIdoc();
     const roles = classifications[index];
     const user = await createUser('onboarding');
-    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles)));
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles), consentInput()));
     const created = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
     assertRolesMatchExactly(created?.roles, roles, `create:${roles.map((r) => r.roleType).join('+')}`);
 
@@ -61,7 +61,7 @@ test('optional Address 2 normalizes empty and whitespace-only input to null and 
   for (const { input, expected } of cases) {
     await resetIdoc();
     const user = await createUser('onboarding');
-    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({ ...profileInput(), address2: input }));
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({ ...profileInput(), address2: input }, consentInput()));
     const [row] = await sql`select address_2 from idoc.profiles where user_id=${user.id}`;
     assert.equal(row.address_2, expected, JSON.stringify(input));
   }
@@ -72,7 +72,7 @@ test('required text fields are trimmed before persistence', async () => {
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({
     ...profileInput(), address1: '  1 Test Road  ', city: '  Test City  ', firstName: '  Jane  ',
     lastName: '  Doe  ', postalCode: '  10115  ', stateProvince: '  Berlin  ',
-  }));
+  }, consentInput()));
   const [row] = await sql`select first_name,last_name,address_1,city,state_province,postal_code from idoc.profiles where user_id=${user.id}`;
   assert.deepEqual(row, {
     address_1: '1 Test Road', city: 'Test City', first_name: 'Jane',
@@ -88,7 +88,7 @@ test('missing or whitespace-only required fields are rejected without mutation o
       const onboardingUser = await createUser('onboarding');
       await assert.rejects(withTestMembershipBoundary(
         { actor: { id: onboardingUser.id, roles: [] } },
-        () => createOwnMemberProfile({ ...profileInput(), [field]: badValue }),
+        () => createOwnMemberProfile({ ...profileInput(), [field]: badValue }, consentInput()),
       ), `create:${field}:${JSON.stringify(badValue)}`);
       assert.equal((await sql`select 1 from idoc.profiles where user_id=${onboardingUser.id}`).length, 0);
 
@@ -122,7 +122,7 @@ test('malformed field types are rejected without mutation on create and edit', a
     const onboardingUser = await createUser('onboarding');
     await assert.rejects(withTestMembershipBoundary(
       { actor: { id: onboardingUser.id, roles: [] } },
-      () => createOwnMemberProfile(payload),
+      () => createOwnMemberProfile(payload, consentInput()),
     ), `create:${JSON.stringify(payload)}`);
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${onboardingUser.id}`).length, 0);
 
@@ -148,7 +148,7 @@ test('a status value from another classification cannot be assigned across roles
   ];
   for (const payload of cases) {
     const user = await createUser('onboarding');
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)));
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload, consentInput())));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
     await resetIdoc();
   }
@@ -165,7 +165,7 @@ test('Veterinarian restrictions reject every foundation field the classification
   for (const extra of forbidden) {
     const user = await createUser('onboarding');
     const payload = { ...profileInput(), roles: [{ roleType: 'veterinarian' as const, ...extra }] };
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)), JSON.stringify(extra));
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload, consentInput())), JSON.stringify(extra));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
     await resetIdoc();
   }
@@ -181,7 +181,7 @@ test('the classification list rejects duplicates, unsupported combinations, and 
   ];
   for (const roles of invalidCombinations) {
     const user = await createUser('onboarding');
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles as never))), JSON.stringify(roles.map((r) => r.roleType)));
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles as never), consentInput())), JSON.stringify(roles.map((r) => r.roleType)));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
     await resetIdoc();
   }
@@ -216,7 +216,7 @@ test('invalid federation, region, FEI ID, official status, and country values ar
   for (const payload of cases) {
     await resetIdoc();
     const user = await createUser('onboarding');
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)), JSON.stringify(payload));
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload, consentInput())), JSON.stringify(payload));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
   }
 });
@@ -226,7 +226,7 @@ test('multiple official statuses persist deduplicated and in the same order the 
   const user = await createUser('onboarding');
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({
     ...profileInput(), roles: [{ ...judgeRole, officialStatuses: [third, first, third, second] }],
-  }));
+  }, consentInput()));
   const created = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
   const judge = created?.roles.find((role) => role.roleType === 'judge');
   assert.deepEqual(judge?.officialStatuses, [first, second, third]);

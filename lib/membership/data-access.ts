@@ -9,7 +9,7 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
-import { memberProfileSchema, type MemberProfileInput } from './validation';
+import { memberProfileSchema, onboardingConsentSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
@@ -66,8 +66,9 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
-export async function createOwnMemberProfile(untrustedInput: unknown) {
+export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsentInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
+  const consent = onboardingConsentSchema.parse(untrustedConsentInput);
   const actor = await authenticatedActor('onboarding');
   return db.transaction(async (tx) => {
     const [account] = await tx.execute<{ account_state: string }>(sql`
@@ -78,7 +79,11 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
     }
     const [existing] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
     if (existing) throw new Error('A member profile already exists for this account.');
-    const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
+    const now = new Date();
+    const [profile] = await tx.insert(profiles).values({
+      ...profileColumns(input), userId: actor.id,
+      keepUpdatedOptIn: consent.keepUpdated, privacyAcceptedAt: now, termsAcceptedAt: now,
+    }).returning();
     injectProfileTransactionFailure('profile-write');
     await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
     injectProfileTransactionFailure('role-insertion');

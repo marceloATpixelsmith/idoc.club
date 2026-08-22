@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
-import { createMembership, createProfile, createUser, closeHarness, grantRole, judgeRole, persistedGraph, profileInput, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
+import { createMembership, createProfile, createUser, closeHarness, consentInput, grantRole, judgeRole, persistedGraph, profileInput, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { createOwnMemberProfile, getOwnPrivateMember, requireAccountAccess, updateMemberProfile } from '../lib/membership/data-access.ts';
 
@@ -45,7 +45,7 @@ test('onboarding validates and atomically creates each approved classification w
   const classifications = [[judgeRole], [stewardRole], [judgeRole, stewardRole], [veterinarianRole]];
   for (const roles of classifications) {
     const user = await createUser('onboarding');
-    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles)));
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles), consentInput()));
     const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
     assert.deepEqual(result?.roles.map(({ roleType }) => roleType).sort(), roles.map(({ roleType }) => roleType).sort());
   }
@@ -63,7 +63,7 @@ test('invalid professional payloads persist nothing', async () => {
   ];
   for (const payload of invalid) {
     const user = await createUser('onboarding');
-    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload)));
+    await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(payload, consentInput())));
     assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
   }
 });
@@ -98,7 +98,7 @@ test('controlled onboarding failures roll back profile, roles, history, audit, a
     const user = await createUser('onboarding');
     await assert.rejects(withTestMembershipBoundary(
       { actor: { id: user.id, roles: [] }, failAt: stage },
-      () => createOwnMemberProfile(profileInput()),
+      () => createOwnMemberProfile(profileInput(), consentInput()),
     ));
     const [persistedUser] = await sql`select account_state from idoc.users where id=${user.id}`;
     assert.equal(persistedUser.account_state, 'onboarding');

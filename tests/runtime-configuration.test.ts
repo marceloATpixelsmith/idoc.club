@@ -6,6 +6,8 @@ import {
   baseUrlForServer,
   databaseUrlForServer,
   mailchimpApiKeyForServer,
+  mailchimpAudienceIdForServer,
+  mailchimpMarketingApiKeyForServer,
   privilegedProductionConfiguration,
   stripeKeyForServer,
   stripeOneTimeProductIdForServer,
@@ -82,6 +84,22 @@ test('the Mailchimp Transactional API key is accepted at its real, shorter lengt
   assert.equal(mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: 'md-1234567890abcdefghij' }), 'md-1234567890abcdefghij');
   for (const value of [undefined, '', '   ']) {
     assert.throws(() => mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: value }), /MAILCHIMP_TRANSACTIONAL_API_KEY/);
+  }
+});
+
+test('the Mailchimp Marketing API key requires its datacenter suffix, distinct from the Transactional key format', () => {
+  // A Marketing API request is routed by datacenter (the "-us21" suffix), unlike the Transactional
+  // (Mandrill) key above, which always targets a single fixed endpoint.
+  assert.equal(mailchimpMarketingApiKeyForServer({ MAILCHIMP_MARKETING_API_KEY: `${'a'.repeat(32)}-us21` }), `${'a'.repeat(32)}-us21`);
+  for (const value of [undefined, '', '   ', 'a'.repeat(32), 'no-suffix-here']) {
+    assert.throws(() => mailchimpMarketingApiKeyForServer({ MAILCHIMP_MARKETING_API_KEY: value }), /MAILCHIMP_MARKETING_API_KEY/);
+  }
+});
+
+test('the Mailchimp audience/list ID is required and alphanumeric', () => {
+  assert.equal(mailchimpAudienceIdForServer({ MAILCHIMP_AUDIENCE_ID: 'a1b2c3d4e5' }), 'a1b2c3d4e5');
+  for (const value of [undefined, '', '   ', 'has spaces', 'has-a-dash']) {
+    assert.throws(() => mailchimpAudienceIdForServer({ MAILCHIMP_AUDIENCE_ID: value }), /MAILCHIMP_AUDIENCE_ID/);
   }
 });
 
