@@ -2,7 +2,6 @@
 
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
@@ -14,11 +13,7 @@ import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { activateMigratedAccountByUserId } from '@/lib/membership/account-recovery';
 import { clearPendingLogin, getPendingLogin, markPendingLoginVerified, startPendingLogin } from '@/lib/auth/pending-login';
-
-async function requestOrigin() {
-  const requestHeaders = await headers();
-  return requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
-}
+import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -33,6 +28,9 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
+  }
+  if (!(await checkRateLimit('login_email', email, origin))) {
+    return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   }
   const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
   if (!user || user.accountState === 'deleted') return { email, error: 'No account was found with that email address.' };
@@ -53,13 +51,15 @@ const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 
 export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
   const pending = await getPendingLogin();
   if (!pending || !pending.legacy) return { error: 'Your sign-in session expired. Start again.' };
-  const result = await verifyEmailOtp(pending.email, 'login_verification', code);
+  const origin = await requestOrigin();
+  const result = await verifyEmailOtp(pending.email, 'login_verification', code, origin);
   if (result === 'verified') {
     await markPendingLoginVerified(pending.email);
     redirect('/sign-in');
   }
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
   if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
+  if (result === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   return { error: 'That code is incorrect.' };
 });
 
