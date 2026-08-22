@@ -33,12 +33,20 @@ export async function subscribeToMarketingList(untrustedEmail: string): Promise<
   const subscriberHash = createHash('md5').update(email).digest('hex');
   try {
     const response = await fetch(`https://${datacenter}.api.mailchimp.com/3.0/lists/${audienceId}/members/${subscriberHash}`, {
-      body: JSON.stringify({ email_address: email, status_if_new: 'subscribed' }),
+      // `status` (not just `status_if_new`) so an email already in the audience -- unsubscribed,
+      // pending, or otherwise -- is actually moved to subscribed too: the member just gave fresh,
+      // explicit consent via this onboarding checkbox, which is exactly the kind of renewed
+      // permission that justifies updating an existing record rather than only a brand-new one.
+      body: JSON.stringify({ email_address: email, status: 'subscribed' }),
       headers: {
         authorization: `Basic ${Buffer.from(`anystring:${apiKey}`).toString('base64')}`,
         'content-type': 'application/json',
       },
       method: 'PUT',
+      // Bounded so this never stalls the onboarding Server Action response past its execution
+      // limit: docs/07 promises an unreachable Marketing API never blocks onboarding, which only
+      // holds if a stalled connection fails fast instead of hanging indefinitely.
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) throw new Error(`Mailchimp Marketing rejected the subscription (status ${response.status}).`);
   } catch (error) {

@@ -103,7 +103,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[14].when > journal.entries[13].when, 'the official_statuses migration must follow migration 0013');
   assert.equal(journal.entries[15].tag, '0015_conscious_ben_parker');
   assert.ok(journal.entries[15].when > journal.entries[14].when, 'the email_otp_codes migration must follow migration 0014');
-  assert.equal(journal.entries[16].tag, '0016_bent_agent_brand');
+  assert.equal(journal.entries[16].tag, '0016_acoustic_lilandra');
   assert.ok(journal.entries[16].when > journal.entries[15].when, 'the onboarding-consent migration must follow migration 0015');
   const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0016_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {

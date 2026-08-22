@@ -1,5 +1,5 @@
 {
-  "id": "7e70a9b0-c712-46c0-8b33-a66d583a0a5b",
+  "id": "b0043725-465e-4a4b-acd3-aea6376ff228",
   "prevId": "8baced37-a510-41f1-83e2-8299157ad388",
   "version": "7",
   "dialect": "postgresql",
@@ -1749,22 +1749,20 @@
           "name": "terms_accepted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         },
         "privacy_accepted_at": {
           "name": "privacy_accepted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         },
         "keep_updated_opt_in": {
           "name": "keep_updated_opt_in",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "created_at": {
           "name": "created_at",
