@@ -15,7 +15,7 @@ import { normalizeEmail } from '@/lib/membership/validation';
 import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordSchema } from '@/lib/auth/password-policy';
-import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
+import { consumeAccountToken, finalizeMigratedAccountAfterVerifiedPassword, requestAccountLink } from '@/lib/membership/account-recovery';
 import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { startPendingLogin } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
@@ -65,10 +65,13 @@ export const signIn = validatedAction(signInSchema, async (data) => {
   }
 
   if (foundUser.accountState === 'migrated_pending') {
-    const now = new Date();
-    await db.update(users).set({ accountState: 'active', updatedAt: now }).where(eq(users.id, foundUser.id));
+    const activation = await finalizeMigratedAccountAfterVerifiedPassword(foundUser.id);
+    if (activation.status !== 'success') {
+      return { error: 'We could not finish signing you in automatically. Contact IDOC for help.', email };
+    }
     const [activated] = await db.select().from(users).where(eq(users.id, foundUser.id)).limit(1);
-    if (activated) await setSession(activated);
+    if (!activated) return { error: 'Invalid email or password. Please try again.', email };
+    await setSession(activated);
     redirect('/dashboard/profile?confirmDetails=1');
   }
 
