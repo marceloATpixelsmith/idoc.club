@@ -11,7 +11,7 @@ import { normalizeEmail } from '@/lib/membership/validation';
 
 export type EmailOtpPurpose = 'login_verification' | 'password_reset' | 'signup_verification';
 
-const CODE_LIFETIME_MS = 30 * 60 * 1000;
+const CODE_LIFETIME_MS = 15 * 60 * 1000;
 const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
@@ -42,18 +42,16 @@ function emailHtml(code: string, purpose: EmailOtpPurpose) {
       : 'Use this code to verify your email address for IDOC.';
   return renderTransactionalEmail({
     bodyHtml: `<p style="text-align:center;">${intro}</p>${emailCode(code)}`,
-    footerNote: 'This code expires in 30 minutes. If you did not request this, you can safely ignore this email.',
+    footerNote: 'This code expires in 15 minutes. If you did not request this, you can safely ignore this email.',
   });
 }
 
 export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retryAfterMs: number } | { status: 'delivery_failed' } | { status: 'rate_limited' };
 
 /** Issues (or re-issues) a 6-digit code for the given email/purpose, sending it synchronously.
- * Not queued through the async account-delivery outbox: a 30-minute-lifetime code is only useful
- * delivered immediately, not sitting in a retry queue. A delivery failure (provider outage, bad
- * credentials, network error) is caught here and reported as a distinct status rather than left to
- * propagate as an unhandled exception — every caller must be able to show the member an actionable
- * "we couldn't send that" message instead of crashing to a generic error page. */
+ * Not queued through the async account-delivery outbox: this short-lived code is only useful
+ * delivered immediately, not sitting in a retry queue. A delivery failure is caught here and
+ * reported as a distinct status rather than allowed to become an unhandled exception. */
 export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, options: { origin?: string; userId?: number } = {}): Promise<IssueEmailOtpResult> {
   const email = normalizeEmail(untrustedEmail);
   const now = new Date();
@@ -75,8 +73,6 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   try {
     await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
   } catch (error) {
-    // Categorical only, matching lib/membership/account-recovery.ts's operational-failure evidence:
-    // the exception text itself is never retained, only which class of problem it was.
     console.error('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
     return { status: 'delivery_failed' };
   }
@@ -86,10 +82,8 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
 export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'rate_limited' | 'verified';
 
 /** Verifies a submitted code against the latest unconsumed, unexpired code for this email/purpose.
- * Each call against an existing record increments its attempt counter first, so even a crashed or
- * short-circuited request still counts toward the lockout. Verification attempts are additionally
- * rate-limited (independently by email and by origin, like issuance) so repeatedly requesting fresh
- * codes cannot be used to grind through more guesses than the per-code lockout alone would allow. */
+ * Each call against an existing record increments its attempt counter first. Verification attempts
+ * are additionally rate-limited independently by email and origin. */
 export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown'): Promise<VerifyEmailOtpResult> {
   if (!/^\d{6}$/.test(code)) return 'invalid';
   const email = normalizeEmail(untrustedEmail);
