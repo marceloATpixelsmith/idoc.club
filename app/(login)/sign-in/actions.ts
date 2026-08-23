@@ -20,11 +20,9 @@ const startLoginSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
-/** The email-first boundary is intentionally account-existence neutral. After a valid bot challenge
- * and rate-limit decision, every syntactically valid email advances to the password step. Password
- * verification then returns the same generic failure for unknown, unverified, suspended, deleted,
- * or otherwise ineligible accounts. Legacy migrated members use the separate neutral activation
- * flow; the retained legacy-OTP handlers below preserve compatibility for already-started flows. */
+/** Everyone enters through the same login surface. Migrated accounts that have not completed their
+ * one-time email-control verification are routed internally into the existing OTP/password-creation
+ * continuation; there is no separate public "migrated member" activation entry point. */
 export const startLogin = validatedAction(startLoginSchema, async ({ email: rawEmail, turnstileToken }) => {
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
@@ -34,6 +32,17 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
   if (!(await checkRateLimit('login_email', email, origin))) {
     return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   }
+
+  const [account] = await db.select({ accountState: users.accountState }).from(users).where(eq(users.email, email)).limit(1);
+  if (account?.accountState === 'migrated_pending') {
+    const issued = await issueEmailOtp(email, 'login_verification', { origin });
+    if (issued.status === 'rate_limited') return { email, error: 'Too many attempts. Please try again in a few minutes.' };
+    if (issued.status === 'cooldown') return { email, error: 'Please wait before requesting another code.' };
+    if (issued.status === 'delivery_failed') return { email, error: 'We could not send that verification code. Please try again in a moment.' };
+    await startPendingLogin(email, true);
+    redirect('/sign-in');
+  }
+
   await startPendingLogin(email, false);
   redirect('/sign-in');
 });
@@ -80,7 +89,7 @@ export const activateLegacyAccount = validatedAction(activateSchema, async ({ pa
   if (!user) { await clearPendingLogin(); return { error: 'Your sign-in session expired. Start again.' }; }
   const result = await activateMigratedAccountByUserId(user.id, password);
   if (result.status !== 'success') {
-    return { error: 'We could not activate your account automatically. Contact IDOC for help.' };
+    return { error: 'We could not finish signing you in automatically. Contact IDOC for help.' };
   }
   await clearPendingLogin();
   const [activated] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
