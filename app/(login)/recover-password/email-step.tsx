@@ -12,6 +12,7 @@ export function EmailStep() {
       footer={<>Remembered your password?{' '}<Link className="font-medium text-gray-900 underline" href="/sign-in">Sign in</Link></>}
       submitLabel="Send code"
       title="Forgot password?"
+      turnstileAction="password-reset"
     />
   );
 }
