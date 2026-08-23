@@ -51,13 +51,15 @@ The second slice removes two inherited subscription-starter Server Actions, `inv
 
 IDOC's production authorization model does not use legacy subscription-starter team ownership as authentication or administrator authority. The compatibility `/api/team` route remains deliberately disabled, and legacy team mutation actions are no longer exported or callable as Server Actions. A regression test now fails if either legacy mutation action, or its team/invitation dependencies, is reintroduced into the authentication action module.
 
-This closes the discovered legacy-team mutation path under the canonical requirements that authentication and authorization remain distinct, client-visible or compatibility role concepts are not authoritative, and protected mutations require trusted server authorization (`AUTH-AUTHZ-*`, `AUTH-FRAMEWORK-*`, and `AUTH-SESSION-001`). It does **not** yet implement the final canonical privileged-invitation flow; that remains separate work and must use IDOC application roles, Super Admin authority, purpose-bound invitation evidence, audit coverage, and applicable fresh step-up/MFA controls.
+Privileged IDOC application-role changes are already restricted to Super Admins and audited. This slice additionally increments the target account's server-owned `sessionVersion` in the same transaction as every Administrator or Super Admin grant/revocation. Because authenticated-user resolution rejects signed sessions whose embedded version no longer matches the authoritative account version, pre-change sessions for the target are invalidated immediately after the role change. This prevents a privilege grant from silently upgrading an existing lower-assurance session and prevents a revoked privileged session from retaining authority until natural expiry.
+
+This closes the discovered legacy-team mutation path and stale-role-session path under the canonical requirements that authentication and authorization remain distinct, client-visible or compatibility role concepts are not authoritative, protected mutations require trusted server authorization, and privilege changes rotate or revoke existing authority (`AUTH-AUTHZ-*`, `AUTH-FRAMEWORK-*`, and `AUTH-SESSION-*`). It does **not** yet implement the final canonical privileged-invitation flow or the full canonical session lifecycle; those remain separate work.
 
 ## Remaining retrofit work
 
 The following areas require a subsequent gap analysis and implementation evidence before the retrofit can be considered complete:
 
-- canonical session lifecycle, rotation, absolute/idle limits, revocation, and session inventory semantics while preserving existing-user continuity;
+- canonical session lifecycle, rotation, absolute/idle limits, individual revocation, session inventory, cookie contract, and session-key rotation semantics while preserving existing-user continuity;
 - complete MFA policy implementation, including required TOTP enrollment/challenge behavior for applicable privileged roles;
 - recovery codes, authenticator replacement/re-enrollment, and remembered-device behavior;
 - fresh sensitive-action step-up for privileged/security-sensitive actions;
