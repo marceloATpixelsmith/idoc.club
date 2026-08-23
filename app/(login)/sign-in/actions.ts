@@ -20,27 +20,19 @@ const startLoginSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
-/** Deliberately reveals whether the email has an account: this is a login flow (the user is already
- * proving they know the email they signed up with), not the neutral anonymous recovery/activation
- * boundary in lib/membership/account-recovery.ts, which stays neutral. */
+/** The email-first boundary is intentionally account-existence neutral. After a valid bot challenge
+ * and rate-limit decision, every syntactically valid email advances to the password step. Password
+ * verification then returns the same generic failure for unknown, unverified, suspended, deleted,
+ * or otherwise ineligible accounts. Legacy migrated members use the separate neutral activation
+ * flow; the retained legacy-OTP handlers below preserve compatibility for already-started flows. */
 export const startLogin = validatedAction(startLoginSchema, async ({ email: rawEmail, turnstileToken }) => {
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
-  if (!(await verifyTurnstile(turnstileToken, origin))) {
+  if (!(await verifyTurnstile(turnstileToken, origin, 'login'))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
   }
   if (!(await checkRateLimit('login_email', email, origin))) {
     return { email, error: 'Too many attempts. Please try again in a few minutes.' };
-  }
-  const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (!user || user.accountState === 'deleted') return { email, error: 'No account was found with that email address.' };
-  if (user.accountState === 'suspended') return { email, error: 'This account is suspended. Contact IDOC for help.' };
-  if (user.accountState === 'migrated_pending') {
-    const result = await issueEmailOtp(email, 'login_verification', { origin, userId: user.id });
-    if (result.status === 'rate_limited') return { email, error: 'Too many attempts. Please try again in a few minutes.' };
-    if (result.status === 'delivery_failed') return { email, error: 'We could not send that verification code. Please try again in a moment.' };
-    await startPendingLogin(email, true);
-    redirect('/sign-in');
   }
   await startPendingLogin(email, false);
   redirect('/sign-in');
