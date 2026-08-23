@@ -57,9 +57,11 @@ This closes the discovered legacy-team mutation path and stale-role-session path
 
 ### Login-surface correction for imported members
 
-Imported members no longer receive a separate public activation choice on the sign-in screen. Every member starts at the same `/sign-in` entry surface. When the trusted server determines that an imported `migrated_pending` account still requires its one-time email-control verification, the existing sign-in transaction routes that member internally through the email OTP and password-establishment continuation. The user-facing copy is migration-neutral, and the old `/request-activation` route redirects to `/sign-in` rather than presenting a distinct imported-account form.
+Imported members no longer receive a separate public activation choice on the sign-in screen. Every member starts at the same `/sign-in` entry surface. The anonymous email-entry boundary is account-state neutral: after Turnstile and rate-limit checks, every syntactically valid email advances to the same login-verification OTP screen, while only an eligible account actually receives a code. OTP delivery, cooldown, and account-state distinctions are not reflected in the anonymous response.
 
-This preserves the migration safety checks and imported-profile foundation validation while matching the canonical reference's single login surface. There is no user-visible “Migrated member?” branch on the login page.
+Only after successful possession of the emailed code does the trusted server inspect account state to choose the continuation. An ordinary eligible member continues to normal password entry; a `migrated_pending` imported member continues to the one-time password-establishment step. The user-facing copy is migration-neutral. The pre-existing `/request-activation` email-link route is retained only as an unlinked compatibility/support fallback for legacy activation links; it is not advertised or linked anywhere in the normal sign-in flow.
+
+This preserves migration safety checks and imported-profile foundation validation while matching the canonical reference's single visible login surface and anti-enumeration requirements. There is no user-visible “Migrated member?” branch on the login page.
 
 ## Remaining retrofit work
 
