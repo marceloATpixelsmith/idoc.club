@@ -9,10 +9,10 @@ test('sign-in does not expose a migrated-member activation link', () => {
   assert.doesNotMatch(passwordStep, /Migrated member\?|request-activation/);
 });
 
-test('legacy activation URL redirects into the normal sign-in entry point', () => {
-  const page = read('app/(login)/request-activation/page.tsx');
-  assert.match(page, /redirect\('\/sign-in'\)/);
-  assert.doesNotMatch(page, /AccountLinkForm|requestMigrationActivation/);
+test('legacy activation fallback is not linked from normal sign-in', () => {
+  const emailStep = read('app/(login)/sign-in/email-step.tsx');
+  const passwordStep = read('app/(login)/sign-in/password-step.tsx');
+  assert.doesNotMatch(`${emailStep}\n${passwordStep}`, /request-activation|Migrated member\?/);
 });
 
 test('anonymous login email entry is account-state neutral', () => {
