@@ -1,5 +1,7 @@
 import 'server-only';
 
+// Keep this import Node-resolvable as well as bundler-resolvable: the release test runner executes
+// this module directly under Node's ESM resolver without the Next.js @/* path alias.
 import { baseUrlForServer, turnstileSecretKeyForServer } from '../runtime/configuration.ts';
 
 type TurnstileSiteverifyResponse = {
