@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { verifyTurnstile } from '../lib/auth/turnstile.ts';
 
+// This file intentionally runs under the repository's raw Node test runner, so imported production
+// modules must remain resolvable without the Next.js path-alias loader.
 const originalFetch = globalThis.fetch;
 const originalSecret = process.env.TURNSTILE_SECRET_KEY;
 const originalBaseUrl = process.env.BASE_URL;
