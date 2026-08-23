@@ -15,19 +15,17 @@ declare global {
   }
 }
 
-/** Renders a Cloudflare Turnstile challenge. The widget itself requires JavaScript to solve (that
- * is inherent to what it verifies), but once solved it injects a hidden `cf-turnstile-response`
- * input into this div, which native form submission picks up like any other field — no client-side
- * submit handling required. `onVerify` is optional progressive enhancement for UI that wants to
- * know the challenge is solved (e.g. to enable a submit button) before the form is even submitted.
- *
- * Explicit rendering (`render=explicit` + calling `window.turnstile.render` ourselves once both the
- * script has loaded and the container div exists) is deliberate: Cloudflare's default implicit mode
- * scans the DOM for `.cf-turnstile` once, when the script executes, and never again — so on a route
- * where the div is added by React after that scan already ran (a very normal ordering with
- * `next/script`), the widget silently never renders until a full page reload happens to reorder
- * things correctly. Driving the render from React's own lifecycle removes that race entirely. */
-export function TurnstileWidget({ onVerify }: { onVerify?: (token: string) => void }) {
+/** Renders a Cloudflare Turnstile challenge with a trusted server-expected action name. The widget
+ * itself requires JavaScript to solve, but once solved its token is submitted with the form and must
+ * still be verified server-side. `onVerify` is optional progressive enhancement for UI that wants
+ * to know the challenge is solved before submission. */
+export function TurnstileWidget({
+  action,
+  onVerify,
+}: {
+  action: string;
+  onVerify?: (token: string) => void;
+}) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -35,13 +33,18 @@ export function TurnstileWidget({ onVerify }: { onVerify?: (token: string) => vo
 
   useEffect(() => {
     if (!scriptLoaded || !siteKey || !containerRef.current || !window.turnstile) return undefined;
-    widgetIdRef.current = window.turnstile.render(containerRef.current, { callback: onVerify, sitekey: siteKey, size: 'flexible' });
+    widgetIdRef.current = window.turnstile.render(containerRef.current, {
+      action,
+      callback: onVerify,
+      sitekey: siteKey,
+      size: 'flexible',
+    });
     return () => {
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onVerify identity changes every render in some callers; re-rendering the widget on every keystroke would reset the solved challenge.
-  }, [scriptLoaded, siteKey]);
+  }, [action, scriptLoaded, siteKey]);
 
   if (!siteKey) return null;
   return (

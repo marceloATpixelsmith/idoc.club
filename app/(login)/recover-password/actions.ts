@@ -20,14 +20,13 @@ const startResetSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
-/** Neutral anonymous boundary, matching lib/membership/account-recovery.ts's requestAccountLink:
- * the outward response and timing are indistinguishable regardless of whether the email belongs to
- * an eligible account, so this step can never be used to enumerate members. */
+/** Neutral anonymous boundary: outward behavior and timing are indistinguishable regardless of
+ * whether the email belongs to an eligible account. */
 export const startPasswordReset = validatedAction(startResetSchema, async ({ email: rawEmail, turnstileToken }) => {
   const startedAt = defaultTiming.now();
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
-  if (!(await verifyTurnstile(turnstileToken, origin))) {
+  if (!(await verifyTurnstile(turnstileToken, origin, 'password-reset'))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
   }
   if (!(await checkRateLimit('password_reset_email', email, origin))) {

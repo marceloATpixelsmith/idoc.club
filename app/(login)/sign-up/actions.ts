@@ -21,16 +21,12 @@ const startSignupSchema = z.object({
 });
 
 /** Neutral outward behavior regardless of whether the email already has an account: an existing
- * account never receives a signup code (issueEmailOtp is skipped), but the response shape and
- * timing are indistinguishable from a brand-new email, so a caller cannot use this step to probe
- * account existence. Anyone who actually controls an existing inbox learns nothing new here either
- * — they simply never receive a code and stay stuck at the same verify screen a wrong email would
- * produce. */
+ * account never receives a signup code, while outward response shape/timing remain neutral. */
 export const startSignup = validatedAction(startSignupSchema, async ({ email: rawEmail, turnstileToken }) => {
   const startedAt = defaultTiming.now();
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
-  if (!(await verifyTurnstile(turnstileToken, origin))) {
+  if (!(await verifyTurnstile(turnstileToken, origin, 'signup'))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
   }
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);

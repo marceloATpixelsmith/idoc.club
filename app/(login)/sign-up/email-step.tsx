@@ -11,6 +11,7 @@ export function EmailStep() {
       footer={<>Already have an account?{' '}<Link className="font-medium text-gray-900 underline" href="/sign-in">Sign in</Link></>}
       submitLabel="Sign Up"
       title="Create account"
+      turnstileAction="signup"
     />
   );
 }
