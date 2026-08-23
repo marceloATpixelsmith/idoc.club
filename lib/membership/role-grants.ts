@@ -3,7 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { applicationRoles, auditLog } from '@/lib/db/schema';
+import { applicationRoles, auditLog, users } from '@/lib/db/schema';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator, requireSuperAdmin } from './authorization';
 
@@ -23,6 +23,14 @@ export async function listActiveRoles(userId: number) {
     .from(applicationRoles).where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
 }
 
+async function revokeTargetSessions(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], userId: number) {
+  const [updated] = await tx.update(users).set({
+    sessionVersion: sql`${users.sessionVersion} + 1`,
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId)).returning({ id: users.id });
+  if (!updated) throw new Error('The target user does not exist.');
+}
+
 /** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6). */
 export async function grantApplicationRole(userId: number, untrustedInput: unknown) {
   const input = grantSchema.parse(untrustedInput);
@@ -36,6 +44,13 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
       .onConflictDoNothing({ target: [applicationRoles.userId, applicationRoles.role], where: sql`${applicationRoles.revokedAt} is null` })
       .returning();
     if (!inserted) throw new Error('This user already holds this role.');
+
+    // A privilege grant must not take effect inside an already-issued lower-assurance session.
+    // Incrementing the target account's server-owned sessionVersion invalidates every existing
+    // signed session for that user. Their next login evaluates the new role under the current auth
+    // policy (including privileged MFA once that retrofit slice is installed).
+    await revokeTargetSessions(tx, userId);
+
     await tx.insert(auditLog).values({
       action: 'admin.role.granted', actorId: actor.id,
       afterJson: { role: input.role }, beforeJson: null,
@@ -68,6 +83,12 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
       .where(and(eq(applicationRoles.userId, userId), eq(applicationRoles.role, input.role), isNull(applicationRoles.revokedAt)))
       .returning();
     if (!revoked) throw new Error('This user does not actively hold this role.');
+
+    // Revocation must promptly remove authority from sessions that were authenticated while the
+    // target held the role. getUser() already rejects any signed session whose version no longer
+    // matches this server-owned account value.
+    await revokeTargetSessions(tx, userId);
+
     await tx.insert(auditLog).values({
       action: 'admin.role.revoked', actorId: actor.id,
       afterJson: null, beforeJson: { role: input.role },
