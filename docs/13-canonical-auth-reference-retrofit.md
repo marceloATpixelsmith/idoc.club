@@ -34,19 +34,19 @@ The retrofit is **not complete** and IDOC must not be described as conformant to
 
 ### First security-alignment slice
 
-The initial slice corrects three existing contradictions with the canonical contract:
+The initial slice corrects four existing contradictions with the canonical contract:
 
 1. **Turnstile Siteverify binding.** Auth flow-entry challenges are now submitted with a stable action name. Trusted server verification requires provider `success`, the hostname derived from trusted `BASE_URL`, and the exact expected action. Provider failure and mismatches fail closed. The client challenge remains untrusted evidence and never establishes authentication authority.
 2. **Login anti-enumeration.** The first login email step no longer reveals whether an account exists or whether it is suspended. Every syntactically valid, rate-limit-allowed email advances to the same password step; the password boundary keeps a generic failure for nonexistent or ineligible accounts. Migrated members retain the separate activation route, and already-started legacy activation continuations remain compatible.
 3. **Email OTP lifetime.** Signup, password-reset, and retained legacy login-verification OTPs now expire after 15 minutes, matching the canonical 900-second transaction/verification lifetime. Attempt caps, single-use behavior, resend replacement, and rate limiting remain in force.
+4. **Password policy and storage migration.** New password-setting paths use the canonical 12–128 character policy without composition rules and store credentials in a versioned Argon2id format. Existing bcrypt credentials remain valid only as a migration format and are rehashed to Argon2id after successful verification, preserving existing-member access while moving credentials forward.
 
-Canonical requirement families directly implicated by this slice include `AUTH-BOT-*`, `AUTH-RATE-*`, `AUTH-TRANSACTION-*`, `AUTH-EMAIL-*`, `AUTH-IDENTITY-*`, and `AUTH-OPERATIONS-*` as defined by the current machine contract.
+Canonical requirement families directly implicated by this slice include `AUTH-BOT-*`, `AUTH-RATE-*`, `AUTH-TRANSACTION-*`, `AUTH-EMAIL-*`, `AUTH-IDENTITY-*`, `AUTH-PASSWORD-*`, `AUTH-STORAGE-*`, and `AUTH-OPERATIONS-*` as defined by the current machine contract.
 
 ## Remaining retrofit work
 
 The following areas require a subsequent gap analysis and implementation evidence before the retrofit can be considered complete:
 
-- password storage migration to the canonical versioned Argon2id model with safe compatibility/rehash behavior for existing bcrypt credentials;
 - canonical session lifecycle, rotation, absolute/idle limits, revocation, and session inventory semantics while preserving existing-user continuity;
 - complete MFA policy implementation, including required TOTP enrollment/challenge behavior for applicable privileged roles;
 - recovery codes, authenticator replacement/re-enrollment, and remembered-device behavior;
