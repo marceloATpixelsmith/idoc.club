@@ -52,5 +52,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate PR58 auth-session schema snapshot artifact
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('lib/db/schema.ts')
+          s = p.read_text()
+          marker = "export const teams = idocSchema.table('teams', {"
+          block = """export const authSessions = idocSchema.table('auth_sessions', {\n  id: serial('id').primaryKey(),\n  sessionId: varchar('session_id', { length: 64 }).notNull().unique(),\n  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),\n  sessionVersion: integer('session_version').notNull(),\n  authenticatedAt: timestamp('authenticated_at', { withTimezone: true }).notNull(),\n  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull(),\n  absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),\n  revokedAt: timestamp('revoked_at', { withTimezone: true }),\n  revokeReason: varchar('revoke_reason', { length: 80 }),\n  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),\n  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),\n}, (table) => [\n  index('auth_sessions_active_user_idx').on(table.userId, table.lastActivityAt).where(sql`${table.revokedAt} is null`),\n  index('auth_sessions_expiry_idx').on(table.absoluteExpiresAt),\n]);\n\n"""
+          if "export const authSessions = idocSchema.table('auth_sessions'" not in s:
+              s = s.replace(marker, block + marker, 1)
+              p.write_text(s)
+          PY
+          rm -rf /tmp/pr58-snapshot
+          pnpm exec drizzle-kit generate --schema=lib/db/schema.ts --out=/tmp/pr58-snapshot --dialect=postgresql
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+          previous = json.loads(Path('lib/db/migrations/meta/0015_snapshot.json').read_text())
+          generated = json.loads(Path('/tmp/pr58-snapshot/meta/0000_snapshot.json').read_text())
+          generated['prevId'] = previous['id']
+          generated['id'] = '7ef366fd-09ea-45f4-8bc8-baa80c004058'
+          Path('/tmp/pr58-snapshot/0016_snapshot.json').write_text(json.dumps(generated, indent=2) + '\n')
+          PY
+
+      - name: Upload PR58 schema snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr58-auth-session-snapshot
+          path: /tmp/pr58-snapshot/0016_snapshot.json
+
       - name: Run Release 1 verification gate
         run: pnpm check:release1
