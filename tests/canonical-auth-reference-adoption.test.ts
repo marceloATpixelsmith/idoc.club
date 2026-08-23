@@ -32,6 +32,7 @@ test('password success gates only unverified accounts into email verification', 
 test('successful login email verification persists authoritative state before session', () => {
   const verifyBody = loginActions.slice(loginActions.indexOf('export const verifyLoginOtp'), loginActions.indexOf('export const resendLoginOtp'));
   assert.match(verifyBody, /emailVerifiedAt:/);
+  assert.match(verifyBody, /finalizeMigratedAccountAfterVerifiedPassword/);
   assert.match(verifyBody, /await setSession\(verifiedUser\)/);
   assert.ok(verifyBody.indexOf('emailVerifiedAt:') < verifyBody.indexOf('await setSession(verifiedUser)'));
 });
@@ -52,7 +53,7 @@ test('auth shell follows canonical split layout and mobile visual behavior', () 
 
 test('canonical reference version is pinned in implementation documentation', () => {
   const doc = read('docs/13-canonical-auth-reference-retrofit.md');
-  assert.match(doc, /contract 1\.9\.0/i);
-  assert.match(doc, /schema 13\.0\.0/i);
-  assert.match(doc, /validator 10\.0\.0/i);
+  assert.match(doc, /contract\s+`?1\.9\.0`?/i);
+  assert.match(doc, /schema\s+`?13\.0\.0`?/i);
+  assert.match(doc, /validator\s+`?10\.0\.0`?/i);
 });
