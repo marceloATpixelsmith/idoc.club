@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import {
+  expiredSessionCookieOptions,
   LEGACY_SESSION_COOKIE_NAME,
   refreshSessionActivity,
   sessionCookieName,
@@ -44,7 +45,7 @@ export async function middleware(request: NextRequest) {
     const res = isProtectedRoute
       ? NextResponse.redirect(new URL('/sign-in', request.url))
       : NextResponse.next();
-    res.cookies.delete(canonicalName);
+    res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
     res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     return res;
   }
