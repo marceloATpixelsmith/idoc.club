@@ -6,6 +6,8 @@ This document tracks IDOC's retrofit to the canonical authentication implementat
 
 Reference repository: `marceloATpixelsmith/pixelsmith-auth-reference`
 
+Current reference `main` inspected through commit `b6aa39aa0868dd86483c40ff168a7bd26a7dea68`.
+
 Baseline inspected for this retrofit:
 
 - contract `1.8.0`
@@ -43,17 +45,28 @@ The initial slice corrects four existing contradictions with the canonical contr
 
 Canonical requirement families directly implicated by this slice include `AUTH-BOT-*`, `AUTH-RATE-*`, `AUTH-TRANSACTION-*`, `AUTH-EMAIL-*`, `AUTH-IDENTITY-*`, `AUTH-PASSWORD-*`, `AUTH-STORAGE-*`, and `AUTH-OPERATIONS-*` as defined by the current machine contract.
 
+### Second security-alignment slice: authorization boundary cleanup
+
+The second slice removes two inherited subscription-starter Server Actions, `inviteTeamMember` and `removeTeamMember`, from the authentication action module. Those actions operated on the legacy `teams`, `team_members`, and `invitations` compatibility tables and authorized only through a normal authenticated-account boundary. They did not represent IDOC's canonical Member/Admin/Super Admin authorization model and could therefore create or remove legacy team membership without a corresponding IDOC application-role authorization decision.
+
+IDOC's production authorization model does not use legacy subscription-starter team ownership as authentication or administrator authority. The compatibility `/api/team` route remains deliberately disabled, and legacy team mutation actions are no longer exported or callable as Server Actions. A regression test now fails if either legacy mutation action, or its team/invitation dependencies, is reintroduced into the authentication action module.
+
+Privileged IDOC application-role changes are already restricted to Super Admins and audited. This slice additionally increments the target account's server-owned `sessionVersion` in the same transaction as every Administrator or Super Admin grant/revocation. Because authenticated-user resolution rejects signed sessions whose embedded version no longer matches the authoritative account version, pre-change sessions for the target are invalidated immediately after the role change. This prevents a privilege grant from silently upgrading an existing lower-assurance session and prevents a revoked privileged session from retaining authority until natural expiry.
+
+This closes the discovered legacy-team mutation path and stale-role-session path under the canonical requirements that authentication and authorization remain distinct, client-visible or compatibility role concepts are not authoritative, protected mutations require trusted server authorization, and privilege changes rotate or revoke existing authority (`AUTH-AUTHZ-*`, `AUTH-FRAMEWORK-*`, and `AUTH-SESSION-*`). It does **not** yet implement the final canonical privileged-invitation flow or the full canonical session lifecycle; those remain separate work.
+
 ## Remaining retrofit work
 
 The following areas require a subsequent gap analysis and implementation evidence before the retrofit can be considered complete:
 
-- canonical session lifecycle, rotation, absolute/idle limits, revocation, and session inventory semantics while preserving existing-user continuity;
+- canonical session lifecycle, rotation, absolute/idle limits, individual revocation, session inventory, cookie contract, and session-key rotation semantics while preserving existing-user continuity;
 - complete MFA policy implementation, including required TOTP enrollment/challenge behavior for applicable privileged roles;
 - recovery codes, authenticator replacement/re-enrollment, and remembered-device behavior;
 - fresh sensitive-action step-up for privileged/security-sensitive actions;
 - full server-owned authentication transaction semantics and replay/atomic-consumption evidence across every flow;
 - CSRF verification against the canonical contract for all cookie-authenticated unsafe mutations;
-- authorization and role/invitation review against current `AUTH-AUTHZ-*` and privileged-role requirements;
+- canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles rather than legacy team roles;
+- remaining authorization review against current `AUTH-AUTHZ-*` requirements, including direct-handler and resource-level negative tests;
 - audit/security-event coverage required by the canonical logging, lifecycle, incident, and key/secret requirements;
 - complete canonical UI/flow comparison and route/configuration mapping;
 - production provider/configuration evidence, failure-mode tests, concurrency/replay tests, and final `AUTH-*` requirement matrix.
