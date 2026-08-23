@@ -24,7 +24,6 @@ export function PasswordStep({ email }: { email: string }) {
       </form>
       <div className="mt-4 space-y-1 text-center text-sm">
         <p><a className="font-medium text-gray-900 underline" href="/recover-password">Forgot your password?</a></p>
-        <p><a className="font-medium text-gray-900 underline" href="/request-activation">Migrated member? Activate your account</a></p>
         <form action={cancelAction}>
           <button className="cursor-pointer text-gray-600 underline" type="submit">Use a different email address</button>
         </form>

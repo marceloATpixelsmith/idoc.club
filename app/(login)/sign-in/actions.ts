@@ -20,11 +20,21 @@ const startLoginSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
-/** The email-first boundary is intentionally account-existence neutral. After a valid bot challenge
- * and rate-limit decision, every syntactically valid email advances to the password step. Password
- * verification then returns the same generic failure for unknown, unverified, suspended, deleted,
- * or otherwise ineligible accounts. Legacy migrated members use the separate neutral activation
- * flow; the retained legacy-OTP handlers below preserve compatibility for already-started flows. */
+async function eligibleLoginOtpUser(email: string) {
+  const [account] = await db.select({
+    accountState: users.accountState,
+    id: users.id,
+  }).from(users).where(eq(users.email, email)).limit(1);
+  if (!account || !['active', 'onboarding', 'migrated_pending'].includes(account.accountState)) return null;
+  return account;
+}
+
+/** The anonymous email-entry boundary is account-state neutral. Every syntactically valid,
+ * Turnstile/rate-limit-allowed email advances to the same OTP screen. A code is sent only when the
+ * server finds an eligible account, and provider/cooldown/account-state distinctions are never
+ * reflected in the anonymous response. Only after successful possession of the emailed code may
+ * the server branch between ordinary password entry and the migrated account's one-time password
+ * establishment. */
 export const startLogin = validatedAction(startLoginSchema, async ({ email: rawEmail, turnstileToken }) => {
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
@@ -34,7 +44,12 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
   if (!(await checkRateLimit('login_email', email, origin))) {
     return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   }
-  await startPendingLogin(email, false);
+
+  const account = await eligibleLoginOtpUser(email);
+  if (account) {
+    await issueEmailOtp(email, 'login_verification', { origin, userId: account.id });
+  }
+  await startPendingLogin(email, true);
   redirect('/sign-in');
 });
 
@@ -59,11 +74,11 @@ export const resendLoginOtp = validatedAction(z.object({}), async () => {
   const pending = await getPendingLogin();
   if (!pending || !pending.legacy) return { error: 'Your sign-in session expired. Start again.' };
   const origin = await requestOrigin();
-  const result = await issueEmailOtp(pending.email, 'login_verification', { origin });
-  if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
-  if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
-  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
-  return { success: 'A new code was sent.' };
+  const account = await eligibleLoginOtpUser(pending.email);
+  if (account) {
+    await issueEmailOtp(pending.email, 'login_verification', { origin, userId: account.id });
+  }
+  return { success: 'If this address can receive a sign-in code, a new code was sent.' };
 });
 
 export const cancelLogin = validatedAction(z.object({}), async () => {
@@ -80,7 +95,7 @@ export const activateLegacyAccount = validatedAction(activateSchema, async ({ pa
   if (!user) { await clearPendingLogin(); return { error: 'Your sign-in session expired. Start again.' }; }
   const result = await activateMigratedAccountByUserId(user.id, password);
   if (result.status !== 'success') {
-    return { error: 'We could not activate your account automatically. Contact IDOC for help.' };
+    return { error: 'We could not finish signing you in automatically. Contact IDOC for help.' };
   }
   await clearPendingLogin();
   const [activated] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
