@@ -1,6 +1,6 @@
 # Canonical authentication reference retrofit
 
-This document tracks IDOC's retrofit to the canonical authentication implementation reference in `marceloATpixelsmith/pixelsmith-auth-reference`. It supplements the existing IDOC security requirements while the retrofit is in progress. If an older authentication-specific statement in another IDOC document conflicts with the current canonical authentication contract, the canonical contract governs the retrofit and the conflicting IDOC documentation must be corrected.
+This document tracks IDOC's retrofit to the canonical authentication implementation reference in `marceloATpixelsmith/pixelsmith-auth-reference`. It supplements the existing IDOC security requirements while the retrofit is in progress. If an older authentication-specific statement in another IDOC document conflicts with the current canonical authentication contract, the canonical contract governs the retrofit and the conflicting IDOC documentation must be corrected in the same implementation work.
 
 ## Canonical baseline
 
