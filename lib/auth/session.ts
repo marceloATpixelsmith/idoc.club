@@ -30,13 +30,30 @@ export function sessionCookieName() {
     : DEVELOPMENT_SESSION_COOKIE_NAME;
 }
 
-export function sessionCookieOptions(absoluteExpiresAt: string) {
+function canonicalCookieSecurityAttributes() {
   return {
-    expires: new Date(absoluteExpiresAt),
     httpOnly: true,
     path: '/' as const,
     sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
+  };
+}
+
+export function sessionCookieOptions(absoluteExpiresAt: string) {
+  return {
+    ...canonicalCookieSecurityAttributes(),
+    expires: new Date(absoluteExpiresAt),
+  };
+}
+
+/** A __Host- cookie must keep Secure and Path=/ even when it is expired. Using the framework's
+ * name-only delete() can omit those attributes, causing production browsers to reject the clearing
+ * Set-Cookie and leave the authenticated cookie intact. */
+export function expiredSessionCookieOptions() {
+  return {
+    ...canonicalCookieSecurityAttributes(),
+    expires: new Date(0),
+    maxAge: 0,
   };
 }
 
@@ -153,6 +170,6 @@ export async function setSession(user: NewUser) {
 
 export async function clearSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(sessionCookieName());
+  cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions());
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
 }
