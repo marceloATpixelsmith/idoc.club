@@ -58,6 +58,8 @@ The following areas require a subsequent gap analysis and implementation evidenc
 - complete canonical UI/flow comparison and route/configuration mapping;
 - production provider/configuration evidence, failure-mode tests, concurrency/replay tests, and final `AUTH-*` requirement matrix.
 
+The final requirement matrix must cite concrete implementation, automated-test, and operational evidence rather than treating documentation statements alone as proof of conformance.
+
 ## Completion criterion
 
 The strongest allowed status before the final audit is **not ready**.
