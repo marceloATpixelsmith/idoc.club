@@ -23,14 +23,6 @@ export async function listActiveRoles(userId: number) {
     .from(applicationRoles).where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
 }
 
-async function revokeTargetSessions(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], userId: number) {
-  const [updated] = await tx.update(users).set({
-    sessionVersion: sql`${users.sessionVersion} + 1`,
-    updatedAt: new Date(),
-  }).where(eq(users.id, userId)).returning({ id: users.id });
-  if (!updated) throw new Error('The target user does not exist.');
-}
-
 /** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6). */
 export async function grantApplicationRole(userId: number, untrustedInput: unknown) {
   const input = grantSchema.parse(untrustedInput);
@@ -49,7 +41,11 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
     // Incrementing the target account's server-owned sessionVersion invalidates every existing
     // signed session for that user. Their next login evaluates the new role under the current auth
     // policy (including privileged MFA once that retrofit slice is installed).
-    await revokeTargetSessions(tx, userId);
+    const [updatedUser] = await tx.update(users).set({
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId)).returning({ id: users.id });
+    if (!updatedUser) throw new Error('The target user does not exist.');
 
     await tx.insert(auditLog).values({
       action: 'admin.role.granted', actorId: actor.id,
@@ -85,9 +81,13 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
     if (!revoked) throw new Error('This user does not actively hold this role.');
 
     // Revocation must promptly remove authority from sessions that were authenticated while the
-    // target held the role. getUser() already rejects any signed session whose version no longer
-    // matches this server-owned account value.
-    await revokeTargetSessions(tx, userId);
+    // target held the role. getUser() rejects any signed session whose version no longer matches
+    // this server-owned account value.
+    const [updatedUser] = await tx.update(users).set({
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId)).returning({ id: users.id });
+    if (!updatedUser) throw new Error('The target user does not exist.');
 
     await tx.insert(auditLog).values({
       action: 'admin.role.revoked', actorId: actor.id,
