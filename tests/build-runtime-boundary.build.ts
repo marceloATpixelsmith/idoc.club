@@ -35,7 +35,8 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
     assert.equal(result.status, 0, `Production build failed without privileged configuration:\n${output.slice(-4000)}`);
     assert.equal(existsSync(marker), false, 'Production build attempted network access.');
     assert.match(output, /Generating static pages/);
-    for (const route of ['/', '/_not-found', '/pricing', '/privacy', '/request-activation', '/terms']) assert.match(output, new RegExp(`◐ ${route.replace('/', '\\/')}(?:\\s|$)`));
+    for (const route of ['/', '/_not-found', '/pricing', '/privacy', '/terms']) assert.match(output, new RegExp(`◐ ${route.replace('/', '\\/')}(?:\\s|$)`));
+    assert.match(output, /○ \/request-activation(?:\s|$)/);
     for (const route of ['/activate', '/admin', '/admin/exports', '/admin/members', '/admin/notifications', '/admin/payments', '/admin/reconciliation', '/api/admin/export/audit-log', '/api/admin/export/members', '/api/admin/export/notifications', '/api/admin/export/payments', '/api/client-error', '/api/cron/account-delivery', '/api/cron/reconciliation-scan', '/api/cron/renewal-notice-delivery', '/api/cron/renewal-notice-scan', '/api/stripe/checkout', '/api/stripe/webhook', '/api/team', '/api/user', '/dashboard', '/dashboard/payments', '/dashboard/profile', '/onboarding', '/recover-password', '/reset-password', '/sign-in', '/sign-up', '/verify-email']) assert.match(output, new RegExp(`ƒ ${route.replaceAll('/', '\\/')}(?:\\s|$)`));
     const browserVisible = [...filesBelow(path.join(outputDirectory, 'static')), ...filesBelow(path.join(outputDirectory, 'server/app')).filter((file) => /\.(?:html|rsc)$/.test(file))];
     assert.ok(browserVisible.length > 0, 'No browser-visible build output was discovered.');
