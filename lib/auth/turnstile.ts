@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { baseUrlForServer, turnstileSecretKeyForServer } from '@/lib/runtime/configuration';
+import { baseUrlForServer, turnstileSecretKeyForServer } from '../runtime/configuration';
 
 type TurnstileSiteverifyResponse = {
   action?: string;
