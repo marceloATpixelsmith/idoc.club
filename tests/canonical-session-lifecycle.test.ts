@@ -24,6 +24,16 @@ test('production session cookie uses host-only canonical security attributes', (
   assert.doesNotMatch(session, /domain:/);
 });
 
+test('canonical session clearing preserves __Host cookie attributes', () => {
+  assert.match(session, /expiredSessionCookieOptions/);
+  assert.match(session, /expires: new Date\(0\)/);
+  assert.match(session, /maxAge: 0/);
+  assert.match(session, /cookieStore\.set\(sessionCookieName\(\), '', expiredSessionCookieOptions\(\)\)/);
+  assert.doesNotMatch(session, /cookieStore\.delete\(sessionCookieName\(\)\)/);
+  assert.match(middleware, /res\.cookies\.set\(\{ name: canonicalName, value: '', \.\.\.expiredSessionCookieOptions\(\) \}\)/);
+  assert.doesNotMatch(middleware, /res\.cookies\.delete\(canonicalName\)/);
+});
+
 test('middleware refreshes idle activity without extending the absolute authentication lifetime', () => {
   assert.match(middleware, /refreshSessionActivity\(parsed\)/);
   assert.match(middleware, /sessionCookieOptions\(refreshed\.absoluteExpiresAt\)/);
