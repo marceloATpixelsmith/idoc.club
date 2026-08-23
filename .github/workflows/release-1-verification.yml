@@ -76,11 +76,13 @@ jobs:
           Path('/tmp/pr58-snapshot/0016_snapshot.json').write_text(json.dumps(generated, indent=2) + '\n')
           PY
 
-      - name: Upload PR58 schema snapshot
+      - name: Upload PR58 schema bundle
         uses: actions/upload-artifact@v4
         with:
-          name: pr58-auth-session-snapshot
-          path: /tmp/pr58-snapshot/0016_snapshot.json
+          name: pr58-auth-session-schema-bundle
+          path: |
+            /tmp/pr58-snapshot/0016_snapshot.json
+            lib/db/schema.ts
 
       - name: Run Release 1 verification gate
         run: pnpm check:release1
