@@ -13,13 +13,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 type EmailAction = (prevState: ActionState, formData: FormData) => Promise<ActionState>;
 
-/** Shared email-entry step reused by signup, login, and password reset: identical email field,
- * true/complete validation (any TLD of 2+ characters, not a hardcoded allowlist), Turnstile
- * challenge gating the submit button, and disabled-until-valid submit button across all three. What
- * differs is purely which Server Action gets submitted, the title/description/submit-button copy,
- * and the footer link (each flow points at a different sibling flow). */
+/** Shared email-entry step reused by signup, login, and password reset. Each flow supplies a stable
+ * Turnstile action that the trusted server independently expects during Siteverify. */
 export function EmailEntryStep({
-  action, below, description, footer, submitLabel, title,
+  action, below, description, footer, submitLabel, title, turnstileAction,
 }: {
   action: EmailAction;
   below?: ReactNode;
@@ -27,6 +24,7 @@ export function EmailEntryStep({
   footer?: ReactNode;
   submitLabel: string;
   title: string;
+  turnstileAction: string;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: '' });
   const [email, setEmail] = useState(state.email ?? '');
@@ -45,7 +43,7 @@ export function EmailEntryStep({
           />
         </div>
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
-        <TurnstileWidget onVerify={setTurnstileToken} />
+        <TurnstileWidget action={turnstileAction} onVerify={setTurnstileToken} />
         <Button className="w-full" disabled={!canSubmit} size="lg" type="submit">
           {pending ? 'Please wait…' : submitLabel}
         </Button>
