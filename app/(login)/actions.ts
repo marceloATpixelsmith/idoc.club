@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
-import { comparePasswords, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
+import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
-import { cookies, headers } from 'next/headers';
+import { headers } from 'next/headers';
 import {
   validatedAction,
   validatedActionWithUser
@@ -119,7 +119,7 @@ export const resendVerification = validatedAction(resendVerificationSchema, asyn
 });
 
 export async function signOut() {
-  (await cookies()).delete('session');
+  await clearSession();
 }
 
 const updatePasswordSchema = z.object({
@@ -152,7 +152,7 @@ export const deleteAccount = validatedActionWithUser(
     const isPasswordValid = await comparePasswords(data.password, user.passwordHash);
     if (!isPasswordValid) return { error: 'Incorrect password. Account deletion failed.' };
     await deleteOwnAccount();
-    (await cookies()).delete('session');
+    await clearSession();
     redirect('/sign-in');
   }
 );

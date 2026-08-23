@@ -1,46 +1,54 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { signToken, verifyToken } from '@/lib/auth/session';
+import {
+  expiredSessionCookieOptions,
+  LEGACY_SESSION_COOKIE_NAME,
+  refreshSessionActivity,
+  sessionCookieName,
+  sessionCookieOptions,
+  signToken,
+  verifyToken,
+} from '@/lib/auth/session';
 
 const protectedRoutes = '/dashboard';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionCookie = request.cookies.get('session');
+  const canonicalName = sessionCookieName();
+  const canonicalCookie = request.cookies.get(canonicalName);
+  const legacyCookie = request.cookies.get(LEGACY_SESSION_COOKIE_NAME);
+  const sessionCookie = canonicalCookie ?? legacyCookie;
   const isProtectedRoute = pathname.startsWith(protectedRoutes);
 
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
 
-  let res = NextResponse.next();
+  if (!sessionCookie) return NextResponse.next();
 
-  if (sessionCookie && request.method === 'GET') {
-    try {
-      const parsed = await verifyToken(sessionCookie.value);
-      const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  try {
+    const parsed = await verifyToken(sessionCookie.value);
+    const res = NextResponse.next();
 
+    if (request.method === 'GET') {
+      const refreshed = refreshSessionActivity(parsed);
       res.cookies.set({
-        name: 'session',
-        value: await signToken({
-          ...parsed,
-          expires: expiresInOneDay.toISOString()
-        }),
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        expires: expiresInOneDay
+        name: canonicalName,
+        value: await signToken(refreshed),
+        ...sessionCookieOptions(refreshed.absoluteExpiresAt),
       });
-    } catch (error) {
-      console.error('Error updating session:', error);
-      res.cookies.delete('session');
-      if (isProtectedRoute) {
-        return NextResponse.redirect(new URL('/sign-in', request.url));
-      }
+      if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     }
-  }
 
-  return res;
+    return res;
+  } catch {
+    const res = isProtectedRoute
+      ? NextResponse.redirect(new URL('/sign-in', request.url))
+      : NextResponse.next();
+    res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
+    res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
+    return res;
+  }
 }
 
 export const config = {
