@@ -1,6 +1,5 @@
-import { AccountLinkForm } from '../token-forms';
-import { requestMigrationActivation } from '../actions';
+import { redirect } from 'next/navigation';
 
 export default function RequestActivationPage() {
-  return <AccountLinkForm action={requestMigrationActivation} heading="Activate an imported account" />;
+  redirect('/sign-in');
 }
