@@ -142,7 +142,7 @@ test('recovery and activation store digests, claim once, and revoke sessions', (
 
 test('ordinary sign-in returns a neutral credential failure for blocked account states', () => {
   const actions = readFileSync(new URL('../app/(login)/actions.ts', import.meta.url), 'utf8');
-  assert.match(actions, /\['active', 'onboarding'\]\.includes\(foundUser\.accountState\)/);
+  assert.match(actions, /\['active', 'onboarding', 'migrated_pending'\]\.includes\(foundUser\.accountState\)/);
   assert.doesNotMatch(actions, /Verify your email before signing in/);
 });
 
@@ -161,6 +161,7 @@ test('migrated activation requires imported profile, role, entitlement, and mapp
   assert.match(recovery, /migrationMap/);
   assert.match(recovery, /migrationMap\.legacyType/);
   assert.match(recovery, /migrationMap\.disposition/);
+  assert.match(recovery, /finalizeMigratedAccountAfterVerifiedPassword/);
 });
 
 test('migration 0005 deliberately replaces the normalized-email index from migration 0002', () => {
