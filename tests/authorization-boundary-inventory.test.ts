@@ -32,8 +32,6 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     updatePassword: 'session-boundary',
     deleteAccount: 'session-boundary',
     updateAccount: 'session-boundary',
-    removeTeamMember: 'session-boundary',
-    inviteTeamMember: 'session-boundary',
   },
   'app/(login)/sign-up/actions.ts': {
     startSignup: 'pre-authentication',
@@ -129,6 +127,12 @@ test('pre-authentication actions are never wrapped in validatedActionWithUser', 
     if (kind !== 'pre-authentication' || name === 'signOut') continue;
     assert.match(source, new RegExp(`export const ${name} = validatedAction\\(`), `${name} must use validatedAction, not validatedActionWithUser`);
   }
+});
+
+test('legacy team mutation actions are not exported from the authentication action module', () => {
+  const source = readFileSync(path.join(root, 'app/(login)/actions.ts'), 'utf8');
+  assert.doesNotMatch(source, /export const (?:removeTeamMember|inviteTeamMember)\b/);
+  assert.doesNotMatch(source, /\bteamMembers\b|\binvitations\b|\bgetUserWithTeam\b/);
 });
 
 test('delegates-to-data-access actions call an ownership-enforcing membership data-access function', () => {
