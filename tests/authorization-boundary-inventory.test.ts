@@ -45,7 +45,6 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     verifyLoginOtp: 'pre-authentication',
     resendLoginOtp: 'pre-authentication',
     cancelLogin: 'pre-authentication',
-    activateLegacyAccount: 'pre-authentication',
   },
   'app/(login)/recover-password/actions.ts': {
     startPasswordReset: 'pre-authentication',
@@ -78,9 +77,6 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
 };
 
-// Every Route Handler, and how it authorizes before touching privileged data. `stripe/checkout` is
-// a stateless return-trip redirect: it never reads Stripe or touches the database, so it needs no
-// authorization boundary of its own (real entitlement is granted by the webhook route instead).
 const routeHandlers: Record<string, string> = {
   'app/api/admin/export/audit-log/route.ts': 'requireSuperAdmin',
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
@@ -159,9 +155,6 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
       assert.match(source, new RegExp(`import \\{[^}]*\\b${functionName}\\b[^}]*\\} from '${from.replaceAll('.', '\\.')}'`), `${file} must call ${functionName} from ${from}`);
     }
   }
-  // createMembershipCheckoutSession/createMembershipPortalSession/recordManualPayment must each
-  // self-authenticate, the same guarantee updateMemberProfile/createOwnMemberProfile already
-  // provide via authenticatedActor.
   assert.match(readFileSync(path.join(root, 'lib/payments/checkout.ts'), 'utf8'), /requireAccountAccess\('billing_boundary'\)/);
   assert.match(readFileSync(path.join(root, 'lib/payments/stripe.ts'), 'utf8'), /requireAccountAccess\('billing_boundary'\)/);
   const manualPayments = readFileSync(path.join(root, 'lib/payments/manual-payments.ts'), 'utf8');

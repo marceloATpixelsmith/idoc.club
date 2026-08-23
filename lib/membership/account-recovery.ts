@@ -87,7 +87,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * complete foundation. Read-only except for the audit trail: an incomplete foundation is recorded
  * and left for reconciliation rather than mutating anything, so the caller's own claim (a token, or
  * an already-consumed OTP) is never spent on a foundation that can't yet be activated. */
-async function validateMigrationActivationFoundation(tx: Tx, userId: number): Promise<boolean> {
+export async function validateMigrationActivationFoundation(tx: Tx, userId: number): Promise<boolean> {
   const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, userId)).limit(1);
   if (!user || user.accountState !== 'migrated_pending') return false;
   const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
@@ -124,19 +124,14 @@ async function validateMigrationActivationFoundation(tx: Tx, userId: number): Pr
   return foundationValid;
 }
 
-/** Applies the activation effects once the caller has already claimed the identity proof (a
- * single-use token, or a consumed OTP): `accountState` -> `active`, `emailVerifiedAt` set, password
- * rotated, session invalidated, any other outstanding migration-activation tokens invalidated. */
-/** The `accountState = 'migrated_pending'` condition on this UPDATE is the actual concurrency gate:
- * two simultaneous activation requests (e.g. a double form submission) both pass the earlier
- * read-only validation before either commits, but only one of these conditional updates can match a
- * row, since the first to commit has already flipped the state away from `migrated_pending`. The
- * second observes zero affected rows and reports failure instead of silently overwriting the first
- * request's password and double-incrementing `sessionVersion`. */
-async function applyMigrationActivationMutation(tx: Tx, userId: number, password: string): Promise<boolean> {
+/** Applies the activation effects after the caller has proven the identity. Password establishment
+ * is optional because the canonical normal-login path may already have verified a usable imported
+ * credential; the compatibility activation path still supplies a new password. */
+async function applyMigrationActivationMutation(tx: Tx, userId: number, password?: string): Promise<boolean> {
   const now = new Date();
+  const passwordUpdate = password === undefined ? {} : { passwordHash: await hashPassword(password) };
   const [claimed] = await tx.update(users)
-    .set({ accountState: 'active', emailVerifiedAt: now, passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
+    .set({ ...passwordUpdate, accountState: 'active', emailVerifiedAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
     .where(and(eq(users.id, userId), eq(users.accountState, 'migrated_pending')))
     .returning({ id: users.id });
   if (!claimed) return false;
@@ -145,9 +140,21 @@ async function applyMigrationActivationMutation(tx: Tx, userId: number, password
   return true;
 }
 
-/** Login-flow entry point: activates a `migrated_pending` account once its email has already been
- * proven via a verified, consumed OTP (see lib/auth/pending-login.ts and lib/auth/email-otp.ts),
- * with no email-link token involved. */
+/** Normal password-first login boundary. The password has already been successfully verified and
+ * email possession has already been proven by a consumed login OTP. Preserve the verified imported
+ * credential while enforcing the same migration-foundation checks, conditional state claim, audit,
+ * session invalidation, and outstanding-token invalidation as token-based activation. */
+export async function finalizeMigratedAccountAfterVerifiedPassword(userId: number): Promise<{ status: 'invalid' | 'success' }> {
+  return db.transaction(async (tx) => {
+    if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };
+    if (!(await applyMigrationActivationMutation(tx, userId))) return { status: 'invalid' };
+    return { status: 'success' };
+  });
+}
+
+/** Compatibility/support entry point for migrated accounts that do not have a usable imported
+ * credential. This remains unlinked from normal sign-in and establishes a new password only after
+ * the migration foundation and identity proof have been validated. */
 export async function activateMigratedAccountByUserId(userId: number, password: string): Promise<{ status: 'invalid' | 'success' }> {
   return db.transaction(async (tx) => {
     if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };

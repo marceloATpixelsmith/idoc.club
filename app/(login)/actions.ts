@@ -15,7 +15,10 @@ import { normalizeEmail } from '@/lib/membership/validation';
 import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordSchema } from '@/lib/auth/password-policy';
-import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
+import { consumeAccountToken, finalizeMigratedAccountAfterVerifiedPassword, requestAccountLink } from '@/lib/membership/account-recovery';
+import { issueEmailOtp } from '@/lib/auth/email-otp';
+import { startPendingLogin } from '@/lib/auth/pending-login';
+import { requestOrigin } from '@/lib/security/rate-limit';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -24,6 +27,9 @@ const signInSchema = z.object({
   password: z.string().min(1).max(128)
 });
 
+/** Canonical login ordering from pixelsmith-auth-reference contract 1.9.0:
+ * email -> password -> authoritative email-verification gate -> MFA/risk -> session.
+ * Migrated/imported status is not a public login branch. */
 export const signIn = validatedAction(signInSchema, async (data) => {
   const { password } = data;
   const email = normalizeEmail(data.email);
@@ -34,8 +40,7 @@ export const signIn = validatedAction(signInSchema, async (data) => {
   const foundUser = matchingUsers[0];
   const isPasswordValid = await comparePasswords(password, foundUser.passwordHash);
 
-  if (!isPasswordValid || !foundUser.emailVerifiedAt ||
-      !['active', 'onboarding'].includes(foundUser.accountState)) {
+  if (!isPasswordValid || !['active', 'onboarding', 'migrated_pending'].includes(foundUser.accountState)) {
     return { error: 'Invalid email or password. Please try again.', email };
   }
 
@@ -44,6 +49,30 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     await db.update(users)
       .set({ passwordHash: upgradedHash, updatedAt: new Date() })
       .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)));
+  }
+
+  if (!foundUser.emailVerifiedAt) {
+    const origin = await requestOrigin();
+    const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
+    if (issued.status === 'delivery_failed') {
+      return { error: 'We could not send the verification code. Please try again.', email };
+    }
+    if (issued.status === 'rate_limited') {
+      return { error: 'Too many attempts. Please try again in a few minutes.', email };
+    }
+    await startPendingLogin(email, true);
+    redirect('/sign-in');
+  }
+
+  if (foundUser.accountState === 'migrated_pending') {
+    const activation = await finalizeMigratedAccountAfterVerifiedPassword(foundUser.id);
+    if (activation.status !== 'success') {
+      return { error: 'We could not finish signing you in automatically. Contact IDOC for help.', email };
+    }
+    const [activated] = await db.select().from(users).where(eq(users.id, foundUser.id)).limit(1);
+    if (!activated) return { error: 'Invalid email or password. Please try again.', email };
+    await setSession(activated);
+    redirect('/dashboard/profile?confirmDetails=1');
   }
 
   await setSession(foundUser);
