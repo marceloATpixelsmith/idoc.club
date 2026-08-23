@@ -54,7 +54,25 @@ The canonical split shell is preserved: 50/50 desktop layout, form content const
 
 The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, and purpose-bound email OTP infrastructure. These remain subject to the canonical contract and regression tests.
 
-This adoption pass corrects the sign-in ordering introduced by the earlier migrated-member retrofit: anonymous email entry no longer sends a login OTP or branches on account state. Password success is now the point after which authoritative email verification is evaluated. Successful OTP verification persists `emailVerifiedAt` before the authenticated session is established.
+The login-order adoption pass corrected the earlier migrated-member flow: anonymous email entry no longer sends a login OTP or branches on account state. Password success is the point after which authoritative email verification is evaluated. Successful OTP verification persists `emailVerifiedAt` before the authenticated session is established.
+
+### Canonical session-lifecycle slice
+
+IDOC's former session cookie was a one-day JWT that middleware extended by another day on each GET. That behavior did not satisfy the reference's separate idle and absolute lifetime requirements because active use could extend a session indefinitely.
+
+The canonical session slice replaces that behavior with a versioned session payload containing a distinct session identifier, the authoritative user/session-version pair, the original authentication time, the last activity time, and a fixed absolute expiration. The security boundaries are now:
+
+- idle timeout: 30 minutes (`1800` seconds);
+- absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
+- middleware may advance only `lastActivityAt`; it never moves `authenticatedAt` or `absoluteExpiresAt`;
+- token verification fails closed when either lifetime is exceeded or the timestamp relationship is invalid;
+- production uses the host-only `__Host-idoc-session` cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, no Domain attribute, and an explicit absolute expiration;
+- every successful authentication creates a new random `sessionId`, so authentication rotates session identity;
+- the authoritative `users.sessionVersion` remains a server-side revocation boundary for account-wide invalidation after privileged role/security changes;
+- the pre-canonical `session` cookie is accepted only as a one-way compatibility input and is upgraded to the canonical cookie on the next valid GET; it is never refreshed in the old one-day shape;
+- sign-out and account deletion clear both canonical and legacy cookie names.
+
+This closes the idle/absolute lifetime and cookie-contract portion of the canonical session requirements without introducing any dependency on payment or billing state. Individual per-session server-side revocation and user-visible session inventory still require a persisted session registry and remain in the next session-specific slice.
 
 ## Payment isolation
 
@@ -64,7 +82,7 @@ Authentication retrofit work must not modify Stripe integration, checkout, billi
 
 The target is the reference in its totality, not only the login flow. Subsequent slices must close the remaining gaps without crossing the payment boundary:
 
-- canonical session lifecycle: 30-minute idle limit, 12-hour absolute limit, remembered lifetime where applicable, rotation events, individual revocation, session inventory, cookie contract, and key rotation;
+- persisted session registry for individual revocation/session inventory, remembered lifetime where applicable, and any remaining rotation/key-management semantics;
 - complete MFA/TOTP policy, enrollment, routine challenge, recovery codes, authenticator replacement, remembered-device rules, and fresh sensitive-action step-up;
 - complete server-owned authentication transaction semantics, replay prevention, atomic single-use evidence, and CSRF protection for cookie-authenticated unsafe mutations;
 - canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;
