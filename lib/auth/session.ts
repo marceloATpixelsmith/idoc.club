@@ -87,7 +87,7 @@ function normalizeSessionPayload(payload: Record<string, unknown>): SessionData 
     };
   }
 
-  // Temporary compatibility only for the pre-canonical cookie. Legacy tokens never become
+  // One-way compatibility input for the pre-canonical cookie. Legacy tokens never become
   // registry-backed canonical sessions; they age out under the 12-hour absolute cap or are
   // replaced by a fresh registered session on the next successful authentication.
   if (typeof payload.iat === 'number') {
@@ -145,30 +145,29 @@ export async function verifyToken(input: string, now = new Date()) {
   return session;
 }
 
-async function assertRegisteredSession(session: SessionData, now = new Date()) {
+async function registeredSessionIsValid(session: SessionData, now = new Date()) {
+  // Database failures intentionally propagate. Only an absent/mismatched registry record is an
+  // authentication-validation failure that should be treated as an invalid session.
   const record = await readActiveSession(session.sessionId, session.user.id);
-  if (!record) throw new Error('Session is not active in the server registry.');
-  if (record.sessionVersion !== session.user.sessionVersion) throw new Error('Session version mismatch.');
-  if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) {
-    throw new Error('Session authentication timestamp mismatch.');
-  }
-  if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) {
-    throw new Error('Session absolute deadline mismatch.');
-  }
+  if (!record) return false;
+  if (record.sessionVersion !== session.user.sessionVersion) return false;
+  if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) return false;
+  if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) return false;
   await touchSession(session.sessionId, session.user.id, now);
+  return true;
 }
 
 export async function getSession() {
   const cookieStore = await cookies();
   const canonicalValue = cookieStore.get(sessionCookieName())?.value;
   if (canonicalValue) {
+    let session: SessionData;
     try {
-      const session = await verifyToken(canonicalValue);
-      await assertRegisteredSession(session);
-      return session;
+      session = await verifyToken(canonicalValue);
     } catch {
       return null;
     }
+    return (await registeredSessionIsValid(session)) ? session : null;
   }
 
   const legacyValue = cookieStore.get(LEGACY_SESSION_COOKIE_NAME)?.value;
@@ -209,11 +208,16 @@ export async function clearSession() {
   const cookieStore = await cookies();
   const canonicalValue = cookieStore.get(sessionCookieName())?.value;
   if (canonicalValue) {
+    let session: SessionData | null = null;
     try {
-      const session = await verifyToken(canonicalValue);
-      await revokeSession(session.sessionId, session.user.id, 'user-signout');
+      session = await verifyToken(canonicalValue);
     } catch {
-      // Invalid client evidence is still cleared below; it is never trusted for revocation.
+      // Invalid client evidence is cleared below, but never trusted for registry mutation.
+    }
+    if (session) {
+      // Deliberately not caught: a registry failure must fail sign-out before the browser cookie is
+      // cleared, otherwise a copied bearer token could remain valid after a reported successful logout.
+      await revokeSession(session.sessionId, session.user.id, 'user-signout');
     }
   }
   cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions());
