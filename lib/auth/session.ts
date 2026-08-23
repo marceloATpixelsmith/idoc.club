@@ -1,23 +1,12 @@
-import { compare, hash } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NewUser } from '@/lib/db/schema';
 import { authSecretForServer } from '@/lib/runtime/configuration';
 import 'server-only';
 
-const SALT_ROUNDS = 10;
+export { comparePasswords, hashPassword, passwordHashNeedsUpgrade } from '@/lib/auth/password-hash';
+
 const signingKey = () => new TextEncoder().encode(authSecretForServer());
-
-export async function hashPassword(password: string) {
-  return hash(password, SALT_ROUNDS);
-}
-
-export async function comparePasswords(
-  plainTextPassword: string,
-  hashedPassword: string
-) {
-  return compare(plainTextPassword, hashedPassword);
-}
 
 type SessionData = {
   user: { id: number; sessionVersion: number };
@@ -55,6 +44,7 @@ export async function setSession(user: NewUser) {
   (await cookies()).set('session', encryptedSession, {
     expires: expiresInOneDay,
     httpOnly: true,
+    path: '/',
     secure: true,
     sameSite: 'lax',
   });
