@@ -32,6 +32,13 @@ test('Turnstile accepts only success bound to the trusted hostname and expected 
   assert.equal(await verifyTurnstile('token', '203.0.113.10', 'login'), true);
 });
 
+test('Turnstile rejects missing client evidence or trusted action context', async () => {
+  configure();
+  respond({ action: 'login', hostname: 'idoc.club', success: true });
+  assert.equal(await verifyTurnstile('', '203.0.113.10', 'login'), false);
+  assert.equal(await verifyTurnstile('token', '203.0.113.10', ''), false);
+});
+
 test('Turnstile rejects hostname mismatch', async () => {
   configure();
   respond({ action: 'login', hostname: 'evil.example', success: true });
