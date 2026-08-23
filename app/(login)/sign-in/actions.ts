@@ -20,9 +20,21 @@ const startLoginSchema = z.object({
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
-/** Everyone enters through the same login surface. Migrated accounts that have not completed their
- * one-time email-control verification are routed internally into the existing OTP/password-creation
- * continuation; there is no separate public "migrated member" activation entry point. */
+async function eligibleLoginOtpUser(email: string) {
+  const [account] = await db.select({
+    accountState: users.accountState,
+    id: users.id,
+  }).from(users).where(eq(users.email, email)).limit(1);
+  if (!account || !['active', 'onboarding', 'migrated_pending'].includes(account.accountState)) return null;
+  return account;
+}
+
+/** The anonymous email-entry boundary is account-state neutral. Every syntactically valid,
+ * Turnstile/rate-limit-allowed email advances to the same OTP screen. A code is sent only when the
+ * server finds an eligible account, and provider/cooldown/account-state distinctions are never
+ * reflected in the anonymous response. Only after successful possession of the emailed code may
+ * the server branch between ordinary password entry and the migrated account's one-time password
+ * establishment. */
 export const startLogin = validatedAction(startLoginSchema, async ({ email: rawEmail, turnstileToken }) => {
   const email = normalizeEmail(rawEmail);
   const origin = await requestOrigin();
@@ -33,17 +45,11 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
     return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   }
 
-  const [account] = await db.select({ accountState: users.accountState }).from(users).where(eq(users.email, email)).limit(1);
-  if (account?.accountState === 'migrated_pending') {
-    const issued = await issueEmailOtp(email, 'login_verification', { origin });
-    if (issued.status === 'rate_limited') return { email, error: 'Too many attempts. Please try again in a few minutes.' };
-    if (issued.status === 'cooldown') return { email, error: 'Please wait before requesting another code.' };
-    if (issued.status === 'delivery_failed') return { email, error: 'We could not send that verification code. Please try again in a moment.' };
-    await startPendingLogin(email, true);
-    redirect('/sign-in');
+  const account = await eligibleLoginOtpUser(email);
+  if (account) {
+    await issueEmailOtp(email, 'login_verification', { origin, userId: account.id });
   }
-
-  await startPendingLogin(email, false);
+  await startPendingLogin(email, true);
   redirect('/sign-in');
 });
 
@@ -68,11 +74,11 @@ export const resendLoginOtp = validatedAction(z.object({}), async () => {
   const pending = await getPendingLogin();
   if (!pending || !pending.legacy) return { error: 'Your sign-in session expired. Start again.' };
   const origin = await requestOrigin();
-  const result = await issueEmailOtp(pending.email, 'login_verification', { origin });
-  if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
-  if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
-  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
-  return { success: 'A new code was sent.' };
+  const account = await eligibleLoginOtpUser(pending.email);
+  if (account) {
+    await issueEmailOtp(pending.email, 'login_verification', { origin, userId: account.id });
+  }
+  return { success: 'If this address can receive a sign-in code, a new code was sent.' };
 });
 
 export const cancelLogin = validatedAction(z.object({}), async () => {
