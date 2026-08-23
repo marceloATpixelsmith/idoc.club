@@ -6,6 +6,8 @@ This document tracks IDOC's retrofit to the canonical authentication implementat
 
 Reference repository: `marceloATpixelsmith/pixelsmith-auth-reference`
 
+Current reference `main` inspected through commit `b6aa39aa0868dd86483c40ff168a7bd26a7dea68`.
+
 Baseline inspected for this retrofit:
 
 - contract `1.8.0`
@@ -43,6 +45,14 @@ The initial slice corrects four existing contradictions with the canonical contr
 
 Canonical requirement families directly implicated by this slice include `AUTH-BOT-*`, `AUTH-RATE-*`, `AUTH-TRANSACTION-*`, `AUTH-EMAIL-*`, `AUTH-IDENTITY-*`, `AUTH-PASSWORD-*`, `AUTH-STORAGE-*`, and `AUTH-OPERATIONS-*` as defined by the current machine contract.
 
+### Second security-alignment slice: authorization boundary cleanup
+
+The second slice removes two inherited subscription-starter Server Actions, `inviteTeamMember` and `removeTeamMember`, from the authentication action module. Those actions operated on the legacy `teams`, `team_members`, and `invitations` compatibility tables and authorized only through a normal authenticated-account boundary. They did not represent IDOC's canonical Member/Admin/Super Admin authorization model and could therefore create or remove legacy team membership without a corresponding IDOC application-role authorization decision.
+
+IDOC's production authorization model does not use legacy subscription-starter team ownership as authentication or administrator authority. The compatibility `/api/team` route remains deliberately disabled, and legacy team mutation actions are no longer exported or callable as Server Actions. A regression test now fails if either legacy mutation action, or its team/invitation dependencies, is reintroduced into the authentication action module.
+
+This closes the discovered legacy-team mutation path under the canonical requirements that authentication and authorization remain distinct, client-visible or compatibility role concepts are not authoritative, and protected mutations require trusted server authorization (`AUTH-AUTHZ-*`, `AUTH-FRAMEWORK-*`, and `AUTH-SESSION-001`). It does **not** yet implement the final canonical privileged-invitation flow; that remains separate work and must use IDOC application roles, Super Admin authority, purpose-bound invitation evidence, audit coverage, and applicable fresh step-up/MFA controls.
+
 ## Remaining retrofit work
 
 The following areas require a subsequent gap analysis and implementation evidence before the retrofit can be considered complete:
@@ -53,7 +63,8 @@ The following areas require a subsequent gap analysis and implementation evidenc
 - fresh sensitive-action step-up for privileged/security-sensitive actions;
 - full server-owned authentication transaction semantics and replay/atomic-consumption evidence across every flow;
 - CSRF verification against the canonical contract for all cookie-authenticated unsafe mutations;
-- authorization and role/invitation review against current `AUTH-AUTHZ-*` and privileged-role requirements;
+- canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles rather than legacy team roles;
+- remaining authorization review against current `AUTH-AUTHZ-*` requirements, including direct-handler and resource-level negative tests;
 - audit/security-event coverage required by the canonical logging, lifecycle, incident, and key/secret requirements;
 - complete canonical UI/flow comparison and route/configuration mapping;
 - production provider/configuration evidence, failure-mode tests, concurrency/replay tests, and final `AUTH-*` requirement matrix.
