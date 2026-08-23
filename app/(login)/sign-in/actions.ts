@@ -11,6 +11,7 @@ import { normalizeEmail } from '@/lib/membership/validation';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingLogin, getPendingLogin, startPendingLogin } from '@/lib/auth/pending-login';
+import { finalizeMigratedAccountAfterVerifiedPassword } from '@/lib/membership/account-recovery';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 const startLoginSchema = z.object({
@@ -39,7 +40,8 @@ const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 
 
 /** This OTP exists only after the primary password credential has succeeded for an account whose
  * authoritative email state is still unverified. Successful verification persists that state before
- * normal session establishment. */
+ * normal session establishment. Migrated accounts additionally pass the established imported-data
+ * foundation validator and atomic activation boundary before any session is created. */
 export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
   const pending = await getPendingLogin();
   if (!pending || !pending.legacy || pending.verified) return { error: 'Your sign-in session expired. Start again.' };
@@ -57,18 +59,28 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) 
     return { error: 'Your sign-in session expired. Start again.' };
   }
 
-  const now = new Date();
-  await db.update(users).set({
-    emailVerifiedAt: user.emailVerifiedAt ?? now,
-    accountState: user.accountState === 'migrated_pending' ? 'active' : user.accountState,
-    updatedAt: now,
-  }).where(and(eq(users.id, user.id), eq(users.email, pending.email)));
+  const migrated = user.accountState === 'migrated_pending';
+  if (migrated) {
+    const activation = await finalizeMigratedAccountAfterVerifiedPassword(user.id);
+    if (activation.status !== 'success') {
+      await clearPendingLogin();
+      return { error: 'We could not finish signing you in automatically. Contact IDOC for help.' };
+    }
+  } else {
+    const now = new Date();
+    await db.update(users).set({
+      emailVerifiedAt: user.emailVerifiedAt ?? now,
+      updatedAt: now,
+    }).where(and(eq(users.id, user.id), eq(users.email, pending.email)));
+  }
 
   await clearPendingLogin();
   const [verifiedUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-  if (!verifiedUser) return { error: 'Your sign-in session expired. Start again.' };
+  if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
+    return { error: 'Your sign-in session expired. Start again.' };
+  }
   await setSession(verifiedUser);
-  redirect(user.accountState === 'migrated_pending' ? '/dashboard/profile?confirmDetails=1' : '/dashboard');
+  redirect(migrated ? '/dashboard/profile?confirmDetails=1' : '/dashboard');
 });
 
 export const resendLoginOtp = validatedAction(z.object({}), async () => {
