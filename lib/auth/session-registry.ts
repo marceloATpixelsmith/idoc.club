@@ -7,14 +7,23 @@ export type PersistedSession = {
   sessionId: string;
   userId: number;
   sessionVersion: number;
-  authenticatedAt: Date;
-  lastActivityAt: Date;
-  absoluteExpiresAt: Date;
-  revokedAt: Date | null;
+  authenticatedAt: string;
+  lastActivityAt: string;
+  absoluteExpiresAt: string;
+  revokedAt: string | null;
   revokeReason: string | null;
 };
 
-export async function registerSession(input: Omit<PersistedSession, 'revokedAt' | 'revokeReason'>) {
+type NewPersistedSession = {
+  sessionId: string;
+  userId: number;
+  sessionVersion: number;
+  authenticatedAt: Date;
+  lastActivityAt: Date;
+  absoluteExpiresAt: Date;
+};
+
+export async function registerSession(input: NewPersistedSession) {
   await db.execute(sql`
     insert into idoc.auth_sessions (
       session_id, user_id, session_version, authenticated_at, last_activity_at, absolute_expires_at
