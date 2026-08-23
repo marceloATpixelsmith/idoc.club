@@ -1,0 +1,65 @@
+# Canonical authentication reference retrofit
+
+This document tracks IDOC's retrofit to the canonical authentication implementation reference in `marceloATpixelsmith/pixelsmith-auth-reference`. It supplements the existing IDOC security requirements while the retrofit is in progress. If an older authentication-specific statement in another IDOC document conflicts with the current canonical authentication contract, the canonical contract governs the retrofit and the conflicting IDOC documentation must be corrected.
+
+## Canonical baseline
+
+Reference repository: `marceloATpixelsmith/pixelsmith-auth-reference`
+
+Baseline inspected for this retrofit:
+
+- contract `1.8.0`
+- machine schema `12.0.0`
+- validator `9.0.0`
+- mapping schema `1.0.0`
+- portable-config schema `2.0.0`
+
+The machine contract under `src/contract/` is authoritative. IDOC remains responsible for implementing the reference's trusted-server requirements in its own Next.js, Drizzle/PostgreSQL, Vercel, email, and provider architecture.
+
+## IDOC application model
+
+IDOC uses the canonical single-application role model:
+
+- Member
+- Admin
+- Super Admin
+
+Professional member classifications such as Judge, Steward, Combo Judge/Steward, and Veterinarian are membership-domain attributes, not authentication roles. They must never grant administrator authority.
+
+Existing member IDs, imported legacy mappings, Stripe customer/subscription relationships, membership status, and billing history are preserved by the authentication retrofit unless a separately reviewed migration explicitly requires a change.
+
+## Retrofit status
+
+The retrofit is **not complete** and IDOC must not be described as conformant to the canonical authentication reference until the remaining gaps have implementation and test evidence.
+
+### First security-alignment slice
+
+The initial slice corrects three existing contradictions with the canonical contract:
+
+1. **Turnstile Siteverify binding.** Auth flow-entry challenges are now submitted with a stable action name. Trusted server verification requires provider `success`, the hostname derived from trusted `BASE_URL`, and the exact expected action. Provider failure and mismatches fail closed. The client challenge remains untrusted evidence and never establishes authentication authority.
+2. **Login anti-enumeration.** The first login email step no longer reveals whether an account exists or whether it is suspended. Every syntactically valid, rate-limit-allowed email advances to the same password step; the password boundary keeps a generic failure for nonexistent or ineligible accounts. Migrated members retain the separate activation route, and already-started legacy activation continuations remain compatible.
+3. **Email OTP lifetime.** Signup, password-reset, and retained legacy login-verification OTPs now expire after 15 minutes, matching the canonical 900-second transaction/verification lifetime. Attempt caps, single-use behavior, resend replacement, and rate limiting remain in force.
+
+Canonical requirement families directly implicated by this slice include `AUTH-BOT-*`, `AUTH-RATE-*`, `AUTH-TRANSACTION-*`, `AUTH-EMAIL-*`, `AUTH-IDENTITY-*`, and `AUTH-OPERATIONS-*` as defined by the current machine contract.
+
+## Remaining retrofit work
+
+The following areas require a subsequent gap analysis and implementation evidence before the retrofit can be considered complete:
+
+- password storage migration to the canonical versioned Argon2id model with safe compatibility/rehash behavior for existing bcrypt credentials;
+- canonical session lifecycle, rotation, absolute/idle limits, revocation, and session inventory semantics while preserving existing-user continuity;
+- complete MFA policy implementation, including required TOTP enrollment/challenge behavior for applicable privileged roles;
+- recovery codes, authenticator replacement/re-enrollment, and remembered-device behavior;
+- fresh sensitive-action step-up for privileged/security-sensitive actions;
+- full server-owned authentication transaction semantics and replay/atomic-consumption evidence across every flow;
+- CSRF verification against the canonical contract for all cookie-authenticated unsafe mutations;
+- authorization and role/invitation review against current `AUTH-AUTHZ-*` and privileged-role requirements;
+- audit/security-event coverage required by the canonical logging, lifecycle, incident, and key/secret requirements;
+- complete canonical UI/flow comparison and route/configuration mapping;
+- production provider/configuration evidence, failure-mode tests, concurrency/replay tests, and final `AUTH-*` requirement matrix.
+
+## Completion criterion
+
+The strongest allowed status before the final audit is **not ready**.
+
+After every applicable canonical requirement has implementation/test/operational evidence and no unresolved production security blocker remains, the project may advance to the verdict **ready for application-specific production validation**. Following the reference never by itself constitutes compliance certification or proof that the deployed application is secure.
