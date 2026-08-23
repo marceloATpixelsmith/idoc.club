@@ -18,8 +18,18 @@ test('canonical cookie authentication requires an active persisted registry row 
   assert.match(session, /readActiveSession\(session\.sessionId, session\.user\.id\)/);
   assert.match(session, /if \(!record\) return false/);
   assert.match(session, /await touchSession\(session\.sessionId, session\.user\.id, now\)/);
-  assert.match(session, /return \(await registeredSessionIsValid\(session\)\) \? session : null/);
-  assert.doesNotMatch(session, /try \{[\s\S]*?await registeredSessionIsValid\(session\)[\s\S]*?catch \{[\s\S]*?return null/);
+
+  const canonicalStart = session.indexOf('if (canonicalValue) {');
+  const registryValidation = session.indexOf('return (await registeredSessionIsValid(session)) ? session : null;', canonicalStart);
+  const legacyStart = session.indexOf('const legacyValue =', registryValidation);
+  assert.ok(canonicalStart >= 0 && registryValidation > canonicalStart && legacyStart > registryValidation);
+
+  const tokenValidationBlock = session.slice(canonicalStart, registryValidation);
+  assert.match(tokenValidationBlock, /session = await verifyToken\(canonicalValue\);/);
+  assert.match(tokenValidationBlock, /catch \{\s*return null;\s*\}/);
+
+  const registryValidationBlock = session.slice(registryValidation, legacyStart);
+  assert.doesNotMatch(registryValidationBlock, /catch\s*\{/);
 });
 
 test('sign-out revokes the current persisted session before clearing the cookie and propagates revocation failure', () => {
