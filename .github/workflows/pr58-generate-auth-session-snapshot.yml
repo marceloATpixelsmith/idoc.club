@@ -1,0 +1,65 @@
+name: PR58 Generate Auth Session Snapshot
+
+on:
+  push:
+    branches:
+      - auth/persisted-session-registry
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: auth/persisted-session-registry
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Model auth_sessions in Drizzle schema
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('lib/db/schema.ts')
+          s = p.read_text()
+          if "export const authSessions = idocSchema.table('auth_sessions'" not in s:
+              marker = "export const teams = idocSchema.table('teams', {"
+              block = """export const authSessions = idocSchema.table('auth_sessions', {\n  id: serial('id').primaryKey(),\n  sessionId: varchar('session_id', { length: 64 }).notNull().unique(),\n  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),\n  sessionVersion: integer('session_version').notNull(),\n  authenticatedAt: timestamp('authenticated_at', { withTimezone: true }).notNull(),\n  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull(),\n  absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),\n  revokedAt: timestamp('revoked_at', { withTimezone: true }),\n  revokeReason: varchar('revoke_reason', { length: 80 }),\n  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),\n  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),\n}, (table) => [\n  index('auth_sessions_active_user_idx').on(table.userId, table.lastActivityAt).where(sql`${table.revokedAt} is null`),\n  index('auth_sessions_expiry_idx').on(table.absoluteExpiresAt),\n]);\n\n"""
+              if marker not in s:
+                  raise SystemExit('schema insertion marker not found')
+              s = s.replace(marker, block + marker, 1)
+              p.write_text(s)
+          PY
+      - name: Generate authoritative snapshot
+        run: |
+          rm -rf /tmp/idoc-drizzle-snapshot
+          pnpm exec drizzle-kit generate --schema=lib/db/schema.ts --out=/tmp/idoc-drizzle-snapshot --dialect=postgresql
+          python3 <<'PY'
+          import json, uuid
+          from pathlib import Path
+          previous = json.loads(Path('lib/db/migrations/meta/0015_snapshot.json').read_text())
+          generated = json.loads(Path('/tmp/idoc-drizzle-snapshot/meta/0000_snapshot.json').read_text())
+          generated['prevId'] = previous['id']
+          generated['id'] = str(uuid.uuid4())
+          Path('lib/db/migrations/meta/0016_snapshot.json').write_text(json.dumps(generated, indent=2) + '\n')
+
+          p = Path('tests/migration-immutability.test.ts')
+          s = p.read_text().replace("meta/0015_snapshot.json', migrations", "meta/0016_snapshot.json', migrations")
+          p.write_text(s)
+          PY
+      - name: Commit generated schema state
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add lib/db/schema.ts lib/db/migrations/meta/0016_snapshot.json tests/migration-immutability.test.ts
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Add authoritative auth session schema snapshot"
+          git push origin HEAD:auth/persisted-session-registry
