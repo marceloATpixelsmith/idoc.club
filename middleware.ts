@@ -30,14 +30,17 @@ export async function middleware(request: NextRequest) {
     const parsed = await verifyToken(sessionCookie.value);
     const res = NextResponse.next();
 
-    if (request.method === 'GET') {
+    // Only already-canonical sessions may be refreshed. A legacy JWT has no persisted registry
+    // row, so silently promoting it into the canonical cookie namespace would create a bearer
+    // token that the authoritative server registry cannot revoke. Legacy sessions simply age out
+    // under the fixed 12-hour cap or are replaced on the next successful login.
+    if (request.method === 'GET' && canonicalCookie) {
       const refreshed = refreshSessionActivity(parsed);
       res.cookies.set({
         name: canonicalName,
         value: await signToken(refreshed),
         ...sessionCookieOptions(refreshed.absoluteExpiresAt),
       });
-      if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     }
 
     return res;
@@ -45,8 +48,10 @@ export async function middleware(request: NextRequest) {
     const res = isProtectedRoute
       ? NextResponse.redirect(new URL('/sign-in', request.url))
       : NextResponse.next();
-    res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
-    res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
+    if (canonicalCookie) {
+      res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
+    }
+    if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     return res;
   }
 }
