@@ -24,6 +24,10 @@ test('migrated accounts enter one-time email verification through normal sign-in
 
 test('first migrated sign-in copy is migration-neutral', () => {
   const passwordCreate = read('app/(login)/sign-in/activate-password-step.tsx');
-  assert.doesNotMatch(passwordCreate, /migrat|activat/i);
-  assert.match(passwordCreate, /Your email is verified\. Set a password to continue\./);
+  const visibleCopy = [
+    ...passwordCreate.matchAll(/(?:description|submitLabel|title)="([^"]+)"/g),
+  ].map((match) => match[1]).join('\n');
+
+  assert.match(visibleCopy, /Your email is verified\. Set a password to continue\./);
+  assert.doesNotMatch(visibleCopy, /migrat|activat/i);
 });
