@@ -15,29 +15,36 @@ test('legacy activation fallback is not linked from normal sign-in', () => {
   assert.doesNotMatch(`${emailStep}\n${passwordStep}`, /request-activation|Migrated member\?/);
 });
 
-test('anonymous login email entry is account-state neutral', () => {
+test('anonymous login email entry is account-state neutral and password-first', () => {
   const actions = read('app/(login)/sign-in/actions.ts');
-  assert.match(actions, /eligibleLoginOtpUser\(email\)/);
-  assert.match(actions, /issueEmailOtp\(email, 'login_verification'/);
-  assert.match(actions, /await startPendingLogin\(email, true\);\s*redirect\('\/sign-in'\);/);
-  assert.doesNotMatch(actions, /if \(account\?\.accountState === 'migrated_pending'\)/);
-  assert.doesNotMatch(actions, /issued\.status === '(?:rate_limited|cooldown|delivery_failed)'/);
+  const startLogin = actions.slice(actions.indexOf('export const startLogin'), actions.indexOf('const verifyOtpSchema'));
+  assert.match(startLogin, /await startPendingLogin\(email, false\);\s*redirect\('\/sign-in'\);/);
+  assert.doesNotMatch(startLogin, /issueEmailOtp|eligibleLoginOtpUser|migrated_pending/);
 });
 
-test('migrated routing happens only after successful email verification', () => {
+test('email verification is triggered only after successful password verification', () => {
+  const actions = read('app/(login)/actions.ts');
+  const signIn = actions.slice(actions.indexOf('export const signIn'), actions.indexOf('const accountLinkSchema'));
+  const passwordCheck = signIn.indexOf('comparePasswords(password, foundUser.passwordHash)');
+  const verificationBranch = signIn.indexOf('if (!foundUser.emailVerifiedAt)');
+  const otpIssue = signIn.indexOf("issueEmailOtp(email, 'login_verification'");
+  assert.ok(passwordCheck >= 0 && verificationBranch > passwordCheck && otpIssue > verificationBranch);
+});
+
+test('migrated members use the same password-first surface and validated activation boundary', () => {
   const page = read('app/(login)/sign-in/page.tsx');
-  const proofBoundary = page.indexOf('if (!pending.verified) return <OtpStep');
-  const accountLookup = page.indexOf('db.select({ accountState: users.accountState })');
-  const migratedBranch = page.indexOf("account?.accountState === 'migrated_pending'");
-  assert.ok(proofBoundary >= 0 && accountLookup > proofBoundary && migratedBranch > accountLookup);
+  const actions = read('app/(login)/actions.ts');
+  const verification = read('app/(login)/sign-in/actions.ts');
+  assert.doesNotMatch(page, /ActivatePasswordStep|accountState|migrated_pending/);
+  assert.match(actions, /finalizeMigratedAccountAfterVerifiedPassword\(foundUser\.id\)/);
+  assert.match(verification, /finalizeMigratedAccountAfterVerifiedPassword\(user\.id\)/);
 });
 
-test('first migrated sign-in copy is migration-neutral', () => {
-  const passwordCreate = read('app/(login)/sign-in/activate-password-step.tsx');
-  const visibleCopy = [
-    ...passwordCreate.matchAll(/(?:description|submitLabel|title)="([^"]+)"/g),
-  ].map((match) => match[1]).join('\n');
-
-  assert.match(visibleCopy, /Your email is verified\. Set a password to continue\./);
-  assert.doesNotMatch(visibleCopy, /migrat|activat/i);
+test('compatibility activation remains support-only for imported accounts without a usable credential', () => {
+  const requestPage = read('app/(login)/request-activation/page.tsx');
+  const recovery = read('lib/membership/account-recovery.ts');
+  assert.match(requestPage, /requestMigrationActivation/);
+  assert.match(recovery, /Compatibility\/support entry point/);
+  assert.match(recovery, /validateMigrationActivationFoundation/);
+  assert.match(recovery, /applyMigrationActivationMutation/);
 });
