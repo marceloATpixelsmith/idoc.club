@@ -14,18 +14,20 @@ test('new canonical sessions are persisted before the cookie is issued', () => {
   assert.match(session, /sessionId: randomUUID\(\)/);
 });
 
-test('canonical cookie authentication requires an active persisted registry row', () => {
+test('canonical cookie authentication requires an active persisted registry row without hiding database failures', () => {
   assert.match(session, /readActiveSession\(session\.sessionId, session\.user\.id\)/);
-  assert.match(session, /Session is not active in the server registry/);
-  assert.match(session, /Session version mismatch/);
-  assert.match(session, /Session absolute deadline mismatch/);
-  assert.match(session, /await assertRegisteredSession\(session\)/);
+  assert.match(session, /if \(!record\) return false/);
+  assert.match(session, /await touchSession\(session\.sessionId, session\.user\.id, now\)/);
+  assert.match(session, /return \(await registeredSessionIsValid\(session\)\) \? session : null/);
+  assert.doesNotMatch(session, /try \{[\s\S]*?await registeredSessionIsValid\(session\)[\s\S]*?catch \{[\s\S]*?return null/);
 });
 
-test('sign-out revokes the current persisted session before clearing the cookie', () => {
+test('sign-out revokes the current persisted session before clearing the cookie and propagates revocation failure', () => {
   const revoke = session.indexOf("await revokeSession(session.sessionId, session.user.id, 'user-signout')");
   const clear = session.indexOf("cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions())");
   assert.ok(revoke >= 0 && clear > revoke);
+  assert.match(session, /if \(session\) \{[\s\S]*?await revokeSession\(session\.sessionId, session\.user\.id, 'user-signout'\);[\s\S]*?\}/);
+  assert.doesNotMatch(session, /try \{[\s\S]*?await revokeSession\(session\.sessionId, session\.user\.id, 'user-signout'\);[\s\S]*?catch/);
 });
 
 test('registry exposes individual and all-session revocation plus inventory primitives', () => {
@@ -38,8 +40,10 @@ test('registry exposes individual and all-session revocation plus inventory prim
 
 test('legacy cookies never get promoted into the canonical registry namespace', () => {
   assert.match(middleware, /request\.method === 'GET' && canonicalCookie/);
-  assert.doesNotMatch(middleware, /if \(legacyCookie\) res\.cookies\.delete\(LEGACY_SESSION_COOKIE_NAME\)/);
-  assert.match(session, /Temporary compatibility only for the pre-canonical cookie/);
+  const refreshBranch = middleware.match(/if \(request\.method === 'GET' && canonicalCookie\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+  assert.match(refreshBranch, /name: canonicalName/);
+  assert.doesNotMatch(refreshBranch, /legacyCookie|LEGACY_SESSION_COOKIE_NAME/);
+  assert.match(session, /One-way compatibility input for the pre-canonical cookie/);
 });
 
 test('migration creates an indexed server-side session registry without touching billing tables', () => {
