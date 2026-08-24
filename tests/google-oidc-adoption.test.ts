@@ -7,8 +7,12 @@ const provider = read('lib/auth/google-oidc-reference.ts');
 const store = read('lib/auth/google-oidc-store.ts');
 const binding = read('lib/auth/google-oauth-browser-binding.ts');
 const account = read('lib/auth/google-account.ts');
+const linking = read('lib/auth/google-identity-linking.ts');
+const evidence = read('lib/auth/google-identity-link-evidence.ts');
 const migration = read('lib/db/migrations/0017_google_oidc.sql');
+const linkingMigration = read('lib/db/migrations/0018_external_identity_linking.sql');
 const startRoute = read('app/api/auth/google/start/route.ts');
+const linkStartRoute = read('app/api/auth/google/link/start/route.ts');
 const callbackRoute = read('app/api/auth/google/callback/route.ts');
 const rateLimit = read('lib/security/rate-limit.ts');
 const login = read('app/(login)/sign-in/email-step.tsx');
@@ -60,6 +64,30 @@ test('external identities use issuer plus subject and never auto-link existing e
   assert.match(account, /and subject = \$\{identity\.subject\}/);
   assert.match(account, /if \(existingUser\)/);
   assert.match(account, /throw new GoogleAccountLinkRequiredError\(\)/);
+});
+
+test('explicit Google linking is bound to the authenticated user and fresh password verification', () => {
+  assert.match(provider, /purpose = 'authentication'/);
+  assert.match(provider, /authenticatedUserId = null/);
+  assert.match(provider, /purpose === 'external_identity_link' && !authenticatedUserId/);
+  assert.match(linkStartRoute, /purpose: 'external_identity_link'/);
+  assert.match(linkStartRoute, /authenticatedUserId: String\(user\.id\)/);
+  assert.match(callbackRoute, /identity\.oauthAuthenticatedUserId !== String\(user\.id\)/);
+  assert.match(evidence, /GOOGLE_LINK_FRESH_AUTH_MAX_AGE_MS = 5 \* 60 \* 1000/);
+  assert.match(evidence, /httpOnly: true/);
+  assert.match(linking, /oauthTransactionPurpose !== 'external_identity_link'/);
+  assert.match(linking, /oauthAuthenticatedUserId !== input\.userId/);
+  assert.match(linking, /pg_advisory_xact_lock/);
+  assert.match(linkingMigration, /purpose varchar\(40\) not null default 'authentication'/);
+  assert.match(linkingMigration, /authenticated_user_id integer references idoc\.users/);
+});
+
+test('link and unlink persist audit evidence and security notification outbox records atomically', () => {
+  assert.match(linking, /client\.begin/);
+  assert.match(linking, /auth\.google_identity\.linked/);
+  assert.match(linking, /auth\.google_identity\.unlinked/);
+  assert.match(linking, /auth_security_notification_outbox/);
+  assert.match(linkingMigration, /auth_security_notification_outbox/);
 });
 
 test('Google buttons point to the canonical start route', () => {
