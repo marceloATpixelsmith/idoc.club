@@ -8,10 +8,13 @@ export function EmailStep() {
   return (
     <EmailEntryStep
       action={startPasswordReset}
-      description="Enter your email address and we'll send you a code to reset your password."
-      footer={<>Remembered your password?{' '}<Link className="font-medium text-gray-900 underline" href="/sign-in">Sign in</Link></>}
-      submitLabel="Send code"
-      title="Forgot password?"
+      actions={(
+        <div className="idoc-auth-actions__center">
+          <Link className="idoc-auth-link" href="/sign-in">Back to login</Link>
+        </div>
+      )}
+      submitLabel="Continue"
+      title="Reset your password"
       turnstileAction="password-reset"
     />
   );

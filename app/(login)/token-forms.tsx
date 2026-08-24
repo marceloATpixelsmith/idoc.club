@@ -1,18 +1,69 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
+import { AuthShell } from '@/components/auth/auth-shell';
 
 type State = { error?: string; success?: string };
 type Action = (state: State, data: FormData) => Promise<State>;
 
 export function AccountLinkForm({ action, heading }: { action: Action; heading: string }) {
   const [state, formAction, pending] = useActionState(action, {});
-  return <main className="mx-auto max-w-md p-8"><h1 className="mb-4 text-2xl font-semibold">{heading}</h1><form action={formAction} className="space-y-4"><label className="block">Email<input autoComplete="email" className="block w-full border p-2" name="email" required type="email" /></label><Feedback state={state} /><button className="rounded bg-orange-600 px-4 py-2 text-white" disabled={pending} type="submit">Send secure link</button></form></main>;
+
+  return (
+    <AuthShell title={heading}>
+      <form action={formAction} className="idoc-auth-form">
+        <div className="idoc-auth-field">
+          <label className="idoc-auth-label" htmlFor="email">Email Address</label>
+          <input autoComplete="email" className="idoc-auth-input" id="email" name="email" required type="email" />
+        </div>
+        <Feedback state={state} />
+        <button className="idoc-auth-button" disabled={pending} type="submit">
+          {pending ? 'Please wait…' : 'Continue'}
+        </button>
+        <div className="idoc-auth-actions__center">
+          <Link className="idoc-auth-link" href="/sign-in">Back to login</Link>
+        </div>
+      </form>
+    </AuthShell>
+  );
 }
 
 export function TokenPasswordForm({ action, heading, token }: { action: Action; heading: string; token: string }) {
   const [state, formAction, pending] = useActionState(action, {});
-  return <main className="mx-auto max-w-md p-8"><h1 className="mb-4 text-2xl font-semibold">{heading}</h1><form action={formAction} className="space-y-4"><input name="token" type="hidden" value={token} /><label className="block">New password<input autoComplete="new-password" className="block w-full border p-2" name="password" required type="password" /></label><label className="block">Confirm password<input autoComplete="new-password" className="block w-full border p-2" name="confirmPassword" required type="password" /></label><p className="text-sm">Use 12 or more characters with uppercase, lowercase, and a number.</p><Feedback state={state} /><button className="rounded bg-orange-600 px-4 py-2 text-white" disabled={pending || !token} type="submit">Continue</button></form></main>;
+
+  return (
+    <AuthShell title={heading}>
+      <form action={formAction} className="idoc-auth-form">
+        <input name="token" type="hidden" value={token} />
+        <PasswordInput label="New Password" name="password" />
+        <PasswordInput label="Confirm Password" name="confirmPassword" />
+        <p className="idoc-auth-page__instructions text-left">
+          Use at least 12 characters and follow the password requirements enforced by IDOC.
+        </p>
+        <Feedback state={state} />
+        <button className="idoc-auth-button" disabled={pending || !token} type="submit">
+          {pending ? 'Please wait…' : 'Continue'}
+        </button>
+      </form>
+    </AuthShell>
+  );
 }
 
-function Feedback({ state }: { state: State }) { return <>{state.error ? <p className="text-red-600">{state.error}</p> : null}{state.success ? <p className="text-green-700">{state.success}</p> : null}</>; }
+function PasswordInput({ label, name }: { label: string; name: string }) {
+  return (
+    <div className="idoc-auth-field">
+      <label className="idoc-auth-label" htmlFor={name}>{label}</label>
+      <input autoComplete="new-password" className="idoc-auth-input" id={name} name={name} required type="password" />
+    </div>
+  );
+}
+
+function Feedback({ state }: { state: State }) {
+  return (
+    <>
+      {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
+      {state.success ? <p className="m-0 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{state.success}</p> : null}
+    </>
+  );
+}

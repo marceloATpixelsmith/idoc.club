@@ -1,0 +1,485 @@
+.idoc-auth-shell {
+  --auth-primary-color: #111827;
+  --auth-link-color: #111827;
+  --auth-turnstile-color: #111827;
+  --auth-page-title-color: #111827;
+  --auth-instruction-color: #64748b;
+  --auth-input-color: #0f172a;
+  --auth-error-color: #dc2626;
+  --auth-terms-color: #64748b;
+  display: flex;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+.idoc-auth-shell__visual {
+  position: relative;
+  order: 2;
+  flex: 0 0 50%;
+  min-height: 100vh;
+  overflow: hidden;
+  background-image: url('/auth-background.jpg');
+  background-position: calc(50% + 150px) center;
+  background-size: cover;
+}
+
+.idoc-auth-shell__content {
+  display: flex;
+  order: 1;
+  flex: 0 0 50%;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: #ffffff;
+}
+
+.idoc-auth-shell__inner {
+  display: flex;
+  width: 100%;
+  max-width: 400px;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.idoc-auth-shell__inner--wide {
+  max-width: 672px;
+}
+
+.idoc-auth-shell__header,
+.idoc-auth-shell__page,
+.idoc-auth-shell__legal {
+  width: 100%;
+}
+
+.idoc-auth-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.idoc-auth-shell__logo {
+  width: 160px;
+  height: auto;
+  object-fit: contain;
+}
+
+.idoc-auth-page {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+}
+
+.idoc-auth-page__heading {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.idoc-auth-page__title {
+  margin: 0;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--auth-page-title-color);
+  text-align: center;
+}
+
+.idoc-auth-page__instructions {
+  width: 100%;
+  margin: 0;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--auth-instruction-color);
+  text-align: center;
+}
+
+.idoc-auth-page__instructions p {
+  margin: 0;
+}
+
+.idoc-auth-form {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.idoc-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.idoc-auth-label {
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.idoc-auth-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--auth-input-color);
+  outline: none;
+}
+
+.idoc-auth-input::placeholder {
+  color: #64748b;
+}
+
+.idoc-auth-input:focus {
+  border-color: var(--auth-primary-color);
+  box-shadow: 0 0 0 3px #e5e7eb;
+}
+
+.idoc-auth-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--auth-error-color);
+}
+
+.idoc-auth-button,
+.idoc-auth-google-button {
+  display: inline-flex;
+  width: 100%;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.idoc-auth-button {
+  padding: 0;
+  border: 0;
+  background: var(--auth-primary-color);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 4%);
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.idoc-auth-button:hover:not(:disabled) {
+  background: #1f2937;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 10%), 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.idoc-auth-button:disabled,
+.idoc-auth-google-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.idoc-auth-link {
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--auth-link-color);
+  text-decoration: none;
+}
+
+.idoc-auth-link:hover {
+  text-decoration: underline;
+}
+
+.idoc-auth-divider {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+}
+
+.idoc-auth-divider__line {
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.idoc-auth-divider__label {
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--auth-instruction-color);
+}
+
+.idoc-auth-google-button {
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1.5px solid #dadce0;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 4%);
+  font-weight: 500;
+  color: var(--auth-input-color);
+}
+
+.idoc-auth-google-button:hover:not(:disabled) {
+  background: #f8fafc;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 10%), 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.idoc-auth-google-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.idoc-auth-actions {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.idoc-auth-actions__row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.idoc-auth-actions__center {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+
+.idoc-auth-password {
+  position: relative;
+  width: 100%;
+}
+
+.idoc-auth-password .idoc-auth-input {
+  padding-right: 52px;
+}
+
+.idoc-auth-password__toggle {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--auth-instruction-color);
+  cursor: pointer;
+}
+
+.idoc-auth-password__toggle:hover {
+  color: var(--auth-link-color);
+}
+
+.idoc-auth-login-password {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.idoc-auth-login-password__identity {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--auth-instruction-color);
+}
+
+.idoc-auth-login-password__email {
+  font-weight: 600;
+  color: var(--auth-input-color);
+}
+
+.idoc-auth-forgot {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+
+.idoc-auth-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 14px;
+  line-height: 1.5;
+  list-style: none;
+}
+
+.idoc-auth-requirement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+}
+
+.idoc-auth-requirement--met {
+  color: #15803d;
+}
+
+.idoc-auth-requirement__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.idoc-auth-requirement--met .idoc-auth-requirement__dot {
+  background: #16a34a;
+}
+
+.idoc-auth-otp {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.idoc-auth-otp [data-slot='input-otp-group'] {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.idoc-auth-otp [data-slot='input-otp-slot'] {
+  width: 100%;
+  height: 52px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--auth-input-color);
+}
+
+.idoc-auth-resend {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--auth-instruction-color);
+  text-align: center;
+}
+
+.idoc-auth-resend button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 500;
+  color: var(--auth-link-color);
+  cursor: pointer;
+}
+
+.idoc-auth-resend button:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.idoc-auth-turnstile {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.idoc-auth-turnstile > div,
+.idoc-auth-turnstile iframe {
+  max-width: 100% !important;
+}
+
+.idoc-auth-shell__legal {
+  margin: 0;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--auth-terms-color);
+  text-align: center;
+}
+
+.idoc-auth-shell__legal a {
+  font: inherit;
+  font-weight: 500;
+  color: var(--auth-link-color);
+  text-decoration: none;
+}
+
+.idoc-auth-shell__legal a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .idoc-auth-shell {
+    flex-direction: column;
+  }
+
+  .idoc-auth-shell__content {
+    order: 1;
+    flex: none;
+    width: 100%;
+    min-height: auto;
+    padding: 32px 20px;
+  }
+
+  .idoc-auth-shell__visual {
+    order: 2;
+    flex: none;
+    width: 100%;
+    min-height: 0;
+    height: 220px;
+  }
+
+  .idoc-auth-shell__inner,
+  .idoc-auth-shell__inner--wide {
+    max-width: 400px;
+  }
+}

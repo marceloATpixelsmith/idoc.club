@@ -7,9 +7,9 @@ export function OtpStep({ email }: { email: string }) {
   return (
     <OtpEntryStep
       cancelAction={cancelPasswordReset}
-      description={<>If an account uses <span className="font-semibold text-gray-900">{email}</span>, we sent it a 6-digit code.</>}
+      description={<>We sent a 6-digit code to <strong>{email}</strong>.</>}
       resendAction={resendPasswordResetOtp}
-      title="Enter your code"
+      title="Verify your identity"
       verifyAction={verifyPasswordResetOtp}
     />
   );

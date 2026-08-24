@@ -7,7 +7,7 @@ export function OtpStep({ email }: { email: string }) {
   return (
     <OtpEntryStep
       cancelAction={cancelSignup}
-      description={<>We sent a 6-digit code to <span className="font-semibold text-gray-900">{email}</span>.</>}
+      description={<>We sent a 6-digit code to <strong>{email}</strong>.</>}
       resendAction={resendSignupOtp}
       title="Verify your email"
       verifyAction={verifySignupOtp}
