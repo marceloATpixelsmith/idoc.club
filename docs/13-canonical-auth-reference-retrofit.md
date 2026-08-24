@@ -62,6 +62,9 @@ IDOC's canonical provider flow uses:
 - OIDC `nonce`;
 - PKCE S256;
 - a 15-minute maximum OAuth transaction lifetime;
+- a signed, `HttpOnly`, `SameSite=Lax` browser-binding cookie tied to the exact OAuth state and verified before callback transaction consumption, preventing login-CSRF callback swapping;
+- an authentication-adjacent per-origin rate limit on anonymous OAuth transaction creation;
+- bounded OAuth transaction retention with cleanup of expired and consumed records;
 - persistent trusted-server transaction storage with atomic single-use consumption;
 - exact `applicationId`, application-origin, redirect-URI, and transaction binding;
 - same-origin-only return destinations with ASCII control-character and backslash rejection;
@@ -92,7 +95,7 @@ The security boundaries are:
 
 ## Security alignment already implemented
 
-The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, and the canonical Google OIDC provider flow described above.
+The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, and the hardened canonical Google OIDC provider flow described above.
 
 ## Remaining full-reference adoption work
 
