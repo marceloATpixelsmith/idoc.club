@@ -72,11 +72,14 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
 }
 
 export async function processAuthSecurityNotificationBatch(limit = 25) {
-  const results: string[] = [];
+  const summary = { deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0 };
   for (let index = 0; index < limit; index += 1) {
     const result = await deliverNextAuthSecurityNotification();
-    results.push(result.status);
     if (result.status === 'empty') break;
+    if (result.status === 'dead_lettered') summary.deadLettered += 1;
+    else if (result.status === 'delivered') summary.delivered += 1;
+    else if (result.status === 'lease_lost') summary.leaseLost += 1;
+    else summary.retryable += 1;
   }
-  return results;
+  return summary;
 }
