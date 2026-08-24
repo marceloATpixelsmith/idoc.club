@@ -36,8 +36,8 @@ test('Google OAuth state is bound to the initiating browser before callback cons
   assert.match(binding, /sameSite: 'lax'/);
   assert.match(startRoute, /createGoogleOauthBrowserBinding\(state\)/);
   assert.match(startRoute, /response\.cookies\.set/);
-  const verify = callbackRoute.indexOf('verifyGoogleOauthBrowserBinding');
-  const consume = callbackRoute.indexOf('completeGoogleOidcCallback');
+  const verify = callbackRoute.indexOf('if (!state || !verifyGoogleOauthBrowserBinding(binding, state))');
+  const consume = callbackRoute.indexOf('const identity = await completeGoogleOidcCallback({');
   assert.ok(verify >= 0 && consume > verify, 'browser binding must be verified before OAuth transaction consumption');
 });
 
