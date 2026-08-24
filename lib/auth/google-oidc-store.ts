@@ -26,6 +26,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
         code_verifier,
         redirect_uri,
         return_to,
+        purpose,
+        authenticated_user_id,
         created_at,
         expires_at
       ) values (
@@ -37,6 +39,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
         ${transaction.codeVerifier},
         ${transaction.redirectUri},
         ${transaction.returnTo},
+        ${transaction.purpose},
+        ${transaction.authenticatedUserId ? Number(transaction.authenticatedUserId) : null},
         ${new Date(transaction.createdAtMs)},
         ${new Date(transaction.expiresAtMs)}
       )
@@ -53,6 +57,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
       code_verifier: string;
       redirect_uri: string;
       return_to: string;
+      purpose: 'authentication' | 'external_identity_link';
+      authenticated_user_id: number | null;
       created_at: Date;
       expires_at: Date;
     }[]>`
@@ -69,6 +75,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
         code_verifier,
         redirect_uri,
         return_to,
+        purpose,
+        authenticated_user_id,
         created_at,
         expires_at
     `;
@@ -85,6 +93,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
       codeVerifier: row.code_verifier,
       redirectUri: row.redirect_uri,
       returnTo: row.return_to,
+      purpose: row.purpose,
+      authenticatedUserId: row.authenticated_user_id === null ? null : String(row.authenticated_user_id),
       createdAtMs: row.created_at.getTime(),
       expiresAtMs: row.expires_at.getTime(),
     } satisfies GoogleOidcTransaction;
