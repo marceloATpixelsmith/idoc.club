@@ -14,9 +14,9 @@ const env = read('.env.example');
 test('Google OIDC uses the canonical reference 1.10 provider security invariants', () => {
   assert.match(provider, /https:\/\/accounts\.google\.com/);
   assert.match(provider, /codeChallengeMethod: 'S256'/);
-  assert.match(provider, /randomBytes\(32\)/);
-  assert.match(provider, /state/);
-  assert.match(provider, /nonce/);
+  assert.match(provider, /const state = randomBase64Url\(32\)/);
+  assert.match(provider, /const nonce = randomBase64Url\(32\)/);
+  assert.match(provider, /const codeVerifier = randomBase64Url\(48\)/);
   assert.match(provider, /applicationId/);
   assert.match(provider, /applicationOrigin/);
   assert.match(provider, /destination\.origin !== applicationOrigin/);
