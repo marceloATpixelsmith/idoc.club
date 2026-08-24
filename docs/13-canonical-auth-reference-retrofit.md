@@ -6,7 +6,7 @@ This document tracks IDOC's retrofit to the canonical authentication implementat
 
 Reference repository: `marceloATpixelsmith/pixelsmith-auth-reference`
 
-Current baseline after reference PR #34:
+Current baseline after reference PR #35:
 
 - contract `1.10.0`
 - machine schema `13.0.0`
@@ -78,6 +78,26 @@ The Google buttons on login and signup now point to the canonical start route. A
 
 Google-authenticated sessions still pass through IDOC's canonical session establishment. Future MFA/step-up policy remains authoritative after primary authentication when those slices are implemented.
 
+## Canonical Google identity linking
+
+Reference PR #35 defines the reusable linking/unlinking behavior without changing the `1.10.0` normative contract. IDOC adopts that behavior rather than linking accounts by matching email addresses.
+
+The implemented linking boundary is:
+
+- the member must already have an authenticated IDOC session;
+- the member must freshly verify the current password before a link flow begins;
+- fresh verification expires after five minutes and is stored in a signed, `HttpOnly` server-authenticated cookie;
+- the Google OAuth transaction is explicitly marked `external_identity_link` and bound to the authenticated IDOC user ID;
+- the callback rejects any mismatch between the OAuth transaction's authenticated user and the current IDOC session;
+- only the canonical Google issuer is accepted;
+- issuer + Google `sub` remains the stable external identity key;
+- concurrent link attempts are serialized and the persistence layer returns authoritative collision outcomes;
+- the identity row, immutable security audit evidence, and a durable user-security notification outbox record are persisted in one database transaction;
+- disconnecting Google requires fresh current-password verification and is allowed only through the canonical Google issuer path;
+- successful link and unlink operations enqueue a security email handled by the existing account-delivery cron cadence.
+
+Google-only accounts created through provider signup do not know the random internal password hash used to satisfy the current non-null database credential column. They therefore cannot disconnect their sole Google sign-in method through the password-verified unlink control, which preserves the canonical requirement not to strand an account without a usable primary authentication method. A future password-establishment flow may provide such accounts an alternate primary method before unlinking.
+
 ## Canonical session lifecycle
 
 IDOC uses versioned, persisted canonical sessions with a distinct random session identifier, authoritative user/session-version pair, original authentication time, last activity time, fixed absolute expiration, and the trusted-server `idoc.auth_sessions` registry.
@@ -95,13 +115,12 @@ The security boundaries are:
 
 ## Security alignment already implemented
 
-The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, and the hardened canonical Google OIDC provider flow described above.
+The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, hardened canonical Google OIDC, and explicit authenticated Google identity linking/unlinking with fresh verification, atomic collision handling, audit evidence, and security notifications.
 
 ## Remaining full-reference adoption work
 
 The target is the reference in its totality, not only password login and Google OIDC. Remaining work includes:
 
-- explicit authenticated external-identity linking and unlinking controls consistent with the canonical account-linking policy;
 - complete MFA/TOTP policy, enrollment, routine challenge, recovery codes, authenticator replacement, remembered-device rules, and fresh sensitive-action step-up;
 - user-facing session inventory/revocation controls where required by product policy and remaining session signing-key rotation semantics;
 - complete server-owned authentication transaction semantics, replay prevention, atomic single-use evidence, and CSRF protection for cookie-authenticated unsafe mutations;

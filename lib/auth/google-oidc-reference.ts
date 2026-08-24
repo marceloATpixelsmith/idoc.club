@@ -7,6 +7,8 @@ export type GoogleOidcConfig = {
   redirectUri: string;
 };
 
+export type GoogleOidcTransactionPurpose = 'authentication' | 'external_identity_link';
+
 export type GoogleOidcTransaction = {
   provider: 'google';
   applicationId: string;
@@ -16,6 +18,8 @@ export type GoogleOidcTransaction = {
   codeVerifier: string;
   redirectUri: string;
   returnTo: string;
+  purpose: GoogleOidcTransactionPurpose;
+  authenticatedUserId: string | null;
   createdAtMs: number;
   expiresAtMs: number;
 };
@@ -33,6 +37,8 @@ export type GoogleOidcIdentity = {
   name: string | null;
   picture: string | null;
   returnTo: string;
+  oauthTransactionPurpose: GoogleOidcTransactionPurpose;
+  oauthAuthenticatedUserId: string | null;
 };
 
 export type GoogleAuthorizationRequest = {
@@ -179,6 +185,8 @@ export async function createGoogleAuthorizationRequest({
   applicationOrigin,
   store,
   returnTo,
+  purpose = 'authentication',
+  authenticatedUserId = null,
   config = loadGoogleOidcConfig(),
   nowMs = Date.now(),
   ttlSeconds = GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS,
@@ -187,6 +195,8 @@ export async function createGoogleAuthorizationRequest({
   applicationOrigin: string;
   store: GoogleOidcTransactionStore;
   returnTo?: string;
+  purpose?: GoogleOidcTransactionPurpose;
+  authenticatedUserId?: string | null;
   config?: GoogleOidcConfig;
   nowMs?: number;
   ttlSeconds?: number;
@@ -194,6 +204,8 @@ export async function createGoogleAuthorizationRequest({
   if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS) {
     throw new GoogleOidcError('configuration');
   }
+  if (purpose === 'external_identity_link' && !authenticatedUserId) throw new GoogleOidcError('configuration');
+  if (purpose === 'authentication' && authenticatedUserId) throw new GoogleOidcError('configuration');
 
   const trustedApplicationId = normalizeApplicationId(applicationId);
   const trustedApplicationOrigin = normalizeApplicationOrigin(applicationOrigin);
@@ -211,6 +223,8 @@ export async function createGoogleAuthorizationRequest({
     codeVerifier,
     redirectUri: config.redirectUri,
     returnTo: normalizeReturnTo(returnTo, trustedApplicationOrigin),
+    purpose,
+    authenticatedUserId,
     createdAtMs: nowMs,
     expiresAtMs,
   });
@@ -265,6 +279,12 @@ export async function completeGoogleOidcCallback({
     transaction.applicationOrigin !== trustedApplicationOrigin ||
     transaction.redirectUri !== config.redirectUri
   ) {
+    throw new GoogleOidcError('invalid_transaction');
+  }
+  if (transaction.purpose === 'external_identity_link' && !transaction.authenticatedUserId) {
+    throw new GoogleOidcError('invalid_transaction');
+  }
+  if (transaction.purpose === 'authentication' && transaction.authenticatedUserId) {
     throw new GoogleOidcError('invalid_transaction');
   }
   if (providerError) throw new GoogleOidcError('provider_error');
@@ -329,6 +349,8 @@ export async function completeGoogleOidcCallback({
       name: typeof payload.name === 'string' ? payload.name : null,
       picture: typeof payload.picture === 'string' ? payload.picture : null,
       returnTo: transaction.returnTo,
+      oauthTransactionPurpose: transaction.purpose,
+      oauthAuthenticatedUserId: transaction.authenticatedUserId,
     };
   } catch (error) {
     if (error instanceof GoogleOidcError) throw error;
