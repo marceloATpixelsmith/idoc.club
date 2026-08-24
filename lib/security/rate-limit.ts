@@ -46,6 +46,17 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
   return emailAllowed && ipAllowed;
 }
 
+/** Authentication-adjacent endpoints without an email identifier (for example an OAuth start
+ * route) use an origin-only bucket rather than inventing a shared email value that would create
+ * one global limit for every user. */
+export async function checkOriginRateLimit(purpose: string, origin: string, now: Date = new Date()): Promise<boolean> {
+  const secret = rateLimitHashKeyForServer();
+  const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
+  const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
+  const allEmailsMarker = digest(`${secret}:all-emails`);
+  return takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, IP_MAX_REQUESTS);
+}
+
 /** The requesting client's IP, derived the same way on every auth-adjacent Server Action: the first
  * entry of X-Forwarded-For (Vercel's proxy chain), falling back to X-Real-IP, then 'unknown'. */
 export async function requestOrigin(): Promise<string> {
