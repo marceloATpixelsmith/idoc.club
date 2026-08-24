@@ -48,10 +48,10 @@ test('new authentication rotates to a distinct session identifier and fixed abso
   assert.match(session, /absoluteExpiresAt: new Date\(now\.getTime\(\) \+ SESSION_ABSOLUTE_SECONDS \* 1000\)/);
 });
 
-test('legacy one-day cookie is only a one-way compatibility input and is removed on upgrade/sign-out', () => {
+test('legacy one-day cookie remains a one-way compatibility input and is never promoted', () => {
   assert.match(session, /LEGACY_SESSION_COOKIE_NAME = 'session'/);
-  assert.match(session, /One-way compatibility bridge/);
-  assert.match(middleware, /if \(legacyCookie\) res\.cookies\.delete\(LEGACY_SESSION_COOKIE_NAME\)/);
+  assert.match(session, /One-way compatibility input for the pre-canonical cookie/);
+  assert.match(middleware, /request\.method === 'GET' && canonicalCookie/);
   assert.match(actions, /export async function signOut\(\) \{\s*await clearSession\(\);\s*\}/s);
   assert.match(session, /cookieStore\.delete\(LEGACY_SESSION_COOKIE_NAME\)/);
 });

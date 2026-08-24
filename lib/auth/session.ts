@@ -3,6 +3,12 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NewUser } from '@/lib/db/schema';
 import { authSecretForServer } from '@/lib/runtime/configuration';
+import {
+  readActiveSession,
+  registerSession,
+  revokeSession,
+  touchSession,
+} from '@/lib/auth/session-registry';
 import 'server-only';
 
 export { comparePasswords, hashPassword, passwordHashNeedsUpgrade } from '@/lib/auth/password-hash';
@@ -46,9 +52,6 @@ export function sessionCookieOptions(absoluteExpiresAt: string) {
   };
 }
 
-/** A __Host- cookie must keep Secure and Path=/ even when it is expired. Using the framework's
- * name-only delete() can omit those attributes, causing production browsers to reject the clearing
- * Set-Cookie and leave the authenticated cookie intact. */
 export function expiredSessionCookieOptions() {
   return {
     ...canonicalCookieSecurityAttributes(),
@@ -84,13 +87,14 @@ function normalizeSessionPayload(payload: Record<string, unknown>): SessionData 
     };
   }
 
-  // One-way compatibility bridge for the pre-canonical one-day JWT. The old token is never
-  // refreshed in its old shape: middleware upgrades it to the canonical cookie on the next GET.
+  // One-way compatibility input for the pre-canonical cookie. Legacy tokens never become
+  // registry-backed canonical sessions; they age out under the 12-hour absolute cap or are
+  // replaced by a fresh registered session on the next successful authentication.
   if (typeof payload.iat === 'number') {
     const authenticatedAt = isoFromEpochSeconds(payload.iat);
     return {
       version: 2,
-      sessionId: randomUUID(),
+      sessionId: `legacy-${payload.iat}-${user.id}`,
       user: { id: user.id, sessionVersion: user.sessionVersion },
       authenticatedAt,
       lastActivityAt: authenticatedAt,
@@ -141,13 +145,35 @@ export async function verifyToken(input: string, now = new Date()) {
   return session;
 }
 
+async function registeredSessionIsValid(session: SessionData, now = new Date()) {
+  // Database failures intentionally propagate. Only an absent/mismatched registry record is an
+  // authentication-validation failure that should be treated as an invalid session.
+  const record = await readActiveSession(session.sessionId, session.user.id);
+  if (!record) return false;
+  if (record.sessionVersion !== session.user.sessionVersion) return false;
+  if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) return false;
+  if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) return false;
+  await touchSession(session.sessionId, session.user.id, now);
+  return true;
+}
+
 export async function getSession() {
   const cookieStore = await cookies();
-  const value = cookieStore.get(sessionCookieName())?.value
-    ?? cookieStore.get(LEGACY_SESSION_COOKIE_NAME)?.value;
-  if (!value) return null;
+  const canonicalValue = cookieStore.get(sessionCookieName())?.value;
+  if (canonicalValue) {
+    let session: SessionData;
+    try {
+      session = await verifyToken(canonicalValue);
+    } catch {
+      return null;
+    }
+    return (await registeredSessionIsValid(session)) ? session : null;
+  }
+
+  const legacyValue = cookieStore.get(LEGACY_SESSION_COOKIE_NAME)?.value;
+  if (!legacyValue) return null;
   try {
-    return await verifyToken(value);
+    return await verifyToken(legacyValue);
   } catch {
     return null;
   }
@@ -163,6 +189,16 @@ export async function setSession(user: NewUser) {
     lastActivityAt: now.toISOString(),
     absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_SECONDS * 1000).toISOString(),
   };
+
+  await registerSession({
+    sessionId: session.sessionId,
+    userId: session.user.id,
+    sessionVersion: session.user.sessionVersion,
+    authenticatedAt: new Date(session.authenticatedAt),
+    lastActivityAt: new Date(session.lastActivityAt),
+    absoluteExpiresAt: new Date(session.absoluteExpiresAt),
+  });
+
   const cookieStore = await cookies();
   cookieStore.set(sessionCookieName(), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
@@ -170,6 +206,20 @@ export async function setSession(user: NewUser) {
 
 export async function clearSession() {
   const cookieStore = await cookies();
+  const canonicalValue = cookieStore.get(sessionCookieName())?.value;
+  if (canonicalValue) {
+    let session: SessionData | null = null;
+    try {
+      session = await verifyToken(canonicalValue);
+    } catch {
+      // Invalid client evidence is cleared below, but never trusted for registry mutation.
+    }
+    if (session) {
+      // Deliberately not caught: a registry failure must fail sign-out before the browser cookie is
+      // cleared, otherwise a copied bearer token could remain valid after a reported successful logout.
+      await revokeSession(session.sessionId, session.user.id, 'user-signout');
+    }
+  }
   cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions());
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
 }

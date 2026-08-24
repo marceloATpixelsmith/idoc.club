@@ -56,11 +56,11 @@ The retrofit includes trusted Turnstile Siteverify binding, generic login failur
 
 The login-order adoption pass corrected the earlier migrated-member flow: anonymous email entry no longer sends a login OTP or branches on account state. Password success is the point after which authoritative email verification is evaluated. Successful OTP verification persists `emailVerifiedAt` before the authenticated session is established.
 
-### Canonical session-lifecycle slice
+### Canonical session lifecycle
 
 IDOC's former session cookie was a one-day JWT that middleware extended by another day on each GET. That behavior did not satisfy the reference's separate idle and absolute lifetime requirements because active use could extend a session indefinitely.
 
-The canonical session slice replaces that behavior with a versioned session payload containing a distinct session identifier, the authoritative user/session-version pair, the original authentication time, the last activity time, and a fixed absolute expiration. The security boundaries are now:
+The canonical session implementation uses a versioned session payload containing a distinct session identifier, the authoritative user/session-version pair, the original authentication time, the last activity time, and a fixed absolute expiration. The security boundaries are now:
 
 - idle timeout: 30 minutes (`1800` seconds);
 - absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
@@ -68,11 +68,24 @@ The canonical session slice replaces that behavior with a versioned session payl
 - token verification fails closed when either lifetime is exceeded or the timestamp relationship is invalid;
 - production uses the host-only `__Host-idoc-session` cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, no Domain attribute, and an explicit absolute expiration;
 - every successful authentication creates a new random `sessionId`, so authentication rotates session identity;
-- the authoritative `users.sessionVersion` remains a server-side revocation boundary for account-wide invalidation after privileged role/security changes;
-- the pre-canonical `session` cookie is accepted only as a one-way compatibility input and is upgraded to the canonical cookie on the next valid GET; it is never refreshed in the old one-day shape;
-- sign-out and account deletion clear both canonical and legacy cookie names.
+- the authoritative `users.sessionVersion` remains an account-wide invalidation boundary after privileged role/security changes;
+- the pre-canonical `session` cookie is compatibility-only and is never promoted into the canonical cookie namespace. It ages out under the fixed 12-hour cap or is replaced by a new registered session after successful authentication;
+- sign-out and account deletion clear both canonical and legacy cookie names while preserving the required `__Host-` clearing attributes.
 
-This closes the idle/absolute lifetime and cookie-contract portion of the canonical session requirements without introducing any dependency on payment or billing state. Individual per-session server-side revocation and user-visible session inventory still require a persisted session registry and remain in the next session-specific slice.
+### Persisted session registry
+
+Canonical sessions are now backed by the trusted-server `idoc.auth_sessions` registry. A validly signed canonical JWT is not sufficient on its own: authenticated server access also requires a matching active registry row for the same user, `sessionId`, `sessionVersion`, original authentication time, and absolute deadline. Revoked, unknown, or expired registry entries fail closed.
+
+The registry provides the server-side primitives required by the canonical reference for:
+
+- individual session revocation;
+- account-wide session revocation;
+- active-session inventory;
+- persisted last-activity tracking;
+- explicit revocation reason/audit context;
+- rejection of a stolen or replayed canonical token after its registry row is revoked.
+
+New canonical sessions are inserted into the registry before the authentication cookie is issued. Sign-out revokes the current registry entry before clearing the cookie. The existing `users.sessionVersion` check remains a second, account-wide revocation boundary rather than being replaced by the registry.
 
 ## Payment isolation
 
@@ -82,7 +95,7 @@ Authentication retrofit work must not modify Stripe integration, checkout, billi
 
 The target is the reference in its totality, not only the login flow. Subsequent slices must close the remaining gaps without crossing the payment boundary:
 
-- persisted session registry for individual revocation/session inventory, remembered lifetime where applicable, and any remaining rotation/key-management semantics;
+- user-facing session inventory/revocation controls where required by product policy, remembered lifetime where applicable, and remaining session signing-key rotation semantics;
 - complete MFA/TOTP policy, enrollment, routine challenge, recovery codes, authenticator replacement, remembered-device rules, and fresh sensitive-action step-up;
 - complete server-owned authentication transaction semantics, replay prevention, atomic single-use evidence, and CSRF protection for cookie-authenticated unsafe mutations;
 - canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;

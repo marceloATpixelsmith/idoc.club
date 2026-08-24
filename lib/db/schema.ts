@@ -31,6 +31,23 @@ export const users = idocSchema.table('users', {
   deletedAt: timestamp('deleted_at'),
 }, (table) => [uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`)]);
 
+export const authSessions = idocSchema.table('auth_sessions', {
+  id: serial('id').primaryKey(),
+  sessionId: varchar('session_id', { length: 64 }).notNull().unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionVersion: integer('session_version').notNull(),
+  authenticatedAt: timestamp('authenticated_at', { withTimezone: true }).notNull(),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull(),
+  absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokeReason: varchar('revoke_reason', { length: 80 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('auth_sessions_active_user_idx').on(table.userId, table.lastActivityAt).where(sql`${table.revokedAt} is null`),
+  index('auth_sessions_expiry_idx').on(table.absoluteExpiresAt),
+]);
+
 export const teams = idocSchema.table('teams', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
