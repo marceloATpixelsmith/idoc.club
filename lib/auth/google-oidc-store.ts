@@ -3,6 +3,17 @@ import 'server-only';
 import { client } from '@/lib/db/drizzle';
 import type { GoogleOidcTransaction, GoogleOidcTransactionStore } from '@/lib/auth/google-oidc-reference';
 
+const RETENTION_MILLISECONDS = 24 * 60 * 60 * 1000;
+
+export async function purgeExpiredGoogleOauthTransactions(now = new Date()) {
+  const cutoff = new Date(now.getTime() - RETENTION_MILLISECONDS);
+  await client`
+    delete from idoc.google_oauth_transactions
+    where expires_at < ${cutoff}
+       or (consumed_at is not null and consumed_at < ${cutoff})
+  `;
+}
+
 export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
   async create(transaction) {
     await client`
