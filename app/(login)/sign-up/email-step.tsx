@@ -17,6 +17,7 @@ export function EmailStep() {
         </div>
       )}
       dividerLabel="or"
+      googleHref="/api/auth/google/start"
       showGoogle
       submitLabel="Sign up"
       title="Create your account"

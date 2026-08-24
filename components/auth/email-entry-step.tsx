@@ -16,6 +16,7 @@ export function EmailEntryStep({
   description,
   dividerLabel,
   googleHref,
+  initialError = '',
   showGoogle = false,
   submitLabel,
   title,
@@ -26,12 +27,13 @@ export function EmailEntryStep({
   description?: ReactNode;
   dividerLabel?: string;
   googleHref?: string;
+  initialError?: string;
   showGoogle?: boolean;
   submitLabel: string;
   title: string;
   turnstileAction: string;
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: '' });
+  const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: initialError });
   const [email, setEmail] = useState(state.email ?? '');
   const [turnstileToken, setTurnstileToken] = useState('');
   const canSubmit = EMAIL_PATTERN.test(email) && turnstileToken.length > 0 && !pending;

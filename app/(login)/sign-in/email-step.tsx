@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { EmailEntryStep } from '@/components/auth/email-entry-step';
 import { startLogin } from './actions';
 
-export function EmailStep() {
+export function EmailStep({ initialError = '' }: { initialError?: string }) {
   return (
     <EmailEntryStep
       action={startLogin}
@@ -15,6 +15,8 @@ export function EmailStep() {
         </div>
       )}
       dividerLabel="or continue with"
+      googleHref="/api/auth/google/start"
+      initialError={initialError}
       showGoogle
       submitLabel="Sign In"
       title="Login"

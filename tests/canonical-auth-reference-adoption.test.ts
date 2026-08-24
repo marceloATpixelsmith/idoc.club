@@ -53,6 +53,7 @@ test('login email screen uses canonical reference copy and action structure', ()
   assert.match(loginEntry, />Forgot password\?</);
   assert.match(loginEntry, /dividerLabel="or continue with"/);
   assert.match(loginEntry, /showGoogle/);
+  assert.match(loginEntry, /googleHref="\/api\/auth\/google\/start"/);
   assert.match(emailEntry, />Email Address</);
   assert.match(emailEntry, /you@example\.com/);
   assert.match(emailEntry, /Continue with Google/);
@@ -92,7 +93,15 @@ test('real Turnstile stays flexible and is forced to the canonical light theme',
 
 test('canonical reference version is pinned in implementation documentation', () => {
   const doc = read('docs/13-canonical-auth-reference-retrofit.md');
-  assert.match(doc, /contract\s+`?1\.9\.0`?/i);
+  assert.match(doc, /contract\s+`?1\.10\.0`?/i);
   assert.match(doc, /schema\s+`?13\.0\.0`?/i);
   assert.match(doc, /validator\s+`?10\.0\.0`?/i);
+});
+
+test('product roadmap tracks Google OIDC as enabled Release 1 scope with explicit remaining launch gates', () => {
+  const roadmap = read('docs/08-product-roadmap-and-functional-requirements.md');
+  assert.match(roadmap, /Google OIDC is now part of the Release 1 authentication scope/);
+  assert.match(roadmap, /browser-bound login-CSRF protection/);
+  assert.match(roadmap, /existing-account Google linking must have an explicit authenticated\/fresh-verification flow/);
+  assert.match(roadmap, /Automatic email-only linking remains prohibited/);
 });

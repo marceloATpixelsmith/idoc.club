@@ -82,6 +82,8 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
   'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
+  'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',
+  'app/api/auth/google/start/route.ts': 'oauth-transaction-boundary',
   'app/api/client-error/route.ts': 'log-only-no-data-access',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
@@ -166,6 +168,18 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
   const roleGrants = readFileSync(path.join(root, 'lib/membership/role-grants.ts'), 'utf8');
   assert.match(roleGrants, /requireAccountAccess\('administration'\)/);
   assert.match(roleGrants, /requireSuperAdmin\(/);
+});
+
+test('the Google OIDC Route Handlers are bound to the canonical provider transaction and callback validators', () => {
+  const start = readFileSync(path.join(root, 'app/api/auth/google/start/route.ts'), 'utf8');
+  const callback = readFileSync(path.join(root, 'app/api/auth/google/callback/route.ts'), 'utf8');
+  assert.match(start, /createGoogleAuthorizationRequest\(/);
+  assert.match(start, /googleOidcTransactionStore/);
+  assert.match(start, /APPLICATION_ID/);
+  assert.match(callback, /completeGoogleOidcCallback\(/);
+  assert.match(callback, /googleOidcTransactionStore/);
+  assert.match(callback, /authenticateGoogleIdentity\(/);
+  assert.match(callback, /APPLICATION_ID/);
 });
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {
