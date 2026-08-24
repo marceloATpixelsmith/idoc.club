@@ -8,9 +8,18 @@ export function EmailStep() {
   return (
     <EmailEntryStep
       action={startSignup}
-      footer={<>Already have an account?{' '}<Link className="font-medium text-gray-900 underline" href="/sign-in">Sign in</Link></>}
-      submitLabel="Sign Up"
-      title="Create account"
+      actions={(
+        <div className="idoc-auth-actions__center">
+          <span className="text-sm text-slate-600">
+            Already have an account?{' '}
+            <Link className="idoc-auth-link" href="/sign-in">Log in</Link>
+          </span>
+        </div>
+      )}
+      dividerLabel="or"
+      showGoogle
+      submitLabel="Sign up"
+      title="Create your account"
       turnstileAction="signup"
     />
   );

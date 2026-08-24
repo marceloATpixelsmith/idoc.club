@@ -50,6 +50,16 @@ IDOC authentication pages use the reference shell geometry and responsive behavi
 
 The canonical split shell is preserved: 50/50 desktop layout, form content constrained to the canonical 400px width, centered branding, legal copy placement, and the reference mobile behavior with the branded visual retained as a 220px section rather than removed. Shared IDOC auth steps continue to supply real server actions and the real Cloudflare Turnstile implementation; reference preview controls are never treated as backend authority.
 
+### UI parity pass
+
+The 24 August 2026 parity pass replaced the remaining older local auth presentation patterns on the currently implemented IDOC auth surfaces with the canonical reference geometry, copy, and component behavior. The implemented surfaces now share the reference 48px field/button geometry, 10px controls, 400px form width, action-row/divider placement, password identity row, OTP layout, legal placement, desktop split, and 220px mobile branded visual.
+
+The login email screen now uses the canonical `Login`, `Email Address`, `Sign In`, `or continue with`, `Continue with Google`, `Create an account`, and `Forgot password?` presentation. Signup, password recovery, email-code, password-creation, compatibility token, and email-verification surfaces were brought onto the same shell and form system. The production Cloudflare widget remains real and server-verified and is explicitly rendered with the reference light theme and flexible width rather than replacing it with the reference-only mock.
+
+The Google control is now represented in the canonical location and geometry, but it remains disabled until IDOC has the required trusted-server OIDC implementation. This is an intentional fail-closed capability gap, not a claim of completed Google authentication. The canonical Stage 5 requirements require server-owned provider configuration, state, nonce, PKCE, callback validation, issuer/subject identity binding, and safe account linking. IDOC currently has no provider-identity or OAuth-transaction implementation, so enabling a decorative or email-auto-linking Google button would violate the reference security contract.
+
+The UI parity pass therefore closes presentation drift on currently implemented IDOC auth flows but does not declare the full authentication retrofit complete. MFA/TOTP, recovery-code, privileged invitation, authenticator-management, remembered-device, step-up, user-facing session-management, and canonical OAuth behavior still require their corresponding trusted-server slices and UI surfaces.
+
 ## Security alignment already implemented
 
 The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, and purpose-bound email OTP infrastructure. These remain subject to the canonical contract and regression tests.
@@ -95,13 +105,14 @@ Authentication retrofit work must not modify Stripe integration, checkout, billi
 
 The target is the reference in its totality, not only the login flow. Subsequent slices must close the remaining gaps without crossing the payment boundary:
 
+- canonical Google/OIDC provider implementation, including provider registry, server-owned OAuth transaction state, nonce, PKCE, validated callback handling, issuer/subject identity binding, and safe account linking;
 - user-facing session inventory/revocation controls where required by product policy, remembered lifetime where applicable, and remaining session signing-key rotation semantics;
 - complete MFA/TOTP policy, enrollment, routine challenge, recovery codes, authenticator replacement, remembered-device rules, and fresh sensitive-action step-up;
 - complete server-owned authentication transaction semantics, replay prevention, atomic single-use evidence, and CSRF protection for cookie-authenticated unsafe mutations;
 - canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;
 - full authorization negative testing, direct-resource checks, and tenant-independent single-app role enforcement;
 - canonical logging, security events, audit integrity, lifecycle cleanup, secrets/key handling, dependency failure behavior, and production operational evidence;
-- canonical UI component/form behavior across sign-in, signup, verification, password recovery/reset, invitation, MFA, recovery-code, and authenticator-management screens;
+- canonical UI component/form behavior for auth surfaces that do not yet exist in IDOC because their trusted-server feature slices are still pending, including invitation, MFA, recovery-code, authenticator-management, session-management, and step-up screens;
 - final `AUTH-*` implementation/evidence matrix against contract `1.9.0`, schema `13.0.0`, validator `10.0.0`.
 
 ## Completion criterion
