@@ -97,3 +97,11 @@ test('canonical reference version is pinned in implementation documentation', ()
   assert.match(doc, /schema\s+`?13\.0\.0`?/i);
   assert.match(doc, /validator\s+`?10\.0\.0`?/i);
 });
+
+test('product roadmap tracks Google OIDC as enabled Release 1 scope with explicit remaining launch gates', () => {
+  const roadmap = read('docs/08-product-roadmap-and-functional-requirements.md');
+  assert.match(roadmap, /Google OIDC is now part of the Release 1 authentication scope/);
+  assert.match(roadmap, /browser-bound login-CSRF protection/);
+  assert.match(roadmap, /existing-account Google linking must have an explicit authenticated\/fresh-verification flow/);
+  assert.match(roadmap, /Automatic email-only linking remains prohibited/);
+});
