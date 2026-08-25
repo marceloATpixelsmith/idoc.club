@@ -22,6 +22,15 @@ function timestamp(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+function timestampMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  throw new Error('Invalid PostgreSQL timestamp value.');
+}
+
 function factorRecord(row: Record<string, unknown>): TotpFactorRecord {
   return {
     factorId: String(row.factor_id),
@@ -30,8 +39,8 @@ function factorRecord(row: Record<string, unknown>): TotpFactorRecord {
     status: row.status as TotpFactorRecord['status'],
     encryptedSecret: String(row.encrypted_secret),
     keyId: String(row.encryption_key_id),
-    createdAtMs: (row.created_at as Date).getTime(),
-    activatedAtMs: row.activated_at ? (row.activated_at as Date).getTime() : null,
+    createdAtMs: timestampMs(row.created_at),
+    activatedAtMs: row.activated_at ? timestampMs(row.activated_at) : null,
     replacedByFactorId: row.replaced_by_factor_id ? String(row.replaced_by_factor_id) : null,
     lastAcceptedCounter: row.last_accepted_counter === null ? null : Number(row.last_accepted_counter),
   };
@@ -44,9 +53,9 @@ function enrollmentRecord(row: Record<string, unknown>): TotpEnrollmentRecord {
     applicationId: String(row.application_id),
     factorId: String(row.factor_id),
     purpose: row.purpose as TotpEnrollmentRecord['purpose'],
-    createdAtMs: (row.created_at as Date).getTime(),
-    expiresAtMs: (row.expires_at as Date).getTime(),
-    consumedAtMs: row.consumed_at ? (row.consumed_at as Date).getTime() : null,
+    createdAtMs: timestampMs(row.created_at),
+    expiresAtMs: timestampMs(row.expires_at),
+    consumedAtMs: row.consumed_at ? timestampMs(row.consumed_at) : null,
   };
 }
 
@@ -113,7 +122,7 @@ export class PostgresMfaStore implements MfaStore {
         select * from idoc.mfa_enrollment_transactions where transaction_id=${input.transactionId} for update`;
       if (!enrollment || Number(enrollment.user_id) !== id || enrollment.application_id !== input.applicationId ||
         enrollment.factor_id !== input.factorId || enrollment.consumed_at ||
-        (enrollment.expires_at as Date).getTime() <= input.nowMs) return 'invalid-transaction' as const;
+        timestampMs(enrollment.expires_at) <= input.nowMs) return 'invalid-transaction' as const;
       const [factor] = await tx<Record<string, unknown>[]>`
         select * from idoc.mfa_factors where factor_id=${input.factorId} for update`;
       if (!factor || Number(factor.user_id) !== id || factor.application_id !== input.applicationId || factor.status !== 'pending') {
@@ -155,7 +164,7 @@ export class PostgresMfaStore implements MfaStore {
         select * from idoc.mfa_challenge_transactions where transaction_id=${input.transactionId} for update`;
       if (!challenge || Number(challenge.user_id) !== id || challenge.application_id !== input.applicationId ||
         challenge.purpose !== input.purpose || challenge.consumed_at ||
-        (challenge.expires_at as Date).getTime() <= input.nowMs) return 'invalid-transaction' as const;
+        timestampMs(challenge.expires_at) <= input.nowMs) return 'invalid-transaction' as const;
       if (Number(challenge.attempt_count) >= Number(challenge.max_attempts)) return 'attempts-exhausted' as const;
       const [factor] = await tx<Record<string, unknown>[]>`
         select * from idoc.mfa_factors where factor_id=${input.factorId} for update`;
