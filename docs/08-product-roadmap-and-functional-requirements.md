@@ -103,6 +103,8 @@ Implementation status: Phase 1 (backend billing foundation) is complete — `sub
 
 # 6. Release 3 - migration and membership launch
 
+Release 1 security follow-up: live canonical TOTP enrollment and login challenge is implemented for database-granted Administrators and Super Admins after both password and Google primary authentication. Ordinary members are unchanged. Privileged password-reset MFA, recovery-authorized factor replacement, generic sensitive-action step-up, account-security management UI, broader notification/session-revocation integration, member remembered-device behavior, and production key deployment/UAT remain open release gates.
+
 16. Export only IDOC users and relevant metadata from the WordPress Multisite network plus IDOC MemberPress memberships, subscriptions and transactions.
 
 17. Import profiles, roles, membership state, manual payments, legacy IDs, Stripe Customer/Subscription IDs, and paid-through dates with deterministic mapping and exception reporting.

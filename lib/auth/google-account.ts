@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
-import { hashPassword, setSession } from '@/lib/auth/session';
+import { hashPassword } from '@/lib/auth/session';
 import type { GoogleOidcIdentity } from '@/lib/auth/google-oidc-reference';
 import { normalizeEmail } from '@/lib/membership/validation';
 
@@ -25,6 +25,7 @@ export class GoogleAccountNotEligibleError extends Error {
 type ResolveGoogleIdentityResult = {
   newAccount: boolean;
   redirectTo: string;
+  user: typeof users.$inferSelect;
 };
 
 export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): Promise<ResolveGoogleIdentityResult> {
@@ -116,9 +117,9 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     throw new GoogleAccountNotEligibleError();
   }
 
-  await setSession(user);
   return {
     newAccount,
     redirectTo: newAccount || user.accountState === 'onboarding' ? '/onboarding' : identity.returnTo || '/dashboard',
+    user,
   };
 }

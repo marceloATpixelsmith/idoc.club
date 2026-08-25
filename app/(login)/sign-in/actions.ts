@@ -13,6 +13,7 @@ import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingLogin, getPendingLogin, startPendingLogin } from '@/lib/auth/pending-login';
 import { finalizeMigratedAccountAfterVerifiedPassword } from '@/lib/membership/account-recovery';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -79,8 +80,10 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) 
   if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
     return { error: 'Your sign-in session expired. Start again.' };
   }
+  const destination = migrated ? '/dashboard/profile?confirmDetails=1' : '/dashboard';
+  if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');
   await setSession(verifiedUser);
-  redirect(migrated ? '/dashboard/profile?confirmDetails=1' : '/dashboard');
+  redirect(destination);
 });
 
 export const resendLoginOtp = validatedAction(z.object({}), async () => {

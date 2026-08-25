@@ -50,7 +50,7 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 # 4. Administrator security
 
-- Require strong authentication for administrator accounts and enable MFA where supported/appropriate.
+- Administrator and Super Admin grants require canonical TOTP after password or Google primary authentication. A normal registered session is issued only after the persisted enrollment/challenge succeeds (and, for enrollment, recovery codes are acknowledged); privileged accounts have no remembered-device bypass. Password-reset MFA and generic sensitive-action step-up remain pending.
 
 - Use least privilege: membership administrators should not automatically receive deployment, database or Stripe secret access.
 
