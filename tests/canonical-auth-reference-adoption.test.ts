@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const read = (path: string) => readFileSync(path, 'utf8');
+const assertContains = (source: string, pattern: RegExp, message: string) => {
+  assert.ok(pattern.test(source), message);
+};
 
 const loginEntry = read('app/(login)/sign-in/email-step.tsx');
 const loginPassword = read('app/(login)/sign-in/password-step.tsx');
@@ -93,15 +96,16 @@ test('real Turnstile stays flexible and is forced to the canonical light theme',
 
 test('canonical reference version is pinned in implementation documentation', () => {
   const doc = read('docs/13-canonical-auth-reference-retrofit.md');
-  assert.match(doc, /contract\s+`?1\.10\.0`?/i);
-  assert.match(doc, /schema\s+`?13\.0\.0`?/i);
-  assert.match(doc, /validator\s+`?10\.0\.0`?/i);
+  assertContains(doc, /contract\s+`?1\.10\.0`?/i, 'docs/13 must pin canonical auth contract 1.10.0');
+  assertContains(doc, /schema\s+`?13\.0\.0`?/i, 'docs/13 must pin canonical auth schema 13.0.0');
+  assertContains(doc, /validator\s+`?10\.0\.0`?/i, 'docs/13 must pin canonical auth validator 10.0.0');
 });
 
 test('product roadmap tracks Google OIDC as enabled Release 1 scope with explicit remaining launch gates', () => {
   const roadmap = read('docs/08-product-roadmap-and-functional-requirements.md');
-  assert.match(roadmap, /Google OIDC is now part of the Release 1 authentication scope/);
-  assert.match(roadmap, /browser-bound login-CSRF protection/);
-  assert.match(roadmap, /existing-account Google linking must have an explicit authenticated\/fresh-verification flow/);
-  assert.match(roadmap, /Automatic email-only linking remains prohibited/);
+  assertContains(roadmap, /Google OIDC is part of the Release 1 authentication scope/, 'docs/08 must keep Google OIDC in Release 1 scope');
+  assertContains(roadmap, /browser-bound login-CSRF protection/, 'docs/08 must retain browser-bound Google login-CSRF protection');
+  assertContains(roadmap, /existing-account Google linking must have an explicit authenticated\/fresh-verification flow/, 'docs/08 must keep the explicit fresh-verification Google-linking gate');
+  assertContains(roadmap, /canonical privileged-MFA enforcement after Google primary authentication/, 'docs/08 must record privileged MFA after Google primary authentication');
+  assertContains(roadmap, /Automatic email-only linking remains prohibited/, 'docs/08 must keep automatic email-only linking prohibited');
 });
