@@ -78,6 +78,13 @@ export interface MfaStore {
     counter: number;
     nowMs: number;
   }): Promise<'accepted' | 'replay' | 'inactive' | 'invalid-transaction' | 'attempts-exhausted'>;
+  recordChallengeFailure(input: {
+    transactionId: string;
+    subjectId: string;
+    applicationId: string;
+    purpose: MfaChallengePurpose;
+    nowMs: number;
+  }): Promise<'recorded' | 'invalid-transaction' | 'attempts-exhausted'>;
   replaceRecoveryCodes(input: { subjectId: string; applicationId: string; generationId: string; codes: readonly RecoveryCodeRecord[]; nowMs: number }): Promise<void>;
   consumeRecoveryCode(input: { subjectId: string; applicationId: string; digests: readonly string[]; nowMs: number }): Promise<'consumed' | 'invalid'>;
   createRememberedDevice(record: RememberedDeviceRecord): Promise<void>;

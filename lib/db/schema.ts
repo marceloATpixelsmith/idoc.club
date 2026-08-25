@@ -438,6 +438,90 @@ export const migrationMap = idocSchema.table('migration_map', {
   reviewedBy: integer('reviewed_by').references(() => users.id),
 }, (table) => [uniqueIndex('migration_map_source_unique').on(table.legacyType, table.legacyId)]);
 
+/** Encrypted TOTP factors. Secret material is always application-encrypted before persistence. */
+export const mfaFactors = idocSchema.table('mfa_factors', {
+  factorId: varchar('factor_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  factorType: varchar('factor_type', { length: 20 }).notNull().default('totp'),
+  status: varchar('status', { length: 20 }).notNull(),
+  encryptedSecret: text('encrypted_secret').notNull(),
+  encryptionKeyId: varchar('encryption_key_id', { length: 100 }).notNull(),
+  lastAcceptedCounter: integer('last_accepted_counter'),
+  activatedAt: timestamp('activated_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  lifecycleReason: varchar('lifecycle_reason', { length: 200 }),
+  replacedByFactorId: varchar('replaced_by_factor_id', { length: 36 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('mfa_factors_type_check', sql`${table.factorType} in ('totp')`),
+  check('mfa_factors_status_check', sql`${table.status} in ('pending', 'active', 'disabled', 'revoked', 'replaced')`),
+  uniqueIndex('mfa_factors_one_active_totp').on(table.userId, table.applicationId, table.factorType).where(sql`${table.status} = 'active'`),
+  index('mfa_factors_owner_idx').on(table.userId, table.applicationId),
+]);
+
+export const mfaEnrollmentTransactions = idocSchema.table('mfa_enrollment_transactions', {
+  transactionId: varchar('transaction_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  factorId: varchar('factor_id', { length: 36 }).notNull().references(() => mfaFactors.factorId, { onDelete: 'cascade' }),
+  purpose: varchar('purpose', { length: 40 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('mfa_enrollment_purpose_check', sql`${table.purpose} in ('mfa-enrollment', 'authenticator-replacement', 'mfa-recovery')`),
+  check('mfa_enrollment_attempt_count_check', sql`${table.attemptCount} >= 0`),
+  index('mfa_enrollment_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
+]);
+
+export const mfaChallengeTransactions = idocSchema.table('mfa_challenge_transactions', {
+  transactionId: varchar('transaction_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  purpose: varchar('purpose', { length: 20 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  satisfiedFactorId: varchar('satisfied_factor_id', { length: 36 }).references(() => mfaFactors.factorId),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('mfa_challenge_purpose_check', sql`${table.purpose} in ('login', 'step-up')`),
+  check('mfa_challenge_attempts_check', sql`${table.attemptCount} >= 0 and ${table.maxAttempts} > 0 and ${table.attemptCount} <= ${table.maxAttempts}`),
+  index('mfa_challenge_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
+]);
+
+export const mfaRecoveryCodes = idocSchema.table('mfa_recovery_codes', {
+  recoveryCodeId: varchar('recovery_code_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  generationId: varchar('generation_id', { length: 36 }).notNull(),
+  digest: varchar('digest', { length: 64 }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('mfa_recovery_codes_digest_unique').on(table.userId, table.applicationId, table.digest),
+  index('mfa_recovery_codes_generation_idx').on(table.userId, table.applicationId, table.generationId),
+]);
+
+export const mfaRememberedDevices = idocSchema.table('mfa_remembered_devices', {
+  rememberedDeviceId: varchar('remembered_device_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  factorId: varchar('factor_id', { length: 36 }).notNull().references(() => mfaFactors.factorId, { onDelete: 'cascade' }),
+  tokenDigest: varchar('token_digest', { length: 64 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokeReason: varchar('revoke_reason', { length: 200 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('mfa_remembered_devices_digest_unique').on(table.tokenDigest),
+  index('mfa_remembered_devices_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
+]);
+
 export type Profile = typeof profiles.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type ProfessionalRole = typeof professionalRoles.$inferSelect;
