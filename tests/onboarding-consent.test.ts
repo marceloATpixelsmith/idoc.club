@@ -22,6 +22,7 @@ test('consent migration does not fabricate consent for existing profiles', () =>
 test('marketing subscription is bounded and updates existing audience members', () => {
   const marketing = readFileSync(new URL('../lib/notifications/mailchimp-marketing.ts', import.meta.url), 'utf8');
   const configuration = readFileSync(new URL('../lib/runtime/configuration.ts', import.meta.url), 'utf8');
+  assert.match(marketing, /Promise<void>/);
   assert.match(marketing, /status: 'subscribed'/);
   assert.match(marketing, /method: 'PUT'/);
   assert.match(marketing, /AbortSignal\.timeout\(5000\)/);
