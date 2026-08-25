@@ -11,7 +11,7 @@ import {
   sensitiveActionRequiresFreshStepUp,
   totpProvisioningUri,
   verifyTotpCode,
-} from '../lib/auth/mfa/index';
+} from '../lib/auth/mfa/index.ts';
 
 function hotpForTest(secretText: string, counter: number): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
