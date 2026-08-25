@@ -154,7 +154,7 @@ test('the Google OIDC Route Handlers are bound to canonical transaction, authent
   assert.match(start, /createGoogleAuthorizationRequest\(/); assert.match(start, /googleOidcTransactionStore/); assert.match(start, /APPLICATION_ID/);
   assert.match(callback, /completeGoogleOidcCallback\(/); assert.match(callback, /googleOidcTransactionStore/); assert.match(callback, /authenticateGoogleIdentity\(/); assert.match(callback, /APPLICATION_ID/);
   assert.match(linkStart, /getUser\(\)/); assert.match(linkStart, /readGoogleLinkFreshEvidence\(user\.id\)/); assert.match(linkStart, /purpose: 'external_identity_link'/); assert.match(linkStart, /authenticatedUserId: String\(user\.id\)/);
-  assert.match(linkStatus, /getUser\(\)/); assert.match(linkStatus, /getGoogleIdentityLinkStatus\(String\(user\.id\)\)/);
+  assert.match(linkStatus, /getUser\(\)/); assert.match(linkStatus, /googleIdentityIsLinked\(user\.id\)/);
 });
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {
