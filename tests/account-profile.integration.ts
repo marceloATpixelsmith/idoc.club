@@ -68,6 +68,20 @@ test('invalid professional payloads persist nothing', async () => {
   }
 });
 
+test('onboarding rejects missing required consent and persists no profile evidence', async () => {
+  const user = await createUser('onboarding');
+  await assert.rejects(withTestMembershipBoundary(
+    { actor: { id: user.id, roles: [] } },
+    () => createOwnMemberProfile(profileInput(), {
+      keepUpdated: true,
+      privacyAccepted: false,
+      termsAccepted: true,
+    }),
+  ));
+  assert.equal((await sql`select 1 from idoc.profiles where user_id=${user.id}`).length, 0);
+  assert.equal((await sql`select 1 from idoc.onboarding_consents`).length, 0);
+});
+
 test('canonical field validation rejects every invalid edit without changing the complete persisted graph', async () => {
   const invalid = [
     { ...profileInput(), countryCode: 'XX' },
@@ -92,7 +106,7 @@ test('canonical field validation rejects every invalid edit without changing the
 });
 
 test('controlled onboarding failures roll back profile, roles, history, audit, and account-state transition', async () => {
-  const stages = ['profile-write', 'role-insertion', 'profile-history-insertion', 'audit-insertion', 'account-state-transition'] as const;
+  const stages = ['profile-write', 'role-insertion', 'consent-write', 'profile-history-insertion', 'audit-insertion', 'account-state-transition'] as const;
   for (const stage of stages) {
     await resetIdoc();
     const user = await createUser('onboarding');

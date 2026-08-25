@@ -7,6 +7,7 @@ import type { Actor } from './authorization';
 export type ProfileTransactionStage =
   | 'account-state-transition'
   | 'audit-insertion'
+  | 'consent-write'
   | 'notification-insertion'
   | 'profile-history-insertion'
   | 'profile-write'

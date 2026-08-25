@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import type { ReactNode } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,6 +105,13 @@ export function OnboardingWizard() {
           </fieldset>
         ) : null}
 
+        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <legend className="px-1 text-sm font-medium text-gray-700">Consent</legend>
+          <ConsentCheckbox name="termsAccepted" required> I accept the <a className="underline" href="/terms" target="_blank">Terms of Service</a>.</ConsentCheckbox>
+          <ConsentCheckbox name="privacyAccepted" required> I accept the <a className="underline" href="/privacy" target="_blank">Privacy Policy</a>.</ConsentCheckbox>
+          <ConsentCheckbox defaultChecked name="keepUpdated"> Keep me updated with IDOC news and announcements.</ConsentCheckbox>
+        </fieldset>
+
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
         <div className="flex items-center gap-3">
           <button className="cursor-pointer text-sm text-gray-600 underline" onClick={() => setStep('type')} type="button">Back</button>
@@ -138,5 +146,14 @@ function CheckboxGroup({ label, name, values }: { label: string; name: string; v
         ))}
       </div>
     </fieldset>
+  );
+}
+
+function ConsentCheckbox({ children, defaultChecked, name, required = false }: { children: ReactNode; defaultChecked?: boolean; name: string; required?: boolean }) {
+  return (
+    <label className="flex items-start gap-2 text-sm text-gray-700">
+      <input defaultChecked={defaultChecked} className="mt-0.5" name={name} required={required} type="checkbox" />
+      <span>{children}</span>
+    </label>
   );
 }

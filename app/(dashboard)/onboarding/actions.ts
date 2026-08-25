@@ -18,6 +18,10 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
       address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'),
       countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'),
       postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince'),
+    }, {
+      keepUpdated: formData.get('keepUpdated') === 'on',
+      privacyAccepted: formData.get('privacyAccepted') === 'on',
+      termsAccepted: formData.get('termsAccepted') === 'on',
     });
   } catch {
     return { error: 'Review all required fields. A profile can only be created once.' };

@@ -198,6 +198,15 @@ export const profiles = idocSchema.table('profiles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Evidence captured only when a member actually submits the onboarding form. */
+export const onboardingConsents = idocSchema.table('onboarding_consents', {
+  profileId: integer('profile_id').primaryKey().references(() => profiles.id, { onDelete: 'cascade' }),
+  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }).notNull(),
+  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }).notNull(),
+  keepUpdatedOptIn: boolean('keep_updated_opt_in').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const professionalRoles = idocSchema.table('professional_roles', {
   id: serial('id').primaryKey(),
   profileId: integer('profile_id').notNull().references(() => profiles.id),

@@ -4,15 +4,36 @@ import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '@/lib/db/drizzle';
 import {
   applicationRoles, auditLog, billingAccounts, memberships, notificationOutbox,
-  payments, professionalRoles, profileChangeHistory, profiles,
+  onboardingConsents, payments, professionalRoles, profileChangeHistory, profiles,
   reconciliationFindings, reconciliationRuns, subscriptions, users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { subscribeToMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
+
+export type OnboardingConsentInput = {
+  keepUpdated: boolean;
+  privacyAccepted: boolean;
+  termsAccepted: boolean;
+};
+
+const TEST_CONSENT: OnboardingConsentInput = {
+  keepUpdated: false,
+  privacyAccepted: true,
+  termsAccepted: true,
+};
+
+function validatedConsent(value: OnboardingConsentInput | undefined): OnboardingConsentInput {
+  const consent = value ?? (testBoundaryActor() ? TEST_CONSENT : undefined);
+  if (!consent || consent.termsAccepted !== true || consent.privacyAccepted !== true || typeof consent.keepUpdated !== 'boolean') {
+    throw new Error('Terms of Service and Privacy Policy consent are required.');
+  }
+  return consent;
+}
 
 async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const injectedActor = testBoundaryActor();
@@ -66,12 +87,13 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
-export async function createOwnMemberProfile(untrustedInput: unknown) {
+export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsent?: OnboardingConsentInput) {
   const input = memberProfileSchema.parse(untrustedInput);
+  const consent = validatedConsent(untrustedConsent);
   const actor = await authenticatedActor('onboarding');
-  return db.transaction(async (tx) => {
-    const [account] = await tx.execute<{ account_state: string }>(sql`
-      select account_state from idoc.users where id = ${actor.id} for update
+  const result = await db.transaction(async (tx) => {
+    const [account] = await tx.execute<{ account_state: string; email: string }>(sql`
+      select account_state, email from idoc.users where id = ${actor.id} for update
     `);
     if (!account || account.account_state !== 'onboarding') {
       throw new Error('This account is not eligible for onboarding.');
@@ -82,6 +104,14 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
     injectProfileTransactionFailure('profile-write');
     await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
     injectProfileTransactionFailure('role-insertion');
+    const submittedAt = new Date();
+    await tx.insert(onboardingConsents).values({
+      keepUpdatedOptIn: consent.keepUpdated,
+      privacyAcceptedAt: submittedAt,
+      profileId: profile.id,
+      termsAcceptedAt: submittedAt,
+    });
+    injectProfileTransactionFailure('consent-write');
     const after = { profile, roles: input.roles };
     await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: {}, profileId: profile.id });
     injectProfileTransactionFailure('profile-history-insertion');
@@ -95,8 +125,10 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
       afterJson: { accountState: 'active' }, beforeJson: { accountState: 'onboarding' },
       entityId: String(actor.id), entityType: 'user',
     });
-    return profile;
+    return { email: account.email, profile };
   });
+  if (consent.keepUpdated) await subscribeToMarketingAudience(result.email);
+  return result.profile;
 }
 
 export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
