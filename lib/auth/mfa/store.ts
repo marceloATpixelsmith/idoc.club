@@ -18,8 +18,8 @@ function userId(subjectId: string): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function date(ms: number): Date {
-  return new Date(ms);
+function timestamp(ms: number): string {
+  return new Date(ms).toISOString();
 }
 
 function factorRecord(row: Record<string, unknown>): TotpFactorRecord {
@@ -74,14 +74,14 @@ export class PostgresMfaStore implements MfaStore {
          activated_at,replaced_by_factor_id,created_at,updated_at)
         values (${input.factor.factorId},${id},${input.factor.applicationId},${input.factor.status},
           ${input.factor.encryptedSecret},${input.factor.keyId},${input.factor.lastAcceptedCounter},
-          ${input.factor.activatedAtMs === null ? null : date(input.factor.activatedAtMs)},
-          ${input.factor.replacedByFactorId},${date(input.factor.createdAtMs)},${date(input.factor.createdAtMs)})`;
+          ${input.factor.activatedAtMs === null ? null : timestamp(input.factor.activatedAtMs)},
+          ${input.factor.replacedByFactorId},${timestamp(input.factor.createdAtMs)},${timestamp(input.factor.createdAtMs)})`;
       await tx`insert into idoc.mfa_enrollment_transactions
         (transaction_id,user_id,application_id,factor_id,purpose,expires_at,consumed_at,created_at)
         values (${input.enrollment.transactionId},${id},${input.enrollment.applicationId},${input.enrollment.factorId},
-          ${input.enrollment.purpose},${date(input.enrollment.expiresAtMs)},
-          ${input.enrollment.consumedAtMs === null ? null : date(input.enrollment.consumedAtMs)},
-          ${date(input.enrollment.createdAtMs)})`;
+          ${input.enrollment.purpose},${timestamp(input.enrollment.expiresAtMs)},
+          ${input.enrollment.consumedAtMs === null ? null : timestamp(input.enrollment.consumedAtMs)},
+          ${timestamp(input.enrollment.createdAtMs)})`;
     });
   }
 
@@ -93,7 +93,7 @@ export class PostgresMfaStore implements MfaStore {
       from idoc.mfa_enrollment_transactions e
       join idoc.mfa_factors f on f.factor_id=e.factor_id and f.user_id=e.user_id and f.application_id=e.application_id
       where e.transaction_id=${input.transactionId} and e.user_id=${id} and e.application_id=${input.applicationId}
-        and e.factor_id=${input.factorId} and e.consumed_at is null and e.expires_at>${date(input.nowMs)}
+        and e.factor_id=${input.factorId} and e.consumed_at is null and e.expires_at>${timestamp(input.nowMs)}
       limit 1`;
     const row = rows[0];
     if (!row) return null;
@@ -107,6 +107,8 @@ export class PostgresMfaStore implements MfaStore {
     const id = userId(input.subjectId);
     if (id === null) return 'invalid-transaction' as const;
     return this.sql.begin(async (tx) => {
+      const [owner] = await tx`select id from idoc.users where id=${id} for update`;
+      if (!owner) return 'invalid-transaction' as const;
       const [enrollment] = await tx<Record<string, unknown>[]>`
         select * from idoc.mfa_enrollment_transactions where transaction_id=${input.transactionId} for update`;
       if (!enrollment || Number(enrollment.user_id) !== id || enrollment.application_id !== input.applicationId ||
@@ -124,14 +126,14 @@ export class PostgresMfaStore implements MfaStore {
       if (activeFactor && enrollment.purpose === 'mfa-enrollment') return 'invalid-transaction' as const;
       if (activeFactor) {
         await tx`update idoc.mfa_factors set status='replaced', replaced_by_factor_id=${input.factorId},
-          revoked_at=${date(input.nowMs)}, lifecycle_reason='authenticator_replacement', updated_at=${date(input.nowMs)}
+          revoked_at=${timestamp(input.nowMs)}, lifecycle_reason='authenticator_replacement', updated_at=${timestamp(input.nowMs)}
           where factor_id=${String(activeFactor.factor_id)}`;
-        await tx`update idoc.mfa_remembered_devices set revoked_at=${date(input.nowMs)}, revoke_reason='factor_replaced'
+        await tx`update idoc.mfa_remembered_devices set revoked_at=${timestamp(input.nowMs)}, revoke_reason='factor_replaced'
           where factor_id=${String(activeFactor.factor_id)} and revoked_at is null`;
       }
-      await tx`update idoc.mfa_enrollment_transactions set consumed_at=${date(input.nowMs)} where transaction_id=${input.transactionId}`;
-      await tx`update idoc.mfa_factors set status='active', activated_at=${date(input.nowMs)},
-        last_accepted_counter=${input.acceptedCounter}, updated_at=${date(input.nowMs)} where factor_id=${input.factorId}`;
+      await tx`update idoc.mfa_enrollment_transactions set consumed_at=${timestamp(input.nowMs)} where transaction_id=${input.transactionId}`;
+      await tx`update idoc.mfa_factors set status='active', activated_at=${timestamp(input.nowMs)},
+        last_accepted_counter=${input.acceptedCounter}, updated_at=${timestamp(input.nowMs)} where factor_id=${input.factorId}`;
       return 'activated' as const;
     });
   }
@@ -161,8 +163,8 @@ export class PostgresMfaStore implements MfaStore {
         return 'inactive' as const;
       }
       if (factor.last_accepted_counter !== null && Number(factor.last_accepted_counter) >= input.counter) return 'replay' as const;
-      await tx`update idoc.mfa_factors set last_accepted_counter=${input.counter}, updated_at=${date(input.nowMs)} where factor_id=${input.factorId}`;
-      await tx`update idoc.mfa_challenge_transactions set consumed_at=${date(input.nowMs)},
+      await tx`update idoc.mfa_factors set last_accepted_counter=${input.counter}, updated_at=${timestamp(input.nowMs)} where factor_id=${input.factorId}`;
+      await tx`update idoc.mfa_challenge_transactions set consumed_at=${timestamp(input.nowMs)},
         satisfied_factor_id=${input.factorId}, attempt_count=attempt_count+1 where transaction_id=${input.transactionId}`;
       return 'accepted' as const;
     });
@@ -181,7 +183,7 @@ export class PostgresMfaStore implements MfaStore {
         await tx`insert into idoc.mfa_recovery_codes
           (recovery_code_id,user_id,application_id,generation_id,digest,consumed_at,created_at)
           values (${code.recoveryCodeId},${id},${code.applicationId},${code.generationId},${code.digest},
-            ${code.consumedAtMs === null ? null : date(code.consumedAtMs)},${date(code.createdAtMs)})`;
+            ${code.consumedAtMs === null ? null : timestamp(code.consumedAtMs)},${timestamp(code.createdAtMs)})`;
       }
     });
   }
@@ -190,7 +192,7 @@ export class PostgresMfaStore implements MfaStore {
     const id = userId(input.subjectId);
     if (id === null || input.digests.length === 0) return 'invalid' as const;
     const rows = await this.sql<Record<string, unknown>[]>`
-      update idoc.mfa_recovery_codes set consumed_at=${date(input.nowMs)}
+      update idoc.mfa_recovery_codes set consumed_at=${timestamp(input.nowMs)}
       where recovery_code_id=(select recovery_code_id from idoc.mfa_recovery_codes
         where user_id=${id} and application_id=${input.applicationId} and digest in ${this.sql(input.digests)}
           and consumed_at is null limit 1 for update skip locked)
@@ -204,7 +206,7 @@ export class PostgresMfaStore implements MfaStore {
     const rows = await this.sql`insert into idoc.mfa_remembered_devices
       (remembered_device_id,user_id,application_id,factor_id,token_digest,expires_at,revoked_at,created_at)
       select ${record.rememberedDeviceId},${id},${record.applicationId},${record.factorId},${record.tokenDigest},
-        ${date(record.expiresAtMs)},${record.revokedAtMs === null ? null : date(record.revokedAtMs)},${date(record.issuedAtMs)}
+        ${timestamp(record.expiresAtMs)},${record.revokedAtMs === null ? null : timestamp(record.revokedAtMs)},${timestamp(record.issuedAtMs)}
       from idoc.mfa_factors where factor_id=${record.factorId} and user_id=${id}
         and application_id=${record.applicationId} and status='active' returning remembered_device_id`;
     if (rows.length !== 1) throw new Error('Invalid remembered-device factor binding.');
@@ -216,14 +218,14 @@ export class PostgresMfaStore implements MfaStore {
     const rows = await this.sql`select d.remembered_device_id from idoc.mfa_remembered_devices d
       join idoc.mfa_factors f on f.factor_id=d.factor_id and f.user_id=d.user_id and f.application_id=d.application_id
       where d.user_id=${id} and d.application_id=${input.applicationId} and d.token_digest=${input.tokenDigest}
-        and d.revoked_at is null and d.expires_at>${date(input.nowMs)} and f.status='active' limit 1`;
+        and d.revoked_at is null and d.expires_at>${timestamp(input.nowMs)} and f.status='active' limit 1`;
     return rows.length === 1 ? 'valid' as const : 'invalid' as const;
   }
 
   async revokeRememberedDevices(subjectId: string, applicationId: string, nowMs: number): Promise<void> {
     const id = userId(subjectId);
     if (id === null) return;
-    await this.sql`update idoc.mfa_remembered_devices set revoked_at=${date(nowMs)}, revoke_reason='user_revocation'
+    await this.sql`update idoc.mfa_remembered_devices set revoked_at=${timestamp(nowMs)}, revoke_reason='user_revocation'
       where user_id=${id} and application_id=${applicationId} and revoked_at is null`;
   }
 
@@ -234,8 +236,8 @@ export class PostgresMfaStore implements MfaStore {
     }
     await this.sql`insert into idoc.mfa_challenge_transactions
       (transaction_id,user_id,application_id,purpose,expires_at,max_attempts,created_at)
-      values (${input.transactionId},${id},${input.applicationId},${input.purpose},${date(input.expiresAtMs)},
-        ${input.maxAttempts},${date(input.nowMs)})`;
+      values (${input.transactionId},${id},${input.applicationId},${input.purpose},${timestamp(input.expiresAtMs)},
+        ${input.maxAttempts},${timestamp(input.nowMs)})`;
   }
 
   async recordChallengeFailure(input: { transactionId: string; subjectId: string; applicationId: string; purpose: MfaChallengePurpose; nowMs: number }) {
@@ -244,7 +246,7 @@ export class PostgresMfaStore implements MfaStore {
     const rows = await this.sql<Record<string, unknown>[]>`update idoc.mfa_challenge_transactions
       set attempt_count=attempt_count+1 where transaction_id=${input.transactionId} and user_id=${id}
         and application_id=${input.applicationId} and purpose=${input.purpose} and consumed_at is null
-        and expires_at>${date(input.nowMs)} and attempt_count<max_attempts returning attempt_count,max_attempts`;
+        and expires_at>${timestamp(input.nowMs)} and attempt_count<max_attempts returning attempt_count,max_attempts`;
     if (!rows[0]) return 'invalid-transaction' as const;
     return Number(rows[0].attempt_count) >= Number(rows[0].max_attempts) ? 'attempts-exhausted' as const : 'recorded' as const;
   }
@@ -253,11 +255,11 @@ export class PostgresMfaStore implements MfaStore {
     const id = userId(input.subjectId);
     if (id === null || !input.reason.trim()) return false;
     return this.sql.begin(async (tx) => {
-      const rows = await tx`update idoc.mfa_factors set status='revoked', revoked_at=${date(input.nowMs)},
-        lifecycle_reason=${input.reason}, updated_at=${date(input.nowMs)} where factor_id=${input.factorId}
+      const rows = await tx`update idoc.mfa_factors set status='revoked', revoked_at=${timestamp(input.nowMs)},
+        lifecycle_reason=${input.reason}, updated_at=${timestamp(input.nowMs)} where factor_id=${input.factorId}
         and user_id=${id} and application_id=${input.applicationId} and status in ('pending','active','disabled') returning factor_id`;
       if (rows.length !== 1) return false;
-      await tx`update idoc.mfa_remembered_devices set revoked_at=${date(input.nowMs)}, revoke_reason='factor_revoked'
+      await tx`update idoc.mfa_remembered_devices set revoked_at=${timestamp(input.nowMs)}, revoke_reason='factor_revoked'
         where factor_id=${input.factorId} and revoked_at is null`;
       return true;
     });
