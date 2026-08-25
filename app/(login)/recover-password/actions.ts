@@ -62,63 +62,68 @@ export const startPasswordReset = validatedAction(startResetSchema, async ({ ema
 });
 
 const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
+const neutralVerificationError = { error: 'That verification code is incorrect or expired.' };
 
 export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
   const pending = await getPendingPasswordReset();
-  if (!pending || pending.stage !== 'email-otp' || !pending.subjectId) return { error: 'Your session expired. Start again.' };
-  if ((await authoritativeMfaRole(pending.subjectId)) !== 'member') {
-    await clearPendingPasswordReset();
-    return { error: 'Your recovery requirements changed. Start again.' };
-  }
+  if (!pending || pending.stage === 'authorized') return { error: 'Your session expired. Start again.' };
   const origin = await requestOrigin();
-  const result = await verifyEmailOtp(pending.email, 'password_reset', code, origin);
-  if (result === 'verified') {
-    await authorizePendingPasswordReset(pending, 'email-otp');
-    redirect('/recover-password');
-  }
-  if (result === 'expired') return { error: 'This code expired. Request a new one.' };
-  if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
-  if (result === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
-  return { error: 'That code is incorrect.' };
-});
 
-export const resendPasswordResetOtp = validatedAction(z.object({}), async () => {
-  const pending = await getPendingPasswordReset();
-  if (!pending || pending.stage !== 'email-otp' || !pending.subjectId ||
-    (await authoritativeMfaRole(pending.subjectId)) !== 'member') {
-    await clearPendingPasswordReset();
-    return { error: 'Your session expired. Start again.' };
+  if (pending.stage === 'email-otp') {
+    if (!pending.subjectId) {
+      await checkRateLimit('password_reset_verify_neutral', pending.email, origin);
+      return neutralVerificationError;
+    }
+    if ((await authoritativeMfaRole(pending.subjectId)) !== 'member') {
+      await clearPendingPasswordReset();
+      return neutralVerificationError;
+    }
+    const result = await verifyEmailOtp(pending.email, 'password_reset', code, origin);
+    if (result === 'verified') {
+      await authorizePendingPasswordReset(pending, 'email-otp');
+      redirect('/recover-password');
+    }
+    return result === 'rate_limited'
+      ? { error: 'Too many attempts. Please try again in a few minutes.' }
+      : neutralVerificationError;
   }
-  const origin = await requestOrigin();
-  const result = await issueEmailOtp(pending.email, 'password_reset', { origin });
-  if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
-  if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
-  if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
-  return { success: 'A new code was sent.' };
-});
 
-export const verifyPasswordResetTotp = validatedAction(verifyOtpSchema, async ({ code }) => {
-  const pending = await getPendingPasswordReset();
-  if (!pending || pending.stage !== 'totp') return { error: 'Your verification session expired. Start again.' };
+  if (pending.stage === 'missing-factor') {
+    await checkRateLimit('mfa_password_reset_verify', String(pending.subjectId), origin);
+    return neutralVerificationError;
+  }
+
   const role = await authoritativeMfaRole(pending.subjectId);
   if (role !== 'admin' && role !== 'super-admin') {
     await clearPendingPasswordReset();
-    return { error: 'Your recovery requirements changed. Start again.' };
+    return neutralVerificationError;
   }
-  if (!(await checkRateLimit('mfa_password_reset_verify', String(pending.subjectId), await requestOrigin()))) {
-    return { error: 'Too many attempts. Start again later.' };
+  if (!(await checkRateLimit('mfa_password_reset_verify', String(pending.subjectId), origin))) {
+    return { error: 'Too many attempts. Please try again in a few minutes.' };
   }
   const config = mfaConfiguration();
   const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'password-reset',
     resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
     store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
-  if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') {
-    await clearPendingPasswordReset();
-    return { error: result.status === 'attempts-exhausted' ? 'Too many incorrect codes. Start again.' : 'Your verification session expired. Start again.' };
+    if (result.status === 'attempts-exhausted' || result.status === 'invalid-transaction') await clearPendingPasswordReset();
+    return neutralVerificationError;
   }
   await authorizePendingPasswordReset(pending, 'totp');
   redirect('/recover-password');
+});
+
+export const resendPasswordResetOtp = validatedAction(z.object({}), async () => {
+  const pending = await getPendingPasswordReset();
+  if (!pending || pending.stage === 'authorized') return { error: 'Your session expired. Start again.' };
+  const origin = await requestOrigin();
+  if (pending.stage === 'email-otp' && pending.subjectId &&
+    (await authoritativeMfaRole(pending.subjectId)) === 'member') {
+    await issueEmailOtp(pending.email, 'password_reset', { origin });
+  } else {
+    await checkRateLimit('password_reset_resend_neutral', pending.email, origin);
+  }
+  return { success: 'If email verification is available for this account, a new code was sent.' };
 });
 
 export const cancelPasswordReset = validatedAction(z.object({}), async () => {
