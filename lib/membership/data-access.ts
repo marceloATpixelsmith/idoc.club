@@ -9,7 +9,7 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
-import { memberProfileSchema, type MemberProfileInput } from './validation';
+import { memberProfileSchema, onboardingConsentSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
@@ -66,8 +66,9 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
-export async function createOwnMemberProfile(untrustedInput: unknown) {
+export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsentInput: unknown) {
   const input = memberProfileSchema.parse(untrustedInput);
+  const consent = onboardingConsentSchema.parse(untrustedConsentInput);
   const actor = await authenticatedActor('onboarding');
   return db.transaction(async (tx) => {
     const [account] = await tx.execute<{ account_state: string }>(sql`
@@ -80,6 +81,13 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
     if (existing) throw new Error('A member profile already exists for this account.');
     const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
     injectProfileTransactionFailure('profile-write');
+    const now = new Date();
+    await tx.execute(sql`
+      insert into idoc.onboarding_consents (
+        profile_id, terms_accepted_at, privacy_accepted_at, keep_updated_opt_in
+      ) values (${profile.id}, ${now}, ${now}, ${consent.keepUpdated})
+    `);
+    injectProfileTransactionFailure('consent-write');
     await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
     injectProfileTransactionFailure('role-insertion');
     const after = { profile, roles: input.roles };
@@ -95,7 +103,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown) {
       afterJson: { accountState: 'active' }, beforeJson: { accountState: 'onboarding' },
       entityId: String(actor.id), entityType: 'user',
     });
-    return profile;
+    return { ...profile, keepUpdatedOptIn: consent.keepUpdated };
   });
 }
 
