@@ -190,7 +190,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       left join pg_class rc on rc.oid=con.confrelid left join pg_namespace rn on rn.oid=rc.relnamespace
       where n.nspname='idoc' and c.relname=${tableName} order by con.conname`;
     const expectedConstraints = [
-      ...Object.values<any>(expectedTable.foreignKeys).map((value) => ({ name: value.name, type: 'f', columns: value.columnsFrom, target_schema: value.schemaTo, target_table: value.tableTo, target_columns: value.columnsTo, update_action: actionCode(value.onUpdate), delete_action: actionCode(value.onDelete) })),
+      ...Object.values<any>(expectedTable.foreignKeys).map((value) => ({ name: value.name.slice(0, 63), type: 'f', columns: value.columnsFrom, target_schema: value.schemaTo, target_table: value.tableTo, target_columns: value.columnsTo, update_action: actionCode(value.onUpdate), delete_action: actionCode(value.onDelete) })),
       ...Object.values<any>(expectedTable.uniqueConstraints).map((value) => ({ name: value.name, type: 'u', columns: value.columns })),
       ...Object.values<any>(expectedTable.checkConstraints).map((value) => ({ name: value.name, type: 'c' })),
       ...Object.values<any>(expectedTable.compositePrimaryKeys),
