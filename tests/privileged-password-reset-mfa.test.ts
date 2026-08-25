@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const actions = readFileSync('app/(login)/recover-password/actions.ts', 'utf8');
+const page = readFileSync('app/(login)/recover-password/page.tsx', 'utf8');
+const otpStep = readFileSync('app/(login)/recover-password/otp-step.tsx', 'utf8');
 const pending = readFileSync('lib/auth/pending-password-reset.ts', 'utf8');
 const types = readFileSync('lib/auth/mfa/types.ts', 'utf8');
 
@@ -19,6 +21,16 @@ test('pending reset is a signed state machine without role or MFA material', () 
   assert.match(pending, /stage: 'totp'/);
   assert.match(pending, /stage: 'authorized'/);
   assert.doesNotMatch(pending, /encryptedSecret|recoveryCode|role:/);
+});
+
+test('anonymous recovery keeps one neutral verification surface for every unresolved state', () => {
+  assert.match(page, /if \(pending\.stage === 'authorized'\) return <PasswordStep/);
+  assert.match(page, /return <OtpStep \/>/);
+  assert.doesNotMatch(page, /TotpStep|missing-factor|Additional recovery required|authenticator/);
+  assert.match(otpStep, /Enter the 6-digit verification code for this recovery request/);
+  assert.match(otpStep, /authenticator app/);
+  assert.match(otpStep, /code sent to your email/);
+  assert.doesNotMatch(otpStep, /We sent a 6-digit code to/);
 });
 
 test('completion revokes persisted sessions and requires fresh sign-in', () => {
