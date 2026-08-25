@@ -2,7 +2,7 @@ export type MfaFactorStatus = 'pending' | 'active' | 'disabled' | 'revoked' | 'r
 export type MfaDecision = 'not-required' | 'enrollment-required' | 'challenge-required' | 'remembered-device-satisfied';
 export type MfaRole = 'member' | 'admin' | 'super-admin' | 'organization-leader';
 export type TotpRequirement = 'super-admin-only' | 'privileged-users' | 'all-users';
-export type MfaChallengePurpose = 'login' | 'step-up';
+export type MfaChallengePurpose = 'login' | 'password-reset' | 'step-up';
 export type SensitiveAction =
   | 'change-email'
   | 'change-password'

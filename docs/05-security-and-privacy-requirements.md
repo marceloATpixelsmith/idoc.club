@@ -50,7 +50,7 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 # 4. Administrator security
 
-- Administrator and Super Admin grants require canonical TOTP after password or Google primary authentication. A normal registered session is issued only after the persisted enrollment/challenge succeeds (and, for enrollment, recovery codes are acknowledged); privileged accounts have no remembered-device bypass. Password-reset MFA and generic sensitive-action step-up remain pending.
+- Administrator and Super Admin grants require canonical TOTP after password or Google primary authentication and during password reset. Password recovery uses a persisted, purpose-bound challenge with no email fallback or remembered-device bypass; accounts without an active factor fail closed to support recovery. Reset completion revokes persisted sessions and requires fresh sign-in. Generic sensitive-action step-up remains pending.
 
 - Use least privilege: membership administrators should not automatically receive deployment, database or Stripe secret access.
 

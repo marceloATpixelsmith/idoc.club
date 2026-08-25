@@ -148,6 +148,13 @@
       "when": 1787702400000,
       "tag": "0020_durable_mfa_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787706000000,
+      "tag": "0021_password_reset_mfa_purpose",
+      "breakpoints": true
     }
   ]
 }

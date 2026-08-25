@@ -103,7 +103,7 @@ Implementation status: Phase 1 (backend billing foundation) is complete — `sub
 
 # 6. Release 3 - migration and membership launch
 
-Release 1 security follow-up: live canonical TOTP enrollment and login challenge is implemented for database-granted Administrators and Super Admins after both password and Google primary authentication. Ordinary members are unchanged. Privileged password-reset MFA, recovery-authorized factor replacement, generic sensitive-action step-up, account-security management UI, broader notification/session-revocation integration, member remembered-device behavior, and production key deployment/UAT remain open release gates.
+Release 1 security follow-up: live canonical TOTP enrollment, login challenge, and password-reset challenge are implemented for database-granted Administrators and Super Admins. Ordinary members retain emailed reset OTP. Privileged reset has no email fallback or remembered-device bypass, revokes persisted sessions, and requires fresh sign-in. Recovery-authorized factor replacement, generic sensitive-action step-up, account-security management UI, broader notification/session-revocation integration, member remembered-device behavior, and production key deployment/UAT remain open release gates.
 
 16. Export only IDOC users and relevant metadata from the WordPress Multisite network plus IDOC MemberPress memberships, subscriptions and transactions.
 
