@@ -111,7 +111,7 @@ Before approving a classification change, confirm that every field required by t
 For an Administrator or Super Admin password-reset request, the recovery screen requires the
 account's active authenticator factor and never sends or falls back to an email OTP. If the factor
 is unavailable or missing, direct the person through approved identity-verification and support
-handling; do not enroll or replace an authenticator inside anonymous recovery. Successful reset
+handling; do not enroll or replace an authenticator inside anonymous recovery. If the user retained a recovery code, they must complete password or Google primary sign-in, choose recovery at the MFA challenge, replace and prove a new authenticator, and acknowledge newly rotated recovery codes. This self-service event revokes prior sessions; support must never request a recovery code or authenticator secret. Successful reset
 revokes all persisted sessions and requires a fresh sign-in.
 
 5. If email delivery is failing, investigate provider logs and account email rather than creating a duplicate account.

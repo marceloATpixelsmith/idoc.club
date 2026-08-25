@@ -198,6 +198,7 @@ export async function completeTotpEnrollment(input: {
   store: MfaStore;
   resolveKey: (keyId: string) => Buffer;
   nowMs?: number;
+  purpose?: TotpEnrollmentRecord['purpose'];
 }) {
   const nowMs = input.nowMs ?? Date.now();
   const pending = await input.store.getPendingTotpEnrollment({
@@ -209,6 +210,7 @@ export async function completeTotpEnrollment(input: {
   });
   if (
     !pending ||
+    pending.enrollment.purpose !== (input.purpose ?? 'mfa-enrollment') ||
     pending.factor.status !== 'pending' ||
     pending.enrollment.consumedAtMs !== null ||
     pending.enrollment.expiresAtMs <= nowMs

@@ -205,6 +205,9 @@ test('factor revocation is owner-bound and blocks routine TOTP and remembered de
 test('replacement enrollment atomically transitions the old active factor', async () => {
   const owner = await createUser();
   const original = await activeFactor(String(owner.id));
+  const device = { applicationId, expiresAtMs: nowMs + 60_000, factorId: original.factorId,
+    issuedAtMs: nowMs, rememberedDeviceId: randomUUID(), revokedAtMs: null, subjectId: String(owner.id), tokenDigest: 'old-device' };
+  await store.createRememberedDevice(device);
   const replacement = await pendingFactor(String(owner.id), nowMs + 60_000, 'authenticator-replacement');
   assert.equal(await store.consumeEnrollmentAndActivate({
     acceptedCounter: 200,
@@ -217,4 +220,22 @@ test('replacement enrollment atomically transitions the old active factor', asyn
   assert.equal((await store.getActiveTotp(String(owner.id), applicationId))?.factorId, replacement.factor.factorId);
   const [old] = await sql`select status,replaced_by_factor_id from idoc.mfa_factors where factor_id=${original.factorId}`;
   assert.deepEqual(old, { replaced_by_factor_id: replacement.factor.factorId, status: 'replaced' });
+  assert.equal(await store.consumeRememberedDevice({ applicationId, nowMs, subjectId: String(owner.id), tokenDigest: device.tokenDigest }), 'invalid');
+});
+
+test('concurrent replacement confirmations leave exactly one active factor', async () => {
+  const owner = await createUser();
+  await activeFactor(String(owner.id));
+  const subjectId = String(owner.id);
+  const [first, second] = await Promise.all([
+    pendingFactor(subjectId, nowMs + 60_000, 'authenticator-replacement'),
+    pendingFactor(subjectId, nowMs + 60_000, 'authenticator-replacement'),
+  ]);
+  const outcomes = await Promise.all([first, second].map((entry, index) => store.consumeEnrollmentAndActivate({
+    acceptedCounter: 200 + index, applicationId, factorId: entry.factor.factorId, nowMs, subjectId,
+    transactionId: entry.enrollment.transactionId,
+  })));
+  assert.equal(outcomes.filter((outcome) => outcome === 'activated').length, 2);
+  const active = await sql<{ count: number }[]>`select count(*)::int as count from idoc.mfa_factors where user_id=${owner.id} and application_id=${applicationId} and status='active'`;
+  assert.equal(active[0].count, 1);
 });
