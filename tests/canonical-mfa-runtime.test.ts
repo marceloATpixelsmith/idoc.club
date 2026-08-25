@@ -10,8 +10,10 @@ import {
   generateTotpSecret,
   sensitiveActionRequiresFreshStepUp,
   totpProvisioningUri,
+  verifyActiveTotp,
   verifyTotpCode,
 } from '../lib/auth/mfa/index.ts';
+import type { MfaStore, TotpFactorRecord } from '../lib/auth/mfa/types.ts';
 
 function hotpForTest(secretText: string, counter: number): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -116,6 +118,48 @@ test('TOTP generation and verification match the canonical six-digit 30-second p
   assert.throws(() => verifyTotpCode(secret, '000000', nowMs, 2 as 0 | 1), /window must be 0 or 1/i);
 });
 
+test('routine TOTP verifier charges invalid codes against the bound challenge', async () => {
+  const nowMs = 1_800_000_000_000;
+  const secret = 'JBSWY3DPEHPK3PXP';
+  const key = Buffer.alloc(32, 7);
+  const counter = Math.floor(nowMs / 1000 / 30);
+  const validCode = hotpForTest(secret, counter);
+  const invalidCode = String((Number(validCode) + 1) % 1_000_000).padStart(6, '0');
+  const factor: TotpFactorRecord = {
+    activatedAtMs: nowMs - 1000,
+    applicationId: 'idoc-web',
+    createdAtMs: nowMs - 2000,
+    encryptedSecret: encryptTotpSecret(secret, { keyId: 'v1', key }),
+    factorId: 'factor-1',
+    keyId: 'v1',
+    lastAcceptedCounter: counter - 1,
+    replacedByFactorId: null,
+    status: 'active',
+    subjectId: '1',
+  };
+  let failures = 0;
+  const store = {
+    getActiveTotp: async () => factor,
+    recordChallengeFailure: async () => {
+      failures += 1;
+      return failures >= 2 ? 'attempts-exhausted' as const : 'recorded' as const;
+    },
+  } as unknown as MfaStore;
+  const input = {
+    applicationId: 'idoc-web',
+    code: invalidCode,
+    nowMs,
+    purpose: 'login' as const,
+    resolveKey: () => key,
+    store,
+    subjectId: '1',
+    transactionId: 'challenge-1',
+  };
+  assert.deepEqual(await verifyActiveTotp(input), { status: 'invalid-code' });
+  assert.deepEqual(await verifyActiveTotp(input), { status: 'attempts-exhausted' });
+  assert.equal(failures, 2);
+});
+
 test('TOTP secrets are encrypted with authenticated encryption and key IDs', () => {
   const key = Buffer.alloc(32, 7);
   const encrypted = encryptTotpSecret('JBSWY3DPEHPK3PXP', { keyId: 'v1', key });
@@ -143,4 +187,5 @@ test('runtime source requires trusted challenge transaction binding for routine 
   assert.match(source, /transactionId: string/);
   assert.match(source, /purpose: MfaChallengePurpose/);
   assert.match(source, /acceptTotpChallenge/);
+  assert.match(source, /recordChallengeFailure/);
 });
