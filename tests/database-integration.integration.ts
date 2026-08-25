@@ -23,7 +23,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 18);
+  assert.equal(count, 19);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -76,7 +76,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 18);
+    assert.equal(count, 19);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -85,7 +85,7 @@ test('forward migration preserves databases that already applied released migrat
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -107,6 +107,9 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[16].when > journal.entries[15].when, 'the persisted auth sessions migration must follow migration 0015');
   assert.equal(journal.entries[17].tag, '0017_google_oidc');
   assert.ok(journal.entries[17].when > journal.entries[16].when, 'the Google OIDC migration must follow migration 0016');
+  assert.equal(journal.entries[18].tag, '0018_external_identity_linking');
+  assert.equal(journal.entries[18].when, 1787619600000, 'migration 0018 timestamp must remain immutable');
+  assert.ok(journal.entries[18].when > journal.entries[17].when, 'external identity linking must follow migration 0017');
   const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0016_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {
     const [schemaName, name] = tableName.split('.');
@@ -117,8 +120,11 @@ test('generated migration metadata agrees with the migrated schema', async () =>
       assert.ok(migratedColumns.has(columnName), `${tableName}.${columnName} must exist`);
     }
   }
-  for (const tableName of ['google_oauth_transactions', 'external_identities']) {
-    assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name=${tableName}`).length, 1, `idoc.${tableName} from migration 0017 must exist`);
+  for (const tableName of ['google_oauth_transactions', 'external_identities', 'auth_security_notification_outbox']) {
+    assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name=${tableName}`).length, 1, `idoc.${tableName} from post-snapshot auth migrations must exist`);
+  }
+  for (const columnName of ['purpose', 'authenticated_user_id']) {
+    assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='google_oauth_transactions' and column_name=${columnName}`).length, 1, `idoc.google_oauth_transactions.${columnName} from migration 0018 must exist`);
   }
 });
 
@@ -131,7 +137,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
     order by table_name`;
-  const expectedTables = [...Object.keys(snapshot.tables), 'idoc.external_identities', 'idoc.google_oauth_transactions'].sort();
+  const expectedTables = [...Object.keys(snapshot.tables), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   for (const [qualifiedName, expectedTable] of Object.entries<any>(snapshot.tables)) {
@@ -190,7 +196,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
         const declaredLiterals = (declared.match(/'[^']*'/g) ?? []).sort();
         const actualLiterals = (actual.definition.match(/'[^']*'/g) ?? []).sort();
         assert.deepEqual(actualLiterals, declaredLiterals, `${qualifiedName}.${expected.name} check literals`);
-        for (const columnName of Object.keys(expectedTable.columns).filter((name) => declared.includes(`"${name}"`))) assert.ok(actual.definition.includes(columnName), `${qualifiedName}.${expected.name} check column ${columnName}`);
+        for (const columnName of Object.keys(expectedTable.columns).filter((name) => declared.includes(`\"${name}\"`))) assert.ok(actual.definition.includes(columnName), `${qualifiedName}.${expected.name} check column ${columnName}`);
         if (declared.includes('>=')) assert.ok(actual.definition.includes('>='), `${qualifiedName}.${expected.name} check operator`);
       }
     }
@@ -239,7 +245,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 18);
+  assert.equal(count, 19);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {
