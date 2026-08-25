@@ -244,7 +244,18 @@ export async function verifyActiveTotp(input: {
   const secret = decryptTotpSecret(factor.encryptedSecret, input.resolveKey);
   const nowMs = input.nowMs ?? Date.now();
   const counter = verifyTotpCode(secret, input.code, nowMs);
-  if (counter === null) return { status: 'invalid-code' as const };
+  if (counter === null) {
+    const failure = await input.store.recordChallengeFailure({
+      transactionId: input.transactionId,
+      subjectId: input.subjectId,
+      applicationId: input.applicationId,
+      purpose: input.purpose,
+      nowMs,
+    });
+    if (failure === 'attempts-exhausted') return { status: 'attempts-exhausted' as const };
+    if (failure === 'invalid-transaction') return { status: 'invalid-transaction' as const };
+    return { status: 'invalid-code' as const };
+  }
   const accepted = await input.store.acceptTotpChallenge({
     transactionId: input.transactionId,
     purpose: input.purpose,
