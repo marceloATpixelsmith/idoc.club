@@ -34,11 +34,13 @@ export async function runSuite(url: string, environment = process.env) {
     .map((name) => `tests/${name}`);
   if (integrationTests.length === 0) throw new Error('No PostgreSQL integration tests were discovered.');
   await run(process.execPath, [
+    '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
     '--import',
     'tsx',
     '--conditions=react-server',
     '--test',
     '--test-concurrency=1',
+    '--test-reporter=dot',
     ...integrationTests,
   ], { ...environment, NODE_ENV: 'test', TEST_DATABASE_URL: validated });
 }
