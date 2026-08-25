@@ -27,6 +27,8 @@ export function OnboardingWizard() {
   const [state, action, pending] = useActionState<{ error?: string }, FormData>(completeOnboarding, {});
   const [step, setStep] = useState<'type' | 'details'>('type');
   const [classification, setClassification] = useState<Classification | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   if (step === 'type') {
     return (
@@ -104,10 +106,40 @@ export function OnboardingWizard() {
           </fieldset>
         ) : null}
 
+        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <legend className="px-1 text-sm font-medium text-gray-700">Consent</legend>
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              checked={termsAccepted} className="mt-0.5" name="termsAccepted" onChange={(event) => setTermsAccepted(event.target.checked)}
+              required type="checkbox"
+            />
+            <span>
+              I have read and agree to the <a className="underline" href="/terms" target="_blank">Terms of Service</a>.*
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              checked={privacyAccepted} className="mt-0.5" name="privacyAccepted" onChange={(event) => setPrivacyAccepted(event.target.checked)}
+              required type="checkbox"
+            />
+            <span>
+              This site collects names, emails and other user information. I consent to the terms set forth in the{' '}
+              <a className="underline" href="/privacy" target="_blank">Privacy Policy</a>.*
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input className="mt-0.5" defaultChecked name="keepUpdated" type="checkbox" />
+            <span>
+              Keep me updated on IDOC events, workshops, and certifications. If unchecked, you will still receive required account,
+              membership, payment, security, and renewal messages.
+            </span>
+          </label>
+        </fieldset>
+
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
         <div className="flex items-center gap-3">
           <button className="cursor-pointer text-sm text-gray-600 underline" onClick={() => setStep('type')} type="button">Back</button>
-          <Button className="flex-1" disabled={pending} size="lg" type="submit">
+          <Button className="flex-1" disabled={pending || !termsAccepted || !privacyAccepted} size="lg" type="submit">
             {pending ? 'Saving…' : 'Create profile'}
           </Button>
         </div>
