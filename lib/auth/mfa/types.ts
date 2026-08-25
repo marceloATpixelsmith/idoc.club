@@ -90,4 +90,5 @@ export interface MfaStore {
   createRememberedDevice(record: RememberedDeviceRecord): Promise<void>;
   consumeRememberedDevice(input: { subjectId: string; applicationId: string; tokenDigest: string; nowMs: number }): Promise<'valid' | 'invalid'>;
   revokeRememberedDevices(subjectId: string, applicationId: string, nowMs: number): Promise<void>;
+  createChallenge(input: { transactionId: string; subjectId: string; applicationId: string; purpose: MfaChallengePurpose; expiresAtMs: number; maxAttempts: number; nowMs: number }): Promise<void>;
 }

@@ -19,6 +19,7 @@ import { consumeAccountToken, finalizeMigratedAccountAfterVerifiedPassword, requ
 import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { startPendingLogin } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
+import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -71,10 +72,12 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     }
     const [activated] = await db.select().from(users).where(eq(users.id, foundUser.id)).limit(1);
     if (!activated) return { error: 'Invalid email or password. Please try again.', email };
+    if (await beginPrimaryMfa(activated, 'password', '/dashboard/profile?confirmDetails=1')) redirect('/mfa');
     await setSession(activated);
     redirect('/dashboard/profile?confirmDetails=1');
   }
 
+  if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) redirect('/mfa');
   await setSession(foundUser);
   redirect('/dashboard');
 });

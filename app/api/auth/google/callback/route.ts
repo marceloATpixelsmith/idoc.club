@@ -19,6 +19,8 @@ import {
   readGoogleLinkFreshEvidence,
 } from '@/lib/auth/google-identity-link-evidence';
 import { linkGoogleIdentity } from '@/lib/auth/google-identity-linking';
+import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { setSession } from '@/lib/auth/session';
 
 const APPLICATION_ID = 'idoc.club';
 export const runtime = 'nodejs';
@@ -60,6 +62,10 @@ export async function GET(request: NextRequest) {
     }
 
     const authenticated = await authenticateGoogleIdentity(identity);
+    if (await beginPrimaryMfa(authenticated.user, 'google', authenticated.redirectTo)) {
+      return clearBinding(NextResponse.redirect(new URL('/mfa', applicationOrigin), 302));
+    }
+    await setSession(authenticated.user);
     return clearBinding(NextResponse.redirect(new URL(authenticated.redirectTo, applicationOrigin), 302));
   } catch (error) {
     await clearGoogleLinkFreshEvidence();

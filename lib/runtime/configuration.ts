@@ -62,6 +62,43 @@ export function mailchimpApiKeyForServer(environment: Environment = process.env)
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 
+function base64Key(environment: Environment, name: string, minimumBytes = 32) {
+  const value = required(environment, name);
+  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
+  const key = Buffer.from(value, 'base64url');
+  if (key.length < minimumBytes) throw new Error(`Invalid production configuration: ${name}.`);
+  return key;
+}
+
+/** Server-only cryptographic material for the live canonical MFA flow. */
+export function mfaConfiguration(environment: Environment = process.env) {
+  const activeKeyId = required(environment, 'MFA_TOTP_ACTIVE_KEY_ID');
+  if (!/^[A-Za-z0-9_-]{1,30}$/.test(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_ACTIVE_KEY_ID.');
+  let serialized: unknown;
+  try { serialized = JSON.parse(required(environment, 'MFA_TOTP_ENCRYPTION_KEYS')); } catch {
+    throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+  }
+  if (!serialized || Array.isArray(serialized) || typeof serialized !== 'object') {
+    throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+  }
+  const encryptionKeys = new Map<string, Buffer>();
+  for (const [keyId, material] of Object.entries(serialized)) {
+    if (!/^[A-Za-z0-9_-]{1,30}$/.test(keyId) || typeof material !== 'string') {
+      throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+    }
+    const key = Buffer.from(material, 'base64url');
+    if (key.length !== 32) throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+    encryptionKeys.set(keyId, key);
+  }
+  if (!encryptionKeys.has(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_ACTIVE_KEY_ID.');
+  return {
+    activeKeyId,
+    continuationKey: base64Key(environment, 'MFA_PENDING_AUTH_SIGNING_KEY'),
+    encryptionKeys,
+    recoveryDigestKey: base64Key(environment, 'MFA_RECOVERY_CODE_DIGEST_KEY'),
+  };
+}
+
 export function accountDeliveryConfiguration(environment: Environment = process.env) {
   const activeVersion = required(environment, 'ACCOUNT_DELIVERY_KEY_VERSION');
   if (!/^[A-Za-z0-9_-]{1,30}$/.test(activeVersion)) throw new Error('Invalid production configuration: ACCOUNT_DELIVERY_KEY_VERSION.');

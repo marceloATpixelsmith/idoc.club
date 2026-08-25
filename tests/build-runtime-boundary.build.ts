@@ -84,7 +84,7 @@ test('production modules contain server-only boundaries and no fake credential f
 test('local and CI Release 1 gates are fail-fast and contain every required boundary', () => {
   const scripts = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).scripts as Record<string, string>;
   assert.equal(scripts.check, 'pnpm typecheck && pnpm test');
-  assert.equal(scripts['check:release1'], 'pnpm check && pnpm test:integration-db && pnpm test:build-boundary && pnpm build');
+  assert.equal(scripts['check:release1'], 'pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build');
   const workflow = readFileSync(path.join(root, '.github/workflows/release-1-verification.yml'), 'utf8');
   assert.match(workflow, /image: postgres:16-alpine/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
