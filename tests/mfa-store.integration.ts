@@ -83,6 +83,33 @@ test('enrollment consumption is bound, expiring, atomic, and single use', async 
   }), 'invalid-transaction');
 });
 
+test('distinct concurrent initial enrollments serialize on the owning user', async () => {
+  const owner = await createUser();
+  const subjectId = String(owner.id);
+  const [first, second] = await Promise.all([pendingFactor(subjectId), pendingFactor(subjectId)]);
+  const outcomes = await Promise.all([
+    store.consumeEnrollmentAndActivate({
+      acceptedCounter: 100,
+      applicationId,
+      factorId: first.factor.factorId,
+      nowMs,
+      subjectId,
+      transactionId: first.enrollment.transactionId,
+    }),
+    store.consumeEnrollmentAndActivate({
+      acceptedCounter: 101,
+      applicationId,
+      factorId: second.factor.factorId,
+      nowMs,
+      subjectId,
+      transactionId: second.enrollment.transactionId,
+    }),
+  ]);
+  assert.deepEqual(outcomes.sort(), ['activated', 'invalid-transaction']);
+  const active = await sql<{ count: number }[]>`select count(*)::int as count from idoc.mfa_factors where user_id=${owner.id} and application_id=${applicationId} and factor_type='totp' and status='active'`;
+  assert.equal(active[0].count, 1);
+});
+
 test('challenge binding, expiry, attempt exhaustion, replay, and factor ownership are enforced', async () => {
   const owner = await createUser();
   const stranger = await createUser();
@@ -102,7 +129,13 @@ test('challenge binding, expiry, attempt exhaustion, replay, and factor ownershi
 
   const exhaustedId = randomUUID();
   await store.createChallenge({ applicationId, expiresAtMs: nowMs + 60_000, maxAttempts: 1, nowMs, purpose: 'login', subjectId: String(owner.id), transactionId: exhaustedId });
-  assert.equal(await store.recordChallengeFailure({ applicationId, nowMs, purpose: 'login', subjectId: String(owner.id), transactionId: exhaustedId }), 'attempts-exhausted');
+  assert.equal(await store.recordChallengeFailure({ applicationId, nowMs, purpose: 'step-up', subjectId: String(owner.id), transactionId: exhaustedId }), 'invalid-transaction');
+  assert.equal(await store.recordChallengeFailure({ applicationId, nowMs, purpose: 'login', subjectId: String(stranger.id), transactionId: exhaustedId }), 'invalid-transaction');
+  const failureOutcomes = await Promise.all([
+    store.recordChallengeFailure({ applicationId, nowMs, purpose: 'login', subjectId: String(owner.id), transactionId: exhaustedId }),
+    store.recordChallengeFailure({ applicationId, nowMs, purpose: 'login', subjectId: String(owner.id), transactionId: exhaustedId }),
+  ]);
+  assert.deepEqual(failureOutcomes.sort(), ['attempts-exhausted', 'invalid-transaction']);
   assert.equal(await store.acceptTotpChallenge({ ...attempt, counter: 103, transactionId: exhaustedId }), 'attempts-exhausted');
 
   const expiredId = randomUUID();
