@@ -489,7 +489,7 @@ export const mfaChallengeTransactions = idocSchema.table('mfa_challenge_transact
   satisfiedFactorId: varchar('satisfied_factor_id', { length: 36 }).references(() => mfaFactors.factorId),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('mfa_challenge_purpose_check', sql`${table.purpose} in ('login', 'step-up')`),
+  check('mfa_challenge_purpose_check', sql`${table.purpose} in ('login', 'password-reset', 'step-up')`),
   check('mfa_challenge_attempts_check', sql`${table.attemptCount} >= 0 and ${table.maxAttempts} > 0 and ${table.attemptCount} <= ${table.maxAttempts}`),
   index('mfa_challenge_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
 ]);

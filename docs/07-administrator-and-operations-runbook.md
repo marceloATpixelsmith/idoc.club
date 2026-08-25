@@ -108,6 +108,12 @@ Before approving a classification change, confirm that every field required by t
 
 4. Do not manually set or ask for the member's password.
 
+For an Administrator or Super Admin password-reset request, the recovery screen requires the
+account's active authenticator factor and never sends or falls back to an email OTP. If the factor
+is unavailable or missing, direct the person through approved identity-verification and support
+handling; do not enroll or replace an authenticator inside anonymous recovery. Successful reset
+revokes all persisted sessions and requires a fresh sign-in.
+
 5. If email delivery is failing, investigate provider logs and account email rather than creating a duplicate account.
 
 # 10. Member says membership is incorrectly expired
