@@ -1,21 +1,21 @@
 'use server';
 
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
 import { clearPendingLogin } from '@/lib/auth/pending-login';
 import { setSession } from '@/lib/auth/session';
-import { revokeAllUserSessions } from '@/lib/auth/session-registry';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { clearPendingPrimaryAuth, getPendingPrimaryAuth, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
-import { consumeRecoveryCode, replaceRecoveryCodes } from '@/lib/auth/mfa/recovery';
+import { consumeRecoveryCode, prepareRecoveryCodes, replaceRecoveryCodes } from '@/lib/auth/mfa/recovery';
+import { finalizeAuthenticatorReplacement } from '@/lib/auth/mfa/replacement-finalization';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { beginTotpEnrollment, completeTotpEnrollment, verifyActiveTotp } from '@/lib/auth/mfa/totp';
+import { beginTotpEnrollment, completeTotpEnrollment, decryptTotpSecret, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 
@@ -87,26 +87,46 @@ export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }
   if (!context) return failAndRestart('Your setup session expired. Sign in again.');
   if (!(await allowed(context.user.id, 'mfa_enrollment_confirm'))) return { error: 'Too many attempts. Sign in again later.' };
   const config = mfaConfiguration();
+  const resolveKey = (keyId: string) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; };
+
+  if (stage === 'replacement') {
+    const nowMs = Date.now();
+    const enrollment = await mfaStore.getPendingTotpEnrollment({
+      applicationId: MFA_APPLICATION_ID, factorId: context.pending.factorId, nowMs,
+      subjectId: String(context.user.id), transactionId: context.pending.transactionId,
+    });
+    if (!enrollment || enrollment.enrollment.purpose !== 'authenticator-replacement' ||
+      enrollment.factor.status !== 'pending' || enrollment.enrollment.consumedAtMs !== null ||
+      enrollment.enrollment.expiresAtMs <= nowMs) return failAndRestart('Your setup session expired. Sign in again.');
+    const acceptedCounter = verifyTotpCode(decryptTotpSecret(enrollment.factor.encryptedSecret, resolveKey), code, nowMs);
+    if (acceptedCounter === null) return { error: 'That authenticator code is incorrect.' };
+
+    const recovery = prepareRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
+      digestSecret: config.recoveryDigestKey, nowMs, subjectId: String(context.user.id) });
+    const nextSessionVersion = context.user.sessionVersion + 1;
+
+    // Write the fail-closed continuation first. If the database transaction below rolls back,
+    // this cookie cannot validate because the user's sessionVersion will still be the old value.
+    await setPendingPrimaryAuth({ ...context.pending, sessionVersion: nextSessionVersion, stage: 'recovery-ack' });
+    const result = await finalizeAuthenticatorReplacement({ acceptedCounter, applicationId: MFA_APPLICATION_ID,
+      expectedSessionVersion: context.user.sessionVersion, factorId: context.pending.factorId, nowMs,
+      recoveryCodes: recovery.records, recoveryGenerationId: recovery.generationId,
+      transactionId: context.pending.transactionId, userId: context.user.id });
+    if (result.status !== 'activated' || result.sessionVersion !== nextSessionVersion) {
+      return failAndRestart('Your setup session expired. Sign in again.');
+    }
+    return { recoveryCodes: recovery.codes, success: 'Authenticator replaced. Save these new recovery codes now.' };
+  }
+
   const result = await completeTotpEnrollment({ applicationId: MFA_APPLICATION_ID, code,
-    factorId: context.pending.factorId,
-    purpose: stage === 'replacement' ? 'authenticator-replacement' : 'mfa-enrollment',
-    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
-    store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+    factorId: context.pending.factorId, purpose: 'mfa-enrollment', resolveKey, store: mfaStore,
+    subjectId: String(context.user.id), transactionId: context.pending.transactionId });
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'activated') return failAndRestart('Your setup session expired. Sign in again.');
-  let sessionVersion = context.user.sessionVersion;
-  if (stage === 'replacement') {
-    const [updated] = await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
-      .where(eq(users.id, context.user.id)).returning({ sessionVersion: users.sessionVersion });
-    if (!updated) return failAndRestart('Your setup session expired. Sign in again.');
-    sessionVersion = updated.sessionVersion;
-    await revokeAllUserSessions(context.user.id, 'authenticator-replacement');
-  }
   const recovery = await replaceRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
     digestSecret: config.recoveryDigestKey, store: mfaStore, subjectId: String(context.user.id) });
-  await setPendingPrimaryAuth({ ...context.pending, sessionVersion, stage: 'recovery-ack' });
-  return { recoveryCodes: recovery.codes, success: stage === 'replacement'
-    ? 'Authenticator replaced. Save these new recovery codes now.' : 'Authenticator enabled. Save these recovery codes now.' };
+  await setPendingPrimaryAuth({ ...context.pending, stage: 'recovery-ack' });
+  return { recoveryCodes: recovery.codes, success: 'Authenticator enabled. Save these recovery codes now.' };
 });
 
 export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.literal('yes') }), async () => {
