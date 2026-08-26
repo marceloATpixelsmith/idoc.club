@@ -43,6 +43,7 @@ test('pending MFA is separate from canonical sessions and MFA completion orders 
 
 test('recovery authorizes only purpose-bound replacement and acknowledgement precedes session creation', () => {
   const actions = source('app/(login)/mfa/actions.ts');
+  const finalization = source('lib/auth/mfa/replacement-finalization.ts');
   assert.match(actions, /consumeRecoveryCode\(/);
   assert.match(actions, /purpose: 'authenticator-replacement'/);
   assert.match(actions, /mfa_recovery_code_verify/);
@@ -51,8 +52,13 @@ test('recovery authorizes only purpose-bound replacement and acknowledgement pre
     actions.indexOf('export const confirmTotpEnrollment')), /setSession|registerSession/);
   const acknowledge = actions.indexOf('export const acknowledgeRecoveryCodes');
   assert.ok(actions.indexOf('await setSession(context.user)', acknowledge) > acknowledge);
-  assert.match(actions, /revokeAllUserSessions\(context\.user\.id, 'authenticator-replacement'\)/);
-  assert.match(actions, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
+  assert.match(actions, /finalizeAuthenticatorReplacement\(/);
+  assert.ok(actions.indexOf("stage: 'recovery-ack'") < actions.indexOf('await finalizeAuthenticatorReplacement('));
+  assert.match(finalization, /client\.begin\(/);
+  assert.match(finalization, /status='replaced'/);
+  assert.match(finalization, /delete from idoc\.mfa_recovery_codes/);
+  assert.match(finalization, /session_version=session_version\+1/);
+  assert.match(finalization, /update idoc\.auth_sessions/);
 });
 
 test('recovery continuation is authenticated, short-lived, and contains no factor plaintext', () => {
