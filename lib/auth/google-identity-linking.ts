@@ -92,8 +92,10 @@ async function atomicLink(input: {
       )
     `;
     await sql`
-      insert into idoc.auth_security_notification_outbox (user_id, kind)
-      values (${Number(input.userId)}, 'google_identity_linked')
+      insert into idoc.auth_security_notification_outbox (user_id, kind, recipient_email, dedupe_key)
+      select id, 'google_identity_linked', email, ${`google-linked:${input.verificationTransactionId}`}
+      from idoc.users where id=${Number(input.userId)}
+      on conflict (dedupe_key) where dedupe_key is not null do nothing
     `;
     return 'linked';
   });
@@ -129,8 +131,10 @@ async function atomicUnlink(input: {
       )
     `;
     await sql`
-      insert into idoc.auth_security_notification_outbox (user_id, kind)
-      values (${Number(input.userId)}, 'google_identity_unlinked')
+      insert into idoc.auth_security_notification_outbox (user_id, kind, recipient_email, dedupe_key)
+      select id, 'google_identity_unlinked', email, ${`google-unlinked:${input.verificationTransactionId}`}
+      from idoc.users where id=${Number(input.userId)}
+      on conflict (dedupe_key) where dedupe_key is not null do nothing
     `;
     return true;
   });

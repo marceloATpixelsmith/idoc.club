@@ -162,6 +162,13 @@
       "when": 1787713200000,
       "tag": "0022_ordinary_login_trusted_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787720400000,
+      "tag": "0023_broader_auth_security_notifications",
+      "breakpoints": true
     }
   ]
 }

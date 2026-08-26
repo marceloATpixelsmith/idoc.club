@@ -93,6 +93,13 @@ export async function finalizeAuthenticatorReplacement(input: {
         revoke_reason=coalesce(revoke_reason,'authenticator-replacement'),updated_at=${timestamp(nowMs)}
       where user_id=${input.userId} and revoked_at is null`;
 
+    await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      values(${input.userId},'auth.mfa.authenticator.replaced','user',${String(input.userId)},'totp')`;
+    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+      select id,'authenticator_replaced',email,${`authenticator-replaced:${input.transactionId}`}
+      from idoc.users where id=${input.userId}
+      on conflict (dedupe_key) where dedupe_key is not null do nothing`;
+
     return { status: 'activated' as const, sessionVersion: Number(updated.session_version) };
   });
 }

@@ -54,6 +54,8 @@ export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_
   const current = await canonicalSession(user.id);
   await revokeOtherUserSessions(user.id, current.sessionId, 'member-security-other-sessions-signout');
   await audit(user.id, 'security.sessions.others_logged_out', 'member-security-page');
+  await db.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+    values(${user.id},'other_sessions_revoked',${user.email},${`other-sessions:${user.id}:${randomUUID()}`})`);
   refreshSecurityPage();
   return { success: 'Your other sessions have been logged out.' };
 });

@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
@@ -17,6 +17,7 @@ import { finalizeAuthenticatorReplacement } from '@/lib/auth/mfa/replacement-fin
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { beginTotpEnrollment, completeTotpEnrollment, decryptTotpSecret, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 
@@ -88,6 +89,10 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
   const recovery = await consumeRecoveryCode({ applicationId: MFA_APPLICATION_ID, code: recoveryCode,
     digestSecrets: [config.recoveryDigestKey], store: mfaStore, subjectId: String(context.user.id) });
   if (recovery.status !== 'recovery-authorized') return { error: 'That recovery code could not be used.' };
+  await db.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+    values(${context.user.id},'auth.mfa.recovery_code.used','user',${String(context.user.id)},'authenticator-replacement')`);
+  await enqueueAuthSecurityNotification({ dedupeKey: `recovery-code:${context.pending.transactionId}`,
+    kind: 'recovery_code_used', userId: context.user.id });
   const enrollment = await beginTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
     purpose: 'authenticator-replacement', store: mfaStore, subjectId: String(context.user.id) });
@@ -142,6 +147,10 @@ export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }
   const recovery = await replaceRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
     digestSecret: config.recoveryDigestKey, store: mfaStore, subjectId: String(context.user.id) });
   await setPendingPrimaryAuth({ ...context.pending, stage: 'recovery-ack' });
+  await db.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+    values(${context.user.id},'auth.mfa.authenticator.enrolled','user',${String(context.user.id)},'totp')`);
+  await enqueueAuthSecurityNotification({ dedupeKey: `authenticator-enrolled:${context.pending.transactionId}`,
+    kind: 'authenticator_enrolled', userId: context.user.id });
   return { recoveryCodes: recovery.codes, success: 'Authenticator enabled. Save these recovery codes now.' };
 });
 

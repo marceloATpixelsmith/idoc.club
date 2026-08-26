@@ -152,10 +152,15 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
   await db.transaction(async (tx) => {
     const [updated] = await tx.update(users).set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
       .where(and(eq(users.id, user.id), eq(users.email, pending.email), isNull(users.deletedAt),
-        sql`${users.accountState} in ('active', 'onboarding')`)).returning({ id: users.id });
+        sql`${users.accountState} in ('active', 'onboarding')`)).returning({ id: users.id, sessionVersion: users.sessionVersion });
     if (!updated) throw new Error('Password reset target became unavailable.');
     await tx.update(authSessions).set({ revokedAt: new Date(), revokeReason: 'password-reset', updatedAt: new Date() })
       .where(and(eq(authSessions.userId, user.id), isNull(authSessions.revokedAt)));
+    await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      values(${user.id},'account.password_reset.completed','user',${String(user.id)},${pending.verification})`);
+    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+      values(${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
+      on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   });
   await clearPendingPasswordReset();
   redirect('/sign-in?reset=success');

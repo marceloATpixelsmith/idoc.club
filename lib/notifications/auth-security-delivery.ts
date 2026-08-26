@@ -11,9 +11,10 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   const rows = await client<{
     id: number;
     user_id: number;
-    kind: 'google_identity_linked' | 'google_identity_unlinked';
+    kind: string;
     attempt_count: number;
-    email: string;
+    recipient_email: string;
+    created_at: Date;
   }[]>`
     with candidate as (
       select o.id
@@ -26,27 +27,39 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     )
     update idoc.auth_security_notification_outbox o
     set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
-    from candidate, idoc.users u
-    where o.id=candidate.id and u.id=o.user_id
-    returning o.id, o.user_id, o.kind, o.attempt_count, u.email
+    from candidate
+    where o.id=candidate.id
+    returning o.id, o.user_id, o.kind, o.attempt_count, o.recipient_email, o.created_at
   `;
   const record = rows[0];
   if (!record) return { status: 'empty' as const };
 
   try {
-    const linked = record.kind === 'google_identity_linked';
+    const content: Record<string, { heading: string; subject: string }> = {
+      authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },
+      authenticator_replaced: { heading: 'Authenticator replaced', subject: 'Authenticator replaced for IDOC' },
+      google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },
+      google_identity_unlinked: { heading: 'Google account disconnected', subject: 'Google account disconnected from IDOC' },
+      other_sessions_revoked: { heading: 'Other sessions logged out', subject: 'IDOC sessions were logged out' },
+      password_changed: { heading: 'Password changed', subject: 'Your IDOC password was changed' },
+      password_reset_completed: { heading: 'Password reset completed', subject: 'Your IDOC password was reset' },
+      recovery_code_used: { heading: 'Recovery code used', subject: 'An IDOC recovery code was used' },
+      role_granted: { heading: 'Administrator access granted', subject: 'Your IDOC access changed' },
+      role_revoked: { heading: 'Administrator access removed', subject: 'Your IDOC access changed' },
+      verified_email_changed: { heading: 'Login email changed', subject: 'Your IDOC login email changed' },
+    };
+    const message = content[record.kind];
+    if (!message) throw new Error('Unsupported security notification kind.');
     const html = renderTransactionalEmail({
-      heading: linked ? 'Google account connected' : 'Google account disconnected',
-      bodyHtml: linked
-        ? '<p>A Google account was connected to your IDOC account. If you did not make this change, contact IDOC immediately.</p>'
-        : '<p>The Google account connected to your IDOC account was removed. If you did not make this change, contact IDOC immediately.</p>',
+      heading: message.heading,
+      bodyHtml: `<p>${message.heading} on ${record.created_at.toISOString()}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
       footerNote: 'This is a security notification for your IDOC account.',
     });
     await sendTransactionalEmail({
       html,
       messageId: `auth-security-${record.id}`,
-      subject: linked ? 'Google account connected to IDOC' : 'Google account disconnected from IDOC',
-      to: record.email,
+      subject: message.subject,
+      to: record.recipient_email,
     });
     const done = await client`
       update idoc.auth_security_notification_outbox

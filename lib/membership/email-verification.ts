@@ -59,6 +59,7 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
     if (!claimed) return { status: 'invalid' };
     const [existing] = await tx.select({ id: users.id }).from(users).where(eq(users.email, record.pendingEmail)).limit(1);
     if (existing && existing.id !== record.userId) return { status: 'invalid' };
+    const [currentUser] = await tx.select({ email: users.email }).from(users).where(eq(users.id, record.userId)).limit(1);
     const [profile] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
     const [billing] = profile ? await tx.select({ externalCustomerId: billingAccounts.externalCustomerId }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1) : [];
     await tx.update(users).set({
@@ -76,6 +77,13 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
       });
     }
     await tx.insert(auditLog).values({ actorId: record.userId, action: 'account.email.verified', entityId: String(record.userId), entityType: 'user' });
+    if (currentUser && currentUser.email !== record.pendingEmail) {
+      for (const recipient of [record.pendingEmail, currentUser.email]) {
+        await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+          values(${record.userId},'verified_email_changed',${recipient},${`email-changed:${record.id}:${recipient}`})
+          on conflict (dedupe_key) where dedupe_key is not null do nothing`);
+      }
+    }
     return { customerId: billing?.externalCustomerId, email: record.pendingEmail, profileId: profile?.id, status: 'verified', userId: record.userId };
   });
   if (result.status === 'verified' && result.customerId && result.email && result.profileId) {
