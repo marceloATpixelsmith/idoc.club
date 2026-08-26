@@ -228,3 +228,8 @@ The Release 1 item-8 sweep uses append-only `audit_log` evidence and the retryin
 | Account deletion | `account.deleted` | No deliverable address retained | Authorize, commit deletion, revoke sessions/devices, clear cookie | lifecycle and management tests |
 
 Notification routing snapshots the intended address at mutation time. Content states the event time and emergency action without IP, inferred device/location, session identifiers, OTP/TOTP values, recovery material, tokens, digests, cookies, JWTs, or provider/database errors. A unique event dedupe key prevents harmful repeat enqueue. Provider delivery is asynchronous; retry/dead-letter state cannot roll back the committed security mutation.
+
+
+## Production authentication key gate
+
+Production authentication must use the complete server-only inventory and rotation rules in document 07. Runtime configuration fails closed for absent, malformed, undersized, non-canonical base64url, wrong-length AES, and incomplete active-key-ring inputs. Staging and production use different secrets while all instances within one environment receive compatible configuration. Repository readiness does not constitute deployed-secret or UAT signoff.

@@ -192,3 +192,8 @@ The required signup fields, permitted status values, rolling membership calendar
 ### Account-security management status
 
 Release 1 now includes the canonical `/dashboard/security` management surface for password and Google sign-in, owned active sessions, ordinary-member login-trust devices, privileged authenticator replacement entry, and password-confirmed deletion. Session and device mutations are server-owned and ownership-scoped. Password change and deletion deliberately require fresh sign-in. Broad security-notification coverage and final production configuration/UAT remain release gates; this work does not change billing scope or sequencing.
+
+
+## Authentication production-readiness gate
+
+The canonical authentication implementation is repository-ready through the item-10 configuration inventory, strict key parsing, deployment/rotation procedure, operator UAT checklist, and release-signoff template in document 07. Release scope is not complete until operators install distinct production secrets, configure the production Google callback and email delivery, run Release 1 Verification on the final head, complete deployed UAT, and record the still-unchecked signoff.

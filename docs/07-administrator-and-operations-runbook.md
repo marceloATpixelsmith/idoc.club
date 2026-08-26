@@ -223,3 +223,120 @@ Administrator and Super Admin users never use ordinary remembered-login-device t
 ## Security-notification operations
 
 The five-minute account-delivery Cron also drains durable authentication-security notices. Each notice snapshots its recipient and event creation time, retries with the existing six-attempt exponential policy, and dead-letters after attempt six. Provider failure never reverses a password, email, factor, role, or session mutation. Operators may inspect only kind, user ownership, timestamps, attempt/lease state, dedupe identity, and categorical delivery error. Never add credential material, raw session/device identifiers, IP/location guesses, exception text, or provider responses to evidence. A dead-letter requires confirming current account ownership before an approved manual communication; never re-run the underlying security mutation merely to send email.
+
+# 15. Production authentication configuration and UAT
+
+This section is the authoritative production-auth configuration inventory. The application is one Vercel-hosted Next.js deployment; its Cron route runs in that deployment and no separate authentication worker is deployed elsewhere. Put server-only values in **Vercel Project Settings → Environment Variables**, scoped separately to Production and to the protected Preview/Staging deployment used for UAT. Preview/Staging must use its own non-production database, OAuth client/configuration, provider credentials, and cryptographic secrets. All instances within one environment must receive the same compatible values. Never put real values in `.env.example`, Git, documentation, issues, pull requests, chat, screenshots, build output, or runtime logs.
+
+## 15.1 Authoritative inventory
+
+“Rotate” below means an operator-coordinated deployment, never an application-generated fallback.
+
+| Variable | Requirement, consumer, and format | Rotation and environment rules |
+|---|---|---|
+| `AUTH_SECRET` | Required server-only UTF-8 text of at least 32 characters. `lib/auth/session.ts` uses it as the HS256 JWT key; it also signs OAuth browser binding and other server authorities. | Must match across instances. Rotation immediately invalidates signed session cookies and signed transient authorities even if a registry row remains; registry and `sessionVersion` checks remain additional requirements and do not make an old signature valid. No old-key ring exists, so coordinate a forced sign-in. Use a distinct staging value. |
+| `BASE_URL` | Required absolute application origin. HTTPS is mandatory in production; loopback HTTP is accepted only outside production. Used for trusted application origins and links. No trailing route; production is `https://idoc.club` when that is the deployed canonical origin. | Not secret. Must match across instances and the deployed origin. A change requires OAuth/callback and email-link review; use the actual staging origin in staging. |
+| `POSTGRES_URL` | Required server-only `postgres:`/`postgresql:` URL for the Render PostgreSQL database; production requires provider TLS configuration. Stores users, session registry, factors, challenges, devices, audit, and durable notification outbox. | Rotate the database credential using Render/Vercel coordination. It does not logically revoke auth material, but an incompatible cutover makes auth fail closed. Never share the production database/credential with staging. |
+| `MFA_TOTP_ACTIVE_KEY_ID` | Required 1–30 character key ID (`A-Z`, `a-z`, digits, `_`, `-`). Selects the encryption key for newly enrolled factors and must exist in the TOTP ring. | Not secret, but must match the ring on every instance. Change only as part of the additive procedure below. Staging has an independent ring. |
+| `MFA_TOTP_ENCRYPTION_KEYS` | Required server-only JSON object from key ID to **unpadded canonical base64url**, each decoding to exactly 32 bytes (AES-256-GCM). Decrypts persisted privileged TOTP factors. | Must be compatible across instances. Additive rotation is safe; old IDs must remain until no factor references them. Removing a referenced key locks out that factor. Use a distinct staging ring. |
+| `MFA_RECOVERY_CODE_DIGEST_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Keys persisted one-time recovery-code digests. | Must match across instances. Rotation intentionally invalidates every existing recovery code; old values are not consulted. Coordinate regeneration/re-enrollment and test only with a disposable staging account. Distinct per environment. |
+| `MFA_PENDING_AUTH_SIGNING_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Signs short-lived MFA enrollment/login/reset/replacement/step-up continuation authority. | Must match across instances. Rotation safely invalidates outstanding continuations; no old key is needed. Begin fresh flows after deployment. Distinct per environment. |
+| `LOGIN_DEVICE_TRUST_DIGEST_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Keys digest-only persisted ordinary-member 14-day login-device tokens. | Must match across instances. Rotation safely invalidates all remembered ordinary devices; no old key is needed. It does not bypass password+OTP recovery. Distinct per environment. |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Both required when Google auth is enabled; Google-issued server configuration consumed by the canonical OIDC flow. The secret has provider-defined format. | Must match the configured OAuth client across instances. Rotate the secret through an overlap/cutover supported by Google; existing IDOC sessions are unaffected, in-flight OAuth may fail. Production and staging must use separate clients/secrets. |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Required absolute HTTPS callback URI outside local development. It must be exactly `${BASE_URL}/api/auth/google/callback` for the deployed canonical origin and exactly match a Google authorized redirect URI. | Not secret; exact-match across instances and provider console. Each stable protected staging origin needs its own explicit callback. Do not use arbitrary per-PR hosts with the production client. |
+| `MAILCHIMP_TRANSACTIONAL_API_KEY` | Required server-only Mailchimp Transactional/Mandrill-issued API key (provider-defined length). Delivers login OTP and durable security/account messages. | Rotate in Mailchimp and Vercel; queued messages remain in PostgreSQL and retry with the new credential. It does not invalidate auth material. Use a non-production account/key or tightly controlled test subaccount in staging. |
+| `CRON_SECRET` | Required server-only random text of at least 32 characters. Vercel Cron presents it as `Authorization: Bearer …` to `/api/cron/account-delivery`; the worker handles retry/dead-letter delivery. | Must match all instances and scheduler. Rotation can temporarily cause 401s and delay mail but does not invalidate auth state; update scheduler/deployment compatibly. Distinct per environment. |
+| `ACCOUNT_DELIVERY_KEY_VERSION` / `ACCOUNT_DELIVERY_ENCRYPTION_KEYS` | Required active 1–30 character version plus server-only JSON version ring. Ring values are the existing encrypted-outbox key format (at least 32 characters). Protects raw, short-lived account-link payloads until delivery. | Add the new value/version before switching active; retain old versions until no pending row references them. Removal makes affected pending deliveries fail safely. Same compatible ring across instances; distinct staging ring. |
+| `RATE_LIMIT_HASH_KEY` | Required server-only random text of at least 32 characters. Keys privacy-preserving authentication-adjacent rate-limit identifiers. | Must match across instances. Rotation loses continuity of existing rate-limit buckets and should occur only during a controlled window; it does not revoke sessions/factors. Distinct per environment. |
+| `TURNSTILE_SECRET_KEY` / `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Required Cloudflare server verification secret (at least 32 characters under runtime validation) and intentionally public site key. Protect anonymous auth boundaries. | Configure as a matched Cloudflare widget pair for each allowed hostname. Secret is server-only; site key may reach browsers. Rotation does not revoke auth material. Do not reuse production secret in staging. |
+| `IDOC_ADMIN_NOTIFICATION_EMAIL` | Required syntactically valid operations recipient for privileged production configuration alerts/workflows. | Not cryptographic; keep consistent across instances and use the appropriate staging recipient. |
+
+`STRIPE_*` and product variables are production runtime requirements but are intentionally outside this authentication inventory and are unchanged by this readiness work.
+
+## 15.2 Generating and rotating keys
+
+Generate each self-managed 32-byte base64url secret independently in an approved operator terminal, then transfer it directly to the deployment secret store without printing it into retained logs:
+
+```sh
+node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+Use that output for each base64url digest/signing key. For the TOTP ring, assign a non-secret ID and construct valid JSON only inside the Vercel secret editor. `AUTH_SECRET`, `CRON_SECRET`, and `RATE_LIMIT_HASH_KEY` may use independently generated high-entropy values; never reuse one secret for two purposes.
+
+Safe TOTP encryption rotation is strictly additive:
+
+1. Generate a new 32-byte key and choose a new key ID.
+2. Add it to `MFA_TOTP_ENCRYPTION_KEYS` while retaining every old ID.
+3. Set `MFA_TOTP_ACTIVE_KEY_ID` to the new ID and deploy all instances.
+4. Confirm new enrollment/replacement stores the new ID and an old factor still verifies.
+5. Retire an old ID only after a database inventory confirms no factor references it. There is no automatic re-encryption.
+
+## 15.3 Google OAuth readiness
+
+Configure the production Google client with application origin `https://idoc.club` and authorized redirect URI `https://idoc.club/api/auth/google/callback` (or the exact final canonical production origin if it differs). Configure the stable protected staging origin and its exact callback on a separate staging client. The implementation retains persisted, single-use transaction state, PKCE S256, nonce, signed browser binding, exact origin/application/redirect binding, and server-side token/JWKS validation. Callback evidence is consumed atomically. Email equality alone never links an existing account. Explicit linking requires an authenticated session and current password, plus fresh TOTP step-up for privileged users. Privileged Google primary login always continues to TOTP; ordinary Google login follows the existing Google policy and never creates ordinary password-login device trust.
+
+## 15.4 Email and worker signoff
+
+Before auth UAT, invoke the deployed account-delivery Cron with its normal Vercel schedule and verify a successful non-sensitive count response, then use dedicated staging accounts to receive a `login_verification` OTP and at least one durable security event. Confirm delivery in Mailchimp Transactional activity and confirm the PostgreSQL outbox reaches `delivered`. Exercise a controlled provider failure to confirm retry and eventual delivery; exercise only a disposable staged record when checking dead-letter operations. Never send real email in automated tests, never record message secrets, and confirm notification bodies contain no password, OTP, TOTP seed, recovery code, cookie, token, or environment value.
+
+## 15.5 Operator UAT checklist
+
+Record account IDs/timestamps and safe audit/outbox identifiers, never credentials or codes.
+
+### Ordinary member — password login and reset
+
+- [ ] On an unremembered browser, correct password sends `login_verification`; wrong OTP fails and correct OTP succeeds.
+- [ ] Without “Remember me”, a fresh login requires OTP again; with “Remember me for 2 weeks”, the same browser bypasses OTP only after password.
+- [ ] “Forget this device” and “Forget all remembered devices” remove bypass; expired/revoked trust cannot bypass OTP.
+- [ ] Reset request delivers verification; wrong/expired code fails and success changes the password.
+- [ ] Reset makes existing sessions and session-version-bound remembered trust unusable, requires fresh sign-in, and delivers a security notification.
+
+### Privileged enrollment, routine login, and reset
+
+- [ ] Password or Google primary auth without a factor requires enrollment; QR/manual seed appears only during enrollment, invalid TOTP fails, and valid TOTP activates.
+- [ ] Recovery codes appear once and acknowledgement is required before a normal session; enrollment notification arrives.
+- [ ] Every password and Google login requires TOTP; ordinary remembered-device evidence cannot bypass it; wrong and replayed accepted counter fail where testable.
+- [ ] No normal session exists before MFA succeeds.
+- [ ] Privileged password reset requires TOTP with no email-OTP or remembered-device fallback; success revokes sessions, requires fresh login, and notifies.
+
+### Authenticator recovery/replacement
+
+- [ ] Start replacement on Security; one recovery code grants replacement authority only and creates no normal session.
+- [ ] A used code cannot be reused; new enrollment succeeds; old authenticator and old recovery set stop working.
+- [ ] Existing sessions are revoked, new codes appear once, acknowledgement is required, canonical completion requires a fresh normal session, and notifications arrive.
+
+### Fresh step-up
+
+- [ ] Verify privileged TOTP step-up for password change, an actual email change, Google link/unlink, role grant/revoke, and every other configured sensitive action.
+- [ ] Without fresh authority the action challenges; ordinary remembered evidence cannot satisfy it.
+- [ ] Authority is action-, session-, user-, version-, and role-bound, is single-use, and does not recreate the normal session.
+
+### Sessions, roles, email, Google, and deletion
+
+- [ ] With two sessions, Security identifies current; revoking one other stops it; “log out other sessions” preserves current; another user's session cannot be revoked.
+- [ ] Promote an ordinary member who has trust: old session is invalid, trust cannot bypass privileged MFA, next login enrolls/challenges, and role notification arrives.
+- [ ] Demote an Administrator: privileged sessions invalidate, stale trust does not resurrect, and next ordinary login follows ordinary policy.
+- [ ] Email change requires new-address verification; login address changes only afterward; new address receives security notification and old address receives the currently implemented informational notice; current session invalidation and Google binding remain canonical.
+- [ ] Google link requires session/current password and privileged step-up; callback cannot replay; email alone does not auto-link; unlink controls work; no account is stranded; notifications arrive.
+- [ ] Account deletion requires password and privileged step-up where applicable; afterward sessions/devices fail and the deleted account cannot authenticate.
+
+### Security notifications and staging key-rotation smoke test
+
+- [ ] Real staged delivery succeeds for password changed/reset, email changed, Google linked/unlinked, authenticator enrolled/replaced, recovery code used, role grant/revoke, and mass session revocation; no secret appears.
+- [ ] Add/switch a second TOTP key: old factor works and newly replaced factor records the new ID; keep old key while referenced.
+- [ ] Rotate login-device digest: old trust stops bypassing, while password plus OTP works.
+- [ ] Rotate pending-auth signing: stale continuation fails closed and a new login works.
+- [ ] With a disposable staging account only, rotate recovery digest and verify old recovery codes intentionally fail.
+
+## 15.6 Release signoff (leave unchecked until manually proved)
+
+- [ ] Release 1 Verification is green on final deployed code head: __________
+- [ ] Production database migrations are applied: __________
+- [ ] Required Production auth variables are configured in Vercel: __________
+- [ ] Google production origin/callback are configured: __________
+- [ ] Security-email delivery and retry operation are verified: __________
+- [ ] Privileged TOTP enrollment and password/Google login are verified: __________
+- [ ] Ordinary password+OTP and remembered-device behavior are verified: __________
+- [ ] Password reset and authenticator recovery/replacement are verified: __________
+- [ ] Fresh step-up, session management, and role-change invalidation are verified: __________
+- [ ] Production smoke test passed; operator/date/deployment SHA: __________

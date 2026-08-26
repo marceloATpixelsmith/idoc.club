@@ -7,6 +7,7 @@ import {
   databaseUrlForServer,
   loginDeviceTrustDigestKeyForServer,
   mailchimpApiKeyForServer,
+  mfaConfiguration,
   privilegedProductionConfiguration,
   stripeKeyForServer,
   stripeOneTimeProductIdForServer,
@@ -18,13 +19,21 @@ const valid = {
   ACCOUNT_DELIVERY_KEY_VERSION: 'current', AUTH_SECRET: 'b'.repeat(32),
   BASE_URL: 'https://idoc.club', CRON_SECRET: 'c'.repeat(32),
   IDOC_ADMIN_NOTIFICATION_EMAIL: 'operations@idoc.club',
-  LOGIN_DEVICE_TRUST_DIGEST_KEY: 'a'.repeat(43),
+  LOGIN_DEVICE_TRUST_DIGEST_KEY: Buffer.alloc(32, 4).toString('base64url'),
   MAILCHIMP_TRANSACTIONAL_API_KEY: 'd'.repeat(22),
   POSTGRES_URL: 'postgres://user:password@database.internal:5432/idoc',
   RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_ONE_TIME_PRODUCT_ID: 'prod_one_time_live',
   STRIPE_RECURRING_PRODUCT_ID: 'prod_recurring_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
   STRIPE_WEBHOOK_SECRET: 'g'.repeat(32),
   TURNSTILE_SECRET_KEY: 'h'.repeat(32),
+};
+
+const key32 = Buffer.alloc(32, 7).toString('base64url');
+const validMfa = {
+  MFA_PENDING_AUTH_SIGNING_KEY: Buffer.alloc(32, 1).toString('base64url'),
+  MFA_RECOVERY_CODE_DIGEST_KEY: Buffer.alloc(32, 2).toString('base64url'),
+  MFA_TOTP_ACTIVE_KEY_ID: 'current',
+  MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ current: key32 }),
 };
 
 test('complete privileged production configuration accepts explicit valid values', () => {
@@ -48,7 +57,7 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
   assert.throws(() => baseUrlForServer({ BASE_URL: 'http://idoc.club', NODE_ENV: 'development' }), /BASE_URL/);
   assert.throws(() => authSecretForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
   assert.throws(() => loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: 'short' }), /LOGIN_DEVICE_TRUST_DIGEST_KEY/);
-  assert.equal(loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: 'a'.repeat(43) }).length, 32);
+  assert.equal(loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: Buffer.alloc(32, 4).toString('base64url') }).length, 32);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: 'sk_fake_value' }), /STRIPE_SECRET_KEY/);
   assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: `rk_test_${'h'.repeat(24)}` }), `rk_test_${'h'.repeat(24)}`, 'a restricted key must be accepted alongside a full-access secret key');
   assert.throws(() => stripeRecurringProductIdForServer({ STRIPE_RECURRING_PRODUCT_ID: 'not-a-product' }), /STRIPE_RECURRING_PRODUCT_ID/);
@@ -94,4 +103,33 @@ test('production build phase and NODE_ENV never enable placeholder credentials',
     assert.throws(() => databaseUrlForServer(environment), /POSTGRES_URL/);
     assert.throws(() => stripeKeyForServer(environment), /STRIPE_SECRET_KEY/);
   }
+});
+
+test('canonical MFA configuration accepts a valid explicit key ring', () => {
+  const configuration = mfaConfiguration(validMfa);
+  assert.equal(configuration.activeKeyId, 'current');
+  assert.deepEqual(configuration.encryptionKeys.get('current'), Buffer.alloc(32, 7));
+});
+
+test('canonical MFA configuration rejects missing or absent active keys and malformed JSON', () => {
+  assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_ACTIVE_KEY_ID: undefined }), /MFA_TOTP_ACTIVE_KEY_ID/);
+  assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_ACTIVE_KEY_ID: 'absent' }), /MFA_TOTP_ACTIVE_KEY_ID/);
+  assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_ENCRYPTION_KEYS: '{' }), /MFA_TOTP_ENCRYPTION_KEYS/);
+});
+
+test('canonical MFA configuration rejects malformed, padded, and incorrectly sized key material', () => {
+  for (const material of ['not+base64url', `${key32}=`, Buffer.alloc(31, 3).toString('base64url'), Buffer.alloc(33, 3).toString('base64url')]) {
+    assert.throws(
+      () => mfaConfiguration({ ...validMfa, MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ current: material }) }),
+      /MFA_TOTP_ENCRYPTION_KEYS/
+    );
+  }
+  for (const name of ['MFA_RECOVERY_CODE_DIGEST_KEY', 'MFA_PENDING_AUTH_SIGNING_KEY'] as const) {
+    assert.throws(() => mfaConfiguration({ ...validMfa, [name]: Buffer.alloc(31).toString('base64url') }), new RegExp(name));
+    assert.throws(() => mfaConfiguration({ ...validMfa, [name]: 'not+base64url' }), new RegExp(name));
+  }
+  assert.throws(
+    () => loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: Buffer.alloc(31).toString('base64url') }),
+    /LOGIN_DEVICE_TRUST_DIGEST_KEY/
+  );
 });
