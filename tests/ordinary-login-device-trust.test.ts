@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
+// Post-merge hardening keeps the ordinary-device bypass bound to current server-owned account state.
+
 test('ordinary login trust is opaque, digest-only, fixed-life, scoped, current-state bound, and non-sliding', () => {
   const trust = read('lib/auth/login-device-trust.ts');
   assert.match(trust, /randomBytes\(32\)\.toString\('base64url'\)/);
