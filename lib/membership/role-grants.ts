@@ -6,6 +6,14 @@ import { db } from '@/lib/db/drizzle';
 import { applicationRoles, auditLog, users } from '@/lib/db/schema';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator, requireSuperAdmin } from './authorization';
+import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
+
+export class FreshStepUpRequiredError extends Error {
+  constructor() {
+    super('Fresh authenticator verification is required.');
+    this.name = 'FreshStepUpRequiredError';
+  }
+}
 
 // 'member' is a valid value in the application_roles_role_check constraint but is never actually
 // granted anywhere in this codebase — vestigial. Only these two are real, grantable roles.
@@ -28,8 +36,11 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
   const input = grantSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
+  if ((await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required) {
+    throw new FreshStepUpRequiredError();
+  }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // application_roles_active_unique is a partial unique index (userId, role) where revokedAt is
     // null — a soft-revoked prior grant doesn't block a fresh one, only an actively-held role does.
     const [inserted] = await tx.insert(applicationRoles).values({ grantedBy: actor.id, role: input.role, userId })
@@ -54,6 +65,8 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
     });
     return { grant: inserted };
   });
+  await consumeFreshStepUp();
+  return result;
 }
 
 /**
@@ -67,8 +80,11 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
   const input = revokeSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
+  if ((await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required) {
+    throw new FreshStepUpRequiredError();
+  }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (input.role === 'super_admin') {
       const activeSuperAdmins = await tx.select({ id: applicationRoles.id }).from(applicationRoles)
         .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt)))
@@ -96,4 +112,6 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
     });
     return { revoked };
   });
+  await consumeFreshStepUp();
+  return result;
 }

@@ -1,12 +1,12 @@
 'use client';
 
 import { useActionState } from 'react';
-import { acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, cancelMfa, confirmTotpEnrollment, verifyLoginTotp } from './actions';
+import { acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, cancelMfa, confirmTotpEnrollment, verifyLoginTotp, verifyStepUpTotp } from './actions';
 
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
 
-export function MfaForm({ mode, provisioningUri }: { mode: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement'; provisioningUri?: string }) {
-  const action = mode === 'challenge' ? verifyLoginTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
+export function MfaForm({ mode, provisioningUri }: { mode: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'step-up'; provisioningUri?: string }) {
+  const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
   const [, acknowledge, acknowledging] = useActionState<State, FormData>(acknowledgeRecoveryCodes, {});
   const [, recover, recovering] = useActionState<State, FormData>(beginAuthenticatorRecovery, {});

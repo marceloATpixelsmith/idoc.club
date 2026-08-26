@@ -1,5 +1,6 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { updateMemberProfile } from '@/lib/membership/data-access';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
 import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
@@ -71,6 +72,7 @@ export async function grantRoleForm(_state: FormState, formData: FormData): Prom
     await grantApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
     return { success: 'Role granted.' };
   } catch (error) {
+    if (error instanceof Error && error.name === 'FreshStepUpRequiredError') redirect('/mfa');
     return friendlyError(error, 'The role could not be granted.');
   }
 }
@@ -81,6 +83,7 @@ export async function revokeRoleForm(_state: FormState, formData: FormData): Pro
     await revokeApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
     return { success: 'Role revoked.' };
   } catch (error) {
+    if (error instanceof Error && error.name === 'FreshStepUpRequiredError') redirect('/mfa');
     return friendlyError(error, 'The role could not be revoked.');
   }
 }

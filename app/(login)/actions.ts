@@ -20,6 +20,7 @@ import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { startPendingLogin } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
 import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -136,6 +137,8 @@ export const updatePassword = validatedActionWithUser(
   async (data, _, user) => {
     const { currentPassword, newPassword, confirmPassword } = data;
 
+    if ((await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) redirect('/mfa');
+
     const isPasswordValid = await comparePasswords(currentPassword, user.passwordHash);
     if (!isPasswordValid) return { error: 'Current password is incorrect.' };
     if (currentPassword === newPassword) return { error: 'New password must be different from the current password.' };
@@ -143,6 +146,7 @@ export const updatePassword = validatedActionWithUser(
 
     const newPasswordHash = await hashPassword(newPassword);
     await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, user.id));
+    await consumeFreshStepUp();
     return { success: 'Password updated successfully.' };
   }
 );
@@ -170,13 +174,16 @@ export const updateAccount = validatedActionWithUser(
   async (data, _, user) => {
     const name = data.name;
     const email = normalizeEmail(data.email);
-    await db.update(users).set({ name }).where(eq(users.id, user.id));
     if (email !== user.email) {
+      if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account')).required) redirect('/mfa');
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (duplicate) return { error: 'That email address is unavailable.', name };
+      await db.update(users).set({ name }).where(eq(users.id, user.id));
       await issueEmailVerification(user.id, email);
+      await consumeFreshStepUp();
       return { name, success: 'Check the new address to verify your email change.' };
     }
+    await db.update(users).set({ name }).where(eq(users.id, user.id));
     return { name, success: 'Account updated successfully.' };
   }
 );

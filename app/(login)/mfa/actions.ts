@@ -16,8 +16,24 @@ import { consumeRecoveryCode, prepareRecoveryCodes, replaceRecoveryCodes } from 
 import { finalizeAuthenticatorReplacement } from '@/lib/auth/mfa/replacement-finalization';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { beginTotpEnrollment, completeTotpEnrollment, decryptTotpSecret, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
+import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
+
+export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
+  const context = await getPendingStepUp();
+  if (!context) return { error: 'Your verification session expired. Try the action again.' };
+  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many attempts. Try again later.' };
+  const config = mfaConfiguration();
+  const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'step-up',
+    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
+    store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+  if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
+  if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
+    ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
+  await grantFreshStepUp(context.pending);
+  redirect(context.pending.returnTo);
+});
 
 async function pendingAccount(expected: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack') {
   const pending = await getPendingPrimaryAuth();
