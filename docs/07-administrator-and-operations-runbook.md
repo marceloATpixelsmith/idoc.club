@@ -213,3 +213,9 @@ The signup/login/password-reset Turnstile challenge additionally requires `NEXT_
 ## Ordinary login trusted-device operations
 
 Set `LOGIN_DEVICE_TRUST_DIGEST_KEY` to a dedicated base64url-encoded secret of at least 32 random bytes in every runtime that serves password login. Keep it server-only and do not reuse session, password, TOTP-encryption, or recovery-code keys. Losing or rotating this single active key safely invalidates all existing ordinary-member trusted-device cookies; deploy the new key consistently before relying on newly issued trust. Individual or account-wide emergency revocation can set `idoc.login_trusted_devices.revoked_at` and an operational `revoke_reason`; revocation takes effect on the next login. Do not delete or mutate factor-bound `mfa_remembered_devices` for this purpose.
+
+## Account-security management operations
+
+Members manage password, Google sign-in, active canonical sessions, remembered ordinary login devices, privileged authenticators, and deletion at `/dashboard/security`. Support should not invent browser, device, location, or IP descriptions: the session registry currently stores only authentication, activity, and absolute-expiry timestamps. "Log out other sessions" intentionally preserves the server-bound current session; password change and account deletion intentionally require fresh sign-in.
+
+Administrator and Super Admin users never use ordinary remembered-login-device trust. Their security page links into the established authenticator recovery/replacement flow, which requires current TOTP or a one-time recovery code, rotates recovery codes, invalidates sessions, and requires acknowledgement before a fresh normal session. Item 8's broader notification and audit sweep remains an operational follow-up; this surface adds only mutation evidence consistent with current audit conventions.

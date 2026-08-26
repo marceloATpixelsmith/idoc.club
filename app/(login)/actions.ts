@@ -20,7 +20,8 @@ import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
-import { hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
+import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
+import { revokeAllUserSessions } from '@/lib/auth/session-registry';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 
 const signInSchema = z.object({
@@ -193,7 +194,8 @@ export const updatePassword = validatedActionWithUser(
       updatedAt: new Date(),
     }).where(eq(users.id, user.id));
     await consumeFreshStepUp();
-    return { success: 'Password updated successfully.' };
+    await clearSession();
+    redirect('/sign-in?password=changed');
   }
 );
 
@@ -202,9 +204,15 @@ const deleteAccountSchema = z.object({ password: z.string().min(1).max(128) });
 export const deleteAccount = validatedActionWithUser(
   deleteAccountSchema,
   async (data, _, user) => {
+    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) redirect('/mfa');
     const isPasswordValid = await comparePasswords(data.password, user.passwordHash);
     if (!isPasswordValid) return { error: 'Incorrect password. Account deletion failed.' };
+    // deleteOwnAccount performs its own authenticated authorization lookup, so the canonical
+    // current session must remain active until that mutation has successfully committed.
     await deleteOwnAccount();
+    await revokeAllUserSessions(user.id, 'account-deleted');
+    await forgetAllLoginDevices(user.id, 'account-deleted');
+    await consumeFreshStepUp();
     await clearSession();
     redirect('/sign-in');
   }

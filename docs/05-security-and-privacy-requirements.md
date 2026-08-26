@@ -198,3 +198,11 @@ Passwords require 12–128 characters. Spaces and Unicode are allowed, paste is 
 ## Client-side error reporting
 
 `POST /api/client-error` accepts a best-effort crash report from the client error boundaries (`app/error.tsx`, `app/global-error.tsx`) and writes it to server runtime logs only — it is never persisted to the database. It requires no authorization, since it must remain reachable from a broken or anonymous session; each field (`digest`, `message`, `stack`, `url`) is capped at 2,000 characters and any non-string value is dropped before logging.
+
+## Member account-security management
+
+`/dashboard/security` is the canonical authenticated account-security surface. It lists only the current member's active, unexpired persisted sessions and identifies the current session from the server-authenticated canonical session ID. Members may log out an owned non-current session or all other sessions without invalidating the current session. No bearer value, cookie content, invented device label, or unpersisted network metadata is rendered.
+
+Ordinary members can see whether the current browser has valid 14-day login trust, forget the server-read current credential, or revoke all of their ordinary IDOC login-trust records. Administrator and Super Admin accounts never receive this ordinary-device UI. Privileged accounts instead see their active authenticator status and enter the existing recovery-authorized replacement state machine; recovery codes remain one-time and new codes are issued only by that canonical replacement flow.
+
+Password change retains current-password and privileged fresh-step-up checks, increments `sessionVersion`, revokes the current registry session, clears the browser session, and deliberately returns the member to sign-in. Account deletion retains password confirmation, requires the canonical privileged step-up policy where applicable, revokes all persisted sessions and ordinary trusted devices, and then clears authentication. Management mutations record secret-free audit evidence.

@@ -43,6 +43,7 @@ test('sign-out revokes the current persisted session before clearing the cookie 
 test('registry exposes individual and all-session revocation plus inventory primitives', () => {
   assert.match(registry, /export async function revokeSession\(/);
   assert.match(registry, /export async function revokeAllUserSessions\(/);
+  assert.match(registry, /export async function revokeOtherUserSessions\(/);
   assert.match(registry, /export async function listActiveSessions\(/);
   assert.match(registry, /revoked_at is null/);
   assert.match(registry, /absolute_expires_at > now\(\)/);
