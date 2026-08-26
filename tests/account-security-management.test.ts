@@ -20,6 +20,12 @@ test('current-session management is bound to the authenticated canonical session
   assert.match(registry, /where user_id = \$\{userId\} and session_id <> \$\{currentSessionId\}/);
 });
 
+test('security page lists only registry sessions matching the current server-owned session version', () => {
+  assert.match(page, /listActiveSessions\(user\.id, user\.sessionVersion\)/);
+  assert.match(registry, /export async function listActiveSessions\(userId: number, currentSessionVersion: number\)/);
+  assert.match(registry, /session_version = \$\{currentSessionVersion\}/);
+});
+
 test('security page returns only safe session presentation fields and server-owned current binding', () => {
   assert.match(page, /currentSessionId=\{session\.sessionId\}/);
   assert.match(page, /absoluteExpiresAt, authenticatedAt, lastActivityAt, sessionId/);
@@ -47,7 +53,8 @@ test('password change and deletion deliberately invalidate authentication state'
   assert.match(passwordChange, /comparePasswords\(currentPassword, user\.passwordHash\)/);
   assert.match(passwordChange, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
   assert.match(passwordChange, /await clearSession\(\);\s*redirect\('\/sign-in\?password=changed'\)/);
-  assert.match(loginActions, /revokeAllUserSessions\(user\.id, 'account-deleted'\)/);
-  assert.match(loginActions, /forgetAllLoginDevices\(user\.id, 'account-deleted'\)/);
-  assert.match(loginActions, /requireFreshStepUp\(user, 'change-security-settings'/);
+  const deletion = loginActions.slice(loginActions.indexOf('export const deleteAccount'), loginActions.indexOf('const updateAccountSchema'));
+  assert.ok(deletion.indexOf('await deleteOwnAccount()') < deletion.indexOf("await revokeAllUserSessions(user.id, 'account-deleted')"));
+  assert.match(deletion, /forgetAllLoginDevices\(user\.id, 'account-deleted'\)/);
+  assert.match(deletion, /requireFreshStepUp\(user, 'change-security-settings'/);
 });
