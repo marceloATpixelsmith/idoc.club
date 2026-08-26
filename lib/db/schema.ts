@@ -522,6 +522,22 @@ export const mfaRememberedDevices = idocSchema.table('mfa_remembered_devices', {
   index('mfa_remembered_devices_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
 ]);
 
+/** Ordinary-member login verification trust. This is deliberately independent from TOTP factors. */
+export const loginTrustedDevices = idocSchema.table('login_trusted_devices', {
+  trustedDeviceId: varchar('trusted_device_id', { length: 36 }).primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  applicationId: varchar('application_id', { length: 100 }).notNull(),
+  tokenDigest: varchar('token_digest', { length: 64 }).notNull(),
+  sessionVersionAtIssue: integer('session_version_at_issue').notNull(),
+  issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokeReason: varchar('revoke_reason', { length: 200 }),
+}, (table) => [
+  uniqueIndex('login_trusted_devices_digest_unique').on(table.tokenDigest),
+  index('login_trusted_devices_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
+]);
+
 export type Profile = typeof profiles.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type ProfessionalRole = typeof professionalRoles.$inferSelect;

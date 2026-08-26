@@ -18,6 +18,7 @@ export function OtpEntryStep({
   resendAction,
   title = 'Verify your email',
   verifyAction,
+  verifyFields,
 }: {
   cancelAction: OtpAction;
   cancelLabel?: string;
@@ -25,6 +26,7 @@ export function OtpEntryStep({
   resendAction: OtpAction;
   title?: string;
   verifyAction: OtpAction;
+  verifyFields?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(verifyAction, { error: '' });
   const [resendState, resendFormAction, resendPending] = useActionState<ActionState, FormData>(resendAction, { error: '' });
@@ -69,6 +71,8 @@ export function OtpEntryStep({
               ))}
             </InputOTPGroup>
           </InputOTP>
+
+          {verifyFields}
 
           {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
 

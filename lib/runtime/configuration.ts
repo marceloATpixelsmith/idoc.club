@@ -62,6 +62,10 @@ export function mailchimpApiKeyForServer(environment: Environment = process.env)
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 
+export function loginDeviceTrustDigestKeyForServer(environment: Environment = process.env) {
+  return base64Key(environment, 'LOGIN_DEVICE_TRUST_DIGEST_KEY');
+}
+
 function base64Key(environment: Environment, name: string, minimumBytes = 32) {
   const value = required(environment, name);
   if (!/^[A-Za-z0-9_-]+={0,2}$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
@@ -121,6 +125,7 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     accountDelivery: accountDeliveryConfiguration(environment), adminEmail,
     authSecret: authSecretForServer(environment), baseUrl: baseUrlForServer(environment),
     cronSecret: secret(environment, 'CRON_SECRET'), databaseUrl: databaseUrlForServer(environment),
+    loginDeviceTrustDigestKey: loginDeviceTrustDigestKeyForServer(environment),
     mailchimpApiKey: mailchimpApiKeyForServer(environment),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
     stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),

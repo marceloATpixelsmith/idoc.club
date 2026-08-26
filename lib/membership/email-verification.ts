@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
@@ -61,7 +61,13 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
     if (existing && existing.id !== record.userId) return { status: 'invalid' };
     const [profile] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, record.userId)).limit(1);
     const [billing] = profile ? await tx.select({ externalCustomerId: billingAccounts.externalCustomerId }).from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1) : [];
-    await tx.update(users).set({ accountState: profile ? 'active' : 'onboarding', email: record.pendingEmail, emailVerifiedAt: now, updatedAt: now }).where(eq(users.id, record.userId));
+    await tx.update(users).set({
+      accountState: profile ? 'active' : 'onboarding',
+      email: record.pendingEmail,
+      emailVerifiedAt: now,
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+      updatedAt: now,
+    }).where(eq(users.id, record.userId));
     if (billing?.externalCustomerId && profile) {
       await tx.insert(notificationOutbox).values({
         kind: 'stripe.customer_email_sync',

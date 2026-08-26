@@ -24,15 +24,16 @@ test('login entry has no special migration or resend-verification UI', () => {
 test('anonymous login entry does not send email OTP before password', () => {
   const startLoginBody = loginActions.slice(loginActions.indexOf('export const startLogin'), loginActions.indexOf('const verifyOtpSchema'));
   assert.doesNotMatch(startLoginBody, /issueEmailOtp|eligibleLoginOtpUser|migrated_pending/);
-  assert.match(startLoginBody, /startPendingLogin\(email, false\)/);
+  assert.match(startLoginBody, /startPendingLogin\(email\)/);
 });
 
-test('password success gates only unverified accounts into email verification', () => {
+test('password success gates ordinary returning accounts into login verification or device trust', () => {
   const signInBody = sharedActions.slice(sharedActions.indexOf('export const signIn'), sharedActions.indexOf('const accountLinkSchema'));
   assert.match(signInBody, /comparePasswords\(password, foundUser\.passwordHash\)/);
   assert.match(signInBody, /if \(!foundUser\.emailVerifiedAt\)/);
   assert.match(signInBody, /issueEmailOtp\(email, 'login_verification'/);
-  assert.match(signInBody, /startPendingLogin\(email, true\)/);
+  assert.match(signInBody, /requireLoginOtp\(email, foundUser\.id, foundUser\.sessionVersion/);
+  assert.match(signInBody, /hasValidLoginDeviceTrust\(foundUser\)/);
   assert.match(signInBody, /await setSession\(foundUser\)/);
 });
 

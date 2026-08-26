@@ -84,14 +84,16 @@ export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'rate_limi
 /** Verifies a submitted code against the latest unconsumed, unexpired code for this email/purpose.
  * Each call against an existing record increments its attempt counter first. Verification attempts
  * are additionally rate-limited independently by email and origin. */
-export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown'): Promise<VerifyEmailOtpResult> {
+export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown', expectedUserId?: number): Promise<VerifyEmailOtpResult> {
   if (!/^\d{6}$/.test(code)) return 'invalid';
   const email = normalizeEmail(untrustedEmail);
   const allowed = await checkRateLimit(`email_otp_verify_${purpose}`, email, origin);
   if (!allowed) return 'rate_limited';
   return db.transaction(async (tx) => {
+    const conditions = [eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)];
+    if (expectedUserId !== undefined) conditions.push(eq(emailOtpCodes.userId, expectedUserId));
     const [record] = await tx.select().from(emailOtpCodes)
-      .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)))
+      .where(and(...conditions))
       .orderBy(desc(emailOtpCodes.createdAt)).limit(1);
     if (!record) return 'invalid';
     if (record.expiresAt.getTime() < Date.now()) return 'expired';
@@ -100,8 +102,11 @@ export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPu
       .where(eq(emailOtpCodes.id, record.id)).returning({ attemptCount: emailOtpCodes.attemptCount });
     if (updated.attemptCount > MAX_VERIFY_ATTEMPTS) return 'locked';
     if (digest(code) !== record.codeHash) return 'invalid';
-    await tx.update(emailOtpCodes).set({ consumedAt: new Date() }).where(eq(emailOtpCodes.id, record.id));
-    return 'verified';
+    const [consumed] = await tx.update(emailOtpCodes).set({ consumedAt: new Date() }).where(and(
+      eq(emailOtpCodes.id, record.id),
+      isNull(emailOtpCodes.consumedAt),
+    )).returning({ id: emailOtpCodes.id });
+    return consumed ? 'verified' : 'invalid';
   });
 }
 
