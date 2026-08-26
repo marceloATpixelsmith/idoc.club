@@ -76,7 +76,7 @@ IDOC's canonical provider flow uses:
 
 The Google buttons on login and signup now point to the canonical start route. A previously linked external identity may authenticate the corresponding eligible account. A first Google authentication may create a new onboarding account only when Google supplies a verified email and no existing IDOC account already uses that email. If an IDOC account already uses the email but has no linked Google identity, authentication fails closed and requires explicit authenticated account linking rather than silently attaching the provider identity.
 
-Google-authenticated sessions still pass through IDOC's canonical session establishment. Future MFA/step-up policy remains authoritative after primary authentication when those slices are implemented.
+Google-authenticated sessions pass through IDOC's canonical session establishment and the live privileged MFA policy. Administrator and Super Admin primary authentication is followed by canonical TOTP enrollment/challenge as required, and authenticated sensitive actions use a separate fresh purpose-bound `step-up` challenge rather than treating the normal session as sufficient authority.
 
 ## Canonical Google identity linking
 
@@ -87,6 +87,7 @@ The implemented linking boundary is:
 - the member must already have an authenticated IDOC session;
 - the member must freshly verify the current password before a link flow begins;
 - fresh verification expires after five minutes and is stored in a signed, `HttpOnly` server-authenticated cookie;
+- privileged Administrator/Super Admin link and unlink mutations additionally require canonical fresh TOTP step-up under the current sensitive-action policy;
 - the Google OAuth transaction is explicitly marked `external_identity_link` and bound to the authenticated IDOC user ID;
 - the callback rejects any mismatch between the OAuth transaction's authenticated user and the current IDOC session;
 - only the canonical Google issuer is accepted;
@@ -115,19 +116,19 @@ The security boundaries are:
 
 ## Security alignment already implemented
 
-The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, hardened canonical Google OIDC, and explicit authenticated Google identity linking/unlinking with fresh verification, atomic collision handling, audit evidence, and security notifications.
+The retrofit includes trusted Turnstile Siteverify binding, generic login failures, canonical password creation/storage policy with legacy-hash upgrade, persistent layered rate limiting, server-owned authorization boundaries for application roles, session-version invalidation on privileged role changes, purpose-bound email OTP infrastructure, persisted session revocation, hardened canonical Google OIDC, explicit authenticated Google identity linking/unlinking, privileged TOTP enrollment and routine challenge, password-reset MFA, recovery-authorized authenticator replacement, and action-bound fresh TOTP step-up for live privileged sensitive mutations. Implemented step-up authority is bound to the current canonical session and intended sensitive action and is backed by a persisted single-use step-up challenge.
 
 ## Remaining full-reference adoption work
 
 The target is the reference in its totality, not only password login and Google OIDC. Remaining work includes:
 
-- complete MFA/TOTP policy, enrollment, routine challenge, recovery codes, authenticator replacement, remembered-device rules, and fresh sensitive-action step-up;
+- complete remaining MFA/TOTP adoption work, especially approved remembered-device rules, broader account-security management, and any sensitive mutations not yet exposed by the product UI;
 - user-facing session inventory/revocation controls where required by product policy and remaining session signing-key rotation semantics;
-- complete server-owned authentication transaction semantics, replay prevention, atomic single-use evidence, and CSRF protection for cookie-authenticated unsafe mutations;
+- remaining server-owned authentication transaction semantics, CSRF protection for cookie-authenticated unsafe mutations, and negative/adversarial coverage not already implemented by the persisted canonical MFA/session flows;
 - canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;
 - full authorization negative testing, direct-resource checks, and single-app role enforcement;
 - canonical logging, security events, audit integrity, lifecycle cleanup, secrets/key handling, dependency failure behavior, and production operational evidence;
-- canonical UI surfaces that do not yet exist in IDOC because their trusted-server feature slices are still pending, including invitation, MFA, recovery-code, authenticator-management, session-management, and step-up screens;
+- canonical UI surfaces that do not yet exist in IDOC because their trusted-server feature slices are still pending, including invitation, broader authenticator/account-security management, and session-management screens. MFA enrollment/challenge, recovery-code, authenticator-replacement, and fresh step-up surfaces now exist;
 - final `AUTH-*` implementation/evidence matrix against contract `1.10.0`, schema `13.0.0`, validator `10.0.0`.
 
 ## Completion criterion

@@ -222,4 +222,6 @@ export async function clearSession() {
   }
   cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions());
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
+  cookieStore.delete('idoc_pending_step_up');
+  cookieStore.delete('idoc_fresh_step_up');
 }

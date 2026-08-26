@@ -5,13 +5,19 @@ import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { getPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
+import { getPendingStepUp } from '@/lib/auth/mfa/step-up';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { decryptTotpSecret, totpProvisioningUri } from '@/lib/auth/mfa/totp';
 import { MfaForm } from './mfa-form';
 
 export default async function MfaPage() {
   const pending = await getPendingPrimaryAuth();
-  if (!pending) redirect('/sign-in');
+  if (!pending) {
+    const stepUp = await getPendingStepUp();
+    if (!stepUp) redirect('/sign-in');
+    return <AuthShell description="Enter the current 6-digit code from your authenticator app to continue."
+      title="Verify it's you"><MfaForm mode="step-up" /></AuthShell>;
+  }
   if (pending.stage === 'recovery-ack') redirect('/sign-in');
   let provisioningUri: string | undefined;
   if (pending.stage === 'enrollment' || pending.stage === 'replacement') {

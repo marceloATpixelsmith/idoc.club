@@ -23,7 +23,8 @@ export async function listActiveRoles(userId: number) {
     .from(applicationRoles).where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
 }
 
-/** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6). */
+/** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6).
+ * The live Server Action additionally requires canonical fresh step-up before calling this request-context-agnostic data layer. */
 export async function grantApplicationRole(userId: number, untrustedInput: unknown) {
   const input = grantSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
@@ -62,6 +63,7 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
  * can't both read "2 remain" and both proceed — the second waits for the first's lock, then
  * re-evaluates and correctly sees only 1 remaining. Protects the last Super Admin from removal by
  * anyone, not just self-removal — a strict superset of what was asked, and simpler to implement.
+ * The live Server Action additionally requires canonical fresh step-up before calling this data layer.
  */
 export async function revokeApplicationRole(userId: number, untrustedInput: unknown) {
   const input = revokeSchema.parse(untrustedInput);

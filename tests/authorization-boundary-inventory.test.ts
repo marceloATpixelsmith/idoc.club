@@ -17,7 +17,7 @@ function exportedNames(source: string): string[] {
   return [...source.matchAll(/^export (?:const|async function) (\w+)/gm)].map((match) => match[1]);
 }
 
-const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authentication' | 'delegates-to-data-access'>> = {
+const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authentication' | 'authenticated-continuation' | 'delegates-to-data-access'>> = {
   'app/(login)/actions.ts': {
     signIn: 'pre-authentication', requestPasswordRecovery: 'pre-authentication', requestMigrationActivation: 'pre-authentication',
     resetPassword: 'pre-authentication', activateMigratedAccount: 'pre-authentication', resendVerification: 'pre-authentication',
@@ -38,6 +38,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     acknowledgeRecoveryCodes: 'pre-authentication', authorizeAuthenticatorRecovery: 'pre-authentication',
     beginAuthenticatorRecovery: 'pre-authentication', cancelMfa: 'pre-authentication',
     confirmTotpEnrollment: 'pre-authentication', verifyLoginTotp: 'pre-authentication',
+    verifyStepUpTotp: 'authenticated-continuation',
   },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfile: 'delegates-to-data-access', saveOwnMemberProfileForm: 'delegates-to-data-access',

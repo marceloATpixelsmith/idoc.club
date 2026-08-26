@@ -1,6 +1,9 @@
 'use server';
 
-import { updateMemberProfile } from '@/lib/membership/data-access';
+import { redirect } from 'next/navigation';
+import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data-access';
+import { requireSuperAdmin } from '@/lib/membership/authorization';
+import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
 import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
@@ -12,6 +15,16 @@ function friendlyError(error: unknown, fallback: string): FormState {
   if (error instanceof Error && error.name === 'AuthorizationError') return { error: 'You are not authorized to make this change.' };
   if (error instanceof Error) return { error: error.message };
   return { error: fallback };
+}
+
+async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
+  try {
+    const actor = await requireAccountAccess('administration');
+    requireSuperAdmin(actor);
+    return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required;
+  } catch (error) {
+    return friendlyError(error, 'The role change could not be authorized safely.');
+  }
 }
 
 export async function saveMemberProfileByAdminForm(_state: FormState, formData: FormData): Promise<FormState> {
@@ -67,6 +80,9 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
 
 export async function grantRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
   const userId = Number(formData.get('userId'));
+  const stepUp = await roleMutationNeedsStepUp();
+  if (typeof stepUp !== 'boolean') return stepUp;
+  if (stepUp) redirect('/mfa');
   try {
     await grantApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
     return { success: 'Role granted.' };
@@ -77,6 +93,9 @@ export async function grantRoleForm(_state: FormState, formData: FormData): Prom
 
 export async function revokeRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
   const userId = Number(formData.get('userId'));
+  const stepUp = await roleMutationNeedsStepUp();
+  if (typeof stepUp !== 'boolean') return stepUp;
+  if (stepUp) redirect('/mfa');
   try {
     await revokeApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
     return { success: 'Role revoked.' };
