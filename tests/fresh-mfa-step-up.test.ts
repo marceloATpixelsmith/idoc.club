@@ -38,6 +38,7 @@ test('fresh authority is atomically claimed from the satisfied persisted challen
   assert.match(store, /satisfied_factor_id=\$\{input\.factorId\}/);
   assert.match(store, /expires_at>\$\{timestamp\(input\.nowMs\)\}/);
   assert.match(store, /set expires_at=\$\{timestamp\(input\.nowMs\)\}/);
+  assert.match(store, /rows\.length === 1 \? 'consumed'/);
 });
 
 test('step-up verification uses canonical TOTP and rate limiting without creating a session', () => {
