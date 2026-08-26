@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db/drizzle';
-import { loginTrustedDevices } from '@/lib/db/schema';
+import { loginTrustedDevices, users } from '@/lib/db/schema';
 import { loginDeviceTrustDigestKeyForServer } from '@/lib/runtime/configuration';
 import { MFA_APPLICATION_ID } from './mfa/login';
 
@@ -18,14 +18,20 @@ function digest(token: string) {
 export async function hasValidLoginDeviceTrust(user: { id: number; sessionVersion: number }, now = new Date()) {
   const token = (await cookies()).get(LOGIN_DEVICE_TRUST_COOKIE)?.value;
   if (!token) return false;
-  const [record] = await db.select({ id: loginTrustedDevices.trustedDeviceId }).from(loginTrustedDevices).where(and(
-    eq(loginTrustedDevices.tokenDigest, digest(token)),
-    eq(loginTrustedDevices.userId, user.id),
-    eq(loginTrustedDevices.applicationId, MFA_APPLICATION_ID),
-    eq(loginTrustedDevices.sessionVersionAtIssue, user.sessionVersion),
-    isNull(loginTrustedDevices.revokedAt),
-    gt(loginTrustedDevices.expiresAt, now),
-  )).limit(1);
+  const [record] = await db.select({ id: loginTrustedDevices.trustedDeviceId })
+    .from(loginTrustedDevices)
+    .innerJoin(users, eq(users.id, loginTrustedDevices.userId))
+    .where(and(
+      eq(loginTrustedDevices.tokenDigest, digest(token)),
+      eq(loginTrustedDevices.userId, user.id),
+      eq(loginTrustedDevices.applicationId, MFA_APPLICATION_ID),
+      eq(loginTrustedDevices.sessionVersionAtIssue, user.sessionVersion),
+      eq(users.sessionVersion, user.sessionVersion),
+      isNull(users.deletedAt),
+      inArray(users.accountState, ['active', 'onboarding']),
+      isNull(loginTrustedDevices.revokedAt),
+      gt(loginTrustedDevices.expiresAt, now),
+    )).limit(1);
   return Boolean(record);
 }
 

@@ -4,13 +4,19 @@ import test from 'node:test';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
-test('ordinary login trust is opaque, digest-only, fixed-life, scoped, and non-sliding', () => {
+// Post-merge hardening keeps the ordinary-device bypass bound to current server-owned account state.
+
+test('ordinary login trust is opaque, digest-only, fixed-life, scoped, current-state bound, and non-sliding', () => {
   const trust = read('lib/auth/login-device-trust.ts');
   assert.match(trust, /randomBytes\(32\)\.toString\('base64url'\)/);
   assert.match(trust, /createHmac\('sha256', loginDeviceTrustDigestKeyForServer\(\)\)/);
   assert.match(trust, /14 \* 24 \* 60 \* 60/);
   assert.match(trust, /sessionVersionAtIssue/);
   assert.match(trust, /MFA_APPLICATION_ID/);
+  assert.match(trust, /innerJoin\(users, eq\(users\.id, loginTrustedDevices\.userId\)\)/);
+  assert.match(trust, /eq\(users\.sessionVersion, user\.sessionVersion\)/);
+  assert.match(trust, /isNull\(users\.deletedAt\)/);
+  assert.match(trust, /inArray\(users\.accountState, \['active', 'onboarding'\]\)/);
   assert.match(trust, /isNull\(loginTrustedDevices\.revokedAt\)/);
   assert.match(trust, /gt\(loginTrustedDevices\.expiresAt, now\)/);
   assert.doesNotMatch(trust.slice(trust.indexOf('hasValidLoginDeviceTrust'), trust.indexOf('issueLoginDeviceTrust')), /update\(/);
@@ -34,13 +40,34 @@ test('password precedes trust and privileged grants bypass ordinary trust lookup
   const ordinary = actions.indexOf("if (role === 'member')");
   const trust = actions.indexOf('hasValidLoginDeviceTrust(foundUser)');
   assert.ok(password >= 0 && role > password && ordinary > role && trust > ordinary);
-  assert.match(actions.slice(ordinary), /beginPrimaryMfa\(foundUser/);
+  assert.match(actions.slice(ordinary), /beginPrimaryMfa\(/);
+});
+
+test('trusted ordinary login rechecks current privilege and reloads the user before newly privileged MFA', () => {
+  const actions = read('app/(login)/actions.ts');
+  const trustedStart = actions.indexOf('if (await hasValidLoginDeviceTrust(foundUser))');
+  const trustedEnd = actions.indexOf("const origin = await requestOrigin();", trustedStart);
+  const trusted = actions.slice(trustedStart, trustedEnd);
+  assert.match(trusted, /const currentRole = await authoritativeMfaRole\(foundUser\.id\)/);
+  assert.match(trusted, /if \(currentRole === 'member'\)/);
+  assert.ok(trusted.indexOf('await clearPendingLogin()') < trusted.indexOf('await setSession(foundUser)'));
+  assert.match(trusted, /const \[currentUser\] = await db\.select\(\)\.from\(users\)/);
+  assert.match(trusted, /!currentUser \|\| currentUser\.deletedAt \|\| !\['active', 'onboarding'\]\.includes\(currentUser\.accountState\)/);
+  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', '\/dashboard'\)/);
+  assert.doesNotMatch(trusted, /beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)/);
+});
+
+test('successful privileged primary login clears obsolete pending-login continuation before MFA/session transition', () => {
+  const actions = read('app/(login)/actions.ts');
+  const privileged = actions.slice(actions.lastIndexOf("if (await beginPrimaryMfa(foundUser, 'password', '/dashboard'))"), actions.indexOf('const accountLinkSchema'));
+  assert.match(privileged, /if \(await beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)\) \{\s+await clearPendingLogin\(\);\s+redirect\('\/mfa'\);/);
+  assert.match(privileged, /await clearPendingLogin\(\);\s+await setSession\(foundUser\);/);
 });
 
 test('untrusted ordinary login cannot create a session before bound OTP verification', () => {
   const primary = read('app/(login)/actions.ts');
-  const ordinary = primary.slice(primary.indexOf("if (role === 'member')"), primary.indexOf("if (await beginPrimaryMfa(foundUser"));
-  const untrusted = ordinary.slice(ordinary.indexOf("const origin"));
+  const ordinary = primary.slice(primary.indexOf("if (role === 'member')"), primary.lastIndexOf("if (await beginPrimaryMfa(foundUser"));
+  const untrusted = ordinary.slice(ordinary.lastIndexOf("const origin"));
   assert.doesNotMatch(untrusted, /setSession\(/);
   assert.match(untrusted, /issueEmailOtp\(email, 'login_verification'/);
   assert.match(untrusted, /requireLoginOtp/);
