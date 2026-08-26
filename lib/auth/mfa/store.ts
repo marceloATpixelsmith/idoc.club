@@ -179,6 +179,23 @@ export class PostgresMfaStore implements MfaStore {
     });
   }
 
+  async consumeStepUpAuthority(input: { transactionId: string; factorId: string; subjectId: string; applicationId: string; nowMs: number }) {
+    const id = userId(input.subjectId);
+    if (id === null) return 'invalid' as const;
+    const rows = await this.sql`
+      update idoc.mfa_challenge_transactions
+      set expires_at=${timestamp(input.nowMs)}
+      where transaction_id=${input.transactionId}
+        and user_id=${id}
+        and application_id=${input.applicationId}
+        and purpose='step-up'
+        and consumed_at is not null
+        and satisfied_factor_id=${input.factorId}
+        and expires_at>${timestamp(input.nowMs)}
+      returning transaction_id`;
+    return rows.length === 1 ? 'consumed' as const : 'invalid' as const;
+  }
+
   async replaceRecoveryCodes(input: { subjectId: string; applicationId: string; generationId: string; codes: readonly RecoveryCodeRecord[]; nowMs: number }): Promise<void> {
     const id = userId(input.subjectId);
     if (id === null || input.codes.some((code) => code.subjectId !== input.subjectId || code.applicationId !== input.applicationId || code.generationId !== input.generationId)) {
