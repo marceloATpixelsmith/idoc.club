@@ -56,7 +56,12 @@ export function OtpEntryStep({
             maxLength={6}
             name="code"
             onChange={setCode}
-            onComplete={() => formRef.current?.requestSubmit()}
+            onComplete={() => {
+              // When the verification step has an additional choice (for example ordinary-member
+              // device trust), leave the completed code in place and let the user choose before
+              // submitting instead of racing an automatic submit with the extra form control.
+              if (!verifyFields) formRef.current?.requestSubmit();
+            }}
             pattern={REGEXP_ONLY_DIGITS}
             required
             value={code}
