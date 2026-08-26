@@ -68,9 +68,13 @@ export function loginDeviceTrustDigestKeyForServer(environment: Environment = pr
 
 function base64Key(environment: Environment, name: string, minimumBytes = 32) {
   const value = required(environment, name);
-  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
   const key = Buffer.from(value, 'base64url');
-  if (key.length < minimumBytes) throw new Error(`Invalid production configuration: ${name}.`);
+  // Buffer's decoder is deliberately forgiving. Require an unpadded canonical base64url
+  // round trip so punctuation, truncation, and non-zero trailing bits cannot be accepted.
+  if (key.length < minimumBytes || key.toString('base64url') !== value) {
+    throw new Error(`Invalid production configuration: ${name}.`);
+  }
   return key;
 }
 
@@ -90,7 +94,13 @@ export function mfaConfiguration(environment: Environment = process.env) {
     if (!/^[A-Za-z0-9_-]{1,30}$/.test(keyId) || typeof material !== 'string') {
       throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
     }
+    if (!/^[A-Za-z0-9_-]+$/.test(material)) {
+      throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+    }
     const key = Buffer.from(material, 'base64url');
+    if (key.toString('base64url') !== material) {
+      throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
+    }
     if (key.length !== 32) throw new Error('Invalid production configuration: MFA_TOTP_ENCRYPTION_KEYS.');
     encryptionKeys.set(keyId, key);
   }
