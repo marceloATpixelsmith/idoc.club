@@ -17,7 +17,7 @@ import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordSchema } from '@/lib/auth/password-policy';
 import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
 import { issueEmailOtp } from '@/lib/auth/email-otp';
-import { getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
+import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
@@ -85,8 +85,21 @@ export const signIn = validatedAction(signInSchema, async (data) => {
 
   if (role === 'member') {
     if (await hasValidLoginDeviceTrust(foundUser)) {
-      await setSession(foundUser);
-      redirect('/dashboard');
+      // Re-resolve the authoritative role immediately before accepting the ordinary-device bypass.
+      // A concurrent privilege grant increments sessionVersion and also changes this role; either
+      // condition forces the login back through the privileged MFA path instead of creating a lower-
+      // assurance session for a newly privileged account.
+      const currentRole = await authoritativeMfaRole(foundUser.id);
+      if (currentRole === 'member') {
+        await clearPendingLogin();
+        await setSession(foundUser);
+        redirect('/dashboard');
+      }
+      if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) {
+        await clearPendingLogin();
+        redirect('/mfa');
+      }
+      return { error: 'Your sign-in session expired. Start again.', email };
     }
     const origin = await requestOrigin();
     const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
@@ -96,7 +109,11 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     redirect('/sign-in');
   }
 
-  if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) redirect('/mfa');
+  if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) {
+    await clearPendingLogin();
+    redirect('/mfa');
+  }
+  await clearPendingLogin();
   await setSession(foundUser);
   redirect('/dashboard');
 });
