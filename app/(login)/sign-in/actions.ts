@@ -77,11 +77,19 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
     await db.update(users).set({
       emailVerifiedAt: user.emailVerifiedAt ?? now,
       updatedAt: now,
-    }).where(and(eq(users.id, user.id), eq(users.email, pending.email)));
+    }).where(and(eq(users.id, user.id), eq(users.email, pending.email), eq(users.sessionVersion, pending.sessionVersion)));
   }
 
   await clearPendingLogin();
-  const [verifiedUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  // Never adopt a newer sessionVersion into a continuation authenticated under older credentials.
+  // If a password reset/change, verified email change, or role mutation raced this OTP flow, this
+  // guarded final read fails. If such a change occurs after this read, both the device trust and
+  // canonical session below remain bound to the old version and are therefore immediately invalid.
+  const [verifiedUser] = await db.select().from(users).where(and(
+    eq(users.id, user.id),
+    eq(users.email, pending.email),
+    eq(users.sessionVersion, pending.sessionVersion),
+  )).limit(1);
   if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
     return { error: 'Your sign-in session expired. Start again.' };
   }
