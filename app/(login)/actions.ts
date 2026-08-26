@@ -207,9 +207,11 @@ export const deleteAccount = validatedActionWithUser(
     if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) redirect('/mfa');
     const isPasswordValid = await comparePasswords(data.password, user.passwordHash);
     if (!isPasswordValid) return { error: 'Incorrect password. Account deletion failed.' };
+    // deleteOwnAccount performs its own authenticated authorization lookup, so the canonical
+    // current session must remain active until that mutation has successfully committed.
+    await deleteOwnAccount();
     await revokeAllUserSessions(user.id, 'account-deleted');
     await forgetAllLoginDevices(user.id, 'account-deleted');
-    await deleteOwnAccount();
     await consumeFreshStepUp();
     await clearSession();
     redirect('/sign-in');
