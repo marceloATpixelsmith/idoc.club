@@ -24,10 +24,13 @@ test('trusted IDOC role mapping reads active grants and ignores client/profile r
 });
 
 test('password and Google issue sessions only after the shared MFA decision', () => {
-  for (const file of ['app/(login)/actions.ts', 'app/(login)/sign-in/actions.ts', 'app/api/auth/google/callback/route.ts']) {
+  for (const file of ['app/(login)/sign-in/actions.ts', 'app/api/auth/google/callback/route.ts']) {
     const body = source(file);
     assert.ok(body.indexOf('await beginPrimaryMfa(') < body.indexOf('await setSession('), file);
   }
+  const password = source('app/(login)/actions.ts');
+  const privileged = password.slice(password.lastIndexOf("if (await beginPrimaryMfa(foundUser"));
+  assert.ok(privileged.indexOf('await beginPrimaryMfa(') < privileged.indexOf('await setSession('));
   const googleAccount = source('lib/auth/google-account.ts');
   assert.doesNotMatch(googleAccount, /setSession\(/);
 });

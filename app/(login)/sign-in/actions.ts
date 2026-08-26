@@ -10,10 +10,11 @@ import { validatedAction } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
-import { clearPendingLogin, getPendingLogin, startPendingLogin } from '@/lib/auth/pending-login';
+import { clearPendingLogin, getPendingLogin, requireLoginOtp, startPendingLogin } from '@/lib/auth/pending-login';
 import { finalizeMigratedAccountAfterVerifiedPassword } from '@/lib/membership/account-recovery';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
-import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { issueLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -33,29 +34,33 @@ export const startLogin = validatedAction(startLoginSchema, async ({ email: rawE
     return { email, error: 'Too many attempts. Please try again in a few minutes.' };
   }
 
-  await startPendingLogin(email, false);
+  await startPendingLogin(email);
   redirect('/sign-in');
 });
 
-const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
+const verifyOtpSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.'),
+  remember: z.string().optional(),
+});
 
 /** This OTP exists only after the primary password credential has succeeded for an account whose
  * authoritative email state is still unverified. Successful verification persists that state before
  * normal session establishment. Migrated accounts additionally pass the established imported-data
  * foundation validator and atomic activation boundary before any session is created. */
-export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
+export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, remember }) => {
   const pending = await getPendingLogin();
-  if (!pending || !pending.legacy || pending.verified) return { error: 'Your sign-in session expired. Start again.' };
+  if (!pending || pending.stage !== 'login-otp') return { error: 'Your sign-in session expired. Start again.' };
 
   const origin = await requestOrigin();
-  const result = await verifyEmailOtp(pending.email, 'login_verification', code, origin);
+  const result = await verifyEmailOtp(pending.email, 'login_verification', code, origin, pending.userId);
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
   if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
   if (result === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   if (result !== 'verified') return { error: 'That code is incorrect.' };
 
-  const [user] = await db.select().from(users).where(eq(users.email, pending.email)).limit(1);
-  if (!user || !['active', 'onboarding', 'migrated_pending'].includes(user.accountState)) {
+  const [user] = await db.select().from(users).where(and(eq(users.id, pending.userId), eq(users.email, pending.email))).limit(1);
+  if (!user || user.sessionVersion !== pending.sessionVersion || user.deletedAt ||
+    !['active', 'onboarding', 'migrated_pending'].includes(user.accountState)) {
     await clearPendingLogin();
     return { error: 'Your sign-in session expired. Start again.' };
   }
@@ -72,15 +77,25 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) 
     await db.update(users).set({
       emailVerifiedAt: user.emailVerifiedAt ?? now,
       updatedAt: now,
-    }).where(and(eq(users.id, user.id), eq(users.email, pending.email)));
+    }).where(and(eq(users.id, user.id), eq(users.email, pending.email), eq(users.sessionVersion, pending.sessionVersion)));
   }
 
   await clearPendingLogin();
-  const [verifiedUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  // Never adopt a newer sessionVersion into a continuation authenticated under older credentials.
+  // If a password reset/change, verified email change, or role mutation raced this OTP flow, this
+  // guarded final read fails. If such a change occurs after this read, both the device trust and
+  // canonical session below remain bound to the old version and are therefore immediately invalid.
+  const [verifiedUser] = await db.select().from(users).where(and(
+    eq(users.id, user.id),
+    eq(users.email, pending.email),
+    eq(users.sessionVersion, pending.sessionVersion),
+  )).limit(1);
   if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
     return { error: 'Your sign-in session expired. Start again.' };
   }
   const destination = migrated ? '/dashboard/profile?confirmDetails=1' : '/dashboard';
+  const role = await authoritativeMfaRole(verifiedUser.id);
+  if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');
   await setSession(verifiedUser);
   redirect(destination);
@@ -88,11 +103,11 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code }) 
 
 export const resendLoginOtp = validatedAction(z.object({}), async () => {
   const pending = await getPendingLogin();
-  if (!pending || !pending.legacy || pending.verified) return { error: 'Your sign-in session expired. Start again.' };
+  if (!pending || pending.stage !== 'login-otp') return { error: 'Your sign-in session expired. Start again.' };
   const origin = await requestOrigin();
-  const [account] = await db.select({ id: users.id, emailVerifiedAt: users.emailVerifiedAt })
-    .from(users).where(eq(users.email, pending.email)).limit(1);
-  if (account && !account.emailVerifiedAt) {
+  const [account] = await db.select({ id: users.id })
+    .from(users).where(and(eq(users.id, pending.userId), eq(users.email, pending.email))).limit(1);
+  if (account) {
     await issueEmailOtp(pending.email, 'login_verification', { origin, userId: account.id });
   }
   return { success: 'If this address still requires verification, a new code was sent.' };

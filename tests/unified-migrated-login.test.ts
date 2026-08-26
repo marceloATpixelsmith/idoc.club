@@ -18,7 +18,7 @@ test('legacy activation fallback is not linked from normal sign-in', () => {
 test('anonymous login email entry is account-state neutral and password-first', () => {
   const actions = read('app/(login)/sign-in/actions.ts');
   const startLogin = actions.slice(actions.indexOf('export const startLogin'), actions.indexOf('const verifyOtpSchema'));
-  assert.match(startLogin, /await startPendingLogin\(email, false\);\s*redirect\('\/sign-in'\);/);
+  assert.match(startLogin, /await startPendingLogin\(email\);\s*redirect\('\/sign-in'\);/);
   assert.doesNotMatch(startLogin, /issueEmailOtp|eligibleLoginOtpUser|migrated_pending/);
 });
 
@@ -36,7 +36,7 @@ test('migrated members use the same password-first surface and validated activat
   const actions = read('app/(login)/actions.ts');
   const verification = read('app/(login)/sign-in/actions.ts');
   assert.doesNotMatch(page, /ActivatePasswordStep|accountState|migrated_pending/);
-  assert.match(actions, /finalizeMigratedAccountAfterVerifiedPassword\(foundUser\.id\)/);
+  assert.match(actions, /foundUser\.accountState === 'migrated_pending'[\s\S]*requireLoginOtp\(email, foundUser\.id, foundUser\.sessionVersion, false\)/);
   assert.match(verification, /finalizeMigratedAccountAfterVerifiedPassword\(user\.id\)/);
 });
 

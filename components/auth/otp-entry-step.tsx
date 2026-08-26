@@ -18,6 +18,7 @@ export function OtpEntryStep({
   resendAction,
   title = 'Verify your email',
   verifyAction,
+  verifyFields,
 }: {
   cancelAction: OtpAction;
   cancelLabel?: string;
@@ -25,6 +26,7 @@ export function OtpEntryStep({
   resendAction: OtpAction;
   title?: string;
   verifyAction: OtpAction;
+  verifyFields?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(verifyAction, { error: '' });
   const [resendState, resendFormAction, resendPending] = useActionState<ActionState, FormData>(resendAction, { error: '' });
@@ -54,7 +56,12 @@ export function OtpEntryStep({
             maxLength={6}
             name="code"
             onChange={setCode}
-            onComplete={() => formRef.current?.requestSubmit()}
+            onComplete={() => {
+              // When the verification step has an additional choice (for example ordinary-member
+              // device trust), leave the completed code in place and let the user choose before
+              // submitting instead of racing an automatic submit with the extra form control.
+              if (!verifyFields) formRef.current?.requestSubmit();
+            }}
             pattern={REGEXP_ONLY_DIGITS}
             required
             value={code}
@@ -69,6 +76,8 @@ export function OtpEntryStep({
               ))}
             </InputOTPGroup>
           </InputOTP>
+
+          {verifyFields}
 
           {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
 

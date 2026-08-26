@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
@@ -15,11 +15,12 @@ import { normalizeEmail } from '@/lib/membership/validation';
 import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordSchema } from '@/lib/auth/password-policy';
-import { consumeAccountToken, finalizeMigratedAccountAfterVerifiedPassword, requestAccountLink } from '@/lib/membership/account-recovery';
+import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
 import { issueEmailOtp } from '@/lib/auth/email-otp';
-import { startPendingLogin } from '@/lib/auth/pending-login';
+import { getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
 import { requestOrigin } from '@/lib/security/rate-limit';
-import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
+import { hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 
 const signInSchema = z.object({
@@ -35,6 +36,10 @@ const signInSchema = z.object({
 export const signIn = validatedAction(signInSchema, async (data) => {
   const { password } = data;
   const email = normalizeEmail(data.email);
+  const pending = await getPendingLogin();
+  if (!pending || pending.stage !== 'password' || pending.email !== email) {
+    return { error: 'Your sign-in session expired. Start again.', email };
+  }
 
   const matchingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (matchingUsers.length === 0) return { error: 'Invalid email or password. Please try again.', email };
@@ -53,6 +58,8 @@ export const signIn = validatedAction(signInSchema, async (data) => {
       .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)));
   }
 
+  const role = await authoritativeMfaRole(foundUser.id);
+
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();
     const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
@@ -62,20 +69,31 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     if (issued.status === 'rate_limited') {
       return { error: 'Too many attempts. Please try again in a few minutes.', email };
     }
-    await startPendingLogin(email, true);
+    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion,
+      role === 'member' && foundUser.accountState !== 'migrated_pending');
     redirect('/sign-in');
   }
 
   if (foundUser.accountState === 'migrated_pending') {
-    const activation = await finalizeMigratedAccountAfterVerifiedPassword(foundUser.id);
-    if (activation.status !== 'success') {
-      return { error: 'We could not finish signing you in automatically. Contact IDOC for help.', email };
+    const origin = await requestOrigin();
+    const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
+    if (issued.status === 'delivery_failed') return { error: 'We could not send the verification code. Please try again.', email };
+    if (issued.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.', email };
+    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, false);
+    redirect('/sign-in');
+  }
+
+  if (role === 'member') {
+    if (await hasValidLoginDeviceTrust(foundUser)) {
+      await setSession(foundUser);
+      redirect('/dashboard');
     }
-    const [activated] = await db.select().from(users).where(eq(users.id, foundUser.id)).limit(1);
-    if (!activated) return { error: 'Invalid email or password. Please try again.', email };
-    if (await beginPrimaryMfa(activated, 'password', '/dashboard/profile?confirmDetails=1')) redirect('/mfa');
-    await setSession(activated);
-    redirect('/dashboard/profile?confirmDetails=1');
+    const origin = await requestOrigin();
+    const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
+    if (issued.status === 'delivery_failed') return { error: 'We could not send the verification code. Please try again.', email };
+    if (issued.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.', email };
+    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, true);
+    redirect('/sign-in');
   }
 
   if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) redirect('/mfa');
@@ -145,7 +163,11 @@ export const updatePassword = validatedActionWithUser(
     if (confirmPassword !== newPassword) return { error: 'New password and confirmation password do not match.' };
 
     const newPasswordHash = await hashPassword(newPassword);
-    await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, user.id));
+    await db.update(users).set({
+      passwordHash: newPasswordHash,
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(users.id, user.id));
     await consumeFreshStepUp();
     return { success: 'Password updated successfully.' };
   }

@@ -122,7 +122,7 @@ The retrofit includes trusted Turnstile Siteverify binding, generic login failur
 
 The target is the reference in its totality, not only password login and Google OIDC. Remaining work includes:
 
-- complete remaining MFA/TOTP adoption work, especially approved remembered-device rules, broader account-security management, and any sensitive mutations not yet exposed by the product UI;
+- complete remaining MFA/TOTP adoption work beyond the implemented ordinary-member 14-day login trust policy, especially broader account-security management and any sensitive mutations not yet exposed by the product UI;
 - user-facing session inventory/revocation controls where required by product policy and remaining session signing-key rotation semantics;
 - remaining server-owned authentication transaction semantics, CSRF protection for cookie-authenticated unsafe mutations, and negative/adversarial coverage not already implemented by the persisted canonical MFA/session flows;
 - canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;
@@ -134,3 +134,8 @@ The target is the reference in its totality, not only password login and Google 
 ## Completion criterion
 
 The retrofit is not complete until every applicable canonical requirement has implementation, test, and operational evidence and the complete auth surface uses the canonical UI/branding contract. Following the reference is not a compliance certification and does not by itself prove the deployed application secure.
+
+
+## IDOC ordinary-member login trust
+
+Ordinary password login now applies the approved IDOC-specific flow after password and eligibility checks: authoritative grants are resolved; privileged grants continue to canonical TOTP without consulting ordinary trust; an ordinary member either presents a valid user/application/session-version-bound opaque trusted-device credential or completes a purpose-bound emailed `login_verification` OTP. Opting in after successful OTP creates fixed 14-day server-revocable trust. This persistence is separate from canonical factor-bound `mfa_remembered_devices`; it never applies to Google login, privileged login, enrollment, recovery, replacement, or step-up.
