@@ -12,6 +12,7 @@ import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000;
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+const recipientDiscriminator = (email: string) => createHash('sha256').update(email).digest('hex').slice(0, 16);
 
 export async function issueEmailVerification(userId: number, untrustedEmail: string) {
   const pendingEmail = normalizeEmail(untrustedEmail);
@@ -79,8 +80,9 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
     await tx.insert(auditLog).values({ actorId: record.userId, action: 'account.email.verified', entityId: String(record.userId), entityType: 'user' });
     if (currentUser && currentUser.email !== record.pendingEmail) {
       for (const recipient of [record.pendingEmail, currentUser.email]) {
+        const dedupeKey = `email-changed:${record.id}:${recipientDiscriminator(recipient)}`;
         await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-          values(${record.userId},'verified_email_changed',${recipient},${`email-changed:${record.id}:${recipient}`})
+          values(${record.userId},'verified_email_changed',${recipient},${dedupeKey})
           on conflict (dedupe_key) where dedupe_key is not null do nothing`);
       }
     }
