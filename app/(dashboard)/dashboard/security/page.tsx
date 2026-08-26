@@ -13,7 +13,7 @@ export default async function SecurityPage() {
   const role = await authoritativeMfaRole(user.id);
   const privileged = role === 'admin' || role === 'super-admin';
   const [sessions, currentDeviceRemembered, factor] = await Promise.all([
-    listActiveSessions(user.id),
+    listActiveSessions(user.id, user.sessionVersion),
     privileged ? Promise.resolve(false) : hasValidLoginDeviceTrust(user),
     privileged ? mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID) : Promise.resolve(null),
   ]);
