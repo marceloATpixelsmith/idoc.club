@@ -12,7 +12,7 @@ export type PendingPrimaryAuth = {
   factorId: string;
   method: 'google' | 'password';
   sessionVersion: number;
-  stage: 'challenge' | 'enrollment' | 'recovery-ack';
+  stage: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack';
   subjectId: number;
   transactionId: string;
   returnTo: string;
@@ -36,7 +36,7 @@ export async function getPendingPrimaryAuth(): Promise<PendingPrimaryAuth | null
     if (payload.applicationId !== 'idoc.club' || !Number.isSafeInteger(payload.subjectId) ||
       !Number.isSafeInteger(payload.sessionVersion) || typeof payload.factorId !== 'string' ||
       typeof payload.transactionId !== 'string' || !['google', 'password'].includes(String(payload.method)) ||
-      !['challenge', 'enrollment', 'recovery-ack'].includes(String(payload.stage)) || typeof payload.returnTo !== 'string') return null;
+      !['challenge', 'enrollment', 'recovery-entry', 'replacement', 'recovery-ack'].includes(String(payload.stage)) || typeof payload.returnTo !== 'string') return null;
     return payload as unknown as PendingPrimaryAuth;
   } catch { return null; }
 }

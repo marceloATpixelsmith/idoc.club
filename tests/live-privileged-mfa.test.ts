@@ -41,6 +41,35 @@ test('pending MFA is separate from canonical sessions and MFA completion orders 
   assert.ok(actions.indexOf("result.status !== 'activated'") < actions.lastIndexOf('await setSession(context.user)'));
 });
 
+test('recovery authorizes only purpose-bound replacement and acknowledgement precedes session creation', () => {
+  const actions = source('app/(login)/mfa/actions.ts');
+  const finalization = source('lib/auth/mfa/replacement-finalization.ts');
+  assert.match(actions, /consumeRecoveryCode\(/);
+  assert.match(actions, /purpose: 'authenticator-replacement'/);
+  assert.match(actions, /mfa_recovery_code_verify/);
+  assert.match(actions, /mfa_enrollment_confirm/);
+  assert.doesNotMatch(actions.slice(actions.indexOf('export const authorizeAuthenticatorRecovery'),
+    actions.indexOf('export const confirmTotpEnrollment')), /setSession|registerSession/);
+  const acknowledge = actions.indexOf('export const acknowledgeRecoveryCodes');
+  assert.ok(actions.indexOf('await setSession(context.user)', acknowledge) > acknowledge);
+  assert.match(actions, /finalizeAuthenticatorReplacement\(/);
+  assert.ok(actions.indexOf("stage: 'recovery-ack'") < actions.indexOf('await finalizeAuthenticatorReplacement('));
+  assert.match(finalization, /client\.begin\(/);
+  assert.match(finalization, /status='replaced'/);
+  assert.match(finalization, /delete from idoc\.mfa_recovery_codes/);
+  assert.match(finalization, /session_version=session_version\+1/);
+  assert.match(finalization, /update idoc\.auth_sessions/);
+});
+
+test('recovery continuation is authenticated, short-lived, and contains no factor plaintext', () => {
+  const pending = source('lib/auth/mfa/pending-primary-auth.ts');
+  assert.match(pending, /SignJWT/);
+  assert.match(pending, /TTL_SECONDS = 10 \* 60/);
+  assert.match(pending, /httpOnly: true/);
+  assert.match(pending, /sameSite: 'lax'/);
+  assert.doesNotMatch(pending, /recoveryCode|totpSecret|encryptedSecret/);
+});
+
 test('MFA crypto configuration fails closed without or with malformed keys', () => {
   assert.throws(() => mfaConfiguration({}), /MFA_TOTP_ACTIVE_KEY_ID/);
   assert.throws(() => mfaConfiguration({ MFA_PENDING_AUTH_SIGNING_KEY: 'bad', MFA_RECOVERY_CODE_DIGEST_KEY: 'bad',

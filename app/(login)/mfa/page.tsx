@@ -14,7 +14,7 @@ export default async function MfaPage() {
   if (!pending) redirect('/sign-in');
   if (pending.stage === 'recovery-ack') redirect('/sign-in');
   let provisioningUri: string | undefined;
-  if (pending.stage === 'enrollment') {
+  if (pending.stage === 'enrollment' || pending.stage === 'replacement') {
     const enrollment = await mfaStore.getPendingTotpEnrollment({ applicationId: pending.applicationId,
       factorId: pending.factorId, nowMs: Date.now(), subjectId: String(pending.subjectId), transactionId: pending.transactionId });
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, pending.subjectId)).limit(1);
@@ -25,8 +25,10 @@ export default async function MfaPage() {
         const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key;
       }) });
   }
-  return <AuthShell description={pending.stage === 'enrollment' ? 'Administrator accounts require an authenticator app.' : 'Enter the current code from your authenticator app.'}
-    title={pending.stage === 'enrollment' ? 'Set up authenticator' : 'Two-step verification'}>
+  const setup = pending.stage === 'enrollment' || pending.stage === 'replacement';
+  return <AuthShell description={pending.stage === 'recovery-entry' ? 'Use a saved recovery code to replace your authenticator.'
+    : setup ? 'Add the new account to your authenticator app.' : 'Enter the current code from your authenticator app.'}
+    title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : setup ? 'Set up authenticator' : 'Two-step verification'}>
     <MfaForm mode={pending.stage} provisioningUri={provisioningUri} />
   </AuthShell>;
 }

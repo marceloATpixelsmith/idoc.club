@@ -18,11 +18,10 @@ export function generateRecoveryCode(): string {
   return `${raw.slice(0, 8)}-${raw.slice(8, 16)}-${raw.slice(16, 24)}-${raw.slice(24, 32)}`;
 }
 
-export async function replaceRecoveryCodes(input: {
+export function prepareRecoveryCodes(input: {
   subjectId: string;
   applicationId: string;
   digestSecret: Buffer;
-  store: MfaStore;
   nowMs?: number;
 }) {
   if (input.digestSecret.length < 32) {
@@ -30,8 +29,8 @@ export async function replaceRecoveryCodes(input: {
   }
   const nowMs = input.nowMs ?? Date.now();
   const generationId = randomUUID();
-  const plaintextCodes = Array.from({ length: RECOVERY_CODE_COUNT }, () => generateRecoveryCode());
-  const records: RecoveryCodeRecord[] = plaintextCodes.map((code) => ({
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => generateRecoveryCode());
+  const records: RecoveryCodeRecord[] = codes.map((code) => ({
     recoveryCodeId: randomUUID(),
     subjectId: input.subjectId,
     applicationId: input.applicationId,
@@ -40,14 +39,25 @@ export async function replaceRecoveryCodes(input: {
     consumedAtMs: null,
     generationId,
   }));
+  return { generationId, codes, records, nowMs };
+}
+
+export async function replaceRecoveryCodes(input: {
+  subjectId: string;
+  applicationId: string;
+  digestSecret: Buffer;
+  store: MfaStore;
+  nowMs?: number;
+}) {
+  const prepared = prepareRecoveryCodes(input);
   await input.store.replaceRecoveryCodes({
     subjectId: input.subjectId,
     applicationId: input.applicationId,
-    generationId,
-    codes: records,
-    nowMs,
+    generationId: prepared.generationId,
+    codes: prepared.records,
+    nowMs: prepared.nowMs,
   });
-  return { generationId, codes: plaintextCodes };
+  return { generationId: prepared.generationId, codes: prepared.codes };
 }
 
 export async function consumeRecoveryCode(input: {

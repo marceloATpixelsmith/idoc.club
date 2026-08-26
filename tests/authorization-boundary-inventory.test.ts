@@ -34,6 +34,11 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     startPasswordReset: 'pre-authentication', verifyPasswordResetOtp: 'pre-authentication', resendPasswordResetOtp: 'pre-authentication',
     cancelPasswordReset: 'pre-authentication', completePasswordReset: 'pre-authentication',
   },
+  'app/(login)/mfa/actions.ts': {
+    acknowledgeRecoveryCodes: 'pre-authentication', authorizeAuthenticatorRecovery: 'pre-authentication',
+    beginAuthenticatorRecovery: 'pre-authentication', cancelMfa: 'pre-authentication',
+    confirmTotpEnrollment: 'pre-authentication', verifyLoginTotp: 'pre-authentication',
+  },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfile: 'delegates-to-data-access', saveOwnMemberProfileForm: 'delegates-to-data-access',
   },
