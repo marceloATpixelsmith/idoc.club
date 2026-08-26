@@ -17,7 +17,7 @@ test('current-session management is bound to the authenticated canonical session
   assert.match(actions, /if \(sessionId === current\.sessionId\)/);
   assert.match(actions, /revokeSession\(sessionId, user\.id/);
   assert.match(actions, /revokeOtherUserSessionsWithEvidence\(\{[\s\S]*currentSessionId: current\.sessionId[\s\S]*userId: user\.id/);
-  assert.match(registry, /where user_id = \$\{input\.userId\} and session_id <> \$\{input\.currentSessionId\}/);
+  assert.match(registry, /where\s+user_id\s*=\s*\$\{input\.userId\}\s+and\s+session_id\s*<>\s*\$\{input\.currentSessionId\}/);
   assert.match(registry, /client\.begin\(/);
   assert.match(registry, /auth_security_notification_outbox/);
 });
