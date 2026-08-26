@@ -78,6 +78,13 @@ export interface MfaStore {
     counter: number;
     nowMs: number;
   }): Promise<'accepted' | 'replay' | 'inactive' | 'invalid-transaction' | 'attempts-exhausted'>;
+  consumeStepUpAuthority(input: {
+    transactionId: string;
+    factorId: string;
+    subjectId: string;
+    applicationId: string;
+    nowMs: number;
+  }): Promise<'consumed' | 'invalid'>;
   recordChallengeFailure(input: {
     transactionId: string;
     subjectId: string;
