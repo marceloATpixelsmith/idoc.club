@@ -188,11 +188,19 @@ export const updatePassword = validatedActionWithUser(
     if (confirmPassword !== newPassword) return { error: 'New password and confirmation password do not match.' };
 
     const newPasswordHash = await hashPassword(newPassword);
-    await db.update(users).set({
-      passwordHash: newPasswordHash,
-      sessionVersion: sql`${users.sessionVersion} + 1`,
-      updatedAt: new Date(),
-    }).where(eq(users.id, user.id));
+    await db.transaction(async (tx) => {
+      const [changed] = await tx.update(users).set({
+        passwordHash: newPasswordHash,
+        sessionVersion: sql`${users.sessionVersion} + 1`,
+        updatedAt: new Date(),
+      }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });
+      if (!changed) throw new Error('Your account changed. Sign in again.');
+      await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+        values(${user.id},'account.password.changed','user',${String(user.id)},'self-service')`);
+      await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+        values(${user.id},'password_changed',${user.email},${`password-changed:${user.id}:${user.sessionVersion + 1}`})
+        on conflict (dedupe_key) where dedupe_key is not null do nothing`);
+    });
     await consumeFreshStepUp();
     await clearSession();
     redirect('/sign-in?password=changed');

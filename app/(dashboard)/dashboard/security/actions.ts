@@ -16,7 +16,7 @@ import { unlinkGoogleIdentity } from '@/lib/auth/google-identity-linking';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/login-device-trust';
-import { revokeOtherUserSessions, revokeSession } from '@/lib/auth/session-registry';
+import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
 
@@ -52,8 +52,13 @@ export const logOutSession = validatedActionWithUser(sessionSchema, async ({ ses
 
 export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_, __, user) => {
   const current = await canonicalSession(user.id);
-  await revokeOtherUserSessions(user.id, current.sessionId, 'member-security-other-sessions-signout');
-  await audit(user.id, 'security.sessions.others_logged_out', 'member-security-page');
+  await revokeOtherUserSessionsWithEvidence({
+    currentSessionId: current.sessionId,
+    dedupeKey: `other-sessions:${user.id}:${randomUUID()}`,
+    reason: 'member-security-other-sessions-signout',
+    recipientEmail: user.email,
+    userId: user.id,
+  });
   refreshSecurityPage();
   return { success: 'Your other sessions have been logged out.' };
 });

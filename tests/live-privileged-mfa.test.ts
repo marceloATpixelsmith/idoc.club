@@ -46,8 +46,13 @@ test('pending MFA is separate from canonical sessions and MFA completion orders 
 
 test('recovery authorizes only purpose-bound replacement and acknowledgement precedes session creation', () => {
   const actions = source('app/(login)/mfa/actions.ts');
+  const recoverySecurity = source('lib/auth/mfa/recovery-security.ts');
   const finalization = source('lib/auth/mfa/replacement-finalization.ts');
-  assert.match(actions, /consumeRecoveryCode\(/);
+  assert.match(actions, /consumeRecoveryCodeWithEvidence\(/);
+  assert.match(recoverySecurity, /client\.begin\(/);
+  assert.match(recoverySecurity, /update idoc\.mfa_recovery_codes set consumed_at=/);
+  assert.match(recoverySecurity, /auth\.mfa\.recovery_code\.used/);
+  assert.match(recoverySecurity, /auth_security_notification_outbox/);
   assert.match(actions, /purpose: 'authenticator-replacement'/);
   assert.match(actions, /mfa_recovery_code_verify/);
   assert.match(actions, /mfa_enrollment_confirm/);

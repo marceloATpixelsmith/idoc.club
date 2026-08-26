@@ -183,6 +183,9 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     await tx.update(users).set({ passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
     await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
     await tx.insert(auditLog).values({ actorId: record.userId, action: `account.${purpose}.completed`, entityId: String(record.userId), entityType: 'user' });
+    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+      select id,'password_reset_completed',email,${`password-reset-token:${record.id}`} from idoc.users where id=${record.userId}
+      on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { status: 'success' as const };
   });
 }

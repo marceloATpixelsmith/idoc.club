@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { sql } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
+import { client, db } from '@/lib/db/drizzle';
 
 export type PersistedSession = {
   sessionId: string;
@@ -89,6 +89,28 @@ export async function revokeOtherUserSessions(userId: number, currentSessionId: 
     set revoked_at = coalesce(revoked_at, now()), revoke_reason = coalesce(revoke_reason, ${reason}), updated_at = now()
     where user_id = ${userId} and session_id <> ${currentSessionId} and revoked_at is null
   `);
+}
+
+export async function revokeOtherUserSessionsWithEvidence(input: {
+  userId: number;
+  currentSessionId: string;
+  reason: string;
+  dedupeKey: string;
+  recipientEmail: string;
+}) {
+  return client.begin(async (tx) => {
+    const revoked = await tx<{ session_id: string }[]>`
+      update idoc.auth_sessions
+      set revoked_at=coalesce(revoked_at,now()),revoke_reason=coalesce(revoke_reason,${input.reason}),updated_at=now()
+      where user_id=${input.userId} and session_id<>${input.currentSessionId} and revoked_at is null
+      returning session_id`;
+    await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      values(${input.userId},'security.sessions.others_logged_out','user',${String(input.userId)},'member-security-page')`;
+    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+      values(${input.userId},'other_sessions_revoked',${input.recipientEmail},${input.dedupeKey})
+      on conflict (dedupe_key) where dedupe_key is not null do nothing`;
+    return revoked.length;
+  });
 }
 
 export async function listActiveSessions(userId: number, currentSessionVersion: number) {

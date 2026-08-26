@@ -206,3 +206,25 @@ Passwords require 12–128 characters. Spaces and Unicode are allowed, paste is 
 Ordinary members can see whether the current browser has valid 14-day login trust, forget the server-read current credential, or revoke all of their ordinary IDOC login-trust records. Administrator and Super Admin accounts never receive this ordinary-device UI. Privileged accounts instead see their active authenticator status and enter the existing recovery-authorized replacement state machine; recovery codes remain one-time and new codes are issued only by that canonical replacement flow.
 
 Password change retains current-password and privileged fresh-step-up checks, increments `sessionVersion`, revokes the current registry session, clears the browser session, and deliberately returns the member to sign-in. Account deletion retains password confirmation, requires the canonical privileged step-up policy where applicable, revokes all persisted sessions and ordinary trusted devices, and then clears authentication. Management mutations record secret-free audit evidence.
+
+## Security-event evidence and notification inventory
+
+The Release 1 item-8 sweep uses append-only `audit_log` evidence and the retrying `auth_security_notification_outbox`; it does not persist credentials in either store. The inventory is authoritative for implemented behavior:
+
+| Event | Durable audit | Owner notice | Session/trust result | Behavioral evidence |
+|---|---|---|---|---|
+| Privileged TOTP enrollment | `auth.mfa.authenticator.enrolled` | Yes | Enrollment session only after recovery-code acknowledgement; ordinary trust never applies | MFA runtime and security-completeness tests |
+| Privileged routine TOTP login / failed or exhausted challenge | Challenge state/counters are durable; no duplicate success audit | No routine-login email | New canonical session only after accepted challenge; exhaustion fails closed | MFA PostgreSQL replay, expiry, purpose and exhaustion tests |
+| Password change | `account.password.changed` | Yes | Conditional `sessionVersion` rotation; current cookie cleared and every old session becomes unusable/invisible | account-security and session lifecycle tests |
+| Password reset (email OTP, privileged TOTP, compatibility link) | `account.password_reset.completed` | Yes | `sessionVersion` rotation and persisted-session revocation; no retained session | password-reset and token lifecycle tests |
+| Recovery-code use | `auth.mfa.recovery_code.used` (never code/digest) | Yes | Restricted replacement continuation only; never a normal session | MFA store/runtime replay and continuation tests |
+| Authenticator replacement | `auth.mfa.authenticator.replaced` | Yes | Old factor/device trust revoked, codes rotated, version incremented, sessions revoked, acknowledgement required | replacement PostgreSQL/runtime tests |
+| Fresh step-up | Single-use challenge/authority evidence | No | Bound to action, subject, application, exact session and version; creates no session | step-up negative/replay tests |
+| Ordinary login trust issue/revoke | Digest-only device row; explicit revocations audited | No (anti-spam policy) | Fixed expiry, ownership/application/version/eligibility checks; raw token is not a session | login-trust PostgreSQL tests |
+| Verified login-email change | `account.email.verified` | Yes, both old and new addresses | `sessionVersion` increment invalidates sessions and ordinary trust | email-change PostgreSQL tests |
+| Google identity link/unlink | `auth.google_identity.linked` / `.unlinked` | Yes | Fresh password plus privileged step-up; no implicit identity-by-email | identity-ownership PostgreSQL tests |
+| One session / other sessions / normal sign-out | Security-page audit for managed revocations; registry reason for sign-out | Mass other-session revocation only | Ownership-scoped; revoke-others preserves server-owned current session | persisted-session and management tests |
+| Administrator or Super Admin grant/revoke | `admin.role.granted` / `.revoked` with actor, subject, role and reason | Yes to target | `sessionVersion` increment; stale lower/higher-assurance sessions and ordinary trust fail; final Super Admin is concurrency protected | role/session and PostgreSQL concurrency tests |
+| Account deletion | `account.deleted` | No deliverable address retained | Authorize, commit deletion, revoke sessions/devices, clear cookie | lifecycle and management tests |
+
+Notification routing snapshots the intended address at mutation time. Content states the event time and emergency action without IP, inferred device/location, session identifiers, OTP/TOTP values, recovery material, tokens, digests, cookies, JWTs, or provider/database errors. A unique event dedupe key prevents harmful repeat enqueue. Provider delivery is asynchronous; retry/dead-letter state cannot roll back the committed security mutation.

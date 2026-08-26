@@ -16,8 +16,10 @@ test('current-session management is bound to the authenticated canonical session
   assert.match(actions, /session\.user\.id !== userId/);
   assert.match(actions, /if \(sessionId === current\.sessionId\)/);
   assert.match(actions, /revokeSession\(sessionId, user\.id/);
-  assert.match(actions, /revokeOtherUserSessions\(user\.id, current\.sessionId/);
-  assert.match(registry, /where user_id = \$\{userId\} and session_id <> \$\{currentSessionId\}/);
+  assert.match(actions, /revokeOtherUserSessionsWithEvidence\(\{[\s\S]*currentSessionId: current\.sessionId[\s\S]*userId: user\.id/);
+  assert.match(registry, /where\s+user_id\s*=\s*\$\{input\.userId\}\s+and\s+session_id\s*<>\s*\$\{input\.currentSessionId\}/);
+  assert.match(registry, /client\.begin\(/);
+  assert.match(registry, /auth_security_notification_outbox/);
 });
 
 test('security page lists only registry sessions matching the current server-owned session version', () => {
