@@ -6,14 +6,6 @@ import { db } from '@/lib/db/drizzle';
 import { applicationRoles, auditLog, users } from '@/lib/db/schema';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator, requireSuperAdmin } from './authorization';
-import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
-
-export class FreshStepUpRequiredError extends Error {
-  constructor() {
-    super('Fresh authenticator verification is required.');
-    this.name = 'FreshStepUpRequiredError';
-  }
-}
 
 // 'member' is a valid value in the application_roles_role_check constraint but is never actually
 // granted anywhere in this codebase — vestigial. Only these two are real, grantable roles.
@@ -31,16 +23,14 @@ export async function listActiveRoles(userId: number) {
     .from(applicationRoles).where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
 }
 
-/** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6). */
+/** The first real production call site for requireSuperAdmin — role granting is Super-Admin-only (docs/01 §6).
+ * The live Server Action additionally requires canonical fresh step-up before calling this request-context-agnostic data layer. */
 export async function grantApplicationRole(userId: number, untrustedInput: unknown) {
   const input = grantSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  if ((await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required) {
-    throw new FreshStepUpRequiredError();
-  }
 
-  const result = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     // application_roles_active_unique is a partial unique index (userId, role) where revokedAt is
     // null — a soft-revoked prior grant doesn't block a fresh one, only an actively-held role does.
     const [inserted] = await tx.insert(applicationRoles).values({ grantedBy: actor.id, role: input.role, userId })
@@ -65,8 +55,6 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
     });
     return { grant: inserted };
   });
-  await consumeFreshStepUp();
-  return result;
 }
 
 /**
@@ -75,16 +63,14 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
  * can't both read "2 remain" and both proceed — the second waits for the first's lock, then
  * re-evaluates and correctly sees only 1 remaining. Protects the last Super Admin from removal by
  * anyone, not just self-removal — a strict superset of what was asked, and simpler to implement.
+ * The live Server Action additionally requires canonical fresh step-up before calling this data layer.
  */
 export async function revokeApplicationRole(userId: number, untrustedInput: unknown) {
   const input = revokeSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  if ((await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required) {
-    throw new FreshStepUpRequiredError();
-  }
 
-  const result = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     if (input.role === 'super_admin') {
       const activeSuperAdmins = await tx.select({ id: applicationRoles.id }).from(applicationRoles)
         .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt)))
@@ -112,6 +98,4 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
     });
     return { revoked };
   });
-  await consumeFreshStepUp();
-  return result;
 }
