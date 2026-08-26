@@ -139,3 +139,7 @@ The retrofit is not complete until every applicable canonical requirement has im
 ## IDOC ordinary-member login trust
 
 Ordinary password login now applies the approved IDOC-specific flow after password and eligibility checks: authoritative grants are resolved; privileged grants continue to canonical TOTP without consulting ordinary trust; an ordinary member either presents a valid user/application/session-version-bound opaque trusted-device credential or completes a purpose-bound emailed `login_verification` OTP. Opting in after successful OTP creates fixed 14-day server-revocable trust. This persistence is separate from canonical factor-bound `mfa_remembered_devices`; it never applies to Google login, privileged login, enrollment, recovery, replacement, or step-up.
+
+## Account-security management retrofit
+
+The live `/dashboard/security` page now presents the canonical registry-backed session inventory, using the authenticated server session ID for its current-session marker and ownership-scoped revocation. Ordinary members can manage the separate ordinary login-trust credential; privileged users instead receive an entry into the existing recovery-authorized authenticator replacement state machine. Password changes deliberately clear the now-version-stale session and account deletion revokes session/device credentials before completion. No secret or raw credential material crosses the rendered management boundary.

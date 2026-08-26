@@ -15,6 +15,12 @@ function digest(token: string) {
   return createHmac('sha256', loginDeviceTrustDigestKeyForServer()).update(token).digest('hex');
 }
 
+function clearCookie() {
+  return cookies().then((store) => store.set(LOGIN_DEVICE_TRUST_COOKIE, '', {
+    expires: new Date(0), httpOnly: true, maxAge: 0, path: '/', sameSite: 'lax', secure: true,
+  }));
+}
+
 export async function hasValidLoginDeviceTrust(user: { id: number; sessionVersion: number }, now = new Date()) {
   const token = (await cookies()).get(LOGIN_DEVICE_TRUST_COOKIE)?.value;
   if (!token) return false;
@@ -63,4 +69,23 @@ export async function revokeLoginDeviceTrustForUser(userId: number, reason: stri
     eq(loginTrustedDevices.applicationId, MFA_APPLICATION_ID),
     isNull(loginTrustedDevices.revokedAt),
   ));
+}
+
+/** Revokes only the server-read credential for this user and application. */
+export async function forgetCurrentLoginDevice(userId: number, reason = 'member-forgot-device', now = new Date()) {
+  const token = (await cookies()).get(LOGIN_DEVICE_TRUST_COOKIE)?.value;
+  if (token) {
+    await db.update(loginTrustedDevices).set({ revokeReason: reason, revokedAt: now }).where(and(
+      eq(loginTrustedDevices.tokenDigest, digest(token)),
+      eq(loginTrustedDevices.userId, userId),
+      eq(loginTrustedDevices.applicationId, MFA_APPLICATION_ID),
+      isNull(loginTrustedDevices.revokedAt),
+    ));
+  }
+  await clearCookie();
+}
+
+export async function forgetAllLoginDevices(userId: number, reason = 'member-forgot-all-devices') {
+  await revokeLoginDeviceTrustForUser(userId, reason);
+  await clearCookie();
 }

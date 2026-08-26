@@ -188,3 +188,7 @@ The starter must be hardened before production data is imported. The required tr
 # 12. Immediate next action
 
 The required signup fields, permitted status values, rolling membership calendar, billing, self-service, notification, administrator, CMS, seminar and publishing rules are approved in document 02. Begin Release 1. Release 3 establishes migrated membership readiness only; the public IDOC launch occurs after Releases 4–6 and complete-project acceptance.
+
+### Account-security management status
+
+Release 1 now includes the canonical `/dashboard/security` management surface for password and Google sign-in, owned active sessions, ordinary-member login-trust devices, privileged authenticator replacement entry, and password-confirmed deletion. Session and device mutations are server-owned and ownership-scoped. Password change and deletion deliberately require fresh sign-in. Broad security-notification coverage and final production configuration/UAT remain release gates; this work does not change billing scope or sequencing.
