@@ -91,7 +91,7 @@ export async function revokeOtherUserSessions(userId: number, currentSessionId: 
   `);
 }
 
-export async function listActiveSessions(userId: number) {
+export async function listActiveSessions(userId: number, currentSessionVersion: number) {
   return db.execute<PersistedSession>(sql`
     select
       session_id as "sessionId",
@@ -104,6 +104,7 @@ export async function listActiveSessions(userId: number) {
       revoke_reason as "revokeReason"
     from idoc.auth_sessions
     where user_id = ${userId}
+      and session_version = ${currentSessionVersion}
       and revoked_at is null
       and absolute_expires_at > now()
     order by last_activity_at desc
