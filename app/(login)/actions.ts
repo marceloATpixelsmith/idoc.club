@@ -86,16 +86,23 @@ export const signIn = validatedAction(signInSchema, async (data) => {
   if (role === 'member') {
     if (await hasValidLoginDeviceTrust(foundUser)) {
       // Re-resolve the authoritative role immediately before accepting the ordinary-device bypass.
-      // A concurrent privilege grant increments sessionVersion and also changes this role; either
-      // condition forces the login back through the privileged MFA path instead of creating a lower-
-      // assurance session for a newly privileged account.
+      // If a privilege grant committed after the initial read, reload the user row before starting
+      // privileged MFA so the pending continuation carries the new server-owned sessionVersion.
       const currentRole = await authoritativeMfaRole(foundUser.id);
       if (currentRole === 'member') {
         await clearPendingLogin();
         await setSession(foundUser);
         redirect('/dashboard');
       }
-      if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) {
+      const [currentUser] = await db.select().from(users).where(and(
+        eq(users.id, foundUser.id),
+        eq(users.email, foundUser.email),
+      )).limit(1);
+      if (!currentUser || currentUser.deletedAt || !['active', 'onboarding'].includes(currentUser.accountState)) {
+        await clearPendingLogin();
+        return { error: 'Your sign-in session expired. Start again.', email };
+      }
+      if (await beginPrimaryMfa(currentUser, 'password', '/dashboard')) {
         await clearPendingLogin();
         redirect('/mfa');
       }
