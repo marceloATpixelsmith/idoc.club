@@ -19,3 +19,25 @@ test('credential and privilege mutations atomically persist safe audit and notif
   assert.match(replacement, /auth_sessions[\s\S]*authenticator-replacement/);
   assert.doesNotMatch([account, reset, roles, replacement, email].join('\n'), /jsonb_build_object\([^)]*(password|otp|secret|digest|token)/i);
 });
+
+test('one-time MFA and session security evidence share atomic persistence boundaries', async () => {
+  const [recovery, enrollment, sessions, actions] = await Promise.all([
+    read('../lib/auth/mfa/recovery-security.ts'),
+    read('../lib/auth/mfa/enrollment-finalization.ts'),
+    read('../lib/auth/session-registry.ts'),
+    read('../app/(login)/mfa/actions.ts'),
+  ]);
+  for (const source of [recovery, enrollment, sessions]) assert.match(source, /client\.begin\(async \(tx\)/);
+  assert.match(recovery, /mfa_recovery_codes[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
+  assert.match(enrollment, /mfa_enrollment_transactions[\s\S]*mfa_recovery_codes[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
+  assert.match(sessions, /auth_sessions[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
+  assert.match(actions, /consumeRecoveryCodeWithEvidence/);
+  assert.match(actions, /finalizeInitialAuthenticatorEnrollment/);
+});
+
+test('email-change notification dedupe keys remain bounded independently of address length', async () => {
+  const email = await read('../lib/membership/email-verification.ts');
+  assert.match(email, /recipientDiscriminator/);
+  assert.match(email, /slice\(0, 16\)/);
+  assert.doesNotMatch(email, /email-changed:\$\{record\.id\}:\$\{recipient\}/);
+});
