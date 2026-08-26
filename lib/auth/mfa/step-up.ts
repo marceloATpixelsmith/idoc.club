@@ -33,7 +33,7 @@ type BoundEvidence = {
 };
 
 export type PendingStepUp = BoundEvidence & { returnTo: string; transactionId: string };
-type FreshStepUp = BoundEvidence & { method: 'totp' };
+type FreshStepUp = BoundEvidence & { method: 'totp'; transactionId: string };
 
 function cookieOptions(maxAge: number) {
   return { httpOnly: true, maxAge, path: '/', sameSite: 'lax' as const, secure: true };
@@ -90,16 +90,24 @@ export async function requireFreshStepUp(actor: Pick<User, 'id'>, action: Sensit
   const factor = configuredFactor === 'totp'
     ? await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID)
     : null;
-  const hasFreshTotp = Boolean(fresh && fresh.method === 'totp' &&
+  const hasFreshTotp = Boolean(fresh && fresh.method === 'totp' && typeof fresh.transactionId === 'string' &&
     factor?.factorId === fresh.factorId && matches(fresh, user, binding.session, binding.role, action));
-  if (!sensitiveActionRequiresFreshStepUp({ configuredFactor, hasFreshPolicyFactor: false,
-    hasFreshTotp, hasFreshWebAuthn: false })) return { required: false as const };
-  if (hasFreshTotp) return { required: false as const };
+  const freshnessRequired = sensitiveActionRequiresFreshStepUp({ configuredFactor, hasFreshPolicyFactor: false,
+    hasFreshTotp, hasFreshWebAuthn: false });
+  if (!freshnessRequired && !hasFreshTotp) return { required: false as const };
+
+  if (hasFreshTotp && fresh && factor) {
+    const claimed = await mfaStore.consumeStepUpAuthority({ applicationId: MFA_APPLICATION_ID,
+      factorId: factor.factorId, nowMs: Date.now(), subjectId: String(user.id), transactionId: fresh.transactionId });
+    (await cookies()).delete(AUTHORITY_COOKIE);
+    if (claimed === 'consumed') return { required: false as const };
+  }
 
   if (!factor) throw new Error('Authenticator verification is required. Use the approved account recovery path.');
   const transactionId = randomUUID();
-  await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, expiresAtMs: Date.now() + TTL_SECONDS * 1000,
-    maxAttempts: 5, nowMs: Date.now(), purpose: 'step-up', subjectId: String(user.id), transactionId });
+  const nowMs = Date.now();
+  await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, expiresAtMs: nowMs + TTL_SECONDS * 1000,
+    maxAttempts: 5, nowMs, purpose: 'step-up', subjectId: String(user.id), transactionId });
   const pending: PendingStepUp = { action, applicationId: MFA_APPLICATION_ID, factorId: factor.factorId,
     returnTo: safeReturnTo(returnTo), role: binding.role, sessionId: binding.session.sessionId,
     sessionVersion: user.sessionVersion, subjectId: user.id, transactionId };
@@ -120,7 +128,7 @@ export async function getPendingStepUp() {
 export async function grantFreshStepUp(pending: PendingStepUp) {
   const authority: FreshStepUp = { action: pending.action, applicationId: pending.applicationId,
     factorId: pending.factorId, method: 'totp', role: pending.role, sessionId: pending.sessionId,
-    sessionVersion: pending.sessionVersion, subjectId: pending.subjectId };
+    sessionVersion: pending.sessionVersion, subjectId: pending.subjectId, transactionId: pending.transactionId };
   const store = await cookies();
   store.set(AUTHORITY_COOKIE, await sign(authority), cookieOptions(TTL_SECONDS));
   store.delete(PENDING_COOKIE);
