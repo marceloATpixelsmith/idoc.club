@@ -40,10 +40,10 @@ test('password precedes trust and privileged grants bypass ordinary trust lookup
   const ordinary = actions.indexOf("if (role === 'member')");
   const trust = actions.indexOf('hasValidLoginDeviceTrust(foundUser)');
   assert.ok(password >= 0 && role > password && ordinary > role && trust > ordinary);
-  assert.match(actions.slice(ordinary), /beginPrimaryMfa\(foundUser/);
+  assert.match(actions.slice(ordinary), /beginPrimaryMfa\(/);
 });
 
-test('trusted ordinary login rechecks current privilege and clears pending login before session issuance', () => {
+test('trusted ordinary login rechecks current privilege and reloads the user before newly privileged MFA', () => {
   const actions = read('app/(login)/actions.ts');
   const trustedStart = actions.indexOf('if (await hasValidLoginDeviceTrust(foundUser))');
   const trustedEnd = actions.indexOf("const origin = await requestOrigin();", trustedStart);
@@ -51,7 +51,10 @@ test('trusted ordinary login rechecks current privilege and clears pending login
   assert.match(trusted, /const currentRole = await authoritativeMfaRole\(foundUser\.id\)/);
   assert.match(trusted, /if \(currentRole === 'member'\)/);
   assert.ok(trusted.indexOf('await clearPendingLogin()') < trusted.indexOf('await setSession(foundUser)'));
-  assert.match(trusted, /beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)/);
+  assert.match(trusted, /const \[currentUser\] = await db\.select\(\)\.from\(users\)/);
+  assert.match(trusted, /!currentUser \|\| currentUser\.deletedAt \|\| !\['active', 'onboarding'\]\.includes\(currentUser\.accountState\)/);
+  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', '\/dashboard'\)/);
+  assert.doesNotMatch(trusted, /beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)/);
 });
 
 test('successful privileged primary login clears obsolete pending-login continuation before MFA/session transition', () => {
