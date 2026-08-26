@@ -49,12 +49,16 @@ test('untrusted ordinary login cannot create a session before bound OTP verifica
   assert.ok(verify.indexOf("result !== 'verified'") < verify.indexOf('await setSession(verifiedUser)'));
   assert.match(verify, /pending\.userId/);
   assert.match(verify, /user\.sessionVersion !== pending\.sessionVersion/);
+  assert.match(verify, /eq\(users\.sessionVersion, pending\.sessionVersion\)/);
+  assert.ok(verify.lastIndexOf('eq(users.sessionVersion, pending.sessionVersion)') < verify.indexOf('issueLoginDeviceTrust(verifiedUser)'));
 });
 
 test('remember is offered only by trusted pending state and never substitutes for privileged TOTP', () => {
   const otp = read('app/(login)/sign-in/otp-step.tsx');
+  const entry = read('components/auth/otp-entry-step.tsx');
   const verify = read('app/(login)/sign-in/actions.ts');
   assert.match(otp, /allowRemember[\s\S]*Remember me for 2 weeks/);
+  assert.match(entry, /if \(!verifyFields\) formRef\.current\?\.requestSubmit\(\)/);
   assert.match(verify, /pending\.allowRemember && role === 'member' && remember === 'on'/);
   const body = verify.slice(verify.indexOf('export const verifyLoginOtp'));
   assert.ok(body.indexOf('issueLoginDeviceTrust') < body.indexOf('beginPrimaryMfa'));
