@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile('app/(dashboard)/onboarding/onboarding-wizard.tsx', 'utf8');
+const autocompleteRoute = await readFile('app/api/address/autocomplete/route.ts', 'utf8');
+const countriesSource = await readFile('lib/membership/countries.ts', 'utf8');
+const envExample = await readFile('.env.example', 'utf8');
 
 test('profile creation remains disabled until all required details and consents are complete', () => {
   assert.match(source, /form\.checkValidity\(\)/);
@@ -25,6 +28,7 @@ test('readiness is recomputed for restored and browser-autofilled form values', 
 
 test('onboarding field and section labels use bold emphasis', () => {
   for (const label of [
+    'Address',
     'Country',
     'Official information',
     'National Federation',
@@ -43,4 +47,32 @@ test('onboarding field and section labels use bold emphasis', () => {
 test('going back to classification clears stale form readiness', () => {
   assert.match(source, /setDetailsComplete\(false\); setStep\('type'\)/);
   assert.match(source, /setClassification\(option\.value\); setDetailsComplete\(false\)/);
+});
+
+test('country selectors display names while preserving ISO alpha-2 values', () => {
+  assert.match(countriesSource, /new Intl\.DisplayNames\(\['en'\], \{ type: 'region' \}\)/);
+  assert.match(countriesSource, /\{ code, name:/);
+  assert.match(source, /COUNTRY_OPTIONS\.map\(\(\{ code, name: countryName \}\)/);
+  assert.match(source, /value=\{code\}>\{countryName\}/);
+});
+
+test('address entry is country-first with Geoapify-assisted structured population and manual fallback', () => {
+  assert.ok(source.indexOf('htmlFor="countryCode"') < source.indexOf('htmlFor="address1"'));
+  assert.match(source, /disabled=\{!countryCode\}/);
+  assert.match(source, /\/api\/address\/autocomplete/);
+  assert.match(source, /setCity\(suggestion\.city\)/);
+  assert.match(source, /setStateProvince\(suggestion\.stateProvince\)/);
+  assert.match(source, /setPostalCode\(suggestion\.postalCode\)/);
+  assert.match(source, /enter the address manually/);
+  assert.match(source, /Powered by Geoapify/);
+});
+
+test('Geoapify credential remains server-only and autocomplete is limited to authenticated onboarding users and selected country', () => {
+  assert.match(autocompleteRoute, /import 'server-only'/);
+  assert.match(autocompleteRoute, /const user = await getUser\(\)/);
+  assert.match(autocompleteRoute, /status: 401/);
+  assert.match(autocompleteRoute, /process\.env\.GEOAPIFY_API_KEY/);
+  assert.doesNotMatch(autocompleteRoute, /NEXT_PUBLIC_GEOAPIFY/);
+  assert.match(autocompleteRoute, /filter', `countrycode:\$\{country\.toLowerCase\(\)\}`/);
+  assert.match(envExample, /^GEOAPIFY_API_KEY=\*\*\*$/m);
 });
