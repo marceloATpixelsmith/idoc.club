@@ -15,6 +15,11 @@ const CODE_LIFETIME_MS = 15 * 60 * 1000;
 const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
+const RATE_LIMIT_PURPOSES: Record<EmailOtpPurpose, { issue: string; verify: string }> = {
+  login_verification: { issue: 'otp_issue_login', verify: 'otp_verify_login' },
+  password_reset: { issue: 'otp_issue_reset', verify: 'otp_verify_reset' },
+  signup_verification: { issue: 'otp_issue_signup', verify: 'otp_verify_signup' },
+};
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const generateCode = () => randomInt(0, 10 ** CODE_LENGTH).toString().padStart(CODE_LENGTH, '0');
@@ -61,7 +66,7 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   if (latest && now.getTime() - latest.createdAt.getTime() < RESEND_COOLDOWN_MS) {
     return { retryAfterMs: RESEND_COOLDOWN_MS - (now.getTime() - latest.createdAt.getTime()), status: 'cooldown' };
   }
-  const allowed = await checkRateLimit(`email_otp_${purpose}`, email, options.origin ?? 'unknown', now);
+  const allowed = await checkRateLimit(RATE_LIMIT_PURPOSES[purpose].issue, email, options.origin ?? 'unknown', now);
   if (!allowed) return { status: 'rate_limited' };
   const code = generateCode();
   await db.update(emailOtpCodes).set({ consumedAt: now })
@@ -87,7 +92,7 @@ export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'rate_limi
 export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown', expectedUserId?: number): Promise<VerifyEmailOtpResult> {
   if (!/^\d{6}$/.test(code)) return 'invalid';
   const email = normalizeEmail(untrustedEmail);
-  const allowed = await checkRateLimit(`email_otp_verify_${purpose}`, email, origin);
+  const allowed = await checkRateLimit(RATE_LIMIT_PURPOSES[purpose].verify, email, origin);
   if (!allowed) return 'rate_limited';
   return db.transaction(async (tx) => {
     const conditions = [eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)];
