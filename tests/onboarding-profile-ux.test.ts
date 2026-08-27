@@ -7,6 +7,7 @@ const autocompleteRoute = await readFile('app/api/address/autocomplete/route.ts'
 const countriesSource = await readFile('lib/membership/countries.ts', 'utf8');
 const envExample = await readFile('.env.example', 'utf8');
 const providerContract = await readFile('docs/15-international-address-autocomplete-security-and-operations.md', 'utf8');
+const onboardingBehavior = await readFile('docs/16-onboarding-demographic-form-behavior.md', 'utf8');
 const rateLimitSource = await readFile('lib/security/rate-limit.ts', 'utf8');
 
 test('profile creation remains disabled until all required details and consents are complete', () => {
@@ -28,22 +29,25 @@ test('readiness is recomputed for restored and browser-autofilled form values', 
   assert.match(source, /addEventListener\('pageshow', syncReadiness\)/);
 });
 
-test('onboarding field and section labels use bold emphasis', () => {
+test('onboarding field labels stay bold and section headers are uppercase without enclosing boxes', () => {
   for (const label of [
-    'Address',
     'Country',
-    'Official information',
     'National Federation',
     'IDOC Region',
     'FEI ID',
     'Official status as Judge',
     'Official status as Steward',
     'Are you a Technical Delegate?',
-    'Consent',
-  ]) {
-    assert.ok(source.includes(label), `missing onboarding label: ${label}`);
+  ]) assert.ok(source.includes(label), `missing onboarding label: ${label}`);
+
+  for (const heading of ['ADDRESS', 'OFFICIAL INFORMATION', 'CONSENT']) {
+    assert.ok(source.includes(`>${heading}</legend>`), `missing uppercase section heading: ${heading}`);
   }
+
   assert.ok((source.match(/font-bold/g) ?? []).length >= 8, 'expected bold field and section labels');
+  assert.match(source, /className="space-y-9"/);
+  assert.match(source, /fieldset className="space-y-4 border-0 p-0"/);
+  assert.doesNotMatch(source, /fieldset className="space-y-[34] rounded-lg border border-gray-200 p-4"/);
 });
 
 test('going back to classification clears stale form readiness', () => {
@@ -58,6 +62,23 @@ test('country selectors display names while preserving ISO alpha-2 values', () =
   assert.match(source, /value=\{code\}>\{countryName\}/);
 });
 
+test('national federation defaults from address country without overwriting an explicit federation', () => {
+  assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(''\)/);
+  assert.match(source, /const \[federationWasManuallyEdited, setFederationWasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /if \(!nationalFederationCountryCode \|\| !federationWasManuallyEdited\)/);
+  assert.match(source, /setNationalFederationCountryCode\(nextCountryCode\)/);
+  assert.match(source, /function handleFederationChange/);
+  assert.match(source, /setFederationWasManuallyEdited\(Boolean\(nextFederationCountryCode\)\)/);
+  assert.match(source, /onChange=\{handleFederationChange\}/);
+  assert.match(source, /value=\{nationalFederationCountryCode\}/);
+});
+
+test('federation default behavior is documented as member-field contract', () => {
+  assert.match(onboardingBehavior, /National Federation is a required professional field and remains fully editable/);
+  assert.match(onboardingBehavior, /must not overwrite that explicitly selected federation/);
+  assert.match(onboardingBehavior, /If the member clears National Federation, it becomes eligible for automatic defaulting again/);
+});
+
 test('address entry is country-first with Geoapify-assisted structured population and manual fallback', () => {
   assert.ok(source.indexOf('htmlFor="countryCode"') < source.indexOf('htmlFor="address1"'));
   assert.match(source, /disabled=\{!countryCode\}/);
@@ -67,6 +88,11 @@ test('address entry is country-first with Geoapify-assisted structured populatio
   assert.match(source, /setPostalCode\(suggestion\.postalCode\)/);
   assert.match(source, /enter the address manually/);
   assert.match(source, /Powered by Geoapify/);
+});
+
+test('Geoapify attribution is visually secondary to the address helper text', () => {
+  assert.match(source, /text-right text-\[10px\] text-gray-400/);
+  assert.match(source, /underline decoration-gray-300 underline-offset-2/);
 });
 
 test('changing address country clears stale structured address values', () => {

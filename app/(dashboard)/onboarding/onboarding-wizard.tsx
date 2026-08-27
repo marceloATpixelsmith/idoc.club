@@ -45,6 +45,8 @@ export function OnboardingWizard() {
   const detailsFormRef = useRef<HTMLFormElement>(null);
 
   const [countryCode, setCountryCode] = useState('');
+  const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState('');
+  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
   const [address1, setAddress1] = useState('');
   const [address2, setAddress2] = useState('');
   const [city, setCity] = useState('');
@@ -74,7 +76,7 @@ export function OnboardingWizard() {
       window.clearTimeout(autofillDelay);
       window.removeEventListener('pageshow', syncReadiness);
     };
-  }, [address1, city, classification, countryCode, postalCode, stateProvince, step]);
+  }, [address1, city, classification, countryCode, nationalFederationCountryCode, postalCode, stateProvince, step]);
 
   useEffect(() => {
     const query = address1.trim();
@@ -113,7 +115,12 @@ export function OnboardingWizard() {
   }, [address1, countryCode, selectedAddressValue, step]);
 
   function handleCountryChange(event: ChangeEvent<HTMLSelectElement>) {
-    setCountryCode(event.target.value);
+    const nextCountryCode = event.target.value;
+    setCountryCode(nextCountryCode);
+    if (!nationalFederationCountryCode || !federationWasManuallyEdited) {
+      setNationalFederationCountryCode(nextCountryCode);
+      setFederationWasManuallyEdited(false);
+    }
     setAddress1('');
     setAddress2('');
     setCity('');
@@ -123,6 +130,12 @@ export function OnboardingWizard() {
     setSuggestions([]);
     setAutocompleteAvailable(true);
     setDetailsComplete(false);
+  }
+
+  function handleFederationChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextFederationCountryCode = event.target.value;
+    setNationalFederationCountryCode(nextFederationCountryCode);
+    setFederationWasManuallyEdited(Boolean(nextFederationCountryCode));
   }
 
   function chooseAddress(suggestion: AddressSuggestion) {
@@ -162,7 +175,7 @@ export function OnboardingWizard() {
     <AuthShell description="All fields are required unless marked optional." title="Complete your profile" wide>
       <form
         action={action}
-        className="space-y-5"
+        className="space-y-9"
         onChange={(event) => setDetailsComplete(isDetailsFormComplete(event.currentTarget, classification))}
         onInput={(event) => setDetailsComplete(isDetailsFormComplete(event.currentTarget, classification))}
         ref={detailsFormRef}
@@ -180,8 +193,8 @@ export function OnboardingWizard() {
           </div>
         </div>
 
-        <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-bold text-gray-700">Address</legend>
+        <fieldset className="space-y-4 border-0 p-0">
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">ADDRESS</legend>
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="countryCode">Country</Label>
             <CountrySelect id="countryCode" name="countryCode" onChange={handleCountryChange} value={countryCode} />
@@ -220,10 +233,14 @@ export function OnboardingWizard() {
               </div>
             ) : null}
             {countryCode ? (
-              <p className="mt-1 text-xs text-gray-500">
-                {autocompleteAvailable ? 'Choose a suggestion to fill city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
-                {' '}<a className="underline" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
-              </p>
+              <div className="mt-1">
+                <p className="text-xs text-gray-500">
+                  {autocompleteAvailable ? 'Choose a suggestion to fill city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
+                </p>
+                <p className="mt-0.5 text-right text-[10px] text-gray-400">
+                  <a className="underline decoration-gray-300 underline-offset-2" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
+                </p>
+              </div>
             ) : null}
           </div>
 
@@ -249,12 +266,17 @@ export function OnboardingWizard() {
         </fieldset>
 
         {classification !== 'veterinarian' ? (
-          <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4">
-            <legend className="px-1 text-sm font-bold text-gray-700">Official information</legend>
+          <fieldset className="space-y-4 border-0 p-0">
+            <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">OFFICIAL INFORMATION</legend>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="nationalFederationCountryCode">National Federation</Label>
-                <CountrySelect id="nationalFederationCountryCode" name="nationalFederationCountryCode" />
+                <CountrySelect
+                  id="nationalFederationCountryCode"
+                  name="nationalFederationCountryCode"
+                  onChange={handleFederationChange}
+                  value={nationalFederationCountryCode}
+                />
               </div>
               <div>
                 <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="idocRegion">IDOC Region</Label>
@@ -286,8 +308,8 @@ export function OnboardingWizard() {
           </fieldset>
         ) : null}
 
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
-          <legend className="px-1 text-sm font-bold text-gray-700">Consent</legend>
+        <fieldset className="space-y-3 border-0 p-0">
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">CONSENT</legend>
           <ConsentCheckbox name="termsAccepted" required>
             {' '}I have read and agree to the <a className="underline" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
           </ConsentCheckbox>
