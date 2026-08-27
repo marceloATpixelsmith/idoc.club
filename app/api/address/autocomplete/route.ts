@@ -1,9 +1,10 @@
+import 'server-only';
+
 import { getUser } from '@/lib/db/queries';
 import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
 
 type GeoapifyResult = {
   address_line1?: string;
-  address_line2?: string;
   city?: string;
   country?: string;
   country_code?: string;
@@ -16,7 +17,7 @@ type GeoapifyResult = {
 
 type GeoapifyPayload = { results?: GeoapifyResult[] };
 
-const COUNTRY_CODES = new Set(ISO_COUNTRY_CODES);
+const COUNTRY_CODES = new Set<string>(ISO_COUNTRY_CODES);
 
 export async function GET(request: Request) {
   const user = await getUser();
@@ -54,7 +55,6 @@ export async function GET(request: Request) {
     const payload = await response.json() as GeoapifyPayload;
     const suggestions = (payload.results ?? []).map((result) => ({
       addressLine1: result.address_line1 ?? [result.housenumber, result.street].filter(Boolean).join(' '),
-      addressLine2: result.address_line2 ?? '',
       city: result.city ?? '',
       country: result.country ?? '',
       countryCode: result.country_code?.toUpperCase() ?? country,
