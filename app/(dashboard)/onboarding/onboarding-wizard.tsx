@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,29 @@ export function OnboardingWizard() {
   const [step, setStep] = useState<'type' | 'details'>('type');
   const [classification, setClassification] = useState<Classification | null>(null);
   const [detailsComplete, setDetailsComplete] = useState(false);
+  const detailsFormRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (step !== 'details') return;
+
+    const syncReadiness = () => {
+      const form = detailsFormRef.current;
+      if (form) setDetailsComplete(isDetailsFormComplete(form, classification));
+    };
+
+    syncReadiness();
+    const animationFrame = requestAnimationFrame(syncReadiness);
+    const shortDelay = window.setTimeout(syncReadiness, 250);
+    const autofillDelay = window.setTimeout(syncReadiness, 1000);
+    window.addEventListener('pageshow', syncReadiness);
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.clearTimeout(shortDelay);
+      window.clearTimeout(autofillDelay);
+      window.removeEventListener('pageshow', syncReadiness);
+    };
+  }, [classification, step]);
 
   if (step === 'type') {
     return (
@@ -68,6 +91,7 @@ export function OnboardingWizard() {
         className="space-y-5"
         onChange={(event) => setDetailsComplete(isDetailsFormComplete(event.currentTarget, classification))}
         onInput={(event) => setDetailsComplete(isDetailsFormComplete(event.currentTarget, classification))}
+        ref={detailsFormRef}
       >
         <input name="classification" type="hidden" value={classification ?? ''} />
         <div className="grid gap-4 sm:grid-cols-2">
