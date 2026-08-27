@@ -29,7 +29,6 @@ const countryCode = z.string().trim().toUpperCase().refine(
   (value) => ISO_COUNTRY_CODE_SET.has(value), 'Select a valid country',
 );
 const requiredText = (label: string, max: number) => z.string().trim().min(1, `${label} is required`).max(max);
-const optionalInternationalAddressText = (max: number) => z.string().trim().max(max);
 const officialBase = z.object({
   feiId: requiredText('FEI ID', 40),
   idocRegion: z.enum(IDOC_REGIONS),
@@ -54,16 +53,13 @@ const veterinarianRole = z.object({ roleType: z.literal('veterinarian') }).stric
 export const memberProfileSchema = z.object({
   address1: requiredText('Address 1', 200),
   address2: z.string().trim().max(200).optional().transform((value) => value || null),
-  city: requiredText('City/locality', 100),
+  city: requiredText('City', 100),
   countryCode,
   firstName: requiredText('First name', 100),
   lastName: requiredText('Last name', 100),
-  // Postal codes and first-level administrative areas do not exist or are not used in every
-  // international address. Persist the normalized empty string when they are not applicable;
-  // the existing columns remain non-null and no fabricated "N/A" value is introduced.
-  postalCode: optionalInternationalAddressText(30),
+  postalCode: requiredText('ZIP/postal code', 30),
   roles: z.array(z.discriminatedUnion('roleType', [judgeRole, stewardRole, veterinarianRole])).min(1).max(2),
-  stateProvince: optionalInternationalAddressText(100),
+  stateProvince: requiredText('State/province', 100),
 }).superRefine(({ roles }, context) => {
   const types = roles.map(({ roleType }) => roleType);
   if (new Set(types).size !== types.length || (types.length === 2 && !(types.includes('judge') && types.includes('steward')))) {
