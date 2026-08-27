@@ -13,6 +13,16 @@ test('profile creation remains disabled until all required details and consents 
   assert.match(source, /<ConsentCheckbox name="privacyAccepted" required>/);
 });
 
+test('readiness is recomputed for restored and browser-autofilled form values', () => {
+  assert.match(source, /useRef<HTMLFormElement>\(null\)/);
+  assert.match(source, /ref=\{detailsFormRef\}/);
+  assert.match(source, /syncReadiness\(\);/);
+  assert.match(source, /requestAnimationFrame\(syncReadiness\)/);
+  assert.match(source, /setTimeout\(syncReadiness, 250\)/);
+  assert.match(source, /setTimeout\(syncReadiness, 1000\)/);
+  assert.match(source, /addEventListener\('pageshow', syncReadiness\)/);
+});
+
 test('onboarding field and section labels use bold emphasis', () => {
   for (const label of [
     'Country',
