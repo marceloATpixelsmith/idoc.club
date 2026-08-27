@@ -59,6 +59,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
 };
 
 const routeHandlers: Record<string, string> = {
+  'app/api/address/autocomplete/route.ts': 'authenticated-provider-proxy',
   'app/api/admin/export/audit-log/route.ts': 'requireSuperAdmin',
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
@@ -169,6 +170,17 @@ test('the user identity Route Handler requires requireAccountAccess before retur
   const source = readFileSync(path.join(root, 'app/api/user/route.ts'), 'utf8');
   const authorize = source.indexOf("requireAccountAccess('profile')"); const respond = source.indexOf('Response.json(user');
   assert.ok(authorize >= 0 && respond > authorize);
+});
+
+test('the address autocomplete Route Handler authenticates and rate-limits before using the shared provider key', () => {
+  const source = readFileSync(path.join(root, 'app/api/address/autocomplete/route.ts'), 'utf8');
+  const authenticate = source.indexOf('await getUser()');
+  const rateLimit = source.indexOf("checkProviderRateLimit('address_autocomplete'");
+  const providerKey = source.indexOf('GEOAPIFY_API_KEY');
+  const providerFetch = source.indexOf('await fetch(endpoint');
+  assert.ok(authenticate >= 0 && rateLimit > authenticate && providerKey > rateLimit && providerFetch > providerKey);
+  assert.match(source, /status: 429/);
+  assert.match(source, /Retry-After/);
 });
 
 test('the compatibility team Route Handler never touches the database', () => {
