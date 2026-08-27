@@ -30,8 +30,10 @@ export default async function globalSetup() {
       values(${`${name}@security.example.test`},'synthetic-not-a-usable-password',now(),${accountState})
       returning id,session_version`;
     if (name !== 'onboarding') {
-      const [profile] = await sql<{ id: number }[]>`insert into idoc.profiles(user_id,first_name,last_name,address_1,city,country_code)
-        values(${user.id},${name},'Security Fixture','1 Test Road','Test City','DE') returning id`;
+      const [profile] = await sql<{ id: number }[]>`
+        insert into idoc.profiles(user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code)
+        values(${user.id},${name},'Security Fixture','1 Test Road','Test City','Test State','00000','DE')
+        returning id`;
       await sql`insert into idoc.professional_roles(profile_id,role_type) values(${profile.id},'veterinarian')`;
       await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
         values(${profile.id},${name === 'expired' ? 'expired' : 'active'},'2025-01-01',${name === 'expired' ? '2025-12-31' : '2099-12-31'},'migration')`;
