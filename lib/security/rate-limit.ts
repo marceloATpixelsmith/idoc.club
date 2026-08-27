@@ -9,6 +9,8 @@ import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
 const WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_MAX_REQUESTS = 3;
 const IP_MAX_REQUESTS = 10;
+const PROVIDER_USER_MAX_REQUESTS = 60;
+const PROVIDER_ORIGIN_MAX_REQUESTS = 180;
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -44,6 +46,28 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
     takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, IP_MAX_REQUESTS),
   ]);
   return emailAllowed && ipAllowed;
+}
+
+/** Protects server-side calls made with a shared third-party provider credential. The higher limits
+ * are suitable for debounced interactive autocomplete while still bounding one account and one
+ * request origin independently so neither can exhaust the shared provider quota unchecked. */
+export async function checkProviderRateLimit(
+  purpose: string,
+  accountIdentifier: string,
+  origin: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const secret = rateLimitHashKeyForServer();
+  const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
+  const accountHash = digest(`${secret}:provider-account:${accountIdentifier}`);
+  const originHash = digest(`${secret}:provider-origin:${origin || 'unknown'}`);
+  const allOriginsMarker = digest(`${secret}:all-origins`);
+  const allAccountsMarker = digest(`${secret}:all-provider-accounts`);
+  const [accountAllowed, originAllowed] = await Promise.all([
+    takeBucket(purpose, accountHash, allOriginsMarker, windowStartedAt, PROVIDER_USER_MAX_REQUESTS),
+    takeBucket(purpose, allAccountsMarker, originHash, windowStartedAt, PROVIDER_ORIGIN_MAX_REQUESTS),
+  ]);
+  return accountAllowed && originAllowed;
 }
 
 /** Authentication-adjacent endpoints without an email identifier (for example an OAuth start
