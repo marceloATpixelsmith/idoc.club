@@ -7,6 +7,7 @@ const autocompleteRoute = await readFile('app/api/address/autocomplete/route.ts'
 const countriesSource = await readFile('lib/membership/countries.ts', 'utf8');
 const envExample = await readFile('.env.example', 'utf8');
 const providerContract = await readFile('docs/15-international-address-autocomplete-security-and-operations.md', 'utf8');
+const onboardingBehavior = await readFile('docs/16-onboarding-demographic-form-behavior.md', 'utf8');
 const rateLimitSource = await readFile('lib/security/rate-limit.ts', 'utf8');
 
 test('profile creation remains disabled until all required details and consents are complete', () => {
@@ -61,12 +62,21 @@ test('country selectors display names while preserving ISO alpha-2 values', () =
   assert.match(source, /value=\{code\}>\{countryName\}/);
 });
 
-test('national federation defaults to the selected address country but remains editable', () => {
+test('national federation defaults from address country without overwriting an explicit federation', () => {
   assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(''\)/);
+  assert.match(source, /const \[federationWasManuallyEdited, setFederationWasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /if \(!nationalFederationCountryCode \|\| !federationWasManuallyEdited\)/);
   assert.match(source, /setNationalFederationCountryCode\(nextCountryCode\)/);
-  assert.match(source, /name="nationalFederationCountryCode"/);
-  assert.match(source, /onChange=\{\(event\) => setNationalFederationCountryCode\(event\.target\.value\)\}/);
+  assert.match(source, /function handleFederationChange/);
+  assert.match(source, /setFederationWasManuallyEdited\(Boolean\(nextFederationCountryCode\)\)/);
+  assert.match(source, /onChange=\{handleFederationChange\}/);
   assert.match(source, /value=\{nationalFederationCountryCode\}/);
+});
+
+test('federation default behavior is documented as member-field contract', () => {
+  assert.match(onboardingBehavior, /National Federation is a required professional field and remains fully editable/);
+  assert.match(onboardingBehavior, /must not overwrite that explicitly selected federation/);
+  assert.match(onboardingBehavior, /If the member clears National Federation, it becomes eligible for automatic defaulting again/);
 });
 
 test('address entry is country-first with Geoapify-assisted structured population and manual fallback', () => {
