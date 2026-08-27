@@ -2,6 +2,7 @@ import 'server-only';
 
 import { getUser } from '@/lib/db/queries';
 import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
+import { checkProviderRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 type GeoapifyResult = {
   address_line1?: string;
@@ -29,6 +30,15 @@ export async function GET(request: Request) {
 
   if (text.length < 3 || text.length > 160 || !COUNTRY_CODES.has(country)) {
     return Response.json({ suggestions: [] });
+  }
+
+  const origin = await requestOrigin();
+  const allowed = await checkProviderRateLimit('address_autocomplete', String(user.id), origin);
+  if (!allowed) {
+    return Response.json({ available: false, suggestions: [] }, {
+      status: 429,
+      headers: { 'Retry-After': '900' },
+    });
   }
 
   const apiKey = process.env.GEOAPIFY_API_KEY?.trim();
