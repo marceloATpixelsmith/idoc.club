@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useActionState, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { PasswordField } from '@/components/auth/password-field';
-import { PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
+import { MAX_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
 import type { ActionState } from '@/lib/auth/middleware';
 
 type CompleteAction = (prevState: ActionState, formData: FormData) => Promise<ActionState>;
@@ -28,7 +28,9 @@ export function PasswordCreateStep({
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: '' });
   const [password, setPassword] = useState('');
-  const allMet = PASSWORD_REQUIREMENTS.every(({ test }) => test(password));
+  const unmetRequirements = PASSWORD_REQUIREMENTS.filter(({ test }) => !test(password));
+  const tooLong = password.length > MAX_PASSWORD_LENGTH;
+  const allMet = unmetRequirements.length === 0 && !tooLong;
 
   return (
     <AuthShell description={description} title={title}>
@@ -41,18 +43,18 @@ export function PasswordCreateStep({
           value={password}
         />
 
-        <ul className="idoc-auth-requirements" aria-label="Password requirements">
-          {PASSWORD_REQUIREMENTS.map(({ key, label: requirementLabel, test }) => {
-            const met = test(password);
-            return (
-              <li className={`idoc-auth-requirement${met ? ' idoc-auth-requirement--met' : ''}`} key={key}>
+        {unmetRequirements.length > 0 ? (
+          <ul className="idoc-auth-requirements" aria-label="Password requirements">
+            {unmetRequirements.map(({ key, label: requirementLabel }) => (
+              <li className="idoc-auth-requirement" key={key}>
                 <span aria-hidden className="idoc-auth-requirement__dot" />
                 {requirementLabel}
               </li>
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+        ) : null}
 
+        {tooLong ? <p className="idoc-auth-error" role="alert">Password must be 128 characters or fewer.</p> : null}
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
 
         <button className="idoc-auth-button" disabled={!allMet || pending} type="submit">

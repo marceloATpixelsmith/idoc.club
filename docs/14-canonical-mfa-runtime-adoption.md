@@ -50,6 +50,10 @@ The privileged login/enrollment slice is wired into the authoritative authentica
 
 The login/enrollment/reset slice does not make the broader MFA program release-complete. Item 8 is implemented. The repository-side portion of item 10 is complete. Actual production secret installation, provider configuration, deployed verification, and operator UAT remain unfinished and are release gates. The account-security management surface does not make those release gates complete.
 
+## Password-creation guidance
+
+Password creation keeps the canonical 12–128 character server-side policy, but the member-facing guidance is intentionally progressive rather than presenting the full bounds as a static checklist. The UI shows `At least 12 characters` only while that requirement is unmet and removes it immediately once satisfied. The 128-character ceiling is not advertised as normal guidance; it remains enforced server-side and is surfaced to the member only if the entered password exceeds that maximum. No uppercase, lowercase, digit, symbol, trimming, or normalization requirement is introduced.
+
 ## Payment isolation
 
 This adoption is authentication-only. It does not modify Stripe integration, checkout, subscriptions, renewal logic, payment webhooks, pricing, imported Stripe relationships, membership billing, or entitlement behavior.
