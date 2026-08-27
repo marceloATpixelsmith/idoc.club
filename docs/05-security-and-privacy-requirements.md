@@ -2,6 +2,8 @@
 
 **Security & Privacy Requirements**
 
+The automated acceptance evidence for these controls is defined in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). The gate combines database adversarial invariants with an isolated real-browser HTTP boundary and is required for authentication/account-security changes.
+
 Production hardening requirements for member data, administration, Render PostgreSQL, authentication and Stripe
 
 | **Organization**     | International Dressage Officials Club (IDOC)   |

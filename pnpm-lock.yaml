@@ -93,11 +93,28 @@ importers:
         specifier: ^3.24.4
         version: 3.24.4
     devDependencies:
+      '@playwright/test':
+        specifier: 1.55.0
+        version: 1.55.0
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
 
 packages:
+
+  '@playwright/test@1.55.0':
+    resolution: {}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright-core@1.55.0:
+    resolution: {}
+    engines: {node: '>=18'}
+
+  playwright@1.55.0:
+    resolution: {}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -2250,6 +2267,16 @@ packages:
     resolution: {integrity: sha512-OdqJE9UDRPwWsrHjLN2F8bPxvwJBK22EHLWtanu0LSYr5YqzsaaW3RMgmjwr8Rypg5k+meEJdSPXJZXE/yqOMg==}
 
 snapshots:
+
+  '@playwright/test@1.55.0':
+    dependencies:
+      playwright: 1.55.0
+
+  playwright-core@1.55.0: {}
+
+  playwright@1.55.0:
+    dependencies:
+      playwright-core: 1.55.0
 
   '@alloc/quick-lru@5.2.0': {}
 
