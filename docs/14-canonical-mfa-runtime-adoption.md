@@ -52,7 +52,7 @@ The login/enrollment/reset slice does not make the broader MFA program release-c
 
 ## Password-creation guidance
 
-Password creation keeps the canonical 12–128 character server-side policy, but the member-facing guidance is intentionally progressive rather than presenting the full bounds as a static checklist. The UI shows `At least 12 characters` only while that requirement is unmet and removes it immediately once satisfied. The 128-character ceiling is not advertised as normal guidance; it remains enforced server-side and is surfaced to the member only if the entered password exceeds that maximum. No uppercase, lowercase, digit, symbol, trimming, or normalization requirement is introduced.
+IDOC password creation requires at least 12 characters plus at least one uppercase letter, one lowercase letter, one number, and one special character. The member-facing guidance is progressive: each unmet requirement is shown and disappears immediately when satisfied. The 128-character ceiling remains enforced server-side but is not advertised as normal guidance; it is surfaced only when the entered password exceeds that maximum. Passwords are preserved exactly as entered and are not trimmed, normalized, or silently truncated.
 
 ## Payment isolation
 
