@@ -46,6 +46,7 @@ export function OnboardingWizard() {
 
   const [countryCode, setCountryCode] = useState('');
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState('');
+  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
   const [address1, setAddress1] = useState('');
   const [address2, setAddress2] = useState('');
   const [city, setCity] = useState('');
@@ -116,7 +117,10 @@ export function OnboardingWizard() {
   function handleCountryChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextCountryCode = event.target.value;
     setCountryCode(nextCountryCode);
-    setNationalFederationCountryCode(nextCountryCode);
+    if (!nationalFederationCountryCode || !federationWasManuallyEdited) {
+      setNationalFederationCountryCode(nextCountryCode);
+      setFederationWasManuallyEdited(false);
+    }
     setAddress1('');
     setAddress2('');
     setCity('');
@@ -126,6 +130,12 @@ export function OnboardingWizard() {
     setSuggestions([]);
     setAutocompleteAvailable(true);
     setDetailsComplete(false);
+  }
+
+  function handleFederationChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextFederationCountryCode = event.target.value;
+    setNationalFederationCountryCode(nextFederationCountryCode);
+    setFederationWasManuallyEdited(Boolean(nextFederationCountryCode));
   }
 
   function chooseAddress(suggestion: AddressSuggestion) {
@@ -264,7 +274,7 @@ export function OnboardingWizard() {
                 <CountrySelect
                   id="nationalFederationCountryCode"
                   name="nationalFederationCountryCode"
-                  onChange={(event) => setNationalFederationCountryCode(event.target.value)}
+                  onChange={handleFederationChange}
                   value={nationalFederationCountryCode}
                 />
               </div>
