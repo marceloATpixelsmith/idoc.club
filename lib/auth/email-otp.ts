@@ -16,9 +16,9 @@ const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const RATE_LIMIT_PURPOSES: Record<EmailOtpPurpose, { issue: string; verify: string }> = {
-  login_verification: { issue: 'otp_issue_login', verify: 'otp_verify_login' },
-  password_reset: { issue: 'otp_issue_reset', verify: 'otp_verify_reset' },
-  signup_verification: { issue: 'otp_issue_signup', verify: 'otp_verify_signup' },
+  login_verification: { issue: 'email_otp_login_verification', verify: 'otp_verify_login' },
+  password_reset: { issue: 'email_otp_password_reset', verify: 'otp_verify_reset' },
+  signup_verification: { issue: 'email_otp_signup_verification', verify: 'otp_verify_signup' },
 };
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
