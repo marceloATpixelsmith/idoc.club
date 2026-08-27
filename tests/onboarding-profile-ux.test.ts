@@ -67,6 +67,13 @@ test('address entry is country-first with Geoapify-assisted structured populatio
   assert.match(source, /Powered by Geoapify/);
 });
 
+test('changing address country clears stale structured address values', () => {
+  assert.match(source, /function handleCountryChange/);
+  for (const reset of ['setAddress1', 'setAddress2', 'setCity', 'setStateProvince', 'setPostalCode']) {
+    assert.match(source, new RegExp(`${reset}\\(''\\)`));
+  }
+});
+
 test('Geoapify credential remains server-only and autocomplete is limited to authenticated onboarding users and selected country', () => {
   assert.match(autocompleteRoute, /import 'server-only'/);
   assert.match(autocompleteRoute, /const user = await getUser\(\)/);
