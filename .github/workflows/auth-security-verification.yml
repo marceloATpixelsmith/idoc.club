@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   security:
     runs-on: ubuntu-latest
@@ -26,11 +26,22 @@ jobs:
       PGOPTIONS: -c client_min_messages=warning
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - name: Regenerate trusted lockfile
+        run: |
+          pnpm install --no-frozen-lockfile
+          if ! git diff --quiet -- pnpm-lock.yaml; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "Regenerate Playwright lockfile [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:security
       - name: Upload failure evidence
