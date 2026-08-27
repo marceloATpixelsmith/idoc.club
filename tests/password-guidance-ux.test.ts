@@ -16,5 +16,5 @@ test('password guidance disappears as requirements are satisfied and reports onl
   assert.match(component, /unmetRequirements\.length > 0/);
   assert.match(component, /password\.length > MAX_PASSWORD_LENGTH/);
   assert.match(component, /Password must be 128 characters or fewer\./);
-  assert.match(component, /disabled=!\{?allMet/);
+  assert.match(component, /disabled=\{!allMet \|\| pending\}/);
 });
