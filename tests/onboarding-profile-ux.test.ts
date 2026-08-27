@@ -28,22 +28,25 @@ test('readiness is recomputed for restored and browser-autofilled form values', 
   assert.match(source, /addEventListener\('pageshow', syncReadiness\)/);
 });
 
-test('onboarding field and section labels use bold emphasis', () => {
+test('onboarding field labels stay bold and section headers are uppercase without enclosing boxes', () => {
   for (const label of [
-    'Address',
     'Country',
-    'Official information',
     'National Federation',
     'IDOC Region',
     'FEI ID',
     'Official status as Judge',
     'Official status as Steward',
     'Are you a Technical Delegate?',
-    'Consent',
-  ]) {
-    assert.ok(source.includes(label), `missing onboarding label: ${label}`);
+  ]) assert.ok(source.includes(label), `missing onboarding label: ${label}`);
+
+  for (const heading of ['ADDRESS', 'OFFICIAL INFORMATION', 'CONSENT']) {
+    assert.ok(source.includes(`>${heading}</legend>`), `missing uppercase section heading: ${heading}`);
   }
+
   assert.ok((source.match(/font-bold/g) ?? []).length >= 8, 'expected bold field and section labels');
+  assert.match(source, /className="space-y-9"/);
+  assert.match(source, /fieldset className="space-y-4 border-0 p-0"/);
+  assert.doesNotMatch(source, /fieldset className="space-y-[34] rounded-lg border border-gray-200 p-4"/);
 });
 
 test('going back to classification clears stale form readiness', () => {
@@ -58,6 +61,14 @@ test('country selectors display names while preserving ISO alpha-2 values', () =
   assert.match(source, /value=\{code\}>\{countryName\}/);
 });
 
+test('national federation defaults to the selected address country but remains editable', () => {
+  assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(''\)/);
+  assert.match(source, /setNationalFederationCountryCode\(nextCountryCode\)/);
+  assert.match(source, /name="nationalFederationCountryCode"/);
+  assert.match(source, /onChange=\{\(event\) => setNationalFederationCountryCode\(event\.target\.value\)\}/);
+  assert.match(source, /value=\{nationalFederationCountryCode\}/);
+});
+
 test('address entry is country-first with Geoapify-assisted structured population and manual fallback', () => {
   assert.ok(source.indexOf('htmlFor="countryCode"') < source.indexOf('htmlFor="address1"'));
   assert.match(source, /disabled=\{!countryCode\}/);
@@ -67,6 +78,11 @@ test('address entry is country-first with Geoapify-assisted structured populatio
   assert.match(source, /setPostalCode\(suggestion\.postalCode\)/);
   assert.match(source, /enter the address manually/);
   assert.match(source, /Powered by Geoapify/);
+});
+
+test('Geoapify attribution is visually secondary to the address helper text', () => {
+  assert.match(source, /text-right text-\[10px\] text-gray-400/);
+  assert.match(source, /underline decoration-gray-300 underline-offset-2/);
 });
 
 test('changing address country clears stale structured address values', () => {
