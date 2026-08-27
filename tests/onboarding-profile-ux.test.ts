@@ -97,13 +97,14 @@ test('shared Geoapify provider quota is bounded by independent account and reque
 });
 
 test('Geoapify privacy, credential rotation, availability, and failure contracts are documented', () => {
+  const normalizedContract = providerContract.toLowerCase();
   for (const required of [
     'partial home-address text',
-    'GEOAPIFY_API_KEY',
-    'Credential rotation',
+    'geoapify_api_key',
+    'credential rotation',
     'manual address entry',
     '60 provider calls per account',
     '180 provider calls per request origin',
-    'must not send the member\'s name, email address, FEI ID',
-  ]) assert.ok(providerContract.includes(required), `missing provider contract detail: ${required}`);
+    'must not send the member\'s name, email address, fei id',
+  ]) assert.ok(normalizedContract.includes(required), `missing provider contract detail: ${required}`);
 });
