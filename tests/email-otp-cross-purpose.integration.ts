@@ -4,6 +4,11 @@ import test from 'node:test';
 import { verifyEmailOtp } from '../lib/auth/email-otp.ts';
 import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
+// verifyEmailOtp calls checkRateLimit internally, which requires RATE_LIMIT_HASH_KEY.
+// Self-set it (matching tests/account-token-lifecycles.integration.ts's convention) so
+// this file does not depend on a specific CI workflow's env block.
+process.env.RATE_LIMIT_HASH_KEY ??= 'integration-only-rate-limit-secret';
+
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const EMAIL = 'otp-cross-purpose@example.test';
 const CODE = '482913';

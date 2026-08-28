@@ -4,6 +4,11 @@ import { checkRateLimit } from '../lib/security/rate-limit.ts';
 import { normalizeEmail } from '../lib/membership/validation.ts';
 import { closeHarness, resetIdoc, sql } from './postgres-harness.ts';
 
+// checkRateLimit requires RATE_LIMIT_HASH_KEY. Self-set it (matching
+// tests/account-token-lifecycles.integration.ts's convention) so this file does not
+// depend on a specific CI workflow's env block.
+process.env.RATE_LIMIT_HASH_KEY ??= 'integration-only-rate-limit-secret';
+
 test.beforeEach(resetIdoc);
 test.after(closeHarness);
 
