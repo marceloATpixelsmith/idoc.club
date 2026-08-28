@@ -19,6 +19,11 @@ import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/logi
 import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
+import { beginWebAuthnRegistration, finishWebAuthnRegistration } from '@/lib/auth/mfa/webauthn';
+import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
+import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
+import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 
 const currentPasswordSchema = z.object({ currentPassword: z.string().min(1).max(128) });
 const emptySchema = z.object({});
@@ -85,10 +90,73 @@ export const beginAuthenticatorReplacement = validatedActionWithUser(emptySchema
   const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
   if (!factor) return { error: 'No configured authenticator was found.' };
   const transactionId = randomUUID();
-  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, method: 'password',
-    returnTo: '/dashboard/security', sessionVersion: user.sessionVersion, stage: 'recovery-entry', subjectId: user.id,
-    transactionId });
+  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, hasWebAuthn: false,
+    method: 'password', returnTo: '/dashboard/security', sessionVersion: user.sessionVersion,
+    stage: 'recovery-entry', subjectId: user.id, transactionId });
   redirect('/mfa');
+});
+
+async function privilegedUser(user: { id: number }) {
+  const role = await authoritativeMfaRole(user.id);
+  if (role !== 'admin' && role !== 'super-admin') throw new Error('Passkey management is not available for this account.');
+  return role;
+}
+
+type PasskeyRegistrationOptions = Awaited<ReturnType<typeof beginWebAuthnRegistration>>['options'];
+
+export const beginPasskeyRegistration = validatedActionWithUser(emptySchema, async (_, __, user): Promise<{
+  error?: string; ceremonyId?: string; options?: PasskeyRegistrationOptions;
+}> => {
+  await privilegedUser(user);
+  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security')).required) redirect('/mfa');
+  const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
+  if (!factor) return { error: 'Set up an authenticator app before adding a passkey.' };
+  const existing = await webauthnStore.getActiveCredentials(String(user.id), MFA_APPLICATION_ID);
+  const { ceremonyId, options } = await beginWebAuthnRegistration({ subjectId: String(user.id),
+    applicationId: MFA_APPLICATION_ID, accountLabel: user.email, baseUrl: baseUrlForServer(),
+    excludeCredentials: existing, store: webauthnStore });
+  await consumeFreshStepUp();
+  return { ceremonyId, options };
+});
+
+const finishPasskeySchema = z.object({ ceremonyId: z.string().uuid(), credentialJson: z.string().min(1).max(8192),
+  deviceName: z.string().trim().max(100).optional() });
+
+export const finishPasskeyRegistration = validatedActionWithUser(finishPasskeySchema, async ({ ceremonyId, credentialJson, deviceName }, _, user): Promise<{ error?: string; success?: string }> => {
+  await privilegedUser(user);
+  let response: RegistrationResponseJSON;
+  try {
+    const parsed: unknown = JSON.parse(credentialJson);
+    if (!parsed || typeof parsed !== 'object' || typeof (parsed as { id?: unknown }).id !== 'string') {
+      return { error: 'That passkey response was not understood.' };
+    }
+    response = parsed as RegistrationResponseJSON;
+  } catch { return { error: 'That passkey response was not understood.' }; }
+  const result = await finishWebAuthnRegistration({ subjectId: String(user.id), applicationId: MFA_APPLICATION_ID,
+    ceremonyId, response, baseUrl: baseUrlForServer(), deviceName: deviceName?.trim() || null, store: webauthnStore });
+  if (result.status === 'no-totp-fallback') return { error: 'Set up an authenticator app before adding a passkey.' };
+  if (result.status !== 'created') return { error: 'That passkey could not be registered.' };
+  await audit(user.id, 'auth.mfa.passkey.registered', 'passkey');
+  await enqueueAuthSecurityNotification({ dedupeKey: `passkey-registered:${result.factorId}`,
+    kind: 'passkey_registered', userId: user.id });
+  refreshSecurityPage();
+  return { success: 'Passkey added.' };
+});
+
+const removePasskeySchema = z.object({ credentialId: z.string().min(1).max(255) });
+
+export const removePasskeyCredential = validatedActionWithUser(removePasskeySchema, async ({ credentialId }, _, user): Promise<{ error?: string; success?: string }> => {
+  await privilegedUser(user);
+  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security')).required) redirect('/mfa');
+  const revoked = await webauthnStore.revokeCredential({ credentialId, subjectId: String(user.id),
+    applicationId: MFA_APPLICATION_ID, reason: 'user_removed', nowMs: Date.now() });
+  await consumeFreshStepUp();
+  if (!revoked) return { error: 'That passkey could not be removed.' };
+  await audit(user.id, 'auth.mfa.passkey.removed', 'passkey');
+  await enqueueAuthSecurityNotification({ dedupeKey: `passkey-removed:${credentialId}:${Date.now()}`,
+    kind: 'passkey_removed', userId: user.id });
+  refreshSecurityPage();
+  return { success: 'Passkey removed.' };
 });
 
 export const beginGoogleIdentityLink = validatedActionWithUser(

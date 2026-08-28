@@ -19,8 +19,21 @@ import { finalizeInitialAuthenticatorEnrollment } from '@/lib/auth/mfa/enrollmen
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { beginTotpEnrollment, decryptTotpSecret, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
+import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
+const webAuthnResponseSchema = z.object({ ceremonyId: z.string().uuid(), credentialJson: z.string().min(1).max(8192) });
+
+function parseWebAuthnResponse(credentialJson: string): AuthenticationResponseJSON | null {
+  try {
+    const parsed: unknown = JSON.parse(credentialJson);
+    if (!parsed || typeof parsed !== 'object' || typeof (parsed as { id?: unknown }).id !== 'string') return null;
+    return parsed as AuthenticationResponseJSON;
+  } catch { return null; }
+}
 
 export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
   const context = await getPendingStepUp();
@@ -33,7 +46,33 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
-  await grantFreshStepUp(context.pending);
+  await grantFreshStepUp(context.pending, { factorId: context.pending.factorId, method: 'totp' });
+  redirect(context.pending.returnTo);
+});
+
+export async function beginStepUpWebAuthn() {
+  const context = await getPendingStepUp();
+  if (!context || !context.hasWebAuthn) throw new Error('A passkey is not available for this verification.');
+  const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);
+  const { ceremonyId, options } = await beginWebAuthnAuthentication({ subjectId: String(context.user.id),
+    applicationId: MFA_APPLICATION_ID, baseUrl: baseUrlForServer(), allowCredentials: credentials, store: webauthnStore });
+  return { ceremonyId, options };
+}
+
+export const verifyStepUpWebAuthn = validatedAction(webAuthnResponseSchema, async ({ ceremonyId, credentialJson }) => {
+  const context = await getPendingStepUp();
+  if (!context || !context.hasWebAuthn) return { error: 'Your verification session expired. Try the action again.' };
+  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many attempts. Try again later.' };
+  const response = parseWebAuthnResponse(credentialJson);
+  if (!response) return { error: 'That passkey response was not understood.' };
+  const verification = await finishWebAuthnAuthentication({ subjectId: String(context.user.id),
+    applicationId: MFA_APPLICATION_ID, ceremonyId, response, baseUrl: baseUrlForServer(), store: webauthnStore });
+  if (verification.status !== 'verified') return { error: 'That passkey could not be verified.' };
+  const accepted = await mfaStore.acceptChallengeWithVerifiedFactor({ applicationId: MFA_APPLICATION_ID,
+    factorId: verification.factorId, nowMs: Date.now(), purpose: 'step-up', subjectId: String(context.user.id),
+    transactionId: context.pending.transactionId });
+  if (accepted !== 'accepted') return { error: 'Your verification session expired. Try the action again.' };
+  await grantFreshStepUp(context.pending, { factorId: verification.factorId, method: 'webauthn' });
   redirect(context.pending.returnTo);
 });
 
@@ -69,6 +108,34 @@ export const verifyLoginTotp = validatedAction(codeSchema, async ({ code }) => {
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') return failAndRestart(result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Sign in again.' : 'Your verification session expired. Sign in again.');
+  await clearPendingPrimaryAuth();
+  await clearPendingLogin();
+  await setSession(context.user);
+  redirect(context.pending.returnTo);
+});
+
+export async function beginLoginWebAuthn() {
+  const context = await pendingAccount('challenge');
+  if (!context || !context.pending.hasWebAuthn) throw new Error('A passkey is not available for this sign-in.');
+  const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);
+  const { ceremonyId, options } = await beginWebAuthnAuthentication({ subjectId: String(context.user.id),
+    applicationId: MFA_APPLICATION_ID, baseUrl: baseUrlForServer(), allowCredentials: credentials, store: webauthnStore });
+  return { ceremonyId, options };
+}
+
+export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async ({ ceremonyId, credentialJson }) => {
+  const context = await pendingAccount('challenge');
+  if (!context || !context.pending.hasWebAuthn) return failAndRestart('Your verification session expired. Sign in again.');
+  if (!(await allowed(context.user.id, 'mfa_login_verify'))) return { error: 'Too many attempts. Sign in again later.' };
+  const response = parseWebAuthnResponse(credentialJson);
+  if (!response) return { error: 'That passkey response was not understood.' };
+  const verification = await finishWebAuthnAuthentication({ subjectId: String(context.user.id),
+    applicationId: MFA_APPLICATION_ID, ceremonyId, response, baseUrl: baseUrlForServer(), store: webauthnStore });
+  if (verification.status !== 'verified') return { error: 'That passkey could not be verified.' };
+  const accepted = await mfaStore.acceptChallengeWithVerifiedFactor({ applicationId: MFA_APPLICATION_ID,
+    factorId: verification.factorId, nowMs: Date.now(), purpose: 'login', subjectId: String(context.user.id),
+    transactionId: context.pending.transactionId });
+  if (accepted !== 'accepted') return failAndRestart('Your verification session expired. Sign in again.');
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   await setSession(context.user);

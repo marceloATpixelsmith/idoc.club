@@ -16,7 +16,7 @@ export default async function MfaPage() {
     const stepUp = await getPendingStepUp();
     if (!stepUp) redirect('/sign-in');
     return <AuthShell description="Enter the current 6-digit code from your authenticator app to continue."
-      title="Verify it's you"><MfaForm mode="step-up" /></AuthShell>;
+      title="Verify it's you"><MfaForm hasWebAuthn={stepUp.hasWebAuthn} mode="step-up" /></AuthShell>;
   }
   if (pending.stage === 'recovery-ack') redirect('/sign-in');
   let provisioningUri: string | undefined;
@@ -35,6 +35,6 @@ export default async function MfaPage() {
   return <AuthShell description={pending.stage === 'recovery-entry' ? 'Use a saved recovery code to replace your authenticator.'
     : setup ? 'Add the new account to your authenticator app.' : 'Enter the current code from your authenticator app.'}
     title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : setup ? 'Set up authenticator' : 'Two-step verification'}>
-    <MfaForm mode={pending.stage} provisioningUri={provisioningUri} />
+    <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri} />
   </AuthShell>;
 }
