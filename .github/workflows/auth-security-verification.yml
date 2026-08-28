@@ -1,0 +1,44 @@
+name: Authentication security verification
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: idoc_test_security
+          POSTGRES_PASSWORD: synthetic_test_password
+          POSTGRES_USER: idoc_security_runner
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U idoc_security_runner -d idoc_test_security"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://idoc_security_runner:synthetic_test_password@127.0.0.1:5432/idoc_test_security
+      AUTH_SECRET: security-e2e-only-auth-secret-32-bytes
+      RATE_LIMIT_HASH_KEY: security-e2e-rate-limit-key-32-bytes
+      PGOPTIONS: -c client_min_messages=warning
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:security
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-security-playwright-evidence
+          path: |
+            playwright-report/
+            test-results/security-e2e/
+          retention-days: 7

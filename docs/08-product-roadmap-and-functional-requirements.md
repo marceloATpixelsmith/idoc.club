@@ -2,6 +2,8 @@
 
 **Product Roadmap & Functional Requirements**
 
+> **Authentication release gate:** Authentication/account-security changes must pass the isolated integration and Chromium adversarial acceptance command documented in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). This gate excludes the planned payment/subscription security suite and does not replace independent penetration testing.
+
 From the deployed raw starter to membership launch, restricted content, seminars, news, and blog publishing
 
 | **Field**         | **Value**                                                                                                         |

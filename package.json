@@ -14,6 +14,8 @@
     "test:ci": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server --experimental-strip-types --test --test-reporter=dot tests/*.test.ts",
     "test:build-boundary": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server --experimental-strip-types --test --test-reporter=dot tests/build-runtime-boundary.build.ts",
     "test:integration-db": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/run-integration-db.ts",
+    "test:security-e2e": "playwright test -c playwright.security.config.ts",
+    "test:security": "pnpm test:integration-db && pnpm test:security-e2e",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "node --conditions=react-server --import tsx lib/db/seed.ts",
     "db:generate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate",
@@ -51,6 +53,7 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "tsx": "^4.23.12"
   }
 }
