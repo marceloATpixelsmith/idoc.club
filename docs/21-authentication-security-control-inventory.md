@@ -8,7 +8,7 @@ Traceability matrix reconciling documented auth/security requirements with the a
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.3                                            |
+| **Document version** | 1.4                                            |
 | **Date**              | 28 August 2026                                 |
 
 Working project document. Update this document in the same pull request as any change to authentication, authorization, session, MFA, OAuth, CSRF, rate-limiting, account-state, cookie, or security-header behavior.
@@ -321,14 +321,14 @@ This section records what changed in the follow-up pull request that closed the 
 
 **Judgment call, stated explicitly:** this closes AUTH-CSRF-001 via a hardened Origin check rather than by building a separate synchronizer-token or double-submit-cookie system. A dedicated token layer would be largely redundant defense-in-depth for a Server-Actions-only application and carries real risk of its own (touching every mutating form/wrapper, a materially larger and riskier change) for a marginal security gain over a correctly-enforced Origin check. If this application ever gains a non-Server-Action mutation surface (a custom `app/api/*` POST route handling browser-submitted, cookie-authenticated state changes), that surface would need its own explicit CSRF defense — Origin checking alone at the middleware layer, or a token, depending on its shape — evaluated at the time it is added.
 
-## 8c. Changes made by the dependency-vulnerability-upgrade pull request (this revision)
+## 8d. Changes made by the dependency-vulnerability-upgrade pull request (this revision)
 
 This section records what changed in the follow-up pull request that closed the pre-existing dependency advisories the AUTH-SUPPLY-001 scanner surfaced but did not itself fix, one of the four items the previous pull request explicitly deferred.
 
 1. **`package.json`/`pnpm-lock.yaml`.** `drizzle-orm` bumped `0.43.1`→`0.45.2` (closes its SQL-identifier-escaping advisory). `next` bumped `15.6.0-canary.59`→`15.6.0-canary.61` — a same-line, two-canary-build step within the already-pinned 15.6.0 line, **not** a major-version migration — closing GHSA-5j59-xgg2-r9c4, GHSA-h25m-26qc-wcjf, and GHSA-5f7q-jpqc-wp7h. `pnpm audit`'s reported advisory count dropped from 11 to 8 with zero new advisories introduced.
 2. **This document, AUTH-SUPPLY-001 and §12 item 8.** Updated to reflect the closed advisories and to record, per remaining advisory, the specific reason it is not reachable by this application's actual code paths (no `next/image` usage, no upload feature, postcss only ever processing developer-authored build-time CSS, `esbuild`/Playwright being dev-only tooling) rather than leaving "pre-existing advisories exist" as an unexamined blanket statement.
 
-**Still deliberately deferred, not silently dropped**: the four remaining advisories (`sharp`, two `postcss` findings, and the Image Optimizer `remotePatterns` finding) all require a Next.js **major**-version migration to close, and this pull request judged that a disproportionate, real-regression-risk change for findings this application cannot currently reach — see §12 item 8 for the full per-advisory reasoning and the condition under which that judgment must be revisited. The CSRF token layer, correlation-ID/APM integration, and WebAuthn/passkey-for-privileged-roles items remain open per §8b.
+**Still deliberately deferred, not silently dropped**: the four remaining advisories (`sharp`, two `postcss` findings, and the Image Optimizer `remotePatterns` finding) all require a Next.js **major**-version migration to close, and this pull request judged that a disproportionate, real-regression-risk change for findings this application cannot currently reach — see §12 item 8 for the full per-advisory reasoning and the condition under which that judgment must be revisited. The CSRF token layer closed in §8c above; the correlation-ID/APM integration and WebAuthn/passkey-for-privileged-roles items remain open per §8b, each tracked in its own sibling pull request.
 
 ---
 
