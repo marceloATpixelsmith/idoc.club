@@ -18,11 +18,13 @@ import { passwordSchema } from '@/lib/auth/password-policy';
 import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
 import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
-import { requestOrigin } from '@/lib/security/rate-limit';
+import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { revokeAllUserSessions } from '@/lib/auth/session-registry';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -40,6 +42,14 @@ export const signIn = validatedAction(signInSchema, async (data) => {
   const pending = await getPendingLogin();
   if (!pending || pending.stage !== 'password' || pending.email !== email) {
     return { error: 'Your sign-in session expired. Start again.', email };
+  }
+
+  // Independent dual-bucket throttle on the credential comparison itself (distinct from the
+  // Turnstile+rate-limited email-collection step that gates entry into this pending-login stage):
+  // without this, holding one valid pending-login cookie let comparePasswords() be called an
+  // unlimited number of times within its lifetime.
+  if (!(await checkRateLimit('login_password', email, await requestOrigin()))) {
+    return { error: 'Too many attempts. Please try again in a few minutes.', email };
   }
 
   const matchingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -146,14 +156,18 @@ export const requestMigrationActivation = validatedAction(accountLinkSchema, asy
 const consumeTokenSchema = z.object({ confirmPassword: passwordSchema, password: passwordSchema, token: z.string().max(100) })
   .refine(({ confirmPassword, password }) => confirmPassword === password, { message: 'Passwords do not match.' });
 
+const breachedPasswordError = { error: 'This password has appeared in a public data breach. Please choose a different password.' };
+
 export const resetPassword = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'password_reset', password);
-  return result.status === 'success' ? { success: 'Your password was reset. Sign in again on every device.' } : { error: 'This reset link is invalid or expired.' };
+  if (result.status === 'success') return { success: 'Your password was reset. Sign in again on every device.' };
+  return result.status === 'breached_password' ? breachedPasswordError : { error: 'This reset link is invalid or expired.' };
 });
 
 export const activateMigratedAccount = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'migration_activation', password);
-  return result.status === 'success' ? { success: 'Your account is active. Sign in to review your imported profile.' } : { error: 'This activation link is invalid or expired.' };
+  if (result.status === 'success') return { success: 'Your account is active. Sign in to review your imported profile.' };
+  return result.status === 'breached_password' ? breachedPasswordError : { error: 'This activation link is invalid or expired.' };
 });
 
 const resendVerificationSchema = z.object({ email: z.string().email().max(255) });
@@ -186,6 +200,10 @@ export const updatePassword = validatedActionWithUser(
     if (!isPasswordValid) return { error: 'Current password is incorrect.' };
     if (currentPassword === newPassword) return { error: 'New password must be different from the current password.' };
     if (confirmPassword !== newPassword) return { error: 'New password and confirmation password do not match.' };
+    if ((await checkPasswordBreached(newPassword)).breached) {
+      await notifyWebmasterOfBreachedPasswordAttempt({ email: user.email, source: 'password-change' });
+      return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
+    }
 
     const newPasswordHash = await hashPassword(newPassword);
     await db.transaction(async (tx) => {

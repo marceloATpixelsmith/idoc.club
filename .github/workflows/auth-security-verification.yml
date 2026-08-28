@@ -31,6 +31,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Two-tier dependency scan: fails the build on a critical advisory (none exist in the current
+      # dependency tree, so this is a real, enforced gate today, not aspirational); high/moderate
+      # advisories are reported but do not fail the build yet, since the tree currently carries
+      # several pre-existing high findings (transitive, via drizzle-orm and Next.js's own bundled
+      # sharp/postcss) that predate this gate and need their own upgrade path rather than blocking
+      # unrelated PRs the day this scan was turned on. Dependabot (.github/dependabot.yml) opens
+      # weekly PRs to close these over time; tighten this step to --audit-level=high once triaged.
+      - run: pnpm audit --audit-level=critical
+      - run: pnpm audit --audit-level=high || echo "::warning::pnpm audit found high/moderate advisories -- see job output above. Not yet build-blocking; see .github/workflows/auth-security-verification.yml for why."
       - run: pnpm typecheck
       # Unit-level auth/security tests (JWT/session-boundary tampering and exact idle/absolute
       # timeout math, Turnstile fail-closed behavior, password policy/hashing, rate-limit hashing,

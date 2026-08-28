@@ -15,6 +15,7 @@ import { finalizeMigratedAccountAfterVerifiedPassword } from '@/lib/membership/a
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { issueLoginDeviceTrust } from '@/lib/auth/login-device-trust';
+import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -97,6 +98,17 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   const role = await authoritativeMfaRole(verifiedUser.id);
   if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');
+  // Reaching here for role === 'member' means device trust did not already bypass this OTP step --
+  // i.e. this is a sign-in from a browser this account has not been recognized on before. Privileged
+  // roles are deliberately excluded: they always pass through mandatory TOTP on every single login
+  // (see AUTH-MFA-003), so an alert here would fire on every admin sign-in with no added signal.
+  if (role === 'member') {
+    await enqueueAuthSecurityNotification({
+      dedupeKey: `new-sign-in:${verifiedUser.id}:${Date.now()}`,
+      kind: 'new_sign_in',
+      userId: verifiedUser.id,
+    });
+  }
   await setSession(verifiedUser);
   redirect(destination);
 });

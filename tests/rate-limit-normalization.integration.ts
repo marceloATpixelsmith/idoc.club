@@ -98,3 +98,24 @@ test('the persisted bucket rows never contain a raw email address or raw origin/
     assert.match(row.origin_hash, /^[0-9a-f]{64}$/);
   }
 });
+
+test('the login password-guessing purpose is throttled by the same dual-independent-bucket design as every other purpose (AUTH-RATE-005)', async () => {
+  const now = new Date();
+  const email = normalizeEmail('guess-target@example.test');
+  // The email-keyed bucket allows exactly 3 guesses per 15-minute window against one account...
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await checkRateLimit('login_password', email, `guess-origin-${i}`, now), true);
+  }
+  // ...and a 4th, even from a brand-new origin, is throttled: an attacker who has passed the
+  // Turnstile+rate-limited email step once cannot then guess the password field unboundedly.
+  assert.equal(await checkRateLimit('login_password', email, 'yet-another-guess-origin', now), false);
+
+  // Independently, the origin-keyed bucket (10/15min) still blocks one origin guessing across many
+  // different email addresses, so rotating the target account from a fixed origin doesn't bypass it.
+  const fixedOrigin = 'fixed-guessing-origin';
+  const perOriginResults: boolean[] = [];
+  for (let i = 0; i < 11; i += 1) {
+    perOriginResults.push(await checkRateLimit('login_password', normalizeEmail(`guess-victim-${i}@example.test`), fixedOrigin, now));
+  }
+  assert.equal(perOriginResults.at(-1), false);
+});

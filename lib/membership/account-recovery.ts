@@ -8,13 +8,13 @@ import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, m
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
 import { memberProfileSchema, normalizeEmail } from './validation';
-import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
+import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { checkRateLimit } from '@/lib/security/rate-limit';
+import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
 const LIFETIME_MS = 60 * 60 * 1000;
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_REQUESTS = 3;
 const MINIMUM_RESPONSE_MS = 350;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -24,21 +24,6 @@ function operationalFailureCategory(error: unknown) {
   if (message.includes('encrypt') || message.includes('key')) return 'encryption';
   if (message.includes('connect') || message.includes('database')) return 'database';
   return 'operational';
-}
-
-async function takeAllowance(email: string, purpose: AccountTokenPurpose, origin: string, now: Date) {
-  const secret = rateLimitHashKeyForServer();
-  const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
-  const identifierHash = digest(`${secret}:account:${email}`);
-  const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
-  const rows = await db.execute<{ request_count: number }>(sql`
-    insert into idoc.account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
-    values (${purpose}, ${identifierHash}, ${originHash}, ${windowStartedAt.toISOString()})
-    on conflict (purpose, identifier_hash, origin_hash, window_started_at)
-    do update set request_count = idoc.account_request_limits.request_count + 1, updated_at = now()
-    returning request_count
-  `);
-  return Boolean(rows[0] && rows[0].request_count <= MAX_REQUESTS);
 }
 
 /** Neutral anonymous boundary. It persists rate evidence and a deliverable token atomically. */
@@ -54,7 +39,7 @@ export async function requestAccountLink(
   try {
     const email = normalizeEmail(untrustedEmail);
     const now = new Date();
-    const allowed = await takeAllowance(email, purpose, origin, now);
+    const allowed = await checkRateLimit(purpose, email, origin, now);
     const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
     const eligible = allowed && user && (purpose === 'password_reset' ? ['active', 'onboarding'].includes(user.accountState) : user.accountState === 'migrated_pending');
     if (eligible) {
@@ -165,6 +150,21 @@ export async function activateMigratedAccountByUserId(userId: number, password: 
 
 export async function consumeAccountToken(rawToken: string, purpose: AccountTokenPurpose, password: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) return { status: 'invalid' as const };
+  // Checked before the transaction opens (never hold a database transaction open across an
+  // external network call), and only after the token shape passes, but before any database read of
+  // the real token record -- a wasted breach check against a garbage/expired token is harmless,
+  // whereas an open transaction blocked on network I/O is not.
+  if ((await checkPasswordBreached(password)).breached) {
+    const [owner] = await db.select({ email: users.email }).from(accountTokens)
+      .innerJoin(users, eq(users.id, accountTokens.userId))
+      .where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date())))
+      .limit(1);
+    await notifyWebmasterOfBreachedPasswordAttempt({
+      email: owner?.email,
+      source: purpose === 'migration_activation' ? 'migration-activation' : 'password-reset-token',
+    });
+    return { status: 'breached_password' as const };
+  }
   return db.transaction(async (tx) => {
     const [record] = await tx.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date()))).limit(1);
     if (!record) return { status: 'invalid' as const };

@@ -19,6 +19,8 @@ import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { verifyActiveTotp } from '@/lib/auth/mfa/totp';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
+import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 
 const startResetSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -147,6 +149,10 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
   if ((privileged && pending.verification !== 'totp') || (!privileged && pending.verification !== 'email-otp' && pending.verification !== 'totp')) {
     await clearPendingPasswordReset();
     return { error: 'Your recovery requirements changed. Start again.' };
+  }
+  if ((await checkPasswordBreached(password)).breached) {
+    await notifyWebmasterOfBreachedPasswordAttempt({ email: user.email, source: 'password-reset' });
+    return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
   }
   const passwordHash = await hashPassword(password);
   await db.transaction(async (tx) => {

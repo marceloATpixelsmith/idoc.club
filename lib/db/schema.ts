@@ -29,7 +29,10 @@ export const users = idocSchema.table('users', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
-}, (table) => [uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`)]);
+}, (table) => [
+  uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`),
+  check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
+]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
   id: serial('id').primaryKey(),
