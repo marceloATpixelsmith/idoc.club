@@ -10,6 +10,7 @@ const TTL_SECONDS = 10 * 60;
 export type PendingPrimaryAuth = {
   applicationId: 'idoc.club';
   factorId: string;
+  hasWebAuthn: boolean;
   method: 'google' | 'password';
   sessionVersion: number;
   stage: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack';
@@ -35,6 +36,7 @@ export async function getPendingPrimaryAuth(): Promise<PendingPrimaryAuth | null
     const { payload } = await jwtVerify(token, mfaConfiguration().continuationKey, { algorithms: ['HS256'] });
     if (payload.applicationId !== 'idoc.club' || !Number.isSafeInteger(payload.subjectId) ||
       !Number.isSafeInteger(payload.sessionVersion) || typeof payload.factorId !== 'string' ||
+      typeof payload.hasWebAuthn !== 'boolean' ||
       typeof payload.transactionId !== 'string' || !['google', 'password'].includes(String(payload.method)) ||
       !['challenge', 'enrollment', 'recovery-entry', 'replacement', 'recovery-ack'].includes(String(payload.stage)) || typeof payload.returnTo !== 'string') return null;
     return payload as unknown as PendingPrimaryAuth;

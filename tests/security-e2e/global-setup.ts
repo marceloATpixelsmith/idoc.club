@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -8,6 +8,20 @@ import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 
 const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
+
+export const E2E_TOTP_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+// Mirrors lib/auth/mfa/totp.ts's encryptTotpSecret serialization exactly (keyId.iv.tag.ciphertext,
+// AES-256-GCM, all base64url) without importing that module: Playwright 1.55's CommonJS-compatible
+// transform for TypeScript global setup can load prebuilt ESM packages like jose, but not raw local
+// app source, so this fixture-only encryption is duplicated in full rather than imported.
+function encryptE2eTotpSecret(secret: string, keyId: string, key: Buffer): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${keyId}.${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}`;
+}
 
 export default async function globalSetup() {
   // Load jose through native dynamic import. Playwright 1.55 executes TypeScript global setup
@@ -40,6 +54,12 @@ export default async function globalSetup() {
     }
     if (name === 'administrator' || name === 'super-administrator') {
       await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'administrator' ? 'administrator' : 'super_admin'},${user.id})`;
+      // Mandatory MFA requires an active TOTP factor before any privileged flow (including WebAuthn
+      // registration, which requires this as its fallback) can be exercised; the raw secret is fixed
+      // and exported so specs can compute a valid current code without re-deriving it from the DB.
+      const encryptedSecret = encryptE2eTotpSecret(E2E_TOTP_SECRET, 'e2e-v1', Buffer.from('uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw', 'base64url'));
+      await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id,activated_at)
+        values(${randomUUID()},${user.id},'idoc.club','totp','active',${encryptedSecret},'e2e-v1',now())`;
     }
     const now = new Date();
     const sessionId = randomUUID();
@@ -58,24 +78,27 @@ export default async function globalSetup() {
       .setIssuedAt()
       .setExpirationTime(Math.floor(expires.getTime() / 1000))
       .sign(new TextEncoder().encode(AUTH_SECRET));
-    await writeFile(
-      `.security-e2e/${name}.json`,
-      JSON.stringify({
-        cookies: [
-          {
-            name: 'idoc-session',
-            value: token,
-            domain: '127.0.0.1',
-            path: '/',
-            expires: Math.floor(expires.getTime() / 1000),
-            httpOnly: true,
-            secure: false,
-            sameSite: 'Lax',
-          },
-        ],
-        origins: [],
-      }),
-    );
+    const storageState = (domain: string) => JSON.stringify({
+      cookies: [
+        {
+          name: 'idoc-session',
+          value: token,
+          domain,
+          path: '/',
+          expires: Math.floor(expires.getTime() / 1000),
+          httpOnly: true,
+          secure: false,
+          sameSite: 'Lax',
+        },
+      ],
+      origins: [],
+    });
+    await writeFile(`.security-e2e/${name}.json`, storageState('127.0.0.1'));
+    // A WebAuthn relying-party ID must be a valid domain, and Chromium rejects a bare IP address
+    // (127.0.0.1) for that purpose even though it's an otherwise-trustworthy local origin. This
+    // localhost-scoped variant exists only for specs that exercise a real WebAuthn ceremony; every
+    // other spec keeps using the 127.0.0.1 fixtures above, unaffected.
+    await writeFile(`.security-e2e/${name}-localhost.json`, storageState('localhost'));
   }
   await sql.end();
 }

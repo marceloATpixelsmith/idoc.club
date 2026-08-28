@@ -58,6 +58,25 @@ export interface RememberedDeviceRecord {
   factorId: string;
 }
 
+export type WebAuthnCeremonyPurpose = 'registration' | 'authentication';
+export type WebAuthnCredentialDeviceType = 'singleDevice' | 'multiDevice';
+
+export interface WebAuthnCredentialRecord {
+  credentialId: string;
+  factorId: string;
+  subjectId: string;
+  applicationId: string;
+  publicKey: string;
+  signCount: number;
+  transports: readonly string[];
+  deviceType: WebAuthnCredentialDeviceType;
+  backedUp: boolean;
+  deviceName: string | null;
+  status: MfaFactorStatus;
+  createdAtMs: number;
+  lastUsedAtMs: number | null;
+}
+
 export interface MfaStore {
   createPendingTotp(input: { factor: TotpFactorRecord; enrollment: TotpEnrollmentRecord }): Promise<void>;
   getPendingTotpEnrollment(input: {

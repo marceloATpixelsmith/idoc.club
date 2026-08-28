@@ -9,13 +9,15 @@ import { beginAuthenticatorReplacement, forgetAllRememberedDevices, forgetThisDe
 import { Suspense, useActionState } from 'react';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
 import { GoogleIdentityCard } from './google-identity-card';
+import { PasskeysCard } from './passkeys-card';
 
 type PasswordState = { error?: string; success?: string };
 type DeleteState = { error?: string; success?: string };
-type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
+type Passkey = { credentialId: string; deviceName: string | null; createdAt: string; lastUsedAt: string | null };
+type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; passkeys: Passkey[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export function SecurityClient({ currentDeviceRemembered, currentSessionId, privileged, sessions, totpConfigured }: SecurityClientProps) {
+export function SecurityClient({ currentDeviceRemembered, currentSessionId, passkeys, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
   const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
   const [replaceState, replaceAction] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
@@ -47,11 +49,14 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, priv
         <GoogleIdentityCard />
       </Suspense>
 
-      {privileged ? <Card className="mb-8"><CardHeader><CardTitle>Authenticator app</CardTitle></CardHeader><CardContent className="space-y-4">
+      {privileged ? <>
+      <Card className="mb-8"><CardHeader><CardTitle>Authenticator app</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-gray-500">Status: {totpConfigured ? 'Configured' : 'Setup required'}. Recovery codes are one-time. New codes are issued when you replace your authenticator.</p>
         {replaceState.error ? <p className="text-sm text-red-500">{replaceState.error}</p> : null}
         {totpConfigured ? <form action={replaceAction}><Button type="submit" variant="outline">Replace authenticator</Button></form> : null}
-      </CardContent></Card> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
+      </CardContent></Card>
+      <PasskeysCard passkeys={passkeys} />
+      </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-gray-500">This browser is {currentDeviceRemembered ? 'remembered for password sign-in verification' : 'not currently remembered'}.</p>
         {(forgetCurrentState.error || forgetAllState.error) ? <p className="text-sm text-red-500">{forgetCurrentState.error || forgetAllState.error}</p> : null}
         {(forgetCurrentState.success || forgetAllState.success) ? <p className="text-sm text-green-500">{forgetCurrentState.success || forgetAllState.success}</p> : null}
