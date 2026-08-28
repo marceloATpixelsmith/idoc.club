@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, cancelMfa, confirmTotpEnrollment, verifyLoginTotp, verifyStepUpTotp } from './actions';
 
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
@@ -24,7 +25,7 @@ export function MfaForm({ mode, provisioningUri }: { mode: 'challenge' | 'enroll
       <form action={formAction} className="idoc-auth-form">
         <label>Recovery code<input autoComplete="off" autoFocus maxLength={64} name="recoveryCode" required /></label>
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
-        <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? 'Checking…' : 'Continue'}</button>
+        <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Checking" /> : 'Continue'}</button>
       </form>
       <form action={cancel}><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
     </>
@@ -38,7 +39,7 @@ export function MfaForm({ mode, provisioningUri }: { mode: 'challenge' | 'enroll
       </> : null}
       <label>Authenticator code<input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} name="code" pattern="[0-9]{6}" required /></label>
       {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
-      <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? 'Verifying…' : 'Verify'}</button>
+      <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
     {mode === 'challenge' ? <form action={recover}><input name="recover" type="hidden" value="yes" />
       <button disabled={recovering} type="submit">Use a recovery code</button></form> : null}

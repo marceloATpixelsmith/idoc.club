@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { PasswordField } from '@/components/auth/password-field';
 import type { ActionState } from '@/lib/auth/middleware';
 import { signIn } from '../actions';
@@ -28,7 +29,7 @@ export function PasswordStep({ email }: { email: string }) {
           <PasswordField autoComplete="current-password" autoFocus label="Password" />
           {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
           <button className="idoc-auth-button" disabled={pending} type="submit">
-            {pending ? 'Signing in…' : 'Sign In'}
+            {pending ? <AuthPendingLabel text="Signing in" /> : 'Sign In'}
           </button>
           <div className="idoc-auth-forgot">
             <a className="idoc-auth-link" href="/recover-password">Forgot password?</a>
