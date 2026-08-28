@@ -31,6 +31,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Unit-level auth/security tests (JWT/session-boundary tampering and exact idle/absolute
+      # timeout math, Turnstile fail-closed behavior, password policy/hashing, rate-limit hashing,
+      # runtime configuration fail-closed checks) run here too, so a green "security" check is a
+      # complete auth/security gate on its own rather than depending on a separate workflow.
+      - run: pnpm test:ci
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:security
       - name: Upload failure evidence
