@@ -36,12 +36,14 @@ test('the same malformed action request, sent same-origin, fails for a different
   expect(body).not.toContain('Invalid Server Actions request');
 });
 
-test('a Server Action request with no Origin header at all is not rejected by the origin-mismatch check specifically (Next only rejects a header that is present and wrong, not an absent one)', async ({ request }) => {
-  // This documents actual, verified behavior rather than an assumption: omitting Origin entirely
-  // behaves like a same-origin request for this specific check (it proceeds to action lookup and
-  // fails with "Server action not found", not "Invalid Server Actions request"). A forged *mismatched*
-  // Origin is what the two tests above prove is actually rejected. A real browser reliably sends
-  // Origin on a cross-site POST, which is the threat model this protection actually defends against.
+test('a Server Action request with no Origin header at all is rejected by the middleware-level hardening on top of Next\'s own check', async ({ request }) => {
+  // Next's own built-in check (action-handler.ts) only rejects an Origin header that is *present and
+  // wrong* -- it explicitly lets an absent Origin through, treating it like an old browser that never
+  // sent one (see docs/21 AUTH-CSRF-001). middleware.ts closes that specific, documented gap: it
+  // rejects any POST it recognizes as a possible Server Action (fetch-based via `next-action`, or a
+  // plain-form url-encoded/multipart POST) that omits Origin entirely, before Next's own handler ever
+  // sees it. A real browser reliably sends Origin on every such POST, so this has no effect on
+  // legitimate traffic and only closes a forged/non-browser-client gap.
   const response = await request.post('/sign-in', {
     data: '[]',
     headers: {
@@ -50,7 +52,20 @@ test('a Server Action request with no Origin header at all is not rejected by th
     },
   });
   const body = await response.text();
-  expect(body).not.toContain('Invalid Server Actions request');
+  expect(response.status(), body).toBe(403);
+  expect(body).toContain('Invalid Server Actions request');
+});
+
+test('a plain-form (progressive-enhancement) Server Action POST with no Origin header is also rejected', async ({ request }) => {
+  // The middleware-level check mirrors Next's own request-detection exactly (fetch-header, url-encoded,
+  // and multipart form POSTs all count), not just the JS fetch-based case the other tests exercise.
+  const response = await request.post('/sign-in', {
+    data: 'field=value',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  });
+  const body = await response.text();
+  expect(response.status(), body).toBe(403);
+  expect(body).toContain('Invalid Server Actions request');
 });
 
 test('a forged Origin cannot reach the real sign-out action either: a state-changing action behind an authenticated session still rejects the cross-origin attempt', async ({ browser }) => {

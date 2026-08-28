@@ -21,8 +21,32 @@ const protectedRoutes = '/dashboard';
 // via `next/headers` (see `lib/observability/request-id.ts`), and also set as a response header so a
 // user or support agent can hand back the exact ID from their browser's network tab.
 
+// Next.js's built-in Server Action CSRF defense (action-handler.ts) rejects a POST whose `Origin`
+// header is present but does not match the deployment's own host -- but explicitly *lets through* a
+// request that omits `Origin` entirely (treating it like an old browser that never sent one). A real
+// browser reliably sends `Origin` on every cross-site POST, fetch-based or plain-form, so this is a
+// narrow gap rather than an open door, but it is a documented one (docs/21 AUTH-CSRF-001) worth
+// closing outright rather than leaving as residual risk. Detection here intentionally mirrors Next's
+// own `getServerActionRequestMetadata` (next/dist/server/lib/server-action-request-meta.js) exactly,
+// so this check fires on precisely the same requests Next itself treats as a possible Server Action --
+// no broader, no narrower -- covering both JS fetch-based actions (the `next-action` header) and the
+// progressive-enhancement plain-<form> case (url-encoded/multipart POST bodies).
+function isPossibleServerActionRequest(request: NextRequest): boolean {
+  if (request.method !== 'POST') return false;
+  if (request.headers.get('next-action') !== null) return true;
+  const contentType = request.headers.get('content-type');
+  return contentType === 'application/x-www-form-urlencoded' || (contentType?.startsWith('multipart/form-data') ?? false);
+}
+
 export async function middleware(request: NextRequest) {
   const requestId = crypto.randomUUID();
+
+  if (isPossibleServerActionRequest(request) && request.headers.get('origin') === null) {
+    const res = new NextResponse('Invalid Server Actions request.', { status: 403 });
+    res.headers.set(REQUEST_ID_HEADER, requestId);
+    return res;
+  }
+
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
   const next = () => NextResponse.next({ request: { headers: forwardedHeaders } });
