@@ -8,6 +8,7 @@ import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactio
 import { emailCode, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { checkRateLimit } from '@/lib/security/rate-limit';
 import { normalizeEmail } from '@/lib/membership/validation';
+import { logError } from '@/lib/observability/logger';
 
 export type EmailOtpPurpose = 'login_verification' | 'password_reset' | 'signup_verification';
 
@@ -78,7 +79,7 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   try {
     await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
   } catch (error) {
-    console.error('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
+    await logError('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
     return { status: 'delivery_failed' };
   }
   return { status: 'ok' };

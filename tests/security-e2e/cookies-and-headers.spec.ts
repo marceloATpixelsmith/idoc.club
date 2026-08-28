@@ -24,6 +24,25 @@ test('the RFC 9116 vulnerability-disclosure policy is served at the well-known l
   expect(body).toMatch(/^Canonical: https?:\/\/.+\/\.well-known\/security\.txt$/m);
 });
 
+test('every response carries a fresh, server-generated x-request-id correlation header, ignoring any client-supplied value', async ({ request }) => {
+  // AUTH-LOG-004: a lightweight substitute for a full APM/tracing vendor integration. middleware.ts
+  // assigns this on every request and forwards it downstream so Server Components/Actions/Route
+  // Handlers can tag log lines with it (lib/observability/request-id.ts) -- this proves the
+  // client-visible half of that behaviorally, against the real running app.
+  const first = await request.get('/sign-in');
+  const second = await request.get('/sign-in');
+  const firstId = first.headers()['x-request-id'];
+  const secondId = second.headers()['x-request-id'];
+  expect(firstId).toBeTruthy();
+  expect(secondId).toBeTruthy();
+  expect(firstId).not.toBe(secondId);
+
+  // A client-supplied x-request-id must never be reflected back -- correlation IDs are always
+  // server-generated, so a client can never inject an arbitrary value into correlated log output.
+  const spoofed = await request.get('/sign-in', { headers: { 'x-request-id': 'attacker-supplied-value' } });
+  expect(spoofed.headers()['x-request-id']).not.toBe('attacker-supplied-value');
+});
+
 test('persisted session cookie has the development transport contract', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const [cookie] = await context.cookies('http://127.0.0.1:3100');

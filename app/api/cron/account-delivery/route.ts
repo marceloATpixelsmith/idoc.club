@@ -4,6 +4,7 @@ import { processAccountDeliveryBatch } from '@/lib/notifications/account-deliver
 import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import { handleAccountDeliveryCron } from '@/lib/notifications/account-delivery-worker-core';
 import { cronSecretForServer } from '@/lib/runtime/configuration';
+import { logError } from '@/lib/observability/logger';
 
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
@@ -14,11 +15,11 @@ export async function GET(request: Request) {
       try {
         await processAuthSecurityNotificationBatch();
       } catch {
-        console.error('auth_security_delivery_worker_failed', { category: 'operational' });
+        await logError('auth_security_delivery_worker_failed', { category: 'operational' });
       }
       return account;
     },
-    reportFailure: () => console.error('account_delivery_worker_failed', { category: 'operational' }),
+    reportFailure: () => logError('account_delivery_worker_failed', { category: 'operational' }),
     secret: cronSecretForServer(),
   });
 }

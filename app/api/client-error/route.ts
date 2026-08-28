@@ -1,3 +1,5 @@
+import { logError } from '@/lib/observability/logger';
+
 const MAX_FIELD_LENGTH = 2000;
 
 function truncate(value: unknown): string {
@@ -12,7 +14,7 @@ function truncate(value: unknown): string {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   if (body && typeof body === 'object') {
-    console.error('[client-error]', {
+    await logError('client_error', {
       digest: truncate((body as Record<string, unknown>).digest),
       message: truncate((body as Record<string, unknown>).message),
       stack: truncate((body as Record<string, unknown>).stack),

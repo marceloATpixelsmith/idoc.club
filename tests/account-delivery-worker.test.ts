@@ -42,7 +42,7 @@ test('failure evidence and public responses contain no sensitive values', async 
   const evidence: unknown[] = [];
   const response = await handleAccountDeliveryCron(request(`Bearer ${SECRET}`), {
     processBatch: async () => { throw new Error('member@example.com token=raw decrypted payload'); },
-    reportFailure: () => evidence.push({ category: 'operational' }),
+    reportFailure: () => { evidence.push({ category: 'operational' }); },
     secret: SECRET,
   });
   const publicBody = await response.text();
