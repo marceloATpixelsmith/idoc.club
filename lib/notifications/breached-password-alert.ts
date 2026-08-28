@@ -2,6 +2,7 @@ import 'server-only';
 
 import { escapeHtml, renderTransactionalEmail } from './email-template';
 import { sendTransactionalEmail } from './mailchimp-transactional';
+import { logWarn } from '@/lib/observability/logger';
 
 export type BreachedPasswordSource = 'migration-activation' | 'password-change' | 'password-reset' | 'password-reset-token' | 'signup';
 
@@ -23,7 +24,7 @@ const SOURCE_LABEL: Record<BreachedPasswordSource, string> = {
 export async function notifyWebmasterOfBreachedPasswordAttempt(input: { email?: string; source: BreachedPasswordSource }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {
-    console.warn('breached_password_alert_skipped', { category: 'configuration' });
+    await logWarn('breached_password_alert_skipped', { category: 'configuration' });
     return;
   }
   try {
@@ -35,6 +36,6 @@ export async function notifyWebmasterOfBreachedPasswordAttempt(input: { email?: 
     });
     await sendTransactionalEmail({ html, subject: 'IDOC: breached password rejected', to });
   } catch {
-    console.warn('breached_password_alert_failed', { category: 'delivery' });
+    await logWarn('breached_password_alert_failed', { category: 'delivery' });
   }
 }

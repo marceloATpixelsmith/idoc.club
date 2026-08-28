@@ -11,6 +11,7 @@ import { memberProfileSchema, normalizeEmail } from './validation';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { checkRateLimit } from '@/lib/security/rate-limit';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
+import { logError } from '@/lib/observability/logger';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
@@ -57,7 +58,7 @@ export async function requestAccountLink(
     }
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
-    console.error('account_link_request_failed', {
+    await logError('account_link_request_failed', {
       category: operationalFailureCategory(error),
       purpose,
     });

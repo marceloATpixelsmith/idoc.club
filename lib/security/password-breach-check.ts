@@ -33,6 +33,10 @@ export async function checkPasswordBreached(password: string): Promise<PasswordB
       signal: controller.signal,
     });
     if (!response.ok) {
+      // Not routed through lib/observability/logger.ts: this module is deliberately kept importable
+      // by a plain `node --test` run with no Next.js bundler present (see tests/password-breach-check.test.ts),
+      // and the logger's request-ID lookup transitively imports `next/headers`, which that runtime
+      // cannot resolve at all -- not even lazily. See docs/21 AUTH-LOG-004 for the full reasoning.
       console.warn('password_breach_check_unavailable', { category: 'external-provider', status: response.status });
       return { breached: false, checked: false };
     }

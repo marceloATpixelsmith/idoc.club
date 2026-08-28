@@ -28,14 +28,14 @@ function authorized(request: Request, secret: string | undefined) {
 
 export async function handleAccountDeliveryCron(request: Request, dependencies: {
   processBatch: () => Promise<Record<string, number>>;
-  reportFailure: () => void;
+  reportFailure: () => void | Promise<void>;
   secret: string | undefined;
 }) {
   if (!authorized(request, dependencies.secret)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     return Response.json(await dependencies.processBatch());
   } catch {
-    dependencies.reportFailure();
+    await dependencies.reportFailure();
     return Response.json({ error: 'Worker failed' }, { status: 500 });
   }
 }
