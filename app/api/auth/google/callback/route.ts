@@ -34,12 +34,20 @@ function clearBinding(response: NextResponse) {
   return response;
 }
 
-/** Distinguishes an expected, benign outcome (the user's account genuinely isn't linked, or isn't
- * eligible for Google sign-in -- a real business rule, not a bug) from a genuine protocol/config
- * problem worth paging an operator about. `GoogleOidcError.code` already carries a precise category
- * (see google-oidc-reference.ts) for exactly this purpose. */
-function classifyGoogleOauthFailure(error: unknown): { alert: boolean; reason: string } {
-  if (error instanceof GoogleOidcError) return { alert: true, reason: error.code };
+/** Distinguishes an expected, benign outcome (the user's account genuinely isn't linked, isn't
+ * eligible for Google sign-in, or the user simply declined Google's consent screen -- all real,
+ * ordinary outcomes, not bugs) from a genuine protocol/config problem worth paging an operator
+ * about. `GoogleOidcError.code` already carries a precise category (see google-oidc-reference.ts)
+ * for exactly this purpose, but `completeGoogleOidcCallback` maps every non-empty `error` query
+ * parameter -- including the standard OAuth2 `access_denied` Google sends when a user clicks
+ * "Cancel" on the consent screen -- to the same `'provider_error'` code, so the raw parameter value
+ * (read directly from the callback URL, never trusted for anything security-relevant) is the only
+ * way to tell a routine cancellation apart from an actual provider-side failure. */
+function classifyGoogleOauthFailure(error: unknown, providerErrorParam: string | null): { alert: boolean; reason: string } {
+  if (error instanceof GoogleOidcError) {
+    if (error.code === 'provider_error' && providerErrorParam === 'access_denied') return { alert: false, reason: 'user_declined_consent' };
+    return { alert: true, reason: error.code };
+  }
   if (error instanceof GoogleAccountLinkRequiredError) return { alert: false, reason: 'link_required' };
   if (error instanceof GoogleAccountNotEligibleError) return { alert: false, reason: 'account_not_eligible' };
   return { alert: true, reason: 'unexpected_error' };
@@ -86,7 +94,7 @@ export async function GET(request: NextRequest) {
     return clearBinding(NextResponse.redirect(new URL(authenticated.redirectTo, applicationOrigin), 302));
   } catch (error) {
     await clearGoogleLinkFreshEvidence();
-    const { alert, reason } = classifyGoogleOauthFailure(error);
+    const { alert, reason } = classifyGoogleOauthFailure(error, request.nextUrl.searchParams.get('error'));
     await logError('google_oauth_callback_failed', { category: 'auth', reason });
     if (alert) await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'callback' });
     const user = await getUser().catch(() => null);

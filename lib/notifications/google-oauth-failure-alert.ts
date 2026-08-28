@@ -4,6 +4,9 @@ import { escapeHtml, renderTransactionalEmail } from './email-template.ts';
 import { sendTransactionalEmail } from './mailchimp-transactional.ts';
 import { logWarn } from '@/lib/observability/logger.ts';
 import { currentRequestId } from '@/lib/observability/request-id.ts';
+import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit.ts';
+
+const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 
 /** Best-effort operational alert only: never blocks or changes the caller's own redirect back to the
  * user, and never includes a raw exception message, the OAuth `code`/`state`, or any cookie/token
@@ -12,14 +15,25 @@ import { currentRequestId } from '@/lib/observability/request-id.ts';
  * request's correlation ID, so an operator can jump straight to the matching Vercel function-log
  * lines. Routed to the existing operations recipient documented in docs/07 §15
  * (`IDOC_ADMIN_NOTIFICATION_EMAIL`) rather than a new dedicated env var. Skips (rather than throws)
- * when unconfigured, matching the established precedent in breached-password-alert.ts. Deliberately
- * has no dedup/rate-limit of its own: Google sign-in failures are rare in a correctly configured
- * production deployment, so the natural volume is low; during initial setup, seeing one alert per
- * failed attempt is exactly the debugging signal this exists to provide. */
+ * when unconfigured, matching the established precedent in breached-password-alert.ts.
+ *
+ * Rate-limited by origin (`google_oauth_failure_alert`, the same `checkOriginRateLimit` primitive
+ * `start/route.ts` already uses): `/api/auth/google/callback` is a public, unauthenticated GET route
+ * with no rate limit of its own, so without this an anonymous caller could repeatedly hit it with no
+ * state/binding cookie and force an email send on every single request -- flooding the paid mail
+ * sender and the operations mailbox, and burying genuine alerts under attacker-triggered noise. Every
+ * failure is still logged unconditionally by the caller regardless of this limit; only the *email*
+ * is throttled. Delivery itself is bounded to `ALERT_DELIVERY_TIMEOUT_MS` so a slow/unresponsive
+ * Mailchimp never blocks the caller's own failure redirect long enough to risk a serverless timeout. */
 export async function notifyWebmasterOfGoogleOauthFailure(input: { reason: string; step: 'start' | 'callback' }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {
     await logWarn('google_oauth_failure_alert_skipped', { category: 'configuration' });
+    return;
+  }
+  const origin = await requestOrigin();
+  if (!(await checkOriginRateLimit('google_oauth_failure_alert', origin))) {
+    await logWarn('google_oauth_failure_alert_rate_limited', { category: 'auth' });
     return;
   }
   try {
@@ -31,7 +45,10 @@ export async function notifyWebmasterOfGoogleOauthFailure(input: { reason: strin
       footerNote: 'IDOC security monitoring. This message never contains any OAuth code, state, cookie, or token value.',
       heading: 'Google sign-in failure',
     });
-    await sendTransactionalEmail({ html, subject: `IDOC: Google sign-in failed (${input.reason})`, to });
+    await sendTransactionalEmail(
+      { html, subject: `IDOC: Google sign-in failed (${input.reason})`, to },
+      { signal: AbortSignal.timeout(ALERT_DELIVERY_TIMEOUT_MS) },
+    );
   } catch {
     await logWarn('google_oauth_failure_alert_failed', { category: 'delivery' });
   }
