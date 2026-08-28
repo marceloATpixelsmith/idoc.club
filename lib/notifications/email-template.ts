@@ -4,6 +4,14 @@
 // what's rendered inside this shell, not rewrite every call site. Deliberately dependency-free (no
 // `server-only`): it is pure string rendering, safe to unit test without a database or provider.
 
+/** Every existing template call site only ever interpolates static copy, dates, or already-validated
+ * URLs into `bodyHtml` -- never raw user input. This helper exists for the one call site that does
+ * (the breached-password webmaster alert, which includes the attempted account's email address), so
+ * that call site cannot introduce HTML injection into an email client via a crafted email string. */
+export function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export function renderTransactionalEmail(options: { bodyHtml: string; footerNote?: string; heading?: string }): string {
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#f9fafb;font-family:Arial,Helvetica,sans-serif;">
 <table role="presentation" width="100%" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">

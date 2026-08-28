@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { GET } from '../app/api/cron/account-delivery/route.ts';
 import { requestAccountLink } from '../lib/membership/account-recovery.ts';
@@ -34,7 +34,13 @@ after(closeHarness);
 async function queue(state: 'active' | 'migrated_pending' | 'onboarding' = 'active') {
   const user = await createUser(state);
   const purpose = state === 'migrated_pending' ? 'migration_activation' : 'password_reset';
-  await requestAccountLink(user.email, purpose, 'integration-origin', timing);
+  // A distinct origin per call: this suite calls queue() many times across many tests, and since
+  // requestAccountLink now enforces a real per-origin allowance (AUTH-RATE-002) in addition to the
+  // per-email one, reusing one literal origin across the whole file would eventually exhaust that
+  // origin-keyed bucket -- an artifact of sharing a fixed string here, not something this file is
+  // actually testing (the rate limiter itself is proven directly in
+  // tests/rate-limit-normalization.integration.ts and tests/account-token-lifecycles.integration.ts).
+  await requestAccountLink(user.email, purpose, `integration-origin-${randomUUID()}`, timing);
   const [row] = await sql`select * from idoc.account_delivery_outbox where user_id=${user.id}`;
   assert.ok(row);
   return { purpose, row, user };

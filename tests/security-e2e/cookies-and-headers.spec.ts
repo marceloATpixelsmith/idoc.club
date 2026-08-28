@@ -14,6 +14,16 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
+test('the RFC 9116 vulnerability-disclosure policy is served at the well-known location', async ({ request }) => {
+  const response = await request.get('/.well-known/security.txt');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('text/plain');
+  const body = await response.text();
+  expect(body).toMatch(/^Contact: mailto:.+@.+$/m);
+  expect(body).toMatch(/^Expires: \d{4}-\d{2}-\d{2}T/m);
+  expect(body).toMatch(/^Canonical: https?:\/\/.+\/\.well-known\/security\.txt$/m);
+});
+
 test('persisted session cookie has the development transport contract', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const [cookie] = await context.cookies('http://127.0.0.1:3100');

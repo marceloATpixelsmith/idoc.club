@@ -9,9 +9,11 @@ import {
   closeHarness, concurrently, createCompleteGraph, createUser, judgeRole, persistedGraph,
   profileInput, resetIdoc, sql, stewardRole, veterinarianRole,
 } from './postgres-harness.ts';
+import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const PASSWORD = 'Replacement9Password';
+const restoreFetch = stubPasswordBreachCheckAsClean();
 
 beforeEach(async () => {
   process.env.ACCOUNT_DELIVERY_KEY_VERSION = 'test-v1';
@@ -20,6 +22,7 @@ beforeEach(async () => {
   await resetIdoc();
 });
 after(closeHarness);
+after(restoreFetch);
 
 async function insertToken(userId: number, purpose: 'migration_activation' | 'password_reset', rawToken: string, expiresAt = new Date(Date.now() + 60_000)) {
   const [token] = await sql<{ id: number }[]>`insert into idoc.account_tokens(user_id,purpose,token_hash,expires_at)
@@ -103,9 +106,19 @@ test('password recovery is neutral, purpose-separated, rate-limited, digest-only
     if (attempt === 0) await sql`update idoc.users set account_state='migrated_pending' where id=${existing.id}`;
     await requestAccountLink(existing.email, 'migration_activation', 'protected-origin', timing);
   }
+  // Each requestAccountLink call now takes the same dual-independent-bucket path proven generically
+  // in tests/rate-limit-normalization.integration.ts (AUTH-RATE-002 closed): one email-keyed row and
+  // one origin-keyed row per purpose, rather than the single combined-key row the legacy bucket used
+  // to produce. Here every migration_activation call reuses the same email+origin, so both of its
+  // rows land on the same key each time and simply accumulate to 5; the password_reset calls use two
+  // distinct emails against the same origin, so they produce two distinct email-keyed rows plus one
+  // shared origin-keyed row.
   const limits = await sql`select purpose,request_count from idoc.account_request_limits order by purpose`;
-  assert.deepEqual(limits.map(({ purpose }) => purpose), ['migration_activation', 'password_reset', 'password_reset']);
-  assert.equal(limits.find(({ purpose }) => purpose === 'migration_activation')?.request_count, 5);
+  assert.deepEqual(limits.map(({ purpose }) => purpose),
+    ['migration_activation', 'migration_activation', 'password_reset', 'password_reset', 'password_reset']);
+  const migrationLimits = limits.filter(({ purpose }) => purpose === 'migration_activation');
+  assert.equal(migrationLimits.length, 2);
+  assert.ok(migrationLimits.every(({ request_count }) => request_count === 5));
   assert.equal((await sql`select count(*)::int as count from idoc.account_tokens`)[0].count, 4);
   assert.equal((await sql`select count(*)::int as count from idoc.account_tokens where purpose='migration_activation'`)[0].count, 3);
   assert.equal((await sql`select count(*)::int as count from idoc.account_delivery_outbox`)[0].count, 4);
@@ -207,5 +220,92 @@ test('migrated activation failure matrix preserves foundations, credentials, ses
     assert.equal(evidence.includes(raw), false);
     assert.equal(evidence.includes(PASSWORD), false);
     assert.equal(evidence.includes('incomplete_import_foundation') || evidence.includes('missing_imported_profile'), true);
+  }
+});
+
+test('rotating the origin alone cannot bypass the legacy recovery path\'s per-email allowance (AUTH-RATE-002 closed)', async () => {
+  const user = await createUser('active');
+  const timing = { now: () => 0, random: () => 0, sleep: async () => undefined };
+  // Under the previous single combined-key bucket, a fresh origin on every call would each get its
+  // own independent allowance for the same email -- exactly the gap this migration to the shared
+  // dual-bucket primitive (lib/security/rate-limit.ts, already proven generically in
+  // tests/rate-limit-normalization.integration.ts) closes.
+  await requestAccountLink(user.email, 'password_reset', 'origin-1', timing);
+  await requestAccountLink(user.email, 'password_reset', 'origin-2', timing);
+  await requestAccountLink(user.email, 'password_reset', 'origin-3', timing);
+  assert.equal((await sql`select count(*)::int as count from idoc.account_tokens where user_id=${user.id} and purpose='password_reset'`)[0].count, 3);
+  await requestAccountLink(user.email, 'password_reset', 'never-seen-before-origin', timing);
+  assert.equal((await sql`select count(*)::int as count from idoc.account_tokens where user_id=${user.id} and purpose='password_reset'`)[0].count, 3,
+    'a brand-new origin must not grant a fresh allowance for an email that has already exhausted its own bucket');
+});
+
+test('a breached password is rejected without consuming the token, and alerts the configured operations recipient', async () => {
+  process.env.IDOC_ADMIN_NOTIFICATION_EMAIL = 'webmaster@idoc.club';
+  process.env.MAILCHIMP_TRANSACTIONAL_API_KEY = 'integration-only-mailchimp-key';
+  const breachedPassword = 'Breached9Password';
+  const suffix = createHash('sha1').update(breachedPassword, 'utf8').digest('hex').toUpperCase().slice(5);
+  const originalFetch = globalThis.fetch;
+  const sentMessages: unknown[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith('https://api.pwnedpasswords.com/')) {
+      return new Response(`${suffix}:37`, { headers: { 'content-type': 'text/plain' }, status: 200 });
+    }
+    if (url.startsWith('https://mandrillapp.com/')) {
+      sentMessages.push(JSON.parse(String(init?.body)));
+      return new Response('[{"status":"sent"}]', { headers: { 'content-type': 'application/json' }, status: 200 });
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  try {
+    const user = await createUser('active');
+    const [before] = await sql`select password_hash from idoc.users where id=${user.id}`;
+    await requestAccountLink(user.email, 'password_reset', 'origin', { now: () => 0, random: () => 0, sleep: async () => undefined });
+    const raw = await rawRequestedToken(user.id, 'password_reset');
+    const result = await consumeAccountToken(raw, 'password_reset', breachedPassword);
+    assert.deepEqual(result, { status: 'breached_password' });
+    assert.equal((await sql`select consumed_at from idoc.account_tokens where token_hash=${digest(raw)}`)[0].consumed_at, null);
+    const [after] = await sql`select password_hash from idoc.users where id=${user.id}`;
+    assert.equal(after.password_hash, before.password_hash);
+    assert.equal(sentMessages.length, 1);
+    const [{ message }] = sentMessages as [{ message: { html: string; to: { email: string }[] } }];
+    assert.equal(message.to[0].email, 'webmaster@idoc.club');
+    assert.equal(message.html.includes(breachedPassword), false);
+    assert.equal(message.html.includes(user.email), true);
+    // The same good password, using the same still-unconsumed token, still succeeds afterward --
+    // rejecting a breached password must not burn the user's one-time recovery token.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.startsWith('https://api.pwnedpasswords.com/')) return new Response('', { status: 200 });
+      return originalFetch(input, init);
+    }) as typeof fetch;
+    assert.equal((await consumeAccountToken(raw, 'password_reset', PASSWORD)).status, 'success');
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
+    delete process.env.MAILCHIMP_TRANSACTIONAL_API_KEY;
+  }
+});
+
+test('a breached password alert is skipped, not thrown, when no operations recipient is configured', async () => {
+  delete process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
+  const breachedPassword = 'AnotherBreached9Password';
+  const suffix = createHash('sha1').update(breachedPassword, 'utf8').digest('hex').toUpperCase().slice(5);
+  const originalFetch = globalThis.fetch;
+  let mandrillCalled = false;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith('https://api.pwnedpasswords.com/')) return new Response(`${suffix}:1`, { status: 200 });
+    if (url.startsWith('https://mandrillapp.com/')) { mandrillCalled = true; return new Response('[]', { status: 200 }); }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  try {
+    const user = await createUser('active');
+    await requestAccountLink(user.email, 'password_reset', 'origin', { now: () => 0, random: () => 0, sleep: async () => undefined });
+    const raw = await rawRequestedToken(user.id, 'password_reset');
+    assert.deepEqual(await consumeAccountToken(raw, 'password_reset', breachedPassword), { status: 'breached_password' });
+    assert.equal(mandrillCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

@@ -9,6 +9,8 @@ import { hashPassword, setSession } from '@/lib/auth/session';
 import { validatedAction } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { passwordSchema } from '@/lib/auth/password-policy';
+import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingSignup, getPendingSignup, markPendingSignupVerified, startPendingSignup } from '@/lib/auth/pending-signup';
@@ -84,6 +86,10 @@ export const completeSignup = validatedAction(completeSignupSchema, async ({ pas
   if (!pending || !pending.verified) return { error: 'Your signup session expired. Start again.' };
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, pending.email)).limit(1);
   if (existing) { await clearPendingSignup(); return { error: 'An account with this email already exists. Sign in instead.' }; }
+  if ((await checkPasswordBreached(password)).breached) {
+    await notifyWebmasterOfBreachedPasswordAttempt({ email: pending.email, source: 'signup' });
+    return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
+  }
   const newUser: NewUser = {
     accountState: 'onboarding', email: pending.email, emailVerifiedAt: new Date(),
     passwordHash: await hashPassword(password), role: 'member',

@@ -7,7 +7,7 @@ export const AUTH_SECURITY_KINDS = [
   'google_identity_linked', 'google_identity_unlinked', 'password_changed',
   'password_reset_completed', 'verified_email_changed', 'authenticator_enrolled',
   'authenticator_replaced', 'recovery_code_used', 'role_granted', 'role_revoked',
-  'other_sessions_revoked',
+  'other_sessions_revoked', 'new_sign_in',
 ] as const;
 
 export type AuthSecurityKind = (typeof AUTH_SECURITY_KINDS)[number];

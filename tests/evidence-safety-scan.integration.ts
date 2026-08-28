@@ -11,6 +11,10 @@ import {
   closeHarness, createCompleteGraph, createMembership, createProfile, createUser,
   judgeRole, profileInput, resetIdoc, sql,
 } from './postgres-harness.ts';
+import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
+
+const restoreFetch = stubPasswordBreachCheckAsClean();
+after(restoreFetch);
 
 // A single consolidated sweep, closing the "comprehensive operational-evidence safety scan" gap.
 // Individual tests elsewhere already check that their own specific failure path's evidence excludes

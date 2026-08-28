@@ -40,6 +40,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
       authenticator_replaced: { heading: 'Authenticator replaced', subject: 'Authenticator replaced for IDOC' },
       google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },
       google_identity_unlinked: { heading: 'Google account disconnected', subject: 'Google account disconnected from IDOC' },
+      new_sign_in: { heading: 'New sign-in to your account', subject: 'New sign-in to your IDOC account' },
       other_sessions_revoked: { heading: 'Other sessions logged out', subject: 'IDOC sessions were logged out' },
       password_changed: { heading: 'Password changed', subject: 'Your IDOC password was changed' },
       password_reset_completed: { heading: 'Password reset completed', subject: 'Your IDOC password was reset' },

@@ -10,9 +10,12 @@ import {
   closeHarness, createCompleteGraph, createMembership, createProfile, createUser,
   grantRole, profileInput, resetIdoc, sql,
 } from './postgres-harness.ts';
+import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const timing = { now: () => 0, random: () => 0, sleep: async () => undefined };
+const restoreFetch = stubPasswordBreachCheckAsClean();
+after(restoreFetch);
 
 beforeEach(async () => {
   process.env.ACCOUNT_DELIVERY_KEY_VERSION = 'test-v1';
