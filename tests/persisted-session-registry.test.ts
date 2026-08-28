@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const session = readFileSync('lib/auth/session.ts', 'utf8');
+const tokens = readFileSync('lib/auth/session-tokens.ts', 'utf8');
 const registry = readFileSync('lib/auth/session-registry.ts', 'utf8');
 const middleware = readFileSync('middleware.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0016_persisted_auth_sessions.sql', 'utf8');
@@ -54,7 +55,7 @@ test('legacy cookies never get promoted into the canonical registry namespace', 
   const refreshBranch = middleware.match(/if \(request\.method === 'GET' && canonicalCookie\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
   assert.match(refreshBranch, /name: canonicalName/);
   assert.doesNotMatch(refreshBranch, /legacyCookie|LEGACY_SESSION_COOKIE_NAME/);
-  assert.match(session, /One-way compatibility input for the pre-canonical cookie/);
+  assert.match(tokens, /One-way compatibility input for the pre-canonical cookie/);
 });
 
 test('migration creates an indexed server-side session registry without touching billing tables', () => {

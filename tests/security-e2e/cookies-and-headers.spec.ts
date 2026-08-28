@@ -9,6 +9,8 @@ test('browser security headers are present on public and sensitive responses', a
     expect(headers['x-frame-options']).toBe('DENY');
     expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['permissions-policy']).toContain('camera=()');
+    expect(headers['strict-transport-security']).toContain('max-age=');
+    expect(headers['strict-transport-security']).toContain('includeSubDomains');
   }
 });
 
