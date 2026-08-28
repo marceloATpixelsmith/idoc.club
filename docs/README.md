@@ -18,8 +18,10 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 12. [Release 1 Verification Matrix](11-release-1-verification-matrix.md)
 13. [Runtime Requirements](12-runtime-requirements.md)
 14. [Canonical Authentication Reference Retrofit](13-canonical-auth-reference-retrofit.md)
+15. [Authentication Security Test Acceptance](20-authentication-security-test-acceptance.md)
+16. [Authentication & Account-Security Control Inventory](21-authentication-security-control-inventory.md)
 
-Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult document 13 and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
+Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult document 13, document 21, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
 
 ## Document ownership
 
@@ -39,6 +41,8 @@ Start with document 08 when planning the next development phase, then consult th
 | Release 1 implementation/evidence matrix | 11 |
 | Runtime/platform requirements | 12 |
 | Canonical authentication retrofit, version baseline, and remaining auth gaps | 13 |
+| Authentication/account-security automated acceptance gate | 20 |
+| Authentication/account-security control-by-control traceability matrix | 21 |
 
 ## Maintenance rule
 
