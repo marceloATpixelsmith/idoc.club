@@ -36,9 +36,11 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
   'app/(login)/mfa/actions.ts': {
     acknowledgeRecoveryCodes: 'pre-authentication', authorizeAuthenticatorRecovery: 'pre-authentication',
-    beginAuthenticatorRecovery: 'pre-authentication', cancelMfa: 'pre-authentication',
+    beginAuthenticatorRecovery: 'pre-authentication', beginLoginWebAuthn: 'pre-authentication',
+    beginStepUpWebAuthn: 'authenticated-continuation', cancelMfa: 'pre-authentication',
     confirmTotpEnrollment: 'pre-authentication', verifyLoginTotp: 'pre-authentication',
-    verifyStepUpTotp: 'authenticated-continuation',
+    verifyLoginWebAuthn: 'pre-authentication', verifyStepUpTotp: 'authenticated-continuation',
+    verifyStepUpWebAuthn: 'authenticated-continuation',
   },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfile: 'delegates-to-data-access', saveOwnMemberProfileForm: 'delegates-to-data-access',
@@ -46,8 +48,10 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/onboarding/actions.ts': { completeOnboarding: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/security/actions.ts': {
     beginAuthenticatorReplacement: 'session-boundary', beginGoogleIdentityLink: 'session-boundary',
-    disconnectGoogleIdentity: 'session-boundary', forgetAllRememberedDevices: 'session-boundary',
+    beginPasskeyRegistration: 'session-boundary', disconnectGoogleIdentity: 'session-boundary',
+    finishPasskeyRegistration: 'session-boundary', forgetAllRememberedDevices: 'session-boundary',
     forgetThisDevice: 'session-boundary', logOutOtherSessions: 'session-boundary', logOutSession: 'session-boundary',
+    removePasskeyCredential: 'session-boundary',
   },
   'lib/payments/actions.ts': { checkoutAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access' },

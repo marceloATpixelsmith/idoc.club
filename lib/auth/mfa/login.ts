@@ -9,6 +9,7 @@ import { decideMfa } from './decision';
 import { mfaStore } from './store';
 import { beginTotpEnrollment } from './totp';
 import { setPendingPrimaryAuth } from './pending-primary-auth';
+import { webauthnStore } from './webauthn-store';
 import type { MfaRole } from './types';
 
 export const MFA_APPLICATION_ID = 'idoc.club';
@@ -30,18 +31,19 @@ export async function beginPrimaryMfa(user: User, method: 'google' | 'password',
   if (decision === 'not-required') return false;
   if (decision === 'challenge-required' && factor) {
     const transactionId = randomUUID();
+    const hasWebAuthn = (await webauthnStore.getActiveCredentials(subjectId, MFA_APPLICATION_ID)).length > 0;
     await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, maxAttempts: 5, nowMs: Date.now(),
       purpose: 'login', subjectId, transactionId, expiresAtMs: Date.now() + 10 * 60 * 1000 });
-    await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, method,
-      returnTo, sessionVersion: user.sessionVersion, stage: 'challenge', subjectId: user.id, transactionId });
+    await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, hasWebAuthn,
+      method, returnTo, sessionVersion: user.sessionVersion, stage: 'challenge', subjectId: user.id, transactionId });
     return true;
   }
   const config = mfaConfiguration();
   const enrollment = await beginTotpEnrollment({ accountLabel: user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
     store: mfaStore, subjectId });
-  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: enrollment.factorId, method,
-    returnTo, sessionVersion: user.sessionVersion, stage: 'enrollment', subjectId: user.id,
+  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: enrollment.factorId, hasWebAuthn: false,
+    method, returnTo, sessionVersion: user.sessionVersion, stage: 'enrollment', subjectId: user.id,
     transactionId: enrollment.transactionId });
   return true;
 }
