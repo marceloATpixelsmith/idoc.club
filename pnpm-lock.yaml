@@ -39,8 +39,8 @@ importers:
         specifier: ^0.31.1
         version: 0.31.10
       drizzle-orm:
-        specifier: ^0.43.1
-        version: 0.43.1(postgres@3.4.9)
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
       input-otp:
         specifier: ^1.4.2
         version: 1.5.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -51,8 +51,8 @@ importers:
         specifier: ^0.511.0
         version: 0.511.0(react@19.1.0)
       next:
-        specifier: 15.6.0-canary.59
-        version: 15.6.0-canary.59(@playwright/test@1.55.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: 15.6.0-canary.61
+        version: 15.6.0-canary.61(@playwright/test@1.55.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       postcss:
         specifier: ^8.5.3
         version: 8.5.26
@@ -753,8 +753,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@next/env@15.6.0-canary.59':
-    resolution: {integrity: sha512-D5msVvBiiJrqAW3MPXP4rR7teMeCcMLCK3yTSCGM4XuuzAcO8Eb4RZtbSPS0zgvFKu9r5hv5eaTXlNmgNmZ5TQ==}
+  '@next/env@15.6.0-canary.61':
+    resolution: {integrity: sha512-8SOJYA/qr5Y3APMAun3N3CT5uZ3xZXUlxrH32X7eDoo4nADvpGfkW/ncjAAqUNf1nuFy4GVpxcZBwm5TyCHpHQ==}
 
   '@next/swc-darwin-arm64@15.6.0-canary.58':
     resolution: {integrity: sha512-jGawwiKITJHOH8dSbTqfjVvCf+DesljZhtvh9LKCrO+1octLlGyDAbEQw5WEzrXCch5LWrdSqPyKft0/9LeniA==}
@@ -1684,8 +1684,8 @@ packages:
     resolution: {integrity: sha512-7OZcmQUrdGI+DUNNsKBn1aW8qSoKuTH7d0mYgSP8bAzdFzKoovxEFnoGQp2dVs82EOJeYycqRtciopszwUf8bw==}
     hasBin: true
 
-  drizzle-orm@0.43.1:
-    resolution: {integrity: sha512-dUcDaZtE/zN4RV/xqGrVSMpnEczxd5cIaoDeor7Zst9wOe/HzC/7eAaulywWGYXdDEc9oBPMjayVEDg0ziTLJA==}
+  drizzle-orm@0.45.2:
+    resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -1701,6 +1701,7 @@ packages:
       '@types/better-sqlite3': '*'
       '@types/pg': '*'
       '@types/sql.js': '*'
+      '@upstash/redis': '>=1.34.7'
       '@vercel/postgres': '>=0.8.0'
       '@xata.io/client': '*'
       better-sqlite3: '>=7'
@@ -1743,6 +1744,8 @@ packages:
       '@types/pg':
         optional: true
       '@types/sql.js':
+        optional: true
+      '@upstash/redis':
         optional: true
       '@vercel/postgres':
         optional: true
@@ -1967,8 +1970,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  next@15.6.0-canary.59:
-    resolution: {integrity: sha512-FOKHnHEVqtbMj2eQfgRgEkzEds/hqjz5JRBjLhT7UgPtvs36Vzc7RU9mh8lOZt/TONS7jVs+5ilv194QA/wdnQ==}
+  next@15.6.0-canary.61:
+    resolution: {integrity: sha512-dJzKldf/ZKKUPc1bHMfDuJMZo9UHAsRDVaTcs1haeMiMgEbyBqyoHYjkJFWnxtLmZIvPrZIo3hsuPXY9fvfSuw==}
     engines: {node: '>=20.9.0'}
     hasBin: true
     peerDependencies:
@@ -2603,7 +2606,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@next/env@15.6.0-canary.59': {}
+  '@next/env@15.6.0-canary.61': {}
 
   '@next/swc-darwin-arm64@15.6.0-canary.58':
     optional: true
@@ -3534,7 +3537,7 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.12
 
-  drizzle-orm@0.43.1(postgres@3.4.9):
+  drizzle-orm@0.45.2(postgres@3.4.9):
     optionalDependencies:
       postgres: 3.4.9
 
@@ -3760,9 +3763,9 @@ snapshots:
 
   nanoid@3.3.18: {}
 
-  next@15.6.0-canary.59(@playwright/test@1.55.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  next@15.6.0-canary.61(@playwright/test@1.55.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
-      '@next/env': 15.6.0-canary.59
+      '@next/env': 15.6.0-canary.61
       '@swc/helpers': 0.5.15
       caniuse-lite: 1.0.30001810
       postcss: 8.4.31
