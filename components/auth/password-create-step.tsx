@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useActionState, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { PasswordField } from '@/components/auth/password-field';
 import { MAX_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
 import type { ActionState } from '@/lib/auth/middleware';
@@ -15,7 +16,7 @@ export function PasswordCreateStep({
   description,
   label = 'Create Password',
   submitLabel,
-  submitPendingLabel = 'Please wait…',
+  submitPendingLabel = 'Please wait',
   title,
 }: {
   action: CompleteAction;
@@ -58,7 +59,7 @@ export function PasswordCreateStep({
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
 
         <button className="idoc-auth-button" disabled={!allMet || pending} type="submit">
-          {pending ? submitPendingLabel : submitLabel}
+          {pending ? <AuthPendingLabel text={submitPendingLabel} /> : submitLabel}
         </button>
 
         {actions ? <div className="idoc-auth-actions">{actions}</div> : null}

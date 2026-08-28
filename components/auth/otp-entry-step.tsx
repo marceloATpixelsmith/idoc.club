@@ -4,6 +4,7 @@ import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import type { ReactNode } from 'react';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import type { ActionState } from '@/lib/auth/middleware';
 
@@ -82,7 +83,7 @@ export function OtpEntryStep({
           {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
 
           <button className="idoc-auth-button" disabled={pending || code.length !== 6} type="submit">
-            {pending ? 'Verifying…' : 'Verify'}
+            {pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}
           </button>
         </form>
 

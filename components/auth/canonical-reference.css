@@ -173,6 +173,8 @@
   font-family: 'Manrope', Arial, Helvetica, sans-serif;
   font-size: 16px;
   line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   cursor: pointer;
 }
 
@@ -194,6 +196,50 @@
 .idoc-auth-google-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.idoc-auth-button__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.idoc-auth-button__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.idoc-auth-button__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  animation: idoc-auth-button-blink 1.2s ease-in-out infinite;
+}
+
+.idoc-auth-button__dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.idoc-auth-button__dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes idoc-auth-button-blink {
+  0%, 80%, 100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-auth-button__dot {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 .idoc-auth-link {
@@ -434,6 +480,27 @@
 .idoc-auth-turnstile > div,
 .idoc-auth-turnstile iframe {
   max-width: 100% !important;
+}
+
+.idoc-auth-turnstile__error {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--auth-error-color);
+}
+
+.idoc-auth-turnstile__retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  color: inherit;
+  cursor: pointer;
 }
 
 .idoc-auth-shell__legal {

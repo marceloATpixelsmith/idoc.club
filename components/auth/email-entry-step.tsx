@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useActionState, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { TurnstileWidget } from '@/components/turnstile-widget';
 import type { ActionState } from '@/lib/auth/middleware';
 
@@ -63,7 +64,7 @@ export function EmailEntryStep({
         <TurnstileWidget action={turnstileAction} onVerify={setTurnstileToken} />
 
         <button className="idoc-auth-button" disabled={!canSubmit} type="submit">
-          {pending ? 'Please wait…' : submitLabel}
+          {pending ? <AuthPendingLabel text="Please wait" /> : submitLabel}
         </button>
 
         {showGoogle ? (

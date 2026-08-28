@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
 import { User } from '@/lib/db/schema';
+import { userInitials } from '@/lib/format/user-initials';
 import useSWR, { mutate } from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -50,12 +51,7 @@ function UserMenu() {
       <DropdownMenuTrigger>
         <Avatar className="cursor-pointer size-9">
           <AvatarImage alt={user.name || ''} />
-          <AvatarFallback>
-            {user.email
-              .split(' ')
-              .map((n) => n[0])
-              .join('')}
-          </AvatarFallback>
+          <AvatarFallback>{userInitials(user.name, user.email)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="flex flex-col gap-1">

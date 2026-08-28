@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
+import { AuthPendingLabel } from '@/components/auth/pending-label';
 
 type State = { error?: string; success?: string };
 type Action = (state: State, data: FormData) => Promise<State>;
@@ -19,7 +20,7 @@ export function AccountLinkForm({ action, heading }: { action: Action; heading: 
         </div>
         <Feedback state={state} />
         <button className="idoc-auth-button" disabled={pending} type="submit">
-          {pending ? 'Please wait…' : 'Continue'}
+          {pending ? <AuthPendingLabel text="Please wait" /> : 'Continue'}
         </button>
         <div className="idoc-auth-actions__center">
           <Link className="idoc-auth-link" href="/sign-in">Back to login</Link>
@@ -43,7 +44,7 @@ export function TokenPasswordForm({ action, heading, token }: { action: Action; 
         </p>
         <Feedback state={state} />
         <button className="idoc-auth-button" disabled={pending || !token} type="submit">
-          {pending ? 'Please wait…' : 'Continue'}
+          {pending ? <AuthPendingLabel text="Please wait" /> : 'Continue'}
         </button>
       </form>
     </AuthShell>
