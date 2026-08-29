@@ -14,7 +14,7 @@ import {
   googleOauthBindingCookieOptions,
 } from '@/lib/auth/google-oauth-browser-binding';
 import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit';
-import { logError } from '@/lib/observability/logger';
+import { logError, logWarn } from '@/lib/observability/logger';
 import { notifyWebmasterOfGoogleOauthFailure } from '@/lib/notifications/google-oauth-failure-alert';
 
 const APPLICATION_ID = 'idoc.club';
@@ -25,6 +25,11 @@ export async function GET(request: NextRequest) {
   try {
     const origin = await requestOrigin();
     if (!(await checkOriginRateLimit('google_oauth_start', origin))) {
+      // Deliberately logWarn, not logError/notifyWebmasterOfGoogleOauthFailure: this is expected,
+      // routine throttling (e.g. many members behind one institutional NAT), not an incident -- but
+      // it must still be logged, so this specific failure isn't silently invisible to an operator
+      // trying to explain a "failed" report from a real user.
+      await logWarn('google_oauth_start_failed', { category: 'auth', reason: 'rate_limited' });
       return NextResponse.redirect(new URL('/sign-in?google=failed', request.url), 302);
     }
 

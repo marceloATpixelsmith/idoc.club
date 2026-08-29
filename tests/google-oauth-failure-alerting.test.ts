@@ -19,12 +19,21 @@ const withDeadlineBody = alertModule.slice(
 );
 const notifyBody = alertModule.slice(alertModule.indexOf('export async function notifyWebmasterOfGoogleOauthFailure'));
 
-test('every Google OAuth start-route failure path logs a categorical reason and alerts the operations recipient', () => {
+test('every unexpected Google OAuth start-route failure logs a categorical reason and alerts the operations recipient', () => {
   assert.match(startRoute, /logError\('google_oauth_start_failed'/);
   assert.match(startRoute, /notifyWebmasterOfGoogleOauthFailure\(\{ reason, step: 'start' \}\)/);
   const catchBody = startRoute.slice(startRoute.indexOf('} catch (error) {'));
   assert.ok(catchBody.indexOf('logError') < catchBody.indexOf('notifyWebmasterOfGoogleOauthFailure'),
     'the log line must run before the alert, so a log entry exists even if the alert delivery itself fails');
+});
+
+test('the start route also logs a rate-limited attempt -- an ordinary, expected redirect that must not be silently invisible to an operator explaining a real user\'s "failed" report -- but deliberately does not alert on it (routine throttling, e.g. one institutional NAT, is not an incident)', () => {
+  const rateLimitBranch = startRoute.slice(
+    startRoute.indexOf("if (!(await checkOriginRateLimit('google_oauth_start', origin)))"),
+    startRoute.indexOf('await purgeExpiredGoogleOauthTransactions();'),
+  );
+  assert.match(rateLimitBranch, /logWarn\('google_oauth_start_failed', \{ category: 'auth', reason: 'rate_limited' \}\)/);
+  assert.doesNotMatch(rateLimitBranch, /notifyWebmasterOfGoogleOauthFailure\(/);
 });
 
 test('the callback route logs and alerts on an invalid/missing OAuth browser-binding cookie -- the very first check on the return leg', () => {
