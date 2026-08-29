@@ -31,12 +31,16 @@ export async function notifyWebmasterOfGoogleOauthFailure(input: { reason: strin
     await logWarn('google_oauth_failure_alert_skipped', { category: 'configuration' });
     return;
   }
-  const origin = await requestOrigin();
-  if (!(await checkOriginRateLimit('google_oauth_failure_alert', origin))) {
-    await logWarn('google_oauth_failure_alert_rate_limited', { category: 'auth' });
-    return;
-  }
+  // The rate-limit preflight lives inside this same guarded block, not before it: it depends on
+  // RATE_LIMIT_HASH_KEY and a real database write (checkOriginRateLimit), either of which can throw
+  // on misconfiguration or a database outage -- exactly the kind of dependency failure this
+  // best-effort alert must never let escape into the caller's own OAuth response.
   try {
+    const origin = await requestOrigin();
+    if (!(await checkOriginRateLimit('google_oauth_failure_alert', origin))) {
+      await logWarn('google_oauth_failure_alert_rate_limited', { category: 'auth' });
+      return;
+    }
     const requestId = await currentRequestId();
     const html = renderTransactionalEmail({
       bodyHtml: `<p>A Google sign-in attempt failed during the <b>${escapeHtml(input.step)}</b> step.</p>

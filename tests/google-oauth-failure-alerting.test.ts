@@ -51,14 +51,22 @@ test('the alert skips delivery entirely when no operations recipient is configur
   const preflight = alertBody.slice(0, alertBody.indexOf('try {'));
   assert.match(preflight, /if \(!to\) \{/);
   assert.match(preflight, /logWarn\('google_oauth_failure_alert_skipped'/);
-  assert.match(preflight, /checkOriginRateLimit\('google_oauth_failure_alert', origin\)/);
-  assert.match(preflight, /logWarn\('google_oauth_failure_alert_rate_limited'/);
-  // Both skip branches must appear before the delivery attempt, and both must return without
-  // reaching it -- a public, unauthenticated caller (the callback route has no rate limit of its
-  // own) must never be able to force unbounded email sends.
-  assert.ok(preflight.indexOf("if (!to)") < preflight.indexOf('checkOriginRateLimit'));
-  const returns = preflight.match(/return;/g) ?? [];
-  assert.equal(returns.length, 2, 'both the unconfigured-recipient and rate-limited branches must return before delivery');
+  const deliveryBranch = alertBody.slice(alertBody.indexOf('try {'), alertBody.indexOf('} catch {'));
+  assert.match(deliveryBranch, /checkOriginRateLimit\('google_oauth_failure_alert', origin\)/);
+  assert.match(deliveryBranch, /logWarn\('google_oauth_failure_alert_rate_limited'/);
+  assert.match(deliveryBranch, /return;/);
+});
+
+test('the rate-limit preflight (requestOrigin + checkOriginRateLimit) runs inside the guarded try block, not before it -- so a RATE_LIMIT_HASH_KEY misconfiguration or a database outage there is caught and logged like any other delivery failure, never thrown back into the caller\'s OAuth response', () => {
+  const preflight = alertBody.slice(0, alertBody.indexOf('try {'));
+  // Only the synchronous, unconfigured-recipient check may run before the try -- it cannot itself
+  // throw. Every actual *call* that touches the database or a second env var must be inside the
+  // guarded block (the preceding comment's own prose is allowed to name these functions).
+  assert.doesNotMatch(preflight, /requestOrigin\(|checkOriginRateLimit\(/);
+  const deliveryBranch = alertBody.slice(alertBody.indexOf('try {'), alertBody.indexOf('} catch {'));
+  assert.match(deliveryBranch, /const origin = await requestOrigin\(\);/);
+  assert.ok(deliveryBranch.indexOf('requestOrigin') < deliveryBranch.indexOf('checkOriginRateLimit'),
+    'origin must be resolved before it is used to rate-limit');
 });
 
 test('the alert delivery is bounded by a timeout so a slow/unresponsive Mailchimp can never block the caller\'s own failure redirect indefinitely', () => {
