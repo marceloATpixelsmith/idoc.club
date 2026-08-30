@@ -51,6 +51,16 @@ function freshIdentity() {
   return { email: `google-e2e-${unique}@security.example.test`, sub: `mock-google-subject-${unique}` };
 }
 
+// The app builds every redirect via `new URL(path, request.url)`, so the `Location` header it sends
+// is always an absolute URL (observed in CI as `http://localhost:3100/...`, not the `127.0.0.1:3100`
+// baseURL these requests are made against) -- only the path and query are what these tests actually
+// assert on.
+function pathAndQuery(location: string | undefined) {
+  if (!location) return location;
+  const url = new URL(location);
+  return `${url.pathname}${url.search}`;
+}
+
 test('a signup attempt with a fresh Google identity creates a new account and lands on onboarding', async ({ page }) => {
   const identity = freshIdentity();
   await configureMockIdentity(identity);
@@ -105,7 +115,7 @@ test('callback rejects a missing, tampered, or state-mismatched binding cookie b
   // No binding cookie at all -- e.g. an attacker linking straight to a crafted callback URL.
   const noCookie = await context.request.get('/api/auth/google/callback?state=attacker-supplied-state', { maxRedirects: 0 });
   expect(noCookie.status()).toBe(302);
-  expect(noCookie.headers().location).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(noCookie.headers().location)).toBe('/sign-in?google=failed');
 
   // A real transaction, but the binding cookie's HMAC signature is tampered before the callback runs.
   const start = await context.request.get('/api/auth/google/start?intent=login', { maxRedirects: 0 });
@@ -116,13 +126,13 @@ test('callback rejects a missing, tampered, or state-mismatched binding cookie b
   await context.addCookies([{ ...bindingCookie!, value: `${state}.tampered-signature` }]);
   const tampered = await context.request.get(`/api/auth/google/callback?state=${state}`, { maxRedirects: 0 });
   expect(tampered.status()).toBe(302);
-  expect(tampered.headers().location).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(tampered.headers().location)).toBe('/sign-in?google=failed');
 
   // A validly-signed binding cookie, but bound to a different state than the one presented.
   await context.addCookies([bindingCookie!]);
   const mismatched = await context.request.get('/api/auth/google/callback?state=a-different-state-entirely', { maxRedirects: 0 });
   expect(mismatched.status()).toBe(302);
-  expect(mismatched.headers().location).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(mismatched.headers().location)).toBe('/sign-in?google=failed');
 
   await context.close();
 });
@@ -144,7 +154,7 @@ test('a consumed callback cannot be replayed against the live route', async ({ b
 
   const replay = await context.request.get(replayUrl!, { maxRedirects: 0 });
   expect(replay.status()).toBe(302);
-  expect(replay.headers().location).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(replay.headers().location)).toBe('/sign-in?google=failed');
   await context.close();
 });
 
@@ -169,7 +179,7 @@ test('a declined Google consent sends the user back to the page they started fro
     { maxRedirects: 0 },
   );
   expect(signupCallback.status()).toBe(302);
-  expect(signupCallback.headers().location).toBe('/sign-up?google=failed');
+  expect(pathAndQuery(signupCallback.headers().location)).toBe('/sign-up?google=failed');
   await signupContext.close();
 
   const loginContext = await browser.newContext();
@@ -180,6 +190,6 @@ test('a declined Google consent sends the user back to the page they started fro
     { maxRedirects: 0 },
   );
   expect(loginCallback.status()).toBe(302);
-  expect(loginCallback.headers().location).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(loginCallback.headers().location)).toBe('/sign-in?google=failed');
   await loginContext.close();
 });
