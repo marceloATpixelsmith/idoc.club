@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
+import { startGoogleMockIdp } from './google-mock-idp';
 
 const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
@@ -101,4 +102,11 @@ export default async function globalSetup() {
     await writeFile(`.security-e2e/${name}-localhost.json`, storageState('localhost'));
   }
   await sql.end();
+
+  // Started once here (not per-spec) so every spec file in the suite shares one running mock IdP,
+  // the same way every spec shares one migrated database -- torn down in the global teardown below.
+  const mockIdp = await startGoogleMockIdp();
+  return async () => {
+    await mockIdp.close();
+  };
 }

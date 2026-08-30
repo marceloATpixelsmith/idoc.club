@@ -84,6 +84,46 @@ export const GOOGLE_OAUTH_ENV = {
   redirectUri: 'GOOGLE_OAUTH_REDIRECT_URI',
 } as const;
 
+export const GOOGLE_OIDC_TEST_PROVIDER_BASE_URL_ENV = 'GOOGLE_OIDC_TEST_PROVIDER_BASE_URL';
+
+/** Resolves which OIDC provider (real Google, or a local mock IdP) this process talks to. Real
+ * Google is the only possible answer unless every one of these holds: the override env var is set,
+ * it parses as a plain-http loopback URL (never a real host -- a mock IdP has no reason to run
+ * anywhere else), and `VERCEL` is unset (Vercel always sets this in every build/runtime environment,
+ * so a value accidentally left in a deployment's env is still inert there). This is deliberately not
+ * gated on `NODE_ENV === 'test'`: `next dev` hardcodes `NODE_ENV=development` in the very process
+ * the security-e2e suite drives, so that gate would never actually activate for a real browser-level
+ * OAuth test running against the dev server. The loopback-URL requirement carries the same weight
+ * NODE_ENV would have: production never runs on localhost. */
+type GoogleOidcProvider = Omit<typeof GOOGLE_OIDC_PROVIDER, 'authorizationEndpoint' | 'issuer' | 'jwksUri' | 'tokenEndpoint'> & {
+  authorizationEndpoint: string;
+  issuer: string;
+  jwksUri: string;
+  tokenEndpoint: string;
+};
+
+export function resolveGoogleOidcProvider(env: NodeJS.ProcessEnv = process.env): GoogleOidcProvider {
+  const testBaseUrl = env[GOOGLE_OIDC_TEST_PROVIDER_BASE_URL_ENV]?.trim();
+  if (!testBaseUrl || env.VERCEL) return GOOGLE_OIDC_PROVIDER;
+
+  let url: URL;
+  try {
+    url = new URL(testBaseUrl);
+  } catch {
+    return GOOGLE_OIDC_PROVIDER;
+  }
+  const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  if (url.protocol !== 'http:' || !isLoopback) return GOOGLE_OIDC_PROVIDER;
+
+  return {
+    ...GOOGLE_OIDC_PROVIDER,
+    issuer: url.origin,
+    authorizationEndpoint: `${url.origin}/o/oauth2/v2/auth`,
+    tokenEndpoint: `${url.origin}/token`,
+    jwksUri: `${url.origin}/certs`,
+  };
+}
+
 export const GOOGLE_OAUTH_TRANSACTION_TTL_SECONDS = 900;
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -114,7 +154,18 @@ export function loadGoogleOidcConfig(env: NodeJS.ProcessEnv = process.env): Goog
   };
 }
 
-const googleJwks = createRemoteJWKSet(new URL(GOOGLE_OIDC_PROVIDER.jwksUri));
+// Keyed by JWKS URI rather than a single load-time singleton, so a resolved test provider (a local
+// mock IdP, a different URI per env) gets its own remote-set instance instead of reusing (or being
+// blocked by) whatever URI happened to be current when this module first loaded.
+const googleJwksByUri = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+function resolveGoogleJwks(jwksUri: string) {
+  let jwks = googleJwksByUri.get(jwksUri);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(jwksUri));
+    googleJwksByUri.set(jwksUri, jwks);
+  }
+  return jwks;
+}
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 const APPLICATION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -229,7 +280,8 @@ export async function createGoogleAuthorizationRequest({
     expiresAtMs,
   });
 
-  const authorizationUrl = new URL(GOOGLE_OIDC_PROVIDER.authorizationEndpoint);
+  const provider = resolveGoogleOidcProvider();
+  const authorizationUrl = new URL(provider.authorizationEndpoint);
   authorizationUrl.searchParams.set('client_id', config.clientId);
   authorizationUrl.searchParams.set('redirect_uri', config.redirectUri);
   authorizationUrl.searchParams.set('response_type', GOOGLE_OIDC_PROVIDER.responseType);
@@ -299,9 +351,10 @@ export async function completeGoogleOidcCallback({
     code_verifier: transaction.codeVerifier,
   });
 
+  const provider = resolveGoogleOidcProvider();
   let response: Response;
   try {
-    response = await fetchImpl(GOOGLE_OIDC_PROVIDER.tokenEndpoint, {
+    response = await fetchImpl(provider.tokenEndpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
@@ -324,8 +377,8 @@ export async function completeGoogleOidcCallback({
   if (typeof idToken !== 'string' || !idToken) throw new GoogleOidcError('token_exchange_failed');
 
   try {
-    const { payload, protectedHeader } = await jwtVerify(idToken, googleJwks, {
-      issuer: GOOGLE_OIDC_PROVIDER.issuer,
+    const { payload, protectedHeader } = await jwtVerify(idToken, resolveGoogleJwks(provider.jwksUri), {
+      issuer: provider.issuer,
       audience: config.clientId,
       algorithms: [...GOOGLE_OIDC_PROVIDER.idTokenAlgorithms],
       clockTolerance: 5,
@@ -342,7 +395,7 @@ export async function completeGoogleOidcCallback({
     if (audiences.length > 1 && payload.azp !== config.clientId) throw new GoogleOidcError('invalid_id_token');
 
     return {
-      issuer: GOOGLE_OIDC_PROVIDER.issuer,
+      issuer: provider.issuer,
       subject: payload.sub,
       email: typeof payload.email === 'string' ? payload.email : null,
       emailVerified: payload.email_verified === true,
