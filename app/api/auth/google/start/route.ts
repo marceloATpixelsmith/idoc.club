@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
   const failureRedirect = () =>
     NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302);
 
+  // Names which step was in flight when an error that isn't a GoogleOidcError (and so carries no
+  // precise `.code`) is thrown, so the logged/alerted reason still points at a subsystem instead of
+  // collapsing every unrelated failure into one opaque 'unexpected_error' -- without logging the
+  // exception itself (AUTH-LOG-003: a static, non-sensitive category only, never raw error content).
+  let phase: 'transaction_purge' | 'authorization_request' = 'transaction_purge';
+
   try {
     const origin = await requestOrigin();
     if (!(await checkOriginRateLimit('google_oauth_start', origin))) {
@@ -48,6 +54,8 @@ export async function GET(request: NextRequest) {
     const config = loadGoogleOidcConfig();
     const applicationOrigin = new URL(config.redirectUri).origin;
     const returnTo = request.nextUrl.searchParams.get('returnTo') ?? '/dashboard';
+
+    phase = 'authorization_request';
     const authorization = await createGoogleAuthorizationRequest({
       applicationId: APPLICATION_ID,
       applicationOrigin,
@@ -68,7 +76,7 @@ export async function GET(request: NextRequest) {
     response.cookies.set(googleOauthIntentCookieName(), intent, googleOauthIntentCookieOptions());
     return response;
   } catch (error) {
-    const reason = error instanceof GoogleOidcError ? error.code : 'unexpected_error';
+    const reason = error instanceof GoogleOidcError ? error.code : `unexpected_error:${phase}`;
     await logError('google_oauth_start_failed', { category: 'auth', reason });
     await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'start' });
     return failureRedirect();

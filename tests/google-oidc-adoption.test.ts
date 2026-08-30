@@ -97,6 +97,15 @@ test('Google buttons point to the canonical start route, tagged with the page th
   assert.match(signup, /googleHref="\/api\/auth\/google\/start\?intent=signup"/);
 });
 
+test('an unexpected start-route failure (no GoogleOidcError.code) still names which phase broke, without logging the exception itself', () => {
+  assert.match(startRoute, /let phase: 'transaction_purge' \| 'authorization_request' = 'transaction_purge';/);
+  assert.match(startRoute, /phase = 'authorization_request';[\s\S]*?createGoogleAuthorizationRequest\(/);
+  const catchBody = startRoute.slice(startRoute.indexOf('} catch (error) {'));
+  assert.match(catchBody, /const reason = error instanceof GoogleOidcError \? error\.code : `unexpected_error:\$\{phase\}`;/);
+  // Still only a fixed, coarse category interpolated in -- never the error object/message itself.
+  assert.doesNotMatch(catchBody, /error\.message|String\(error\)|error\.stack/);
+});
+
 test('a Google failure sends the user back to the page they started from, not always to sign-in', () => {
   // The start route reads ?intent from the button href and stores it in a cookie, so it survives
   // the round trip through Google even if the transaction is never created (e.g. rate limited).
