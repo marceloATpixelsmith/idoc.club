@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { GOOGLE_MOCK_IDP_URL } from './tests/security-e2e/google-mock-idp';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl || !/(?:^|[_-])test(?:$|[_-])|\/[^/?]*test[^/?]*(?:\?|$)/i.test(databaseUrl)) {
@@ -44,6 +45,14 @@ export default defineConfig({
       MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ 'e2e-v1': 'uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw' }),
       MFA_PENDING_AUTH_SIGNING_KEY: 'P-rFOz-JzQlJ6iijr4i9SBPWg-1dn72SbPPY-CHkoqQ',
       MFA_RECOVERY_CODE_DIGEST_KEY: 'zaoDYF2rFZXfbool4YgF40tqjFyibcoukUB8Q13y1Nc',
+      // Synthetic, not a real Google OAuth client -- loadGoogleOidcConfig only requires these to be
+      // non-empty and GOOGLE_OAUTH_REDIRECT_URI to be a valid loopback/https URL; nothing here is
+      // checked against Google, since GOOGLE_OIDC_TEST_PROVIDER_BASE_URL below points the app at the
+      // mock IdP (tests/security-e2e/google-mock-idp.ts) instead of the real Google endpoints.
+      GOOGLE_OAUTH_CLIENT_ID: 'security-e2e-test-client-id',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'security-e2e-test-client-secret',
+      GOOGLE_OAUTH_REDIRECT_URI: 'http://127.0.0.1:3100/api/auth/google/callback',
+      GOOGLE_OIDC_TEST_PROVIDER_BASE_URL: GOOGLE_MOCK_IDP_URL,
     },
   },
 });

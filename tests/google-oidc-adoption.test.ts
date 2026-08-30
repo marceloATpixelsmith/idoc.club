@@ -30,7 +30,7 @@ test('Google OIDC uses the canonical reference 1.10 provider security invariants
   assert.match(provider, /applicationId/);
   assert.match(provider, /applicationOrigin/);
   assert.match(provider, /destination\.origin !== applicationOrigin/);
-  assert.match(provider, /issuer: GOOGLE_OIDC_PROVIDER\.issuer/);
+  assert.match(provider, /issuer: provider\.issuer/);
   assert.match(provider, /audience: config\.clientId/);
   assert.match(provider, /algorithms: \[\.\.\.GOOGLE_OIDC_PROVIDER\.idTokenAlgorithms\]/);
   assert.match(provider, /payload\.azp !== config\.clientId/);
@@ -145,4 +145,15 @@ test('deployment environment contract uses the canonical variable names', () => 
   assert.match(env, /^GOOGLE_OAUTH_CLIENT_ID=/m);
   assert.match(env, /^GOOGLE_OAUTH_CLIENT_SECRET=/m);
   assert.match(env, /^GOOGLE_OAUTH_REDIRECT_URI=/m);
+});
+
+// The security-e2e suite (tests/security-e2e/google-oauth.spec.ts) needs a way to point this module
+// at a local mock IdP instead of real Google, so it can drive the actual start/callback routes
+// end-to-end. This test guards the safety gate around that override -- a mistake here would make a
+// test-only escape hatch reachable in production, not just weaken a test.
+test('the test-provider override is gated so it can never resolve anywhere but a local mock server', () => {
+  assert.match(provider, /function resolveGoogleOidcProvider\(/);
+  assert.match(provider, /if \(!testBaseUrl \|\| env\.VERCEL\) return GOOGLE_OIDC_PROVIDER;/);
+  assert.match(provider, /url\.hostname === 'localhost' \|\| url\.hostname === '127\.0\.0\.1' \|\| url\.hostname === '::1'/);
+  assert.match(provider, /if \(url\.protocol !== 'http:' \|\| !isLoopback\) return GOOGLE_OIDC_PROVIDER;/);
 });
