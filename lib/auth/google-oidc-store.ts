@@ -64,8 +64,13 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
       return_to: string;
       purpose: 'authentication' | 'external_identity_link';
       authenticated_user_id: number | null;
-      created_at: Date;
-      expires_at: Date;
+      // Strings, not Date objects: this driver returns raw timestamptz columns as ISO strings on
+      // raw `client` queries (confirmed in production -- a TypeError calling .getTime() on what
+      // TypeScript had declared as Date). drizzle's schema-aware query builder parses these into
+      // Date objects itself; a raw `client` query gets the column back exactly as the driver sends
+      // it over the wire, so the conversion has to happen explicitly below.
+      created_at: string;
+      expires_at: string;
     }[]>`
       update idoc.google_oauth_transactions
       set consumed_at = now()
@@ -100,8 +105,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
       returnTo: row.return_to,
       purpose: row.purpose,
       authenticatedUserId: row.authenticated_user_id === null ? null : String(row.authenticated_user_id),
-      createdAtMs: row.created_at.getTime(),
-      expiresAtMs: row.expires_at.getTime(),
+      createdAtMs: new Date(row.created_at).getTime(),
+      expiresAtMs: new Date(row.expires_at).getTime(),
     } satisfies GoogleOidcTransaction;
   },
 };

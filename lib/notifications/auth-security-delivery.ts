@@ -14,7 +14,13 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     kind: string;
     attempt_count: number;
     recipient_email: string;
-    created_at: Date;
+    // A string, not a Date object: this driver returns raw timestamptz columns as ISO strings on
+    // raw `client` queries (the same bug confirmed in production for
+    // googleOidcTransactionStore.consume -- a TypeError calling a Date method on what TypeScript
+    // had declared as Date). drizzle's schema-aware query builder parses these into Date objects
+    // itself; a raw `client` query gets the column back exactly as the driver sends it over the
+    // wire.
+    created_at: string;
   }[]>`
     with candidate as (
       select o.id
@@ -53,7 +59,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     if (!message) throw new Error('Unsupported security notification kind.');
     const html = renderTransactionalEmail({
       heading: message.heading,
-      bodyHtml: `<p>${message.heading} on ${record.created_at.toISOString()}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
+      bodyHtml: `<p>${message.heading} on ${new Date(record.created_at).toISOString()}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
       footerNote: 'This is a security notification for your IDOC account.',
     });
     await sendTransactionalEmail({
