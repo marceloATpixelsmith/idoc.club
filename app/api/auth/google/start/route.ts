@@ -13,6 +13,12 @@ import {
   googleOauthBindingCookieName,
   googleOauthBindingCookieOptions,
 } from '@/lib/auth/google-oauth-browser-binding';
+import {
+  googleOauthFailureRedirectPath,
+  googleOauthIntentCookieName,
+  googleOauthIntentCookieOptions,
+  parseGoogleOauthIntent,
+} from '@/lib/auth/google-oauth-intent';
 import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { logError, logWarn } from '@/lib/observability/logger';
 import { notifyWebmasterOfGoogleOauthFailure } from '@/lib/notifications/google-oauth-failure-alert';
@@ -22,6 +28,10 @@ const APPLICATION_ID = 'idoc.club';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  const intent = parseGoogleOauthIntent(request.nextUrl.searchParams.get('intent'));
+  const failureRedirect = () =>
+    NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302);
+
   try {
     const origin = await requestOrigin();
     if (!(await checkOriginRateLimit('google_oauth_start', origin))) {
@@ -30,7 +40,7 @@ export async function GET(request: NextRequest) {
       // it must still be logged, so this specific failure isn't silently invisible to an operator
       // trying to explain a "failed" report from a real user.
       await logWarn('google_oauth_start_failed', { category: 'auth', reason: 'rate_limited' });
-      return NextResponse.redirect(new URL('/sign-in?google=failed', request.url), 302);
+      return failureRedirect();
     }
 
     await purgeExpiredGoogleOauthTransactions();
@@ -55,11 +65,12 @@ export async function GET(request: NextRequest) {
       createGoogleOauthBrowserBinding(state),
       googleOauthBindingCookieOptions(),
     );
+    response.cookies.set(googleOauthIntentCookieName(), intent, googleOauthIntentCookieOptions());
     return response;
   } catch (error) {
     const reason = error instanceof GoogleOidcError ? error.code : 'unexpected_error';
     await logError('google_oauth_start_failed', { category: 'auth', reason });
     await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'start' });
-    return NextResponse.redirect(new URL('/sign-in?google=failed', request.url), 302);
+    return failureRedirect();
   }
 }

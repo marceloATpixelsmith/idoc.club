@@ -3,9 +3,23 @@ import { EmailStep } from './email-step';
 import { OtpStep } from './otp-step';
 import { PasswordStep } from './password-step';
 
-export default async function SignUpPage() {
+function googleErrorMessage(value?: string) {
+  if (value === 'failed') {
+    return 'Google authentication could not be completed. Please try again.';
+  }
+  return '';
+}
+
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
   const pending = await getPendingSignup();
-  if (!pending) return <EmailStep />;
+  if (!pending) {
+    const params = await searchParams;
+    return <EmailStep initialError={googleErrorMessage(params.google)} />;
+  }
   if (!pending.verified) return <OtpStep email={pending.email} />;
   return <PasswordStep />;
 }

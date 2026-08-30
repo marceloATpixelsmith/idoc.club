@@ -17,6 +17,8 @@ const callbackRoute = read('app/api/auth/google/callback/route.ts');
 const rateLimit = read('lib/security/rate-limit.ts');
 const login = read('app/(login)/sign-in/email-step.tsx');
 const signup = read('app/(login)/sign-up/email-step.tsx');
+const signupPage = read('app/(login)/sign-up/page.tsx');
+const intentModule = read('lib/auth/google-oauth-intent.ts');
 const env = read('.env.example');
 
 test('Google OIDC uses the canonical reference 1.10 provider security invariants', () => {
@@ -90,9 +92,44 @@ test('link and unlink persist audit evidence and security notification outbox re
   assert.match(linkingMigration, /auth_security_notification_outbox/);
 });
 
-test('Google buttons point to the canonical start route', () => {
-  assert.match(login, /googleHref="\/api\/auth\/google\/start"/);
-  assert.match(signup, /googleHref="\/api\/auth\/google\/start"/);
+test('Google buttons point to the canonical start route, tagged with the page the user started from so a failure can send them back to it', () => {
+  assert.match(login, /googleHref="\/api\/auth\/google\/start\?intent=login"/);
+  assert.match(signup, /googleHref="\/api\/auth\/google\/start\?intent=signup"/);
+});
+
+test('a Google failure sends the user back to the page they started from, not always to sign-in', () => {
+  // The start route reads ?intent from the button href and stores it in a cookie, so it survives
+  // the round trip through Google even if the transaction is never created (e.g. rate limited).
+  assert.match(startRoute, /parseGoogleOauthIntent\(request\.nextUrl\.searchParams\.get\('intent'\)\)/);
+  assert.match(startRoute, /googleOauthFailureRedirectPath\(intent\)/);
+  assert.match(startRoute, /response\.cookies\.set\(googleOauthIntentCookieName\(\), intent, googleOauthIntentCookieOptions\(\)\)/);
+
+  // The callback route reads the cookie -- before the binding-cookie check, so even that failure
+  // (the very first thing that can go wrong on the return leg) redirects to the right page -- and
+  // clears it alongside the binding cookie on every exit.
+  const beforeBindingCheck = callbackRoute.slice(
+    callbackRoute.indexOf('export async function GET'),
+    callbackRoute.indexOf('if (!state || !verifyGoogleOauthBrowserBinding'),
+  );
+  assert.match(beforeBindingCheck, /parseGoogleOauthIntent\(request\.cookies\.get\(googleOauthIntentCookieName\(\)\)\?\.value\)/);
+  assert.match(callbackRoute, /function clearBinding\(response: NextResponse\) \{[\s\S]*?googleOauthIntentCookieName[\s\S]*?\}/);
+
+  const catchBody = callbackRoute.slice(callbackRoute.lastIndexOf('} catch (error) {'));
+  assert.match(catchBody, /googleOauthFailureRedirectPath\(intent\)/);
+  // The one deliberate exception: an existing password account that needs linking always sends
+  // the user to sign-in (with the "sign in with your password first" message), regardless of
+  // which page they started from -- that is the actually-correct next step for that case.
+  assert.match(catchBody, /GoogleAccountLinkRequiredError\) \{[\s\S]*?'\/sign-in\?google=link-required'/);
+});
+
+test('the Google OAuth intent cookie only ever steers a redirect -- signup is the only non-default value, everything else falls back to login', () => {
+  assert.match(intentModule, /value === 'signup' \? 'signup' : 'login'/);
+  assert.match(intentModule, /intent === 'signup' \? '\/sign-up' : '\/sign-in'/);
+});
+
+test('the sign-up page surfaces a Google failure inline instead of silently dropping it', () => {
+  assert.match(signupPage, /searchParams/);
+  assert.match(signupPage, /initialError=\{googleErrorMessage\(params\.google\)\}/);
 });
 
 test('deployment environment contract uses the canonical variable names', () => {
