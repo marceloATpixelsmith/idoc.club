@@ -6,15 +6,16 @@ import type { GoogleOidcTransaction, GoogleOidcTransactionStore } from '@/lib/au
 const RETENTION_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 export async function purgeExpiredGoogleOauthTransactions(now = new Date()) {
-  const cutoff = new Date(now.getTime() - RETENTION_MILLISECONDS);
-  // Bind `cutoff` exactly once: postgres.js's parameter serialization throws when the identical
-  // JS value is interpolated twice in one tagged-template query (confirmed in production -- a
-  // TypeError inside Buffer.byteLength trying to serialize the second occurrence).
+  // A string, not a raw Date: this driver's parameter serializer throws trying to serialize a
+  // native JS Date passed through the raw `client` tagged template (confirmed in production -- a
+  // TypeError inside Buffer.byteLength). drizzle's query builder never hits this because it
+  // stringifies Date values itself before they reach the driver; raw `client` calls have to do the
+  // same conversion explicitly. An ISO-8601 string compares correctly against a timestamptz column.
+  const cutoff = new Date(now.getTime() - RETENTION_MILLISECONDS).toISOString();
   await client`
-    with cutoff as (select ${cutoff}::timestamptz as value)
     delete from idoc.google_oauth_transactions
-    where expires_at < (select value from cutoff)
-       or (consumed_at is not null and consumed_at < (select value from cutoff))
+    where expires_at < ${cutoff}
+       or (consumed_at is not null and consumed_at < ${cutoff})
   `;
 }
 
@@ -45,8 +46,8 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
         ${transaction.returnTo},
         ${transaction.purpose},
         ${transaction.authenticatedUserId ? Number(transaction.authenticatedUserId) : null},
-        ${new Date(transaction.createdAtMs)},
-        ${new Date(transaction.expiresAtMs)}
+        ${new Date(transaction.createdAtMs).toISOString()},
+        ${new Date(transaction.expiresAtMs).toISOString()}
       )
     `;
   },

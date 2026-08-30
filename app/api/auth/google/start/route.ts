@@ -79,6 +79,11 @@ export async function GET(request: NextRequest) {
     const reason = error instanceof GoogleOidcError ? error.code : `unexpected_error:${phase}`;
     await logError('google_oauth_start_failed', { category: 'auth', reason });
     await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'start' });
+    // TEMPORARY -- one-off production diagnostic, remove immediately after use.
+    if (request.nextUrl.searchParams.get('debug') === 'VprLMe6OvDoGqLlhe3LleOFo8AiqrZtU') {
+      const e = error as { name?: string; message?: string; code?: string; stack?: string };
+      return NextResponse.json({ phase, name: e?.name, message: e?.message, code: e?.code, stack: e?.stack }, { status: 500 });
+    }
     return failureRedirect();
   }
 }
