@@ -38,6 +38,7 @@ export const runtime = 'nodejs';
 function clearBinding(response: NextResponse) {
   response.cookies.set(googleOauthBindingCookieName(), '', expiredGoogleOauthBindingCookieOptions());
   response.cookies.set(googleOauthIntentCookieName(), '', expiredGoogleOauthIntentCookieOptions());
+  response.cookies.set('idoc-google-oauth-debug', '', expiredGoogleOauthBindingCookieOptions());
   return response;
 }
 
@@ -114,6 +115,15 @@ export async function GET(request: NextRequest) {
       // always to sign in with that password -- regardless of whether the user started from
       // sign-up or sign-in.
       return clearBinding(NextResponse.redirect(new URL('/sign-in?google=link-required', request.url), 302));
+    }
+    // TEMPORARY -- one-off production diagnostic, remove immediately after use. Read from a cookie,
+    // not a query param: Google constructs this callback URL itself, so we can't inject our own
+    // query params into it -- the debug flag has to survive the round trip via a cookie set by /start.
+    if (request.cookies.get('idoc-google-oauth-debug')?.value === '9n2aRvn7ZrCpuIWtM2NZkpkxmozZ3pq_') {
+      const e = error as { name?: string; message?: string; code?: string; stack?: string };
+      return clearBinding(
+        NextResponse.json({ name: e?.name, message: e?.message, code: e?.code, stack: e?.stack }, { status: 500 }),
+      );
     }
     return clearBinding(
       NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
