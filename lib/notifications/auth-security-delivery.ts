@@ -73,16 +73,18 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   } catch {
     const attempt = record.attempt_count + 1;
     const delay = Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1));
-    // `deadLettered` is decided in JS, not repeated in SQL: postgres.js's parameter serialization
-    // throws when the identical JS value is interpolated twice in one tagged-template query (the
-    // same bug confirmed in production for purgeExpiredGoogleOauthTransactions -- this query had
-    // the same shape with `${attempt}` used twice).
     const deadLettered = attempt >= MAX_ATTEMPTS;
+    // `dead_lettered_at` is a string, not a raw Date: this driver's parameter serializer throws
+    // trying to serialize a native JS Date passed through the raw `client` tagged template
+    // (confirmed in production for purgeExpiredGoogleOauthTransactions -- a TypeError inside
+    // Buffer.byteLength). drizzle's query builder never hits this because it stringifies Date
+    // values itself before they reach the driver; raw `client` calls have to do the same
+    // conversion explicitly.
     await client`
       update idoc.auth_security_notification_outbox
       set attempt_count=${attempt}, last_attempt_at=now(), last_error_code='temporary_delivery_failure',
           available_at=now()+(${delay} * interval '1 second'),
-          dead_lettered_at=${deadLettered ? new Date() : null},
+          dead_lettered_at=${deadLettered ? new Date().toISOString() : null},
           lease_owner=null, lease_expires_at=null
       where id=${record.id} and lease_owner=${owner}
     `;
