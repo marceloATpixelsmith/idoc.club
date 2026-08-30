@@ -74,12 +74,6 @@ export async function GET(request: NextRequest) {
       googleOauthBindingCookieOptions(),
     );
     response.cookies.set(googleOauthIntentCookieName(), intent, googleOauthIntentCookieOptions());
-    // TEMPORARY -- one-off production diagnostic, remove immediately after use. Carries the debug
-    // flag through the round trip to Google via a cookie, since the callback route can't read our
-    // query params (Google constructs that URL itself).
-    if (request.nextUrl.searchParams.get('debug') === '9n2aRvn7ZrCpuIWtM2NZkpkxmozZ3pq_') {
-      response.cookies.set('idoc-google-oauth-debug', '9n2aRvn7ZrCpuIWtM2NZkpkxmozZ3pq_', googleOauthBindingCookieOptions());
-    }
     return response;
   } catch (error) {
     const reason = error instanceof GoogleOidcError ? error.code : `unexpected_error:${phase}`;
