@@ -11,6 +11,12 @@ import {
   verifyGoogleOauthBrowserBinding,
 } from '@/lib/auth/google-oauth-browser-binding';
 import {
+  expiredGoogleOauthIntentCookieOptions,
+  googleOauthFailureRedirectPath,
+  googleOauthIntentCookieName,
+  parseGoogleOauthIntent,
+} from '@/lib/auth/google-oauth-intent';
+import {
   authenticateGoogleIdentity,
   GoogleAccountLinkRequiredError,
   GoogleAccountNotEligibleError,
@@ -31,6 +37,7 @@ export const runtime = 'nodejs';
 
 function clearBinding(response: NextResponse) {
   response.cookies.set(googleOauthBindingCookieName(), '', expiredGoogleOauthBindingCookieOptions());
+  response.cookies.set(googleOauthIntentCookieName(), '', expiredGoogleOauthIntentCookieOptions());
   return response;
 }
 
@@ -54,13 +61,16 @@ function classifyGoogleOauthFailure(error: unknown, providerErrorParam: string |
 }
 
 export async function GET(request: NextRequest) {
+  const intent = parseGoogleOauthIntent(request.cookies.get(googleOauthIntentCookieName())?.value);
   try {
     const state = request.nextUrl.searchParams.get('state');
     const binding = request.cookies.get(googleOauthBindingCookieName())?.value;
     if (!state || !verifyGoogleOauthBrowserBinding(binding, state)) {
       await logError('google_oauth_callback_failed', { category: 'auth', reason: 'binding_cookie_invalid' });
       await notifyWebmasterOfGoogleOauthFailure({ reason: 'binding_cookie_invalid', step: 'callback' });
-      return clearBinding(NextResponse.redirect(new URL('/sign-in?google=failed', request.url), 302));
+      return clearBinding(
+        NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
+      );
     }
 
     const config = loadGoogleOidcConfig();
@@ -99,7 +109,14 @@ export async function GET(request: NextRequest) {
     if (alert) await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'callback' });
     const user = await getUser().catch(() => null);
     if (user) return clearBinding(NextResponse.redirect(new URL('/dashboard/security?google=failed', request.url), 302));
-    const redirectReason = error instanceof GoogleAccountLinkRequiredError ? 'link-required' : 'failed';
-    return clearBinding(NextResponse.redirect(new URL(`/sign-in?google=${redirectReason}`, request.url), 302));
+    if (error instanceof GoogleAccountLinkRequiredError) {
+      // The Google identity belongs to an existing password account, so the correct next step is
+      // always to sign in with that password -- regardless of whether the user started from
+      // sign-up or sign-in.
+      return clearBinding(NextResponse.redirect(new URL('/sign-in?google=link-required', request.url), 302));
+    }
+    return clearBinding(
+      NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
+    );
   }
 }

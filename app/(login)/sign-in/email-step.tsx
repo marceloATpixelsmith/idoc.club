@@ -15,7 +15,7 @@ export function EmailStep({ initialError = '' }: { initialError?: string }) {
         </div>
       )}
       dividerLabel="or continue with"
-      googleHref="/api/auth/google/start"
+      googleHref="/api/auth/google/start?intent=login"
       initialError={initialError}
       showGoogle
       submitLabel="Sign In"

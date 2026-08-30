@@ -57,7 +57,7 @@ test('login email screen uses canonical reference copy and action structure', ()
   assert.match(loginEntry, />Forgot password\?</);
   assert.match(loginEntry, /dividerLabel="or continue with"/);
   assert.match(loginEntry, /showGoogle/);
-  assert.match(loginEntry, /googleHref="\/api\/auth\/google\/start"/);
+  assert.match(loginEntry, /googleHref="\/api\/auth\/google\/start\?intent=login"/);
   assert.match(emailEntry, />Email Address</);
   assert.match(emailEntry, /you@example\.com/);
   assert.match(emailEntry, /Continue with Google/);
