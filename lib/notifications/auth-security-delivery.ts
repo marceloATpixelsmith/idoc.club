@@ -73,15 +73,20 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   } catch {
     const attempt = record.attempt_count + 1;
     const delay = Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1));
+    // `deadLettered` is decided in JS, not repeated in SQL: postgres.js's parameter serialization
+    // throws when the identical JS value is interpolated twice in one tagged-template query (the
+    // same bug confirmed in production for purgeExpiredGoogleOauthTransactions -- this query had
+    // the same shape with `${attempt}` used twice).
+    const deadLettered = attempt >= MAX_ATTEMPTS;
     await client`
       update idoc.auth_security_notification_outbox
       set attempt_count=${attempt}, last_attempt_at=now(), last_error_code='temporary_delivery_failure',
           available_at=now()+(${delay} * interval '1 second'),
-          dead_lettered_at=case when ${attempt} >= ${MAX_ATTEMPTS} then now() else null end,
+          dead_lettered_at=${deadLettered ? new Date() : null},
           lease_owner=null, lease_expires_at=null
       where id=${record.id} and lease_owner=${owner}
     `;
-    return { status: attempt >= MAX_ATTEMPTS ? 'dead_lettered' as const : 'retryable' as const };
+    return { status: deadLettered ? 'dead_lettered' as const : 'retryable' as const };
   }
 }
 
