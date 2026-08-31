@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { resolveRequestOrigin } from '../lib/security/request-origin.ts';
 
@@ -55,4 +56,16 @@ test('on a Vercel deployment, an invalid X-Forwarded-For entry fails safe to unk
   // value there is rejected outright, not silently retried against a second header, which would
   // itself be a confusable-input surface.
   assert.equal(resolveRequestOrigin('not-an-ip', '198.51.100.1', true), 'unknown');
+});
+
+test('no call site in the login action module reads X-Forwarded-For/X-Real-IP directly -- every origin derivation goes through the fixed requestOrigin()', () => {
+  // A Codex review on this PR caught that requestPasswordRecovery and requestMigrationActivation
+  // each carried their own inline copy of the exact pre-fix logic (reading the headers directly,
+  // with no Vercel-deployment gate and no IP-shape validation), bypassing resolveRequestOrigin
+  // entirely even though checkRateLimit's origin-keyed bucket depends on this value being trustworthy.
+  const source = readFileSync('app/(login)/actions.ts', 'utf8');
+  assert.doesNotMatch(source, /x-forwarded-for/);
+  assert.doesNotMatch(source, /x-real-ip/);
+  const requestOriginCallCount = source.match(/requestOrigin\(\)/g)?.length ?? 0;
+  assert.ok(requestOriginCallCount >= 2, 'requestPasswordRecovery and requestMigrationActivation must both call requestOrigin()');
 });
