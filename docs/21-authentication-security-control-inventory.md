@@ -509,6 +509,16 @@ No migration (only `DELETE`s against existing tables, no schema change). No comp
 
 No migration. No compatibility impact: the default fallback (`support@idoc.club`) preserves a working, real-looking address in place of the prior static string; an operator sets `SUPPORT_EMAIL` to point it at the actual support inbox.
 
+## 8s. Changes made by the alert-severity-taxonomy pull request (this revision)
+
+`docs/22`'s `AUTH-OPERATIONS-006` row noted that this codebase's three existing admin-email alerts (`lib/notifications/breached-password-alert.ts`, `google-oauth-failure-alert.ts`, `profile-change-delivery.ts`) each fired independently with no severity taxonomy and no correlation/anomaly-detection engine.
+
+1. **`lib/notifications/alert-severity.ts` (new).** A fixed, compile-time-enforced mapping from each existing alert kind to one of `informational`/`warning`/`high`/`critical`, and a `taggedSubject()` helper that prefixes a subject line with the matching tag (e.g. `[HIGH] IDOC: breached password rejected`). Only closes the severity-taxonomy half of the requirement -- a correlation/anomaly-detection engine (pattern or frequency detection across events) remains a genuinely larger, separate capability this pull request does not attempt, and `docs/22`'s row is corrected to `partial`, not softened to `verified`.
+2. **`breached-password-alert.ts`, `google-oauth-failure-alert.ts`, `profile-change-delivery.ts`.** Each now tags its subject via `taggedSubject()` instead of a bare string.
+3. **`tests/alert-severity.test.ts` (new).** Proves the fixed severity mapping and, separately, that every one of the three alert call sites actually imports and calls `taggedSubject` -- not just that the helper function works correctly in isolation.
+
+No migration. No compatibility impact: only a subject-line prefix changes on three existing alert emails; no recipient, body content, or delivery behavior changes.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
