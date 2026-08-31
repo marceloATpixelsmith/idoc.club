@@ -80,10 +80,10 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 95 | 61.3% |
+| verified | 96 | 61.9% |
 | implemented-but-unverified | 28 | 18.1% |
 | partial | 17 | 11.0% |
-| missing | 5 | 3.2% |
+| missing | 4 | 2.6% |
 | not-applicable | 10 | 6.5% |
 
 (This table also reflects several corrections made after the initial recount: AUTH-TENANT-001/002 moved
@@ -130,13 +130,11 @@ and a fresh audit is run against the final proposed head.
 5. **AUTH-REMEMBER-001 (remembered-TOTP-device policy)** — `missing`. No `AuthPolicyConfig` concept for
    remembered-device duration exists at all; the underlying feature is also unreachable in production
    (see AUTH-REMEMBER-002/3/4 above).
-6. **AUTH-ERROR-003 (support-contact policy value)** — `missing`. No portable, policy-configured
-   `supportEmail` used by persistent-error UX; only a hardcoded "Contact IDOC for help" string.
-7. **AUTH-CRYPTO-005 / AUTH-SECRET-003 (key rotation completeness)** — `partial`. TOTP secret encryption
+6. **AUTH-CRYPTO-005 / AUTH-SECRET-003 (key rotation completeness)** — `partial`. TOTP secret encryption
    genuinely supports multi-key rotation, but session-key (`AUTH_SECRET`) rotation has no ring/overlap at
    all (documented hard cutover), and there is no distinct "compromised key" state — only full removal,
    which is all-or-nothing and generates no dedicated audit event.
-8. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
+7. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
     not issued/rotated CSRF tokens; effective in practice but does not literally satisfy this control.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
@@ -194,7 +192,7 @@ PKCE binding (AUTH-TRANSACTION-010, AUTH-OAUTH-002), audit-log DB-level immutabi
 | AUTH-BOT-001..009 (layered defense, fail-closed, flow-entry, Siteverify binding, single-use, defense-in-depth, no client booleans, key separation, presentation non-authoritative) | `lib/auth/turnstile.ts` (server verify, hostname+action binding, fail-closed); `components/turnstile-widget.tsx` (client presentation only, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` public key, secret server-only); wired at signup/login/password-reset entry (`app/(login)/*/actions.ts`) | N/A (Cloudflare-side single-use enforcement, not app-tracked) | `tests/turnstile-contract.test.ts` (12 tests: hostname/action binding, fail-closed on missing config/network/malformed JSON/non-2xx, no NODE_ENV bypass); `tests/turnstile-widget-resilience.test.ts` | verified (for 001,002,004,005,006,007,008,009); implemented-but-unverified (003) | AUTH-BOT-003 ("provider fail-closed behavior") is proven; single-use-token enforcement (part of 005) relies on Cloudflare's own one-time-token semantics — not independently verified against replay in this codebase's tests. |
 | AUTH-ERROR-001 | Generic messages for persistent failures, e.g. `app/(login)/sign-in/actions.ts:74` "We could not finish signing you in automatically. Contact IDOC for help." | N/A | none found (no test asserts error-message class taxonomy) | implemented-but-unverified | |
 | AUTH-ERROR-002 | No stack/SQL/exception text ever returned to client; `lib/observability/logger.ts` + `deliveryFailureCategory`/`operationalFailureCategory` helpers deliberately discard exception text before logging | N/A | `tests/evidence-safety-scan.integration.ts` | verified | |
-| AUTH-ERROR-003 (policy) | NOT FOUND — no `supportEmail` config value; UI hardcodes "Contact IDOC for help" with no mailto link; `app/.well-known/security.txt/route.ts:10` has an operator-facing `webmaster@idoc.club` (security contact, not a user-facing support policy value) | N/A | NOT FOUND | missing | No portable, policy-configured `supportEmail` used by persistent-error UX exists. |
+| AUTH-ERROR-003 (policy) | `lib/runtime/configuration.ts` `supportEmailForServer()` (added by the support-contact-policy-value pull request) reads `SUPPORT_EMAIL`, falling back to `support@idoc.club` when unset — deliberately not `required()`-gated, since a user-facing support address is not a security-critical secret that should fail a production build closed. `app/(login)/sign-in/actions.ts`'s persistent-error UX now interpolates it instead of a hardcoded string. Distinct from `app/.well-known/security.txt/route.ts:10`'s operator-facing `IDOC_ADMIN_NOTIFICATION_EMAIL`, a security-researcher contact, not a member-facing support value | N/A | `tests/runtime-configuration.test.ts` (explicit value, fallback, and whitespace-only-treated-as-unset); `tests/unified-migrated-login.test.ts` source-inspection-proves the failure branch interpolates it | verified | A portable, policy-configured `supportEmail` now exists and is used by the persistent-error UX this row named; an operator sets `SUPPORT_EMAIL` to the real address, with a working default in the meantime. |
 | AUTH-REDIRECT-001 | `lib/auth/mfa/step-up.ts:43-45` `safeReturnTo`; `lib/auth/google-oidc-reference.ts:214-227` `normalizeReturnTo` | N/A | `tests/security-e2e/google-oauth.spec.ts` | verified | |
 | AUTH-REDIRECT-002 | Same as above — origin-match required, protocol-relative (`//`) explicitly rejected | N/A | `tests/security-e2e/google-oauth.spec.ts` | verified | |
 | AUTH-TRANSPORT-001 | `next.config.ts:15` HSTS header (`max-age=63072000; includeSubDomains; preload`); `secure: NODE_ENV==='production'` cookie flags throughout | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:3` | verified | |

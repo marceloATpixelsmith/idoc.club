@@ -54,6 +54,14 @@ export function baseUrlForServer(environment: Environment = process.env) {
   return value;
 }
 export function cronSecretForServer(environment: Environment = process.env) { return secret(environment, 'CRON_SECRET'); }
+// Deliberately not required()-gated: this is a user-facing support contact for persistent-error UX
+// copy, not a security-critical secret or endpoint, so an unset value must not fail a production
+// build closed -- it falls back to a real, monitored address instead. Distinct from
+// IDOC_ADMIN_NOTIFICATION_EMAIL (app/.well-known/security.txt/route.ts), which is an
+// operator/security-researcher contact, not a member-facing support value.
+export function supportEmailForServer(environment: Environment = process.env) {
+  return environment.SUPPORT_EMAIL?.trim() || 'support@idoc.club';
+}
 // Not routed through secret()'s 32-character minimum: unlike the self-generated secrets below
 // (CRON_SECRET, RATE_LIMIT_HASH_KEY, TURNSTILE_SECRET_KEY), this is a third-party-issued Mandrill
 // API key in a fixed, shorter format we don't control -- real keys are commonly ~22 characters, so

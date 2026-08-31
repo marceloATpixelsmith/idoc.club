@@ -499,6 +499,16 @@ No migration. No compatibility impact: documentation-only.
 
 No migration (only `DELETE`s against existing tables, no schema change). No compatibility impact: nothing in the running application reads these tables in a way that depends on rows older than their own natural (already-enforced) expiry remaining present.
 
+## 8r. Changes made by the support-contact-policy-value pull request (this revision)
+
+`docs/22`'s `AUTH-ERROR-003` row noted that no portable, policy-configured `supportEmail` existed anywhere in the codebase -- the persistent-error UX in `app/(login)/sign-in/actions.ts` hardcoded "Contact IDOC for help" with no way for an operator to point it at a real, monitored address.
+
+1. **`lib/runtime/configuration.ts`.** New `supportEmailForServer()` reads `SUPPORT_EMAIL`, falling back to `support@idoc.club` when unset. Deliberately not routed through `required()`: a user-facing support address is not a security-critical secret or endpoint, so it must not fail a production build closed the way `AUTH_SECRET`/`POSTGRES_URL`/etc. do -- it needs a working default instead. Distinct from `IDOC_ADMIN_NOTIFICATION_EMAIL` (used by `app/.well-known/security.txt/route.ts`), which is an operator/security-researcher contact, not a member-facing support value.
+2. **`app/(login)/sign-in/actions.ts`.** The migrated-activation failure branch now interpolates `supportEmailForServer()` instead of the hardcoded string.
+3. **Tests.** `tests/runtime-configuration.test.ts` gained a new test proving the explicit value, the fallback, and that whitespace-only is treated as unset. `tests/unified-migrated-login.test.ts` (which already source-inspection-proves this exact failure branch calls `finalizeMigratedAccountAfterVerifiedPassword`) gained an assertion that the branch interpolates the new function.
+
+No migration. No compatibility impact: the default fallback (`support@idoc.club`) preserves a working, real-looking address in place of the prior static string; an operator sets `SUPPORT_EMAIL` to point it at the actual support inbox.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
