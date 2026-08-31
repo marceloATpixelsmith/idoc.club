@@ -17,6 +17,12 @@ export const ALERT_SEVERITY = {
   'auth.google_oauth_failure': 'warning',
   // Routine account-maintenance activity an administrator may want to review, not a security event.
   'administrator.profile_changed': 'informational',
+  // A spam/abuse complaint risks the sending domain's deliverability reputation for every member --
+  // the highest severity of the alerts in this table.
+  'email.spam_complaint': 'critical',
+  // An address that permanently can't be delivered to (bad mailbox, bad domain, ...) -- worth an
+  // operator's attention, but not urgent the way a complaint is.
+  'email.hard_bounce': 'warning',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;
