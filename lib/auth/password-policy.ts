@@ -30,3 +30,16 @@ export const passwordSchema = z.string()
   .refine((value) => /\p{Ll}/u.test(value), 'Include at least one lowercase letter.')
   .refine((value) => /\p{N}/u.test(value), 'Include at least one number.')
   .refine((value) => /[^\p{L}\p{N}\s]/u.test(value), 'Include at least one special character.');
+
+/** For verifying a password against an existing hash (login, current-password re-verification,
+ * account-deletion confirmation) rather than creating one -- deliberately not `passwordSchema`,
+ * since login must accept the existing credential exactly as it was created, including a password
+ * that predates a since-tightened composition policy. Still bounded at the same `MAX_PASSWORD_LENGTH`
+ * (in code points, matching `passwordSchema`, not raw `.length`) as a defensive input-size cap
+ * against comparePasswords/bcrypt -- anything ever accepted by passwordSchema at creation already
+ * satisfies this bound, so it can never strand a legitimately-created credential in either direction:
+ * a plain `.max(128)` (UTF-16 units) would wrongly reject a legitimately-created ≤128-code-point
+ * password containing astral-plane characters before comparePasswords is ever reached. */
+export const passwordEntrySchema = z.string()
+  .min(1)
+  .refine((value) => countPasswordCharacters(value) <= MAX_PASSWORD_LENGTH, 'Use no more than 128 characters.');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { countPasswordCharacters, passwordSchema } from '../lib/auth/password-policy.ts';
+import { countPasswordCharacters, passwordEntrySchema, passwordSchema } from '../lib/auth/password-policy.ts';
 
 const validPassword = 'StrongPassword1!';
 
@@ -58,4 +58,28 @@ test('a password with 128 or fewer real characters is accepted even though astra
   assert.equal(password.length, 135);
   assert.equal(countPasswordCharacters(password), 69);
   assert.equal(passwordSchema.safeParse(password).success, true);
+});
+
+// passwordEntrySchema (login, current-password re-verification, account-deletion confirmation):
+// verifies an *existing* credential exactly as created, so it must accept anything passwordSchema
+// could ever have accepted at creation time -- including composition-rule-violating legacy
+// passwords -- while still capping length. A plain z.string().max(128) (UTF-16 units) previously
+// used at these call sites would lock a user out of their own account the moment their
+// legitimately-created, ≤128-code-point password contained enough astral-plane characters to push
+// its UTF-16 length over 128, rejecting it before comparePasswords ever ran.
+
+test('passwordEntrySchema accepts a password with 128 or fewer real characters even though astral-plane characters inflate its UTF-16 length past 128', () => {
+  const password = `${ASTRAL_UPPERCASE.repeat(66)}a1!`;
+  assert.equal(password.length, 135);
+  assert.equal(passwordEntrySchema.safeParse(password).success, true);
+});
+
+test('passwordEntrySchema does not enforce composition rules or the 12-character minimum, since it verifies an existing credential rather than creating one', () => {
+  assert.equal(passwordEntrySchema.safeParse('short').success, true);
+  assert.equal(passwordEntrySchema.safeParse('alllowercaseandnospecialchars').success, true);
+});
+
+test('passwordEntrySchema rejects an empty password and one over the 128-real-character bound', () => {
+  assert.equal(passwordEntrySchema.safeParse('').success, false);
+  assert.equal(passwordEntrySchema.safeParse(`${ASTRAL_UPPERCASE.repeat(129)}`).success, false);
 });
