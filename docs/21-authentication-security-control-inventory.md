@@ -461,6 +461,16 @@ This section records the fix for two Codex review findings caught on the pull re
 
 No migration in this pull request (the `idoc.teams`/`idoc.team_members` tables and the `activity_logs.ip_address` column are left in place). No compatibility impact for any current user of the running application: this PR only removes code paths, and neither removed read path is something a user could have observed. It does **not** claim these tables/columns hold no historical data from before this PR -- see the corrections above and the residual-risk note this section adds to `docs/22`. `pnpm build` was run locally to confirm the root-layout change doesn't break any page.
 
+## 8n. Changes made by the health-readiness-endpoint pull request (this revision)
+
+`docs/22`'s `AUTH-API-005` row noted that, while the cron/delivery endpoints were well-minimized, no dedicated `/api/health` or `/api/readiness` route existed at all -- a Glob for `*health*` under `app/api` returned nothing.
+
+1. **`app/api/health/route.ts` (new).** A minimal, deliberately unauthenticated liveness/readiness probe for a load balancer or uptime monitor: it confirms the database is reachable with a trivial `select 1` and returns only `{status: 'ok'}` (200) or `{status: 'error'}` (503), with an explicit `Cache-Control: no-store` header. No version, topology, or configuration detail is ever included, matching this codebase's existing cron-response minimization convention (docs/07 §12.1).
+2. **`tests/health-endpoint.integration.ts` (new).** Calls the real route handler against a real Postgres database and proves the 200 status, the `no-store` header, and that the response body contains nothing beyond the single `status` key.
+3. **`tests/authorization-boundary-inventory.test.ts`.** The new route is added to the Route Handler inventory as `public-liveness-probe-no-data-access`, keeping the "every Route Handler is accounted for" test exhaustive.
+
+No migration. No compatibility impact: this is a new, additive route that nothing previously depended on.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)

@@ -80,9 +80,9 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 91 | 58.7% |
+| verified | 92 | 59.4% |
 | implemented-but-unverified | 28 | 18.1% |
-| partial | 21 | 13.5% |
+| partial | 20 | 12.9% |
 | missing | 5 | 3.2% |
 | not-applicable | 10 | 6.5% |
 
@@ -146,8 +146,6 @@ and a fresh audit is run against the final proposed head.
     on session/auth API responses; relies only on Next.js's implicit dynamic-rendering behavior.
 11. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
     callers get an in-band cooldown message instead.
-12. **AUTH-API-005 (health/readiness endpoint)** — `partial`. No dedicated `/api/health` or
-    `/api/readiness` route exists at all.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
 (AUTH-SESSION-002/009/010, directly proven by dedicated e2e tests including one added by this program's
@@ -373,7 +371,7 @@ Methodology note: docs/21 uses its own AUTH-* numbering scheme that does **not**
 | AUTH-OPERATIONS-010 | `.github/workflows/auth-security-verification.yml` (install → `pnpm audit` → `pnpm typecheck` → `pnpm test:ci` → Playwright security e2e), `.github/workflows/release-1-verification.yml` (install → `pnpm check:release1` = typecheck+test+build) | N/A | The workflows themselves are the test evidence | None | `partial` | Dependency install, typecheck, unit/integration tests, and build are all real, enforced CI gates on every PR. **No whitespace/lint check and no "contract documentation change" validation step were found** — no ESLint/Prettier config referenced in CI, no doc-drift check verifying docs/21 or docs/05 stay in sync with code changes. This is a genuine partial gap, not "verified." |
 | AUTH-OPERATIONS-011 | **NOT FOUND** as a distinct machine-readable checklist — the closest artifacts are docs/07 §15.6 "Release signoff (leave unchecked until manually proved)" (a markdown checkbox list) and docs/11 (release-1-verification-matrix.md, not opened in this pass) | N/A | The `check:release1`/`test:security` CI gates are automated *tests*, not a readiness *checklist* | docs/07 §15.5/§15.6 — an explicit, manually-checked markdown checklist covering security config, MFA, sessions, email delivery, etc., **correctly framed as "leave unchecked until manually proved"** rather than an automatic certification | `partial` | The checklist exists and is explicitly non-self-certifying (a real strength — it doesn't silently claim security), but it's a markdown document requiring a human to tick boxes, not a machine-readable evidence artifact (e.g. no JSON/YAML manifest, no CI step that fails a PR if the checklist itself is stale). |
 | AUTH-SESSION-010 | `lib/auth/session-registry.ts:38-56,116-134` — `readActiveSession`/`listActiveSessions` require `revoked_at IS NULL AND absolute_expires_at > now() AND session_version = <current>` on every read; `middleware.ts` is explicitly documented (docs/21 AUTH-SESSION-010 row) as a non-authoritative UX layer only | `idoc.auth_sessions`, `idoc.users.session_version` | `tests/canonical-session-lifecycle.test.ts`, `tests/security-e2e/session-replay.spec.ts` | None additional | `verified` | Directly corroborated by docs/21's own row for this exact ID, which I independently confirmed by reading `session-registry.ts` and the middleware boundary. |
-| AUTH-API-005 | `lib/notifications/account-delivery-worker-core.ts:29-41` — cron routes return only aggregate counts (`{delivered, retryable, deadLettered, ineligible, leaseLost}` shape) or `{error: 'Unauthorized'}`/`{error: 'Worker failed'}`, never topology/secret detail; constant-time bearer-token auth via `timingSafeEqual` | N/A | Not independently unit-tested for response-shape minimization beyond source inspection | docs/07 §12.1: "Cron responses expose only aggregate delivered, retryable, dead-lettered, ineligible, and lease-lost counts." | `partial` | Cron/delivery endpoints are well-minimized and documented. **No dedicated `/api/health` or `/api/readiness` route exists at all** (`Glob` for `*health*` under `app/api` returned nothing) — so the "health/readiness" half of this requirement is simply absent, not merely minimized. |
+| AUTH-API-005 | `lib/notifications/account-delivery-worker-core.ts:29-41` — cron routes return only aggregate counts (`{delivered, retryable, deadLettered, ineligible, leaseLost}` shape) or `{error: 'Unauthorized'}`/`{error: 'Worker failed'}`, never topology/secret detail; constant-time bearer-token auth via `timingSafeEqual`. `app/api/health/route.ts` (added by the health-readiness-endpoint pull request) is a dedicated, unauthenticated liveness/readiness route: it confirms the database is reachable (`select 1`) and returns only `{status: 'ok'}`/`{status: 'error'}`, with `Cache-Control: no-store` | N/A | `tests/health-endpoint.integration.ts` proves the 200/no-store/minimal-body shape against a real database; cron response minimization remains verified only by source inspection | docs/07 §12.1: "Cron responses expose only aggregate delivered, retryable, dead-lettered, ineligible, and lease-lost counts." | `verified` | Cron/delivery endpoints are well-minimized and documented, and the previously-absent health/readiness route now exists, is minimal, and is tested. |
 
 ### Stage 6 summary of the most consequential gaps (do not soften)
 
