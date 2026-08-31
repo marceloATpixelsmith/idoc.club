@@ -487,6 +487,22 @@ No migration. No compatibility impact: this only adds a response header, and doe
 
 No migration. No compatibility impact: documentation-only.
 
+## 8q. Changes made by the data-retention-purge-job pull request (this revision)
+
+`docs/22`'s `AUTH-STORAGE-007` row noted that logical invalidation (revoked/expired rows treated as unauthorized on every read) was solid, but no physical purge job existed for any of the six tables that grow unbounded: `email_otp_codes`, `mfa_challenge_transactions`, `mfa_enrollment_transactions`, `account_tokens`, `auth_sessions`, `login_trusted_devices`.
+
+1. **`lib/security/data-retention-purge.ts` (new).** `purgeExpiredAuthRecords(now)` runs one `DELETE` per table, keyed on that table's own `expires_at`/`absolute_expires_at`, once it is more than 30 days in the past. The 30-day grace period is a conservative engineering default (headroom for a security-incident investigation to still find a recently-expired record), not a compliance-mandated value; it is not configurable via an environment variable, matching the pattern of other hardcoded security-parameter constants elsewhere in this codebase (e.g. `SESSION_ABSOLUTE_SECONDS`). Each table's `DELETE` is independent -- there is no cross-table transaction -- so a partial run simply leaves the remaining tables for the next scheduled run.
+2. **`app/api/cron/data-retention-purge/route.ts` (new).** Wraps the purge function in the same `handleAccountDeliveryCron` shared-secret bearer-token gate every other cron route in this codebase uses.
+3. **`vercel.json`.** Registers the new route on a daily schedule (`0 8 * * *`), after the existing reconciliation-scan job.
+4. **`tests/data-retention-purge.integration.ts` (new).** Real-Postgres test inserting one row per table on each side of the 30-day boundary (well past it, within it, and not yet expired), proving the purge deletes exactly the rows past the grace period and leaves every other row untouched, plus a no-op-on-empty-database test.
+5. **`tests/authorization-boundary-inventory.test.ts`.** The new cron route added to the Route Handler inventory and given the same shared-secret-gating source-inspection test as the other cron routes.
+
+No migration (only `DELETE`s against existing tables, no schema change). No compatibility impact: nothing in the running application reads these tables in a way that depends on rows older than their own natural (already-enforced) expiry remaining present.
+
+---
+
+# 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
+
 These are controls that are implemented in code (per the tables above) but whose proof rests on source-inspection tests (regex/string assertions against production files) rather than a test that actually executes the behavior, or that have no test at all. None of these are claims that the control does not work — they are claims that the *repository's own test suite* does not yet prove it end-to-end, per `docs/20`'s own distinction between what Playwright/integration tests prove and what they don't.
 
 **Closed by the test-completeness pull request** (kept here, struck through in spirit, for audit trail — full detail is in the rows above):

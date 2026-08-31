@@ -75,6 +75,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/auth/google/start/route.ts': 'oauth-transaction-boundary',
   'app/api/client-error/route.ts': 'log-only-no-data-access',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
+  'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
@@ -241,6 +242,10 @@ test('the renewal-notice Cron Route Handlers are gated by the shared secret befo
 
 test('the reconciliation-scan Cron Route Handler is gated by the shared secret before batch processing', () => {
   const source = readFileSync(path.join(root, 'app/api/cron/reconciliation-scan/route.ts'), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
+});
+
+test('the data-retention-purge Cron Route Handler is gated by the shared secret before batch processing', () => {
+  const source = readFileSync(path.join(root, 'app/api/cron/data-retention-purge/route.ts'), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
 });
 
 test('the Stripe checkout return-trip Route Handler never touches the database or calls Stripe, confirming its stateless classification is current', () => {

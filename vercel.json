@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/reconciliation-scan",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/data-retention-purge",
+      "schedule": "0 8 * * *"
     }
   ]
 }
