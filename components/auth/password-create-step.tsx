@@ -5,7 +5,7 @@ import { useActionState, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { PasswordField } from '@/components/auth/password-field';
-import { MAX_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
+import { countPasswordCharacters, MAX_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
 import type { ActionState } from '@/lib/auth/middleware';
 
 type CompleteAction = (prevState: ActionState, formData: FormData) => Promise<ActionState>;
@@ -30,7 +30,7 @@ export function PasswordCreateStep({
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: '' });
   const [password, setPassword] = useState('');
   const unmetRequirements = PASSWORD_REQUIREMENTS.filter(({ test }) => !test(password));
-  const tooLong = password.length > MAX_PASSWORD_LENGTH;
+  const tooLong = countPasswordCharacters(password) > MAX_PASSWORD_LENGTH;
   const allMet = unmetRequirements.length === 0 && !tooLong;
 
   return (
