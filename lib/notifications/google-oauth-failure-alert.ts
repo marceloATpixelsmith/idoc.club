@@ -2,6 +2,7 @@ import 'server-only';
 
 import { escapeHtml, renderTransactionalEmail } from './email-template.ts';
 import { sendTransactionalEmail } from './mailchimp-transactional.ts';
+import { taggedSubject } from './alert-severity.ts';
 import { logWarn } from '@/lib/observability/logger.ts';
 import { currentRequestId } from '@/lib/observability/request-id.ts';
 import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit.ts';
@@ -23,7 +24,7 @@ async function deliverAlert(input: { reason: string; step: 'start' | 'callback' 
     heading: 'Google sign-in failure',
   });
   await sendTransactionalEmail(
-    { html, subject: `IDOC: Google sign-in failed (${input.reason})`, to },
+    { html, subject: taggedSubject('auth.google_oauth_failure', `IDOC: Google sign-in failed (${input.reason})`), to },
     { signal: AbortSignal.timeout(ALERT_DELIVERY_TIMEOUT_MS) },
   );
 }

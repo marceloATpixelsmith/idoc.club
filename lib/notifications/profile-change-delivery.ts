@@ -6,6 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { notificationOutbox } from '@/lib/db/schema';
 import { sendTransactionalEmail } from './mailchimp-transactional';
 import { emailButton, renderTransactionalEmail } from './email-template';
+import { taggedSubject } from './alert-severity';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const MAX_ATTEMPTS = 6;
@@ -29,7 +30,7 @@ export async function deliverProfileChangeNotification(_outboxId?: number, owner
       bodyHtml: `<p>A member profile was changed and may need review.</p>${emailButton(adminMembersUrl, 'Review in admin area')}`,
       heading: 'Member profile changed',
     });
-    await sendTransactionalEmail({ html, messageId: `profile-change-${record.id}`, subject: 'IDOC member profile changed', to });
+    await sendTransactionalEmail({ html, messageId: `profile-change-${record.id}`, subject: taggedSubject('administrator.profile_changed', 'IDOC member profile changed'), to });
     const finalized = await db.update(notificationOutbox).set({ attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(), lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date() }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner), isNull(notificationOutbox.sentAt))).returning({ id: notificationOutbox.id });
     return finalized.length ? { status: 'delivered' as const } : { status: 'lease_lost' as const };
   } catch {
