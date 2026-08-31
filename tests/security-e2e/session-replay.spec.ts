@@ -119,18 +119,27 @@ test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template s
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + 12 * 60 * 60)
     .sign(new TextEncoder().encode(AUTH_SECRET));
+  const legacyCookie = { name: 'session', value: legacyToken, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax' as const, secure: false };
 
-  const context = await browser.newContext();
-  await context.addCookies([{ name: 'session', value: legacyToken, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
-
-  const identity = await context.request.get('/api/user');
+  // Two separate contexts, each freshly seeded with the legacy cookie: middleware.ts's own
+  // response to the first request (finish()) sets a Set-Cookie deletion for the legacy cookie name,
+  // which a shared context's cookie jar would apply before the second request ever went out --
+  // silently turning the /dashboard check below into a test of an already-cookie-less request
+  // rather than of whether a signed legacy cookie is rejected.
+  const userContext = await browser.newContext();
+  await userContext.addCookies([legacyCookie]);
+  const identity = await userContext.request.get('/api/user');
   expect(await identity.json()).toBeNull();
+  await userContext.close();
 
-  const dashboard = await context.request.get('/dashboard', { maxRedirects: 0 });
-  expect(dashboard.status()).toBe(302);
+  const dashboardContext = await browser.newContext();
+  await dashboardContext.addCookies([legacyCookie]);
+  const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
+  // NextResponse.redirect() defaults to a 307 (temporary redirect) status when none is passed
+  // explicitly, which is what middleware.ts's sign-in redirects use.
+  expect(dashboard.status()).toBe(307);
   expect(new URL(dashboard.headers().location!).pathname).toBe('/sign-in');
-
-  await context.close();
+  await dashboardContext.close();
 });
 
 test('a genuinely valid, freshly registered session is accepted (positive control for the two rejection cases above)', async ({ browser }) => {
