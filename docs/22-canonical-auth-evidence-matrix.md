@@ -11,8 +11,7 @@ supply-chain notes, and its changelog of individual pull requests) and is not be
 per-requirement status claims should be read as historical narrative, not current status — this
 document is current status.
 
-**Canonical versions confirmed at the time of this audit** (matching `pixelsmith-auth-reference` `main`
-exactly, no drift): contractVersion 2.0.0, machine schemaVersion 14.0.0, validatorVersion 11.0.0,
+**Canonical versions confirmed at the time of this audit** (independently reproduced from the canonical machine artifacts on `pixelsmith-auth-reference` `main`): contractVersion 2.0.0, machine schemaVersion 14.0.0, validatorVersion 11.0.0,
 mapping schemaVersion 1.0.0, portable-config schemaVersion 2.0.0.
 
 ## Methodology
@@ -60,15 +59,11 @@ code, and AUTH-TENANT-001/002 was marked `partial` rather than `not-applicable` 
 pull request removed the call site and the now-fully-dead query functions it was the only caller of;
 AUTH-TENANT-001/002 is `not-applicable` again, see the Stage 5 detail section below.
 
-Separately, this audit found that IDOC's TOTP "remembered device" subsystem
-(`lib/auth/mfa/remembered-device.ts`, table `idoc.mfa_remembered_devices`) is fully implemented and
-integration-tested but has **zero production callers** — the only production caller of `decideMfa`
-(`lib/auth/mfa/login.ts`) hardcodes `rememberTotpDevice: false`. AUTH-REMEMBER-002/003/004 are marked
-not-applicable on that basis (the feature is not offered to users, not that a required control within an
-offered feature is missing) rather than missing/partial, but this is flagged for a product decision:
-either wire the feature up, or remove the dead code, per docs/21 §8's own conventions around not
-retaining stale/inert claims. AUTH-REMEMBER-001 (the policy-config premise itself) is marked missing
-rather than not-applicable, since a config surface for it is a prerequisite either way.
+IDOC's TOTP remembered-device subsystem is now an offered, opt-in feature. Server-owned policy
+configuration gates it; the post-TOTP production action issues the hardened cookie and persisted digest;
+the primary-login path validates it; and authenticator replacement invalidates it. AUTH-REMEMBER-001
+through AUTH-REMEMBER-004 are therefore verified. Deployed enablement and secret values remain an
+external production-configuration check, not repository evidence.
 
 ## Summary counts
 
@@ -80,9 +75,9 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 102 | 65.8% |
+| verified | 103 | 66.5% |
 | implemented-but-unverified | 28 | 18.1% |
-| partial | 18 | 11.6% |
+| partial | 17 | 11.0% |
 | missing | 0 | 0.0% |
 | not-applicable | 7 | 4.5% |
 
@@ -250,7 +245,7 @@ Also covers Slice 3's corrupted-state/failure-mode scenario analysis (final tabl
 | ID | Implementation location | Persistence location | Test evidence | Assessment | Notes |
 |---|---|---|---|---|---|
 | AUTH-MFA-003 | `lib/auth/mfa/store.ts` (all factor rows built server-side: `factorRecord()` L34-47; `revokeFactor` L304-316; `consumeEnrollmentAndActivate` L115-148 sets status/lineage under lock) | `idoc.mfa_factors` (`lib/db/schema.ts:446-475`) | `tests/mfa-store.integration.ts` (real Postgres, exercises the unused-in-prod store path) | verified | Factor status/timestamps/lineage are DB-computed, never client-supplied, in both the tested store path and the actually-used finalization files. |
-| AUTH-MFA-004 | `lib/auth/mfa/decision.ts:9-22` (`decideMfa`) + `lib/auth/mfa/step-up.ts` (`sensitiveActionRequiresFreshStepUp`, separate function for step-up policy) | N/A (policy logic, no dedicated table) | `tests/canonical-mfa-runtime.test.ts` (unit, real function calls, no DB); `tests/live-privileged-mfa.test.ts` (unit) | partial | Role/enrollment-eligibility/remembered-state/action evaluation exists but is split across two separate functions rather than one canonical evaluator, and the "remembered state" input is permanently hardcoded `false` by the only production caller (`login.ts:29-30`) — so that branch of the policy is implemented but unreachable in production. |
+| AUTH-MFA-004 | `lib/auth/mfa/decision.ts` (`decideMfa`) evaluates role, enrollment eligibility, and remembered-device state; `lib/auth/mfa/login.ts` supplies the validated remembered-device result; `lib/auth/mfa/step-up.ts` separately evaluates action freshness | `idoc.mfa_remembered_devices` plus server policy configuration | `tests/canonical-mfa-runtime.test.ts` calls the production evaluator; `tests/remembered-totp-device.integration.ts` proves persisted-device validation with real Postgres; `tests/live-privileged-mfa.test.ts` traces production wiring | verified | Policy evaluation is deliberately composed across primary-login and sensitive-action boundaries; the remembered-state branch is now reachable rather than hardcoded false. |
 | AUTH-MFA-005 | `lib/auth/mfa/totp.ts:140-190` (`beginTotpEnrollment`, CSPRNG via `generateTotpSecret`→`randomBytes(20)`); atomic activation in `lib/auth/mfa/enrollment-finalization.ts:10-75` and `lib/auth/mfa/replacement-finalization.ts:10-105` (production path) | `idoc.mfa_factors`, `idoc.mfa_enrollment_transactions` (`lib/db/schema.ts:446-491`) | `tests/security-completeness-item-8.test.ts`, `tests/live-privileged-mfa.test.ts` (source-inspection only for the production finalization files); `tests/mfa-store.integration.ts` (real-Postgres, but tests the parallel unused `consumeEnrollmentAndActivate` path) | implemented-but-unverified | Pending factor is expiring (`TOTP_ENROLLMENT_TTL_MS = 10min`), purpose-bound, and displaying the QR/provisioning URI (`beginTotpEnrollment`) never activates it — only `finalizeInitialAuthenticatorEnrollment`/`finalizeAuthenticatorReplacement` do, atomically. No behavioral (real-Postgres) test exists for the actual production functions. |
 | AUTH-MFA-006 | `lib/auth/mfa/totp.ts:97-114,234-271` (`verifyTotpCode` ±1 window, `verifyActiveTotp`); attempts/replay in `app/(login)/mfa/actions.ts:100-115,38-51`; rate limit `lib/security/rate-limit.ts` | `idoc.mfa_challenge_transactions` (attempt_count/max_attempts), `idoc.mfa_factors.last_accepted_counter` | `tests/canonical-mfa-runtime.test.ts` (unit, attempt-exhaustion charging); `tests/mfa-store.integration.ts` (real-Postgres concurrency race on `acceptTotpChallenge`, same code path used by login/step-up verification); `tests/security-e2e/webauthn-passkeys.spec.ts` (real browser, real TOTP step-up round-trip) | verified | `equalCode` uses `timingSafeEqual`; challenge replay/attempt exhaustion is enforced under a Postgres row lock and is behaviorally proven for `acceptTotpChallenge`/`recordChallengeFailure`, which **is** the function the login/step-up TOTP flow actually calls (`totp.ts` `verifyActiveTotp` → `store.acceptTotpChallenge`). |
 | AUTH-STORAGE-006 | `lib/auth/mfa/totp.ts:116-138` (`encryptTotpSecret`/`decryptTotpSecret`, AES-256-GCM, per-key-ID) | `idoc.mfa_factors.encrypted_secret`/`encryption_key_id`; DB CHECK `mfa_factors_totp_secret_check` (`lib/db/schema.ts:467-469`) forces non-null secret+key for `totp` factors | `tests/canonical-mfa-runtime.test.ts` (unit round-trip); no test scans logs/browser storage for TOTP secrets specifically | implemented-but-unverified | Encryption is real (32-byte key required, GCM auth tag). No behavioral test of "never in logs/telemetry" for TOTP secrets specifically (only `console.*` absence confirmed by code review — no `console.*` calls anywhere in `lib/auth/mfa/`). |
@@ -359,10 +354,10 @@ Methodology note: docs/21 uses its own AUTH-* numbering scheme that does **not**
 
 ### Stage 6 summary of the most consequential gaps (do not soften)
 
-1. **AUTH-STORAGE-008 (backups)** — genuinely `missing`. No backup/restore code, script, or documented step-by-step procedure exists; only a one-line quarterly "check the posture" reminder.
-2. **AUTH-EMAIL-007 (bounce/complaint handling)** — genuinely `missing`. Zero code or docs on the topic.
-3. **AUTH-OPERATIONS-006 (alert severity taxonomy)** — `missing`. Only three ad hoc single-event admin emails exist; no correlation/severity system.
-4. **AUTH-STORAGE-007 (physical cleanup)** — `partial`. Logical invalidation is solid and verified, but no purge job exists for any expired-record table, so several tables grow unbounded.
+1. **AUTH-STORAGE-008 (backups) — fixed later.** Render backup behavior and a restore/reconciliation procedure are documented in docs/07. A real restore drill remains external/manual evidence; this historical item is not a current repository gap.
+2. **AUTH-EMAIL-007 (bounce/complaint handling) — fixed later.** The signed Mandrill webhook route and behavioral route tests now exist. A live provider test remains external/manual evidence.
+3. **AUTH-OPERATIONS-006 (alerting) — partially fixed later.** A tested severity taxonomy covers current alerts; correlation/anomaly detection remains partial.
+4. **AUTH-STORAGE-007 (physical cleanup) — fixed later.** The scheduled retention purge and real-Postgres behavioral tests now cover the named expiring tables.
 5. **AUTH-LIFECYCLE-006 — fixed in a later pull request.** At the time of this stage audit, `users.account_state = 'suspended'` was defined in the schema's CHECK constraint but no code path set it. `lib/membership/account-suspension.ts` now provides admin-initiated suspend/reinstate actions; see the AUTH-LIFECYCLE-006 row above, now `verified`. Kept here as a record of what was true at the time of this stage's original audit, not a currently-open gap.
 6. **AUTH-CRYPTO-005 / AUTH-SECRET-003** — TOTP key rotation mechanism is real and better than a naive single-key design, but session-key (`AUTH_SECRET`) rotation has no ring/overlap at all (documented hard cutover), and there is no "compromised key" state distinct from "removed key."
 7. **AUTH-OPERATIONS-009** and **AUTH-AUDIT-002** are the strongest items in this stage — both are genuinely `verified` with real fail-closed code and a DB-level immutability trigger, respectively.
