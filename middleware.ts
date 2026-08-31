@@ -54,32 +54,33 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const canonicalName = sessionCookieName();
   const canonicalCookie = request.cookies.get(canonicalName);
+  // A signed JWT alone is never sufficient authentication authority: only the canonical cookie
+  // (verified above, and registry-checked by every downstream getSession() call) may establish
+  // access to a protected route. The legacy pre-retrofit cookie is never read for authentication
+  // here -- it is only ever defensively cleared, on every response path below, in case a browser
+  // still holds one from before the persisted-session-registry retrofit.
   const legacyCookie = request.cookies.get(LEGACY_SESSION_COOKIE_NAME);
-  const sessionCookie = canonicalCookie ?? legacyCookie;
   const isProtectedRoute = pathname.startsWith(protectedRoutes);
 
-  if (isProtectedRoute && !sessionCookie) {
-    const res = NextResponse.redirect(new URL('/sign-in', request.url));
+  const finish = (res: NextResponse) => {
     res.headers.set(REQUEST_ID_HEADER, requestId);
+    if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     return res;
+  };
+
+  if (isProtectedRoute && !canonicalCookie) {
+    return finish(NextResponse.redirect(new URL('/sign-in', request.url)));
   }
 
-  if (!sessionCookie) {
-    const res = next();
-    res.headers.set(REQUEST_ID_HEADER, requestId);
-    return res;
+  if (!canonicalCookie) {
+    return finish(next());
   }
 
   try {
-    const parsed = await verifyToken(sessionCookie.value);
+    const parsed = await verifyToken(canonicalCookie.value);
     const res = next();
-    res.headers.set(REQUEST_ID_HEADER, requestId);
 
-    // Only already-canonical sessions may be refreshed. A legacy JWT has no persisted registry
-    // row, so silently promoting it into the canonical cookie namespace would create a bearer
-    // token that the authoritative server registry cannot revoke. Legacy sessions simply age out
-    // under the fixed 12-hour cap or are replaced on the next successful login.
-    if (request.method === 'GET' && canonicalCookie) {
+    if (request.method === 'GET') {
       const refreshed = refreshSessionActivity(parsed);
       res.cookies.set({
         name: canonicalName,
@@ -88,17 +89,13 @@ export async function middleware(request: NextRequest) {
       });
     }
 
-    return res;
+    return finish(res);
   } catch {
     const res = isProtectedRoute
       ? NextResponse.redirect(new URL('/sign-in', request.url))
       : next();
-    res.headers.set(REQUEST_ID_HEADER, requestId);
-    if (canonicalCookie) {
-      res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
-    }
-    if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
-    return res;
+    res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
+    return finish(res);
   }
 }
 

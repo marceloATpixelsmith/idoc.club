@@ -52,23 +52,19 @@ async function registeredSessionIsValid(session: SessionData, now = new Date()) 
 export async function getSession() {
   const cookieStore = await cookies();
   const canonicalValue = cookieStore.get(sessionCookieName())?.value;
-  if (canonicalValue) {
-    let session: SessionData;
-    try {
-      session = await verifyToken(canonicalValue);
-    } catch {
-      return null;
-    }
-    return (await registeredSessionIsValid(session)) ? session : null;
-  }
+  if (!canonicalValue) return null;
 
-  const legacyValue = cookieStore.get(LEGACY_SESSION_COOKIE_NAME)?.value;
-  if (!legacyValue) return null;
+  let session: SessionData;
   try {
-    return await verifyToken(legacyValue);
+    session = await verifyToken(canonicalValue);
   } catch {
     return null;
   }
+  // A signed JWT alone is never sufficient authentication authority: every canonical session must
+  // also carry an active, matching persisted registry row (see registeredSessionIsValid above). The
+  // legacy pre-retrofit cookie is never accepted here at all -- only ever cleared defensively, in
+  // setSession/clearSession below and in middleware.ts.
+  return (await registeredSessionIsValid(session)) ? session : null;
 }
 
 export async function setSession(user: NewUser) {
