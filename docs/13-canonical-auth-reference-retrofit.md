@@ -6,15 +6,19 @@ This document tracks IDOC's retrofit to the canonical authentication implementat
 
 Reference repository: `marceloATpixelsmith/pixelsmith-auth-reference`
 
-Current baseline after reference PR #35:
+Current baseline, confirmed against the canonical reference repository's `main` branch with no drift:
 
-- contract `1.10.0`
-- machine schema `13.0.0`
-- validator `10.0.0`
+- contract `2.0.0`
+- machine schema `14.0.0`
+- validator `11.0.0`
 - mapping schema `1.0.0`
 - portable-config schema `2.0.0`
 
 The machine contract under `src/contract/` is authoritative. Canonical UI structure and styling come from `src/auth`; application branding is supplied through the reference branding contract rather than by inventing a separate authentication shell.
+
+The current, from-scratch `AUTH-*` evidence matrix against this baseline lives in
+[`docs/22-canonical-auth-evidence-matrix.md`](22-canonical-auth-evidence-matrix.md); it supersedes
+per-requirement status claims elsewhere in this document and in `docs/21`.
 
 ## IDOC application model
 
@@ -125,11 +129,20 @@ The target is the reference in its totality, not only password login and Google 
 - complete remaining MFA/TOTP adoption work beyond the implemented ordinary-member 14-day login trust policy, especially broader account-security management and any sensitive mutations not yet exposed by the product UI;
 - user-facing session inventory/revocation controls where required by product policy and remaining session signing-key rotation semantics;
 - remaining server-owned authentication transaction semantics, CSRF protection for cookie-authenticated unsafe mutations, and negative/adversarial coverage not already implemented by the persisted canonical MFA/session flows;
-- canonical Super Admin-only privileged invitation lifecycle and acceptance flow using IDOC application roles;
 - full authorization negative testing, direct-resource checks, and single-app role enforcement;
 - canonical logging, security events, audit integrity, lifecycle cleanup, secrets/key handling, dependency failure behavior, and production operational evidence;
-- canonical UI surfaces that do not yet exist in IDOC because their trusted-server feature slices are still pending, including invitation, broader authenticator/account-security management, and session-management screens. MFA enrollment/challenge, recovery-code, authenticator-replacement, and fresh step-up surfaces now exist;
-- final `AUTH-*` implementation/evidence matrix against contract `1.10.0`, schema `13.0.0`, validator `10.0.0`.
+- canonical UI surfaces that do not yet exist in IDOC because their trusted-server feature slices are still pending, including broader authenticator/account-security management and session-management screens. MFA enrollment/challenge, recovery-code, authenticator-replacement, and fresh step-up surfaces now exist;
+- final `AUTH-*` implementation/evidence matrix against contract `2.0.0`, schema `14.0.0`, validator `11.0.0` — see `docs/22-canonical-auth-evidence-matrix.md`.
+
+**Correction (this revision):** a prior version of this list carried "canonical Super Admin-only
+privileged invitation lifecycle and acceptance flow" as remaining work. A dedicated audit of the
+canonical Stage 5 (OAuth/invite/tenant) requirements confirmed IDOC has no organization/tenant concept
+anywhere in its schema or code, and that privileged-account provisioning is deliberately handled by an
+existing Super Admin calling `grantApplicationRole` directly (`lib/membership/role-grants.ts`), not by
+an invitation flow — this is documented, approved policy (docs/05 §4, docs/07 §11), not an omission. The
+canonical `AUTH-INVITE-*`/`AUTH-TENANT-*` requirement IDs are therefore marked not-applicable in
+`docs/22`, and an invitation lifecycle is removed from this remaining-work list rather than carried
+forward as a stale target.
 
 ## Completion criterion
 
