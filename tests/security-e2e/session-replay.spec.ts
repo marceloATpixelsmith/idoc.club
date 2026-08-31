@@ -106,6 +106,33 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
   await context.close();
 });
 
+test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template session shape, under its old cookie name) never authenticates', async ({ browser }) => {
+  // A signed JWT alone is never sufficient authentication authority. This forges the actual old
+  // cookie shape and name the pre-persisted-session-registry codebase used -- a bare {user, iat}
+  // payload (no version, no sessionId) under the cookie literally named 'session' -- and proves it
+  // is rejected both at the session layer (/api/user) and at the middleware layer (/dashboard),
+  // even though the signature is valid and the referenced user really exists.
+  const email = `session-replay-legacy-cookie-${randomUUID()}@security.example.test`;
+  const user = await withDb((sql) => createUser(sql, email));
+  const legacyToken = await new SignJWT({ user: { id: user.id, sessionVersion: 0 } })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + 12 * 60 * 60)
+    .sign(new TextEncoder().encode(AUTH_SECRET));
+
+  const context = await browser.newContext();
+  await context.addCookies([{ name: 'session', value: legacyToken, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
+
+  const identity = await context.request.get('/api/user');
+  expect(await identity.json()).toBeNull();
+
+  const dashboard = await context.request.get('/dashboard', { maxRedirects: 0 });
+  expect(dashboard.status()).toBe(302);
+  expect(new URL(dashboard.headers().location!).pathname).toBe('/sign-in');
+
+  await context.close();
+});
+
 test('a genuinely valid, freshly registered session is accepted (positive control for the two rejection cases above)', async ({ browser }) => {
   const email = `session-replay-valid-control-${randomUUID()}@security.example.test`;
   const { token } = await withDb(async (sql) => {

@@ -62,49 +62,40 @@ export function expiredSessionCookieOptions(environment: Environment = process.e
   };
 }
 
-function isoFromEpochSeconds(value: number) {
-  return new Date(value * 1000).toISOString();
-}
-
 function normalizeSessionPayload(payload: Record<string, unknown>): SessionData {
   const user = payload.user as { id?: unknown; sessionVersion?: unknown } | undefined;
   if (!user || typeof user.id !== 'number' || typeof user.sessionVersion !== 'number') {
     throw new Error('Invalid session identity payload.');
   }
 
+  // A signed JWT alone is never sufficient authentication authority: only the exact, registry-
+  // backed version-2 shape is accepted. This module previously reinterpreted any payload short of
+  // that shape (a bare {user, iat}, matching the pre-retrofit starter-template session cookie) as a
+  // one-way "legacy compatibility" session -- synthesizing a sessionId that was never persisted via
+  // registerSession(). lib/auth/session.ts's getSession() returned that synthesized session
+  // directly, with no call to registeredSessionIsValid(), so a stale or forged legacy-shaped token
+  // could authenticate -- and, via middleware.ts, reach /dashboard -- with no persisted row for the
+  // server to revoke. Removed outright: setSession() has never issued this shape, and the fixed
+  // 12-hour absolute cap means any session that legitimately predated the persisted-session-registry
+  // retrofit has long since expired on its own terms regardless.
   if (
-    payload.version === 2 &&
-    typeof payload.sessionId === 'string' &&
-    typeof payload.authenticatedAt === 'string' &&
-    typeof payload.lastActivityAt === 'string' &&
-    typeof payload.absoluteExpiresAt === 'string'
+    payload.version !== 2 ||
+    typeof payload.sessionId !== 'string' ||
+    typeof payload.authenticatedAt !== 'string' ||
+    typeof payload.lastActivityAt !== 'string' ||
+    typeof payload.absoluteExpiresAt !== 'string'
   ) {
-    return {
-      version: 2,
-      sessionId: payload.sessionId,
-      user: { id: user.id, sessionVersion: user.sessionVersion },
-      authenticatedAt: payload.authenticatedAt,
-      lastActivityAt: payload.lastActivityAt,
-      absoluteExpiresAt: payload.absoluteExpiresAt,
-    };
+    throw new Error('Unsupported session payload.');
   }
 
-  // One-way compatibility input for the pre-canonical cookie. Legacy tokens never become
-  // registry-backed canonical sessions; they age out under the 12-hour absolute cap or are
-  // replaced by a fresh registered session on the next successful authentication.
-  if (typeof payload.iat === 'number') {
-    const authenticatedAt = isoFromEpochSeconds(payload.iat);
-    return {
-      version: 2,
-      sessionId: `legacy-${payload.iat}-${user.id}`,
-      user: { id: user.id, sessionVersion: user.sessionVersion },
-      authenticatedAt,
-      lastActivityAt: authenticatedAt,
-      absoluteExpiresAt: new Date(payload.iat * 1000 + SESSION_ABSOLUTE_SECONDS * 1000).toISOString(),
-    };
-  }
-
-  throw new Error('Unsupported session payload.');
+  return {
+    version: 2,
+    sessionId: payload.sessionId,
+    user: { id: user.id, sessionVersion: user.sessionVersion },
+    authenticatedAt: payload.authenticatedAt,
+    lastActivityAt: payload.lastActivityAt,
+    absoluteExpiresAt: payload.absoluteExpiresAt,
+  };
 }
 
 export function assertSessionFresh(session: SessionData, now = new Date()) {

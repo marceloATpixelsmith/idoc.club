@@ -49,12 +49,22 @@ test('new authentication rotates to a distinct session identifier and fixed abso
   assert.match(session, /absoluteExpiresAt: new Date\(now\.getTime\(\) \+ SESSION_ABSOLUTE_SECONDS \* 1000\)/);
 });
 
-test('legacy one-day cookie remains a one-way compatibility input and is never promoted', () => {
+test('the legacy pre-retrofit cookie is never accepted as authentication authority, only ever defensively cleared', () => {
+  // A signed JWT alone is never sufficient authentication authority: neither getSession() nor
+  // middleware.ts reads LEGACY_SESSION_COOKIE_NAME for anything but deletion, and
+  // normalizeSessionPayload no longer reinterprets a legacy-shaped payload as a valid session at all.
   assert.match(tokens, /LEGACY_SESSION_COOKIE_NAME = 'session'/);
-  assert.match(tokens, /One-way compatibility input for the pre-canonical cookie/);
-  assert.match(middleware, /request\.method === 'GET' && canonicalCookie/);
-  assert.match(actions, /export async function signOut\(\) \{\s*await clearSession\(\);\s*\}/s);
+  assert.doesNotMatch(tokens, /One-way compatibility input for the pre-canonical cookie/);
+  assert.match(tokens, /payload\.version !== 2 \|\|/);
+
+  assert.match(middleware, /const legacyCookie = request\.cookies\.get\(LEGACY_SESSION_COOKIE_NAME\);/);
+  assert.doesNotMatch(middleware, /canonicalCookie \?\? legacyCookie/);
+  assert.match(middleware, /if \(legacyCookie\) res\.cookies\.delete\(LEGACY_SESSION_COOKIE_NAME\);/);
+
+  assert.doesNotMatch(session, /cookieStore\.get\(LEGACY_SESSION_COOKIE_NAME\)\?\.value/);
   assert.match(session, /cookieStore\.delete\(LEGACY_SESSION_COOKIE_NAME\)/);
+
+  assert.match(actions, /export async function signOut\(\) \{\s*await clearSession\(\);\s*\}/s);
 });
 
 test('authenticated user resolution uses the canonical freshness validator and authoritative sessionVersion', () => {
