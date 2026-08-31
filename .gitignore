@@ -42,3 +42,6 @@ next-env.d.ts
 # Docker
 postgres_data/
 .env*.local
+
+# Claude Code local agent worktrees/session scratch data (never project source)
+.claude/
