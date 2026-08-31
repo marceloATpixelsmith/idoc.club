@@ -6,7 +6,6 @@ import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import {
   validatedAction,
   validatedActionWithUser
@@ -140,15 +139,13 @@ const accountLinkSchema = z.object({ email: z.string().email().max(255) });
 const NEUTRAL_RECOVERY = 'If an eligible account uses this address, an email will be sent.';
 
 export const requestPasswordRecovery = validatedAction(accountLinkSchema, async ({ email }) => {
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
+  const origin = await requestOrigin();
   await requestAccountLink(email, 'password_reset', origin);
   return { success: NEUTRAL_RECOVERY };
 });
 
 export const requestMigrationActivation = validatedAction(accountLinkSchema, async ({ email }) => {
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? requestHeaders.get('x-real-ip') ?? 'unknown';
+  const origin = await requestOrigin();
   await requestAccountLink(email, 'migration_activation', origin);
   return { success: NEUTRAL_RECOVERY };
 });
