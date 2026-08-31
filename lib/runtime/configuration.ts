@@ -86,6 +86,21 @@ function base64Key(environment: Environment, name: string, minimumBytes = 32) {
   return key;
 }
 
+// AUTH-REMEMBER-001: opt-in, off by default -- an unset REMEMBER_TOTP_DEVICE_ENABLED must never
+// force a new required secret onto a deployment that doesn't use this feature. Only once explicitly
+// enabled does the digest key become a fail-closed required() value, matching every other MFA
+// secret in this file.
+function rememberedTotpDeviceConfiguration(environment: Environment) {
+  const enabled = (environment.REMEMBER_TOTP_DEVICE_ENABLED ?? '').trim().toLowerCase() === 'true';
+  if (!enabled) return { days: 30, digestSecret: null as Buffer | null, enabled: false };
+  const daysRaw = (environment.REMEMBER_TOTP_DEVICE_DAYS ?? '30').trim();
+  const days = Number(daysRaw);
+  if (!Number.isInteger(days) || days <= 0 || days > 90) {
+    throw new Error('Invalid production configuration: REMEMBER_TOTP_DEVICE_DAYS.');
+  }
+  return { days, digestSecret: base64Key(environment, 'MFA_REMEMBERED_DEVICE_DIGEST_KEY') as Buffer | null, enabled: true };
+}
+
 /** Server-only cryptographic material for the live canonical MFA flow. */
 export function mfaConfiguration(environment: Environment = process.env) {
   const activeKeyId = required(environment, 'MFA_TOTP_ACTIVE_KEY_ID');
@@ -118,6 +133,7 @@ export function mfaConfiguration(environment: Environment = process.env) {
     continuationKey: base64Key(environment, 'MFA_PENDING_AUTH_SIGNING_KEY'),
     encryptionKeys,
     recoveryDigestKey: base64Key(environment, 'MFA_RECOVERY_CODE_DIGEST_KEY'),
+    rememberedDevice: rememberedTotpDeviceConfiguration(environment),
   };
 }
 

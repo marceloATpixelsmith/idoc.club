@@ -1,6 +1,6 @@
 import type { MfaDecision, MfaRole, TotpRequirement } from './types';
 
-function roleRequiresTotp(requirement: TotpRequirement, role: MfaRole): boolean {
+export function roleRequiresTotp(requirement: TotpRequirement, role: MfaRole): boolean {
   if (requirement === 'all-users') return true;
   if (requirement === 'super-admin-only') return role === 'super-admin';
   return role === 'admin' || role === 'super-admin' || role === 'organization-leader';

@@ -32,9 +32,11 @@ export default async function MfaPage() {
       }) });
   }
   const setup = pending.stage === 'enrollment' || pending.stage === 'replacement';
+  const rememberedDevice = pending.stage === 'challenge' ? mfaConfiguration().rememberedDevice : undefined;
   return <AuthShell description={pending.stage === 'recovery-entry' ? 'Use a saved recovery code to replace your authenticator.'
     : setup ? 'Add the new account to your authenticator app.' : 'Enter the current code from your authenticator app.'}
     title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : setup ? 'Set up authenticator' : 'Two-step verification'}>
-    <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri} />
+    <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri}
+      rememberDeviceDays={rememberedDevice?.days} rememberDeviceEnabled={rememberedDevice?.enabled} />
   </AuthShell>;
 }

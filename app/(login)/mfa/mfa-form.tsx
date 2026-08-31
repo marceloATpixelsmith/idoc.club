@@ -49,7 +49,9 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   );
 }
 
-export function MfaForm({ hasWebAuthn, mode, provisioningUri }: { hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string }) {
+export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays, rememberDeviceEnabled }: {
+  hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
+}) {
   const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
   const [, acknowledge, acknowledging] = useActionState<State, FormData>(acknowledgeRecoveryCodes, {});
@@ -81,6 +83,12 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri }: { hasWebAuthn?: 
         <label>Authenticator setup key<textarea readOnly rows={4} value={provisioningUri} /></label>
       </> : null}
       <label>Authenticator code<input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} name="code" pattern="[0-9]{6}" required /></label>
+      {mode === 'challenge' && rememberDeviceEnabled ? (
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input name="remember" type="checkbox" />
+          Remember this device for {rememberDeviceDays} days
+        </label>
+      ) : null}
       {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>

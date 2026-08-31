@@ -118,6 +118,29 @@ test('canonical MFA configuration accepts a valid explicit key ring', () => {
   assert.deepEqual(configuration.encryptionKeys.get('current'), Buffer.alloc(32, 7));
 });
 
+test('remembered-TOTP-device policy is off by default and never demands its own secret when unset', () => {
+  const configuration = mfaConfiguration(validMfa);
+  assert.equal(configuration.rememberedDevice.enabled, false);
+  assert.equal(configuration.rememberedDevice.digestSecret, null);
+  assert.equal(configuration.rememberedDevice.days, 30);
+});
+
+test('remembered-TOTP-device policy fails closed on its own digest key and day bounds once explicitly enabled', () => {
+  const digestKey = Buffer.alloc(32, 9).toString('base64url');
+  const enabled = { ...validMfa, MFA_REMEMBERED_DEVICE_DIGEST_KEY: digestKey, REMEMBER_TOTP_DEVICE_ENABLED: 'true' };
+  const configuration = mfaConfiguration(enabled);
+  assert.equal(configuration.rememberedDevice.enabled, true);
+  assert.equal(configuration.rememberedDevice.days, 30);
+  assert.deepEqual(configuration.rememberedDevice.digestSecret, Buffer.alloc(32, 9));
+
+  assert.equal(mfaConfiguration({ ...enabled, REMEMBER_TOTP_DEVICE_DAYS: '14' }).rememberedDevice.days, 14);
+  assert.throws(() => mfaConfiguration({ ...enabled, REMEMBER_TOTP_DEVICE_DAYS: '0' }), /REMEMBER_TOTP_DEVICE_DAYS/);
+  assert.throws(() => mfaConfiguration({ ...enabled, REMEMBER_TOTP_DEVICE_DAYS: '91' }), /REMEMBER_TOTP_DEVICE_DAYS/);
+  assert.throws(() => mfaConfiguration({ ...enabled, REMEMBER_TOTP_DEVICE_DAYS: 'not-a-number' }), /REMEMBER_TOTP_DEVICE_DAYS/);
+  assert.throws(() => mfaConfiguration({ ...enabled, MFA_REMEMBERED_DEVICE_DIGEST_KEY: undefined }), /MFA_REMEMBERED_DEVICE_DIGEST_KEY/);
+  assert.throws(() => mfaConfiguration({ ...enabled, MFA_REMEMBERED_DEVICE_DIGEST_KEY: Buffer.alloc(31).toString('base64url') }), /MFA_REMEMBERED_DEVICE_DIGEST_KEY/);
+});
+
 test('canonical MFA configuration rejects missing or absent active keys and malformed JSON', () => {
   assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_ACTIVE_KEY_ID: undefined }), /MFA_TOTP_ACTIVE_KEY_ID/);
   assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_ACTIVE_KEY_ID: 'absent' }), /MFA_TOTP_ACTIVE_KEY_ID/);
