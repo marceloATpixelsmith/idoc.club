@@ -14,6 +14,15 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
+test('session/auth API responses carry an explicit Cache-Control: no-store', async ({ request }) => {
+  // AUTH-TRANSPORT-002: these two routes reflect the caller's own session/linked-identity state, so
+  // a shared or browser cache must never be allowed to serve one visitor's response to another.
+  for (const route of ['/api/user', '/api/auth/google/link/status']) {
+    const response = await request.get(route);
+    expect(response.headers()['cache-control']).toBe('no-store');
+  }
+});
+
 test('the RFC 9116 vulnerability-disclosure policy is served at the well-known location', async ({ request }) => {
   const response = await request.get('/.well-known/security.txt');
   expect(response.status()).toBe(200);

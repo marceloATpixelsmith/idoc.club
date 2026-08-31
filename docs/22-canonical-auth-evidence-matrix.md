@@ -80,9 +80,9 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 92 | 59.4% |
+| verified | 93 | 60.0% |
 | implemented-but-unverified | 28 | 18.1% |
-| partial | 20 | 12.9% |
+| partial | 19 | 12.3% |
 | missing | 5 | 3.2% |
 | not-applicable | 10 | 6.5% |
 
@@ -142,9 +142,7 @@ and a fresh audit is run against the final proposed head.
    which is all-or-nothing and generates no dedicated audit event.
 9. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
     not issued/rotated CSRF tokens; effective in practice but does not literally satisfy this control.
-10. **AUTH-TRANSPORT-002 (explicit no-store)** — `partial`. No explicit `Cache-Control: no-store` is set
-    on session/auth API responses; relies only on Next.js's implicit dynamic-rendering behavior.
-11. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
+10. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
     callers get an in-band cooldown message instead.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
@@ -206,7 +204,7 @@ PKCE binding (AUTH-TRANSACTION-010, AUTH-OAUTH-002), audit-log DB-level immutabi
 | AUTH-REDIRECT-001 | `lib/auth/mfa/step-up.ts:43-45` `safeReturnTo`; `lib/auth/google-oidc-reference.ts:214-227` `normalizeReturnTo` | N/A | `tests/security-e2e/google-oauth.spec.ts` | verified | |
 | AUTH-REDIRECT-002 | Same as above — origin-match required, protocol-relative (`//`) explicitly rejected | N/A | `tests/security-e2e/google-oauth.spec.ts` | verified | |
 | AUTH-TRANSPORT-001 | `next.config.ts:15` HSTS header (`max-age=63072000; includeSubDomains; preload`); `secure: NODE_ENV==='production'` cookie flags throughout | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:3` | verified | |
-| AUTH-TRANSPORT-002 | No explicit `Cache-Control: no-store` set on session/auth API responses (e.g. `app/api/user/route.ts`); relies on Next.js's implicit dynamic-rendering behavior from `cookies()` usage rather than an explicit header | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:3` (checks security headers, not cache-control) | partial | Dynamic rendering avoids static caching, but no explicit no-store directive was found or tested for sensitive API/pages. |
+| AUTH-TRANSPORT-002 | `app/api/user/route.ts` and `app/api/auth/google/link/status/route.ts` (added by the no-store-auth-responses pull request) now set an explicit `Cache-Control: no-store` header on every response, on top of Next.js's implicit dynamic-rendering behavior from `cookies()` usage | N/A | `tests/security-e2e/cookies-and-headers.spec.ts` (a dedicated test asserts `cache-control: no-store` on both routes against the real running app) | verified | Both JSON endpoints that reflect the caller's own session/linked-identity state now carry the explicit directive, behaviorally proven. |
 | AUTH-API-001 | Consistent pattern across `app/api/*/route.ts` and Server Actions: trusted server derives identity/role, client only receives shaped output (e.g. `app/api/user/route.ts`) | N/A | `tests/authorization-boundary-inventory.test.ts` | verified | |
 | AUTH-FRAMEWORK-003 | `middleware.ts` explicit cookie/CSRF handling; `lib/security/request-origin.ts` explicit, Vercel-gated proxy header handling (AUTH-RATE-004, fixed in a later pull request); `next.config.ts` explicit headers | N/A | `tests/security-e2e/csrf.spec.ts`, `cookies-and-headers.spec.ts`, `tests/trusted-proxy-headers.test.ts` | verified | Cookies/CSRF/caching/proxy-trust are all now explicit. |
 | AUTH-STORAGE-003 | Secrets encrypted/hashed at rest: `lib/auth/password-hash.ts` (Argon2id), `lib/security/encrypted-payload.ts` (delivery payloads), TOTP secrets `encryptedSecret`/`keyId` in `lib/auth/mfa/types.ts:21-22` | `idoc.mfa_totp_factors`, `idoc.account_tokens` (hash only) | `tests/canonical-mfa-runtime.test.ts:163` ("TOTP secrets encrypted with authenticated encryption and key IDs"); `tests/evidence-safety-scan.integration.ts` (no plaintext secrets in logs) | verified | |
