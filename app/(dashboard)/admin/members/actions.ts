@@ -7,6 +7,7 @@ import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
 import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
+import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
 
 type FormState = { error?: string; success?: string };
 
@@ -75,6 +76,26 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
     return { success: 'Entitlement corrected.' };
   } catch (error) {
     return friendlyError(error, 'The entitlement could not be corrected.');
+  }
+}
+
+export async function suspendUserAccountForm(_state: FormState, formData: FormData): Promise<FormState> {
+  const userId = Number(formData.get('userId'));
+  try {
+    await suspendUserAccount(userId, formData.get('reason'));
+    return { success: 'Account suspended. The user can no longer sign in.' };
+  } catch (error) {
+    return friendlyError(error, 'The account could not be suspended.');
+  }
+}
+
+export async function reinstateUserAccountForm(_state: FormState, formData: FormData): Promise<FormState> {
+  const userId = Number(formData.get('userId'));
+  try {
+    await reinstateUserAccount(userId, { accountState: formData.get('accountState'), reason: formData.get('reason') });
+    return { success: 'Account reinstated.' };
+  } catch (error) {
+    return friendlyError(error, 'The account could not be reinstated.');
   }
 }
 

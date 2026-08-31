@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { getPrivateMember, listAuditHistory, requireAccountAccess, searchMembersForAdmin } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listActiveRoles } from '@/lib/membership/role-grants';
+import { getUserAccountState } from '@/lib/membership/account-suspension';
 import { MEMBERSHIP_STATUS_LABELS } from '@/lib/membership/entitlement';
 import { AdminProfileForm } from './admin-profile-form';
 import { EntitlementCorrectionForm } from './entitlement-correction-form';
 import { ReinstateForm, SuspendForm } from './membership-status-form';
+import { ReinstateAccountForm, SuspendAccountForm } from './account-suspension-form';
 import { RolesSection } from './roles-section';
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; q?: string }> }) {
@@ -19,6 +21,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const selected = profileId && Number.isInteger(profileId) ? await getPrivateMember(profileId) : null;
   const auditHistory = profileId && Number.isInteger(profileId) ? await listAuditHistory(profileId) : [];
   const activeRoles = selected && isSuperAdmin ? await listActiveRoles(selected.profile.userId) : [];
+  const accountState = selected ? await getUserAccountState(selected.profile.userId) : null;
 
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Members</h1>
@@ -58,6 +61,14 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
             : selected.entitlement
               ? <SuspendForm profileId={selected.profile.id} />
               : <p className="mt-2 text-sm text-gray-500">No membership on file — nothing to suspend.</p>}
+        </section>
+
+        <section className="mt-8 max-w-2xl">
+          <h3 className="font-medium text-gray-900">Account authentication</h3>
+          <p className="mt-1 text-sm text-gray-500">Distinct from membership status above: this controls whether the user can sign in at all.</p>
+          {accountState === 'suspended'
+            ? <ReinstateAccountForm userId={selected.profile.userId} />
+            : <SuspendAccountForm userId={selected.profile.userId} />}
         </section>
 
         <section className="mt-8 max-w-2xl">
