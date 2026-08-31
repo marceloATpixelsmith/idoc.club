@@ -16,6 +16,7 @@ import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { issueLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
+import { supportEmailForServer } from '@/lib/runtime/configuration';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -71,7 +72,7 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
     const activation = await finalizeMigratedAccountAfterVerifiedPassword(user.id);
     if (activation.status !== 'success') {
       await clearPendingLogin();
-      return { error: 'We could not finish signing you in automatically. Contact IDOC for help.' };
+      return { error: `We could not finish signing you in automatically. Contact ${supportEmailForServer()} for help.` };
     }
   } else {
     const now = new Date();

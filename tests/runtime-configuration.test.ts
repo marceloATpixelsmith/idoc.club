@@ -12,6 +12,7 @@ import {
   stripeKeyForServer,
   stripeOneTimeProductIdForServer,
   stripeRecurringProductIdForServer,
+  supportEmailForServer,
 } from '../lib/runtime/configuration.ts';
 
 const valid = {
@@ -103,6 +104,12 @@ test('production build phase and NODE_ENV never enable placeholder credentials',
     assert.throws(() => databaseUrlForServer(environment), /POSTGRES_URL/);
     assert.throws(() => stripeKeyForServer(environment), /STRIPE_SECRET_KEY/);
   }
+});
+
+test('the support-contact address is policy-configured, with a real fallback, and never fails closed when unset', () => {
+  assert.equal(supportEmailForServer({ SUPPORT_EMAIL: 'help@idoc.club' }), 'help@idoc.club');
+  assert.equal(supportEmailForServer({}), 'support@idoc.club');
+  assert.equal(supportEmailForServer({ SUPPORT_EMAIL: '   ' }), 'support@idoc.club');
 });
 
 test('canonical MFA configuration accepts a valid explicit key ring', () => {

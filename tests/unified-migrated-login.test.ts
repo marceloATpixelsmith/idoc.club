@@ -38,6 +38,9 @@ test('migrated members use the same password-first surface and validated activat
   assert.doesNotMatch(page, /ActivatePasswordStep|accountState|migrated_pending/);
   assert.match(actions, /foundUser\.accountState === 'migrated_pending'[\s\S]*requireLoginOtp\(email, foundUser\.id, foundUser\.sessionVersion, false\)/);
   assert.match(verification, /finalizeMigratedAccountAfterVerifiedPassword\(user\.id\)/);
+  // AUTH-ERROR-003: the failure branch must use the policy-configured support contact, not a
+  // hardcoded string with no way for an operator to point it at a real, monitored address.
+  assert.match(verification, /Contact \$\{supportEmailForServer\(\)\} for help/);
 });
 
 test('compatibility activation remains support-only for imported accounts without a usable credential', () => {
