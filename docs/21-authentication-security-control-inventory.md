@@ -481,9 +481,11 @@ No migration. No compatibility impact: this is a new, additive route that nothin
 
 No migration. No compatibility impact: this only adds a response header, and does not change any response body or status code.
 
----
+## 8p. Correction to the AUTH-RATE-002 assessment (this revision)
 
-# 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
+`docs/22`'s `AUTH-RATE-002` row claimed no explicit `Retry-After` header emission existed anywhere in the codebase. That claim was inaccurate: `app/api/address/autocomplete/route.ts:37-40` -- the codebase's one genuine HTTP 429 response point, gated by the same `checkProviderRateLimit` function the row already cited as evidence -- has set `Retry-After: '900'` since before this audit was written, and `tests/authorization-boundary-inventory.test.ts:216-217` already source-inspection-proves both the `status: 429` and the `Retry-After` header on that route. No code change was needed; this pull request only corrects the matrix entry from `partial` to `verified`, with an accurate account of why the other two categories of rate-limited path (OAuth-start redirects, Server-Action-driven in-band cooldowns) have no HTTP status/header to attach a `Retry-After` to in the first place.
+
+No migration. No compatibility impact: documentation-only.
 
 These are controls that are implemented in code (per the tables above) but whose proof rests on source-inspection tests (regex/string assertions against production files) rather than a test that actually executes the behavior, or that have no test at all. None of these are claims that the control does not work — they are claims that the *repository's own test suite* does not yet prove it end-to-end, per `docs/20`'s own distinction between what Playwright/integration tests prove and what they don't.
 
