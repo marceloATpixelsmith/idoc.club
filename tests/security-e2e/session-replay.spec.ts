@@ -106,6 +106,42 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
   await context.close();
 });
 
+test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template session shape, under its old cookie name) never authenticates', async ({ browser }) => {
+  // A signed JWT alone is never sufficient authentication authority. This forges the actual old
+  // cookie shape and name the pre-persisted-session-registry codebase used -- a bare {user, iat}
+  // payload (no version, no sessionId) under the cookie literally named 'session' -- and proves it
+  // is rejected both at the session layer (/api/user) and at the middleware layer (/dashboard),
+  // even though the signature is valid and the referenced user really exists.
+  const email = `session-replay-legacy-cookie-${randomUUID()}@security.example.test`;
+  const user = await withDb((sql) => createUser(sql, email));
+  const legacyToken = await new SignJWT({ user: { id: user.id, sessionVersion: 0 } })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + 12 * 60 * 60)
+    .sign(new TextEncoder().encode(AUTH_SECRET));
+  const legacyCookie = { name: 'session', value: legacyToken, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax' as const, secure: false };
+
+  // Two separate contexts, each freshly seeded with the legacy cookie: middleware.ts's own
+  // response to the first request (finish()) sets a Set-Cookie deletion for the legacy cookie name,
+  // which a shared context's cookie jar would apply before the second request ever went out --
+  // silently turning the /dashboard check below into a test of an already-cookie-less request
+  // rather than of whether a signed legacy cookie is rejected.
+  const userContext = await browser.newContext();
+  await userContext.addCookies([legacyCookie]);
+  const identity = await userContext.request.get('/api/user');
+  expect(await identity.json()).toBeNull();
+  await userContext.close();
+
+  const dashboardContext = await browser.newContext();
+  await dashboardContext.addCookies([legacyCookie]);
+  const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
+  // NextResponse.redirect() defaults to a 307 (temporary redirect) status when none is passed
+  // explicitly, which is what middleware.ts's sign-in redirects use.
+  expect(dashboard.status()).toBe(307);
+  expect(new URL(dashboard.headers().location!).pathname).toBe('/sign-in');
+  await dashboardContext.close();
+});
+
 test('a genuinely valid, freshly registered session is accepted (positive control for the two rejection cases above)', async ({ browser }) => {
   const email = `session-replay-valid-control-${randomUUID()}@security.example.test`;
   const { token } = await withDb(async (sql) => {

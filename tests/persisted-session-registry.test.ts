@@ -20,17 +20,21 @@ test('canonical cookie authentication requires an active persisted registry row 
   assert.match(session, /if \(!record\) return false/);
   assert.match(session, /await touchSession\(session\.sessionId, session\.user\.id, now\)/);
 
-  const canonicalStart = session.indexOf('if (canonicalValue) {');
-  const registryValidation = session.indexOf('return (await registeredSessionIsValid(session)) ? session : null;', canonicalStart);
-  const legacyStart = session.indexOf('const legacyValue =', registryValidation);
-  assert.ok(canonicalStart >= 0 && registryValidation > canonicalStart && legacyStart > registryValidation);
+  const getSessionStart = session.indexOf('export async function getSession()');
+  const notCanonical = session.indexOf('if (!canonicalValue) return null;', getSessionStart);
+  const registryValidation = session.indexOf('return (await registeredSessionIsValid(session)) ? session : null;', notCanonical);
+  assert.ok(getSessionStart >= 0 && notCanonical > getSessionStart && registryValidation > notCanonical);
 
-  const tokenValidationBlock = session.slice(canonicalStart, registryValidation);
+  const tokenValidationBlock = session.slice(notCanonical, registryValidation);
   assert.match(tokenValidationBlock, /session = await verifyToken\(canonicalValue\);/);
   assert.match(tokenValidationBlock, /catch \{\s*return null;\s*\}/);
 
-  const registryValidationBlock = session.slice(registryValidation, legacyStart);
-  assert.doesNotMatch(registryValidationBlock, /catch\s*\{/);
+  // getSession() never accepts a legacy-shaped or legacy-cookie session at all -- there is no
+  // second, un-registry-checked return path after the canonical registry validation above.
+  const afterRegistryCheck = session.slice(registryValidation + 'return (await registeredSessionIsValid(session)) ? session : null;'.length);
+  const nextFunctionStart = afterRegistryCheck.indexOf('export async function setSession');
+  const restOfGetSession = afterRegistryCheck.slice(0, nextFunctionStart);
+  assert.doesNotMatch(restOfGetSession, /legacyValue|LEGACY_SESSION_COOKIE_NAME/);
 });
 
 test('sign-out revokes the current persisted session before clearing the cookie and propagates revocation failure', () => {
@@ -50,12 +54,21 @@ test('registry exposes individual and all-session revocation plus inventory prim
   assert.match(registry, /absolute_expires_at > now\(\)/);
 });
 
-test('legacy cookies never get promoted into the canonical registry namespace', () => {
-  assert.match(middleware, /request\.method === 'GET' && canonicalCookie/);
-  const refreshBranch = middleware.match(/if \(request\.method === 'GET' && canonicalCookie\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
-  assert.match(refreshBranch, /name: canonicalName/);
-  assert.doesNotMatch(refreshBranch, /legacyCookie|LEGACY_SESSION_COOKIE_NAME/);
-  assert.match(tokens, /One-way compatibility input for the pre-canonical cookie/);
+test('a signed JWT alone is never sufficient authentication authority: legacy cookies are never accepted, only defensively cleared', () => {
+  // middleware.ts: only the canonical cookie is ever read into `canonicalCookie`/verified/refreshed;
+  // the legacy cookie is looked up solely to delete it on every response path (`finish()`).
+  assert.doesNotMatch(middleware, /canonicalCookie \?\? legacyCookie/);
+  assert.match(middleware, /const legacyCookie = request\.cookies\.get\(LEGACY_SESSION_COOKIE_NAME\);/);
+  assert.match(middleware, /if \(legacyCookie\) res\.cookies\.delete\(LEGACY_SESSION_COOKIE_NAME\);/);
+  assert.match(middleware, /const parsed = await verifyToken\(canonicalCookie\.value\);/);
+
+  // lib/auth/session-tokens.ts: normalizeSessionPayload hard-rejects anything short of the exact
+  // version-2 shape -- no more one-way "legacy compatibility" reinterpretation of a bare {user, iat}
+  // payload into a session with a synthesized, never-persisted sessionId.
+  assert.doesNotMatch(tokens, /legacy-\$\{/);
+  assert.doesNotMatch(tokens, /One-way compatibility input for the pre-canonical cookie/);
+  assert.match(tokens, /payload\.version !== 2 \|\|/);
+  assert.match(tokens, /throw new Error\('Unsupported session payload\.'\);/);
 });
 
 test('migration creates an indexed server-side session registry without touching billing tables', () => {

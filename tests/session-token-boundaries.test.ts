@@ -182,10 +182,13 @@ test('a payload with neither a canonical version-2 shape nor a legacy iat claim 
   await assert.rejects(() => verifyToken(forged), /Unsupported session payload/);
 });
 
-test('a payload with the wrong version number falls back to the legacy compatibility shape rather than being hard-rejected', async () => {
-  // This documents actual, verified behavior: normalizeSessionPayload's version check is not a hard
-  // reject — any payload short of the exact version-2 shape that still carries `iat` and `user` is
-  // reinterpreted as a legacy one-way compatibility session with a synthesized 12-hour absolute cap.
+test('a payload with the wrong version number is hard-rejected, not reinterpreted as a legacy compatibility shape', async () => {
+  // A signed JWT alone is never sufficient authentication authority: normalizeSessionPayload no
+  // longer reinterprets a payload short of the exact version-2 shape (e.g. the pre-retrofit
+  // starter-template {user, iat} shape) as a one-way "legacy compatibility" session. That fallback
+  // synthesized a sessionId that was never persisted via registerSession(), and getSession() (see
+  // lib/auth/session.ts) returned it without ever checking the registry -- so a stale or forged
+  // legacy-shaped token could authenticate with no persisted row for the server to revoke.
   const key = new TextEncoder().encode(process.env.AUTH_SECRET);
   const beforeSign = Math.floor(Date.now() / 1000);
   const forged = await new SignJWT({ version: 1, user: { id: 7, sessionVersion: 3 } })
@@ -193,14 +196,17 @@ test('a payload with the wrong version number falls back to the legacy compatibi
     .setIssuedAt()
     .setExpirationTime(beforeSign + SESSION_ABSOLUTE_SECONDS)
     .sign(key);
-  const verified = await verifyToken(forged, new Date());
-  assert.equal(verified.user.id, 7);
-  assert.equal(verified.user.sessionVersion, 3);
-  assert.match(verified.sessionId, /^legacy-\d+-7$/);
-  assert.equal(
-    new Date(verified.absoluteExpiresAt).getTime(),
-    new Date(verified.authenticatedAt).getTime() + SESSION_ABSOLUTE_SECONDS * 1000,
-  );
+  await assert.rejects(() => verifyToken(forged, new Date()), /Unsupported session payload/);
+});
+
+test('a bare pre-retrofit {user, iat} payload (no version, no sessionId) -- the actual legacy starter-template cookie shape -- is rejected', async () => {
+  const key = new TextEncoder().encode(process.env.AUTH_SECRET);
+  const forged = await new SignJWT({ user: { id: 7, sessionVersion: 0 } })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + SESSION_ABSOLUTE_SECONDS)
+    .sign(key);
+  await assert.rejects(() => verifyToken(forged), /Unsupported session payload/);
 });
 
 // --- Production vs development cookie contract (environment-injected, no process.env mutation) --
