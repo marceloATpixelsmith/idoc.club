@@ -58,34 +58,46 @@ export async function suspendUserAccount(userId: number, untrustedReason: unknow
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
 
-  await db.transaction(async (tx) => {
-    const [current] = await tx.select({ accountState: users.accountState })
+  // suspendedAt anchors the notification dedupe key below to the actual DB-committed transition
+  // rather than this call's own wall-clock time, so a retry after a failed session/device-revocation
+  // or notification-enqueue step (below, deliberately outside this transaction -- see the class
+  // comment) converges on the same key instead of enqueuing a duplicate. A retry lands here because
+  // the account_state write already committed but a later step threw; without idempotent handling,
+  // suspendUserAccount would otherwise reject the retry outright as "already suspended," with no way
+  // to complete the still-missing session revocation or notification.
+  const { suspendedAt } = await db.transaction(async (tx) => {
+    const [current] = await tx.select({ accountState: users.accountState, updatedAt: users.updatedAt })
       .from(users).where(eq(users.id, userId)).for('update');
     if (!current) throw new Error('This user does not exist.');
+    if (current.accountState === 'suspended') return { suspendedAt: current.updatedAt };
     if (!SUSPENDABLE_STATES.includes(current.accountState as (typeof SUSPENDABLE_STATES)[number])) {
-      throw new Error(current.accountState === 'suspended'
-        ? 'This account is already suspended.'
-        : 'This account cannot be suspended from its current state.');
+      throw new Error('This account cannot be suspended from its current state.');
     }
     const [activeGrant] = await tx.select({ id: applicationRoles.id }).from(applicationRoles)
       .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))).limit(1);
     if (activeGrant) throw new Error("Remove this user's administrator/Super Admin role before suspending their account.");
 
-    await tx.update(users).set({
+    const [updated] = await tx.update(users).set({
       accountState: 'suspended',
       sessionVersion: sql`${users.sessionVersion} + 1`,
       updatedAt: new Date(),
-    }).where(eq(users.id, userId));
+    }).where(eq(users.id, userId)).returning({ updatedAt: users.updatedAt });
     await tx.insert(auditLog).values({
       action: 'admin.account.suspended', actorId: actor.id,
       afterJson: { accountState: 'suspended' }, beforeJson: { accountState: current.accountState },
       entityId: String(userId), entityType: 'user', reason,
     });
+    return { suspendedAt: updated.updatedAt };
   });
 
+  // Deliberately outside the transaction above (revokeAllUserSessions/revokeLoginDeviceTrustForUser
+  // are plain UPDATE statements against other tables, not part of the state transition's atomicity
+  // requirement) but each is naturally idempotent -- both only touch not-yet-revoked rows, so a
+  // retry after a partial failure safely completes whatever was missed rather than double-revoking
+  // or erroring.
   await revokeAllUserSessions(userId, 'account-suspended');
   await revokeLoginDeviceTrustForUser(userId, 'account-suspended');
-  await enqueueAuthSecurityNotification({ dedupeKey: `account-suspended:${userId}:${Date.now()}`, kind: 'account_suspended', userId });
+  await enqueueAuthSecurityNotification({ dedupeKey: `account-suspended:${userId}:${suspendedAt.toISOString()}`, kind: 'account_suspended', userId });
 }
 
 /** Restores a suspended account to a login-eligible state. The admin picks the target state explicitly
@@ -95,22 +107,31 @@ export async function reinstateUserAccount(userId: number, untrustedInput: unkno
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
 
-  await db.transaction(async (tx) => {
-    const [current] = await tx.select({ accountState: users.accountState })
+  // Mirrors suspendUserAccount's idempotent-retry handling: if a prior call already committed this
+  // exact reinstatement but a later step (the notification enqueue below) failed, a retry lands here
+  // with the account already in the requested state. Treat that as success rather than rejecting it
+  // as "not currently suspended," using the DB-committed transition time (not this call's wall-clock
+  // time) as the dedupe anchor so the retry converges instead of enqueuing a duplicate notification.
+  // A current state that is neither 'suspended' nor already the requested target is a genuine error
+  // (the account drifted to something this call didn't cause) and still rejects.
+  const { reinstatedAt } = await db.transaction(async (tx) => {
+    const [current] = await tx.select({ accountState: users.accountState, updatedAt: users.updatedAt })
       .from(users).where(eq(users.id, userId)).for('update');
     if (!current) throw new Error('This user does not exist.');
+    if (current.accountState === input.accountState) return { reinstatedAt: current.updatedAt };
     if (current.accountState !== 'suspended') throw new Error('This account is not currently suspended.');
 
-    await tx.update(users).set({
+    const [updated] = await tx.update(users).set({
       accountState: input.accountState,
       updatedAt: new Date(),
-    }).where(eq(users.id, userId));
+    }).where(eq(users.id, userId)).returning({ updatedAt: users.updatedAt });
     await tx.insert(auditLog).values({
       action: 'admin.account.reinstated', actorId: actor.id,
       afterJson: { accountState: input.accountState }, beforeJson: { accountState: 'suspended' },
       entityId: String(userId), entityType: 'user', reason: input.reason,
     });
+    return { reinstatedAt: updated.updatedAt };
   });
 
-  await enqueueAuthSecurityNotification({ dedupeKey: `account-reinstated:${userId}:${Date.now()}`, kind: 'account_reinstated', userId });
+  await enqueueAuthSecurityNotification({ dedupeKey: `account-reinstated:${userId}:${reinstatedAt.toISOString()}`, kind: 'account_reinstated', userId });
 }

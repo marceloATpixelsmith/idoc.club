@@ -31,6 +31,20 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
   requireSuperAdmin(actor);
 
   return db.transaction(async (tx) => {
+    // Locking and checking the target's account_state here, before the role insert, closes a real
+    // race with suspendUserAccount (lib/membership/account-suspension.ts): that function also locks
+    // this same users row and rejects suspending a user who already holds an active grant, but
+    // without a shared lock a concurrent grant could insert its applicationRoles row (a different
+    // table, so not blocked by that check) after suspendUserAccount's read of applicationRoles but
+    // commit its own users-row update only once suspendUserAccount released the lock — leaving a
+    // suspended account with an active grant. Taking this row lock first makes the two operations
+    // mutually exclusive on the same user, whichever acquires it first.
+    const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, userId)).for('update');
+    if (!user) throw new Error('The target user does not exist.');
+    if (user.accountState === 'suspended' || user.accountState === 'deleted') {
+      throw new Error('This account cannot be granted a role while suspended or deleted.');
+    }
+
     // application_roles_active_unique is a partial unique index (userId, role) where revokedAt is
     // null — a soft-revoked prior grant doesn't block a fresh one, only an actively-held role does.
     const [inserted] = await tx.insert(applicationRoles).values({ grantedBy: actor.id, role: input.role, userId })

@@ -53,15 +53,25 @@ test('suspending an active account sets account_state, bumps session_version, re
   assert.equal(notification.recipient_email, member.email);
 });
 
-test('suspending an already-suspended account is rejected and writes no new audit row', async () => {
+test('retrying suspension on an already-suspended account succeeds idempotently: no duplicate audit row, no duplicate notification, and the retry still (re-)runs session/device revocation', async () => {
   const admin = await adminUser();
-  const member = await createUser('suspended');
+  const member = await createUser('active');
+  await asAdmin(admin.id, () => suspendUserAccount(member.id, 'First attempt'));
 
-  await assert.rejects(
-    asAdmin(admin.id, () => suspendUserAccount(member.id, 'Second attempt')),
-    /already suspended/,
-  );
-  assert.equal((await sql`select count(*)::int as count from idoc.audit_log where entity_id=${String(member.id)}`)[0].count, 0);
+  // Simulate the exact scenario a Codex review on this PR flagged: the state transition committed,
+  // but a session/device that only appeared afterward (e.g. because revocation partially failed and
+  // this row was never reached) is still unrevoked when the action is retried.
+  await seedActiveSession(member.id);
+
+  await asAdmin(admin.id, () => suspendUserAccount(member.id, 'Retry after a partial failure'));
+
+  assert.equal((await sql`select count(*)::int as count from idoc.audit_log where entity_id=${String(member.id)}`)[0].count, 1);
+  assert.equal((await sql`select count(*)::int as count from idoc.auth_security_notification_outbox where user_id=${member.id} and kind='account_suspended'`)[0].count, 1);
+  const revoked = await sql`select revoked_at from idoc.auth_sessions where user_id=${member.id}`;
+  assert.equal(revoked.length, 1);
+  assert.ok(revoked[0].revoked_at, 'the session seeded after the first suspension call must still be revoked by the retry');
+  const [user] = await sql`select session_version from idoc.users where id=${member.id}`;
+  assert.equal(user.session_version, 1, 'the retry must not bump session_version a second time');
 });
 
 for (const accountState of ['deleted', 'unverified'] as const) {
@@ -111,13 +121,26 @@ test('reinstating a suspended account restores the chosen account_state and writ
   assert.equal(notification.user_id, member.id);
 });
 
-test('reinstating a non-suspended account is rejected', async () => {
+test('reinstating a non-suspended account to a different state than it currently holds is rejected', async () => {
   const admin = await adminUser();
   const member = await createUser('active');
   await assert.rejects(
-    asAdmin(admin.id, () => reinstateUserAccount(member.id, { accountState: 'active', reason: 'Reason' })),
+    asAdmin(admin.id, () => reinstateUserAccount(member.id, { accountState: 'onboarding', reason: 'Reason' })),
     /not currently suspended/,
   );
+});
+
+test('retrying reinstatement to the account\'s already-current state succeeds idempotently: no duplicate audit row, no duplicate notification', async () => {
+  const admin = await adminUser();
+  const member = await createUser('suspended');
+  await asAdmin(admin.id, () => reinstateUserAccount(member.id, { accountState: 'active', reason: 'First attempt' }));
+
+  await asAdmin(admin.id, () => reinstateUserAccount(member.id, { accountState: 'active', reason: 'Retry after a partial failure' }));
+
+  const [user] = await sql`select account_state from idoc.users where id=${member.id}`;
+  assert.equal(user.account_state, 'active');
+  assert.equal((await sql`select count(*)::int as count from idoc.audit_log where entity_id=${String(member.id)}`)[0].count, 1);
+  assert.equal((await sql`select count(*)::int as count from idoc.auth_security_notification_outbox where user_id=${member.id} and kind='account_reinstated'`)[0].count, 1);
 });
 
 test('a non-administrator actor cannot reinstate an account', async () => {
