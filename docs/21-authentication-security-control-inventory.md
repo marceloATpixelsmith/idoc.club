@@ -421,6 +421,19 @@ No migration, no compatibility impact on any existing password (every existing p
 
 ---
 
+## 8k. Changes made by the dead-team-path and raw-IP-log removal pull request (this revision)
+
+This section records the fix for two Codex review findings caught on the pull request that introduced `docs/22`: both had incorrectly assessed a live, unreviewed data path as either not-applicable (`AUTH-TENANT-001/002`) or fully accounted for by the hashed rate-limit path alone (`AUTH-PRIVACY-002`), because the underlying code was mistaken for dead SaaS-starter-template leftovers. Both are now genuinely removed rather than merely re-labeled.
+
+1. **`app/layout.tsx`.** Removed the `getTeamForUser()` call from the root layout's `SWRConfig` `fallback` prop. This ran a live query against `idoc.team_members`/`idoc.teams` on every request and serialized its result into the initial page payload regardless of whether any component subscribed to `/api/team` (which itself unconditionally 404s and was unaffected). No production code path has ever populated `team_members` -- only `lib/db/seed.ts`, a local/dev seed script, does -- so nothing was exposed in practice, but the path was live, not inert.
+2. **`lib/db/queries.ts`.** Removed `getTeamForUser`, `getTeamByStripeCustomerId`, `updateTeamSubscription`, and `getUserWithTeam` -- each had zero remaining callers once the layout call site above was removed (confirmed by `grep` before deletion). Also removed `ipAddress` from `getActivityLogs()`'s selected columns.
+3. **`app/(dashboard)/dashboard/activity/page.tsx`.** Removed the `from IP {log.ipAddress}` fragment from the activity list rendering. `idoc.activity_logs.ip_address` (a plain, unhashed `varchar(45)` column that nothing has ever written to) is left in the schema -- dropping it is a separate, more deliberate schema/migration decision than removing the dead application-level read/render path, and out of scope for this pull request.
+4. **Tests.** `tests/authorization-boundary-inventory.test.ts` gained two new source-inspection tests: one proving neither `app/layout.tsx` nor `lib/db/queries.ts` reference the removed team functions/tables any longer, one proving neither `lib/db/queries.ts` nor the activity page reference `ipAddress` any longer.
+
+No migration in this pull request (the `idoc.teams`/`idoc.team_members` tables and the `activity_logs.ip_address` column are left in place, unused). No compatibility impact: nothing any real user could observe changes, since neither removed path was ever populated with real data in production. `pnpm build` was run locally to confirm the root-layout change doesn't break any page.
+
+---
+
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
 
 These are controls that are implemented in code (per the tables above) but whose proof rests on source-inspection tests (regex/string assertions against production files) rather than a test that actually executes the behavior, or that have no test at all. None of these are claims that the control does not work — they are claims that the *repository's own test suite* does not yet prove it end-to-end, per `docs/20`'s own distinction between what Playwright/integration tests prove and what they don't.

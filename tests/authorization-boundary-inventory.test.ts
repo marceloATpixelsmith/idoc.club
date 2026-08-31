@@ -128,6 +128,30 @@ test('legacy team mutation actions are not exported from the authentication acti
   assert.doesNotMatch(source, /\bteamMembers\b|\binvitations\b|\bgetUserWithTeam\b/);
 });
 
+test('the SaaS-starter team-query code path is fully removed, not merely unrouted', () => {
+  // /api/team unconditionally 404s (see the route-handler inventory below), but a Codex review
+  // caught that the root layout separately called getTeamForUser() on every request as a live SWR
+  // fallback -- a real, unreviewed query against idoc.team_members/idoc.teams that serialized its
+  // result to the client regardless of whether any component subscribed to it, even though the
+  // route itself was inert. Fixed by removing the call, not just leaving the route 404ing.
+  const layout = readFileSync(path.join(root, 'app/layout.tsx'), 'utf8');
+  assert.doesNotMatch(layout, /getTeamForUser|\/api\/team/);
+  const queries = readFileSync(path.join(root, 'lib/db/queries.ts'), 'utf8');
+  assert.doesNotMatch(queries, /getTeamForUser|getTeamByStripeCustomerId|updateTeamSubscription|getUserWithTeam|\bteamMembers\b|\bteams\b/);
+});
+
+test('activity_logs.ip_address is no longer read or rendered', () => {
+  // A Codex review caught that this column -- a plain unhashed varchar(45), never actually written
+  // to by any code path -- was still selected by getActivityLogs() and rendered raw on
+  // /dashboard/activity, contradicting a blanket "IP is never retained raw" claim elsewhere in this
+  // codebase's own security documentation. The column itself is left in the schema (nothing writes
+  // to it; dropping it is a separate, more deliberate decision), but the read/render path is gone.
+  const queries = readFileSync(path.join(root, 'lib/db/queries.ts'), 'utf8');
+  assert.doesNotMatch(queries, /ipAddress/);
+  const activityPage = readFileSync(path.join(root, 'app/(dashboard)/dashboard/activity/page.tsx'), 'utf8');
+  assert.doesNotMatch(activityPage, /ipAddress|from IP/);
+});
+
 test('delegates-to-data-access actions call an ownership-enforcing membership data-access function', () => {
   const expected: Record<string, Array<{ from: string; functionName: string }>> = {
     'app/(dashboard)/account/actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' }],
