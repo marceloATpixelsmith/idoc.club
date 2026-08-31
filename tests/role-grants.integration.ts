@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { grantApplicationRole, listActiveRoles, revokeApplicationRole } from '../lib/membership/role-grants.ts';
+import { suspendUserAccount } from '../lib/membership/account-suspension.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
-import { adminUser, closeHarness, concurrently, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, asAdmin, closeHarness, concurrently, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -45,6 +46,60 @@ test('granting the vestigial \'member\' role is rejected before reaching the dat
   const superAdmin = await superAdminUser();
   const target = await createUser();
   await assert.rejects(asSuperAdmin(superAdmin.id, () => grantApplicationRole(target.id, { reason: 'Should not be possible', role: 'member' })));
+});
+
+test('a role cannot be granted to a suspended or deleted account', async () => {
+  const superAdmin = await superAdminUser();
+  const suspended = await createUser('active');
+  const admin = await adminUser();
+  await asAdmin(admin.id, () => suspendUserAccount(suspended.id, 'Compromised credentials'));
+  await assert.rejects(
+    asSuperAdmin(superAdmin.id, () => grantApplicationRole(suspended.id, { reason: 'Should be blocked', role: 'administrator' })),
+    /suspended or deleted/,
+  );
+  assert.equal((await sql`select count(*)::int as count from idoc.application_roles where user_id=${suspended.id}`)[0].count, 0);
+
+  const deleted = await createUser('deleted');
+  await assert.rejects(
+    asSuperAdmin(superAdmin.id, () => grantApplicationRole(deleted.id, { reason: 'Should be blocked', role: 'administrator' })),
+    /suspended or deleted/,
+  );
+});
+
+test('a role grant that starts before a concurrent suspension of the same user cannot complete after the suspension commits, so no account ends up suspended with an active grant', async () => {
+  // A Codex review on marceloATpixelsmith/idoc.club#104 caught that, before this test's guard
+  // existed, grantApplicationRole's INSERT into application_roles was not blocked by
+  // suspendUserAccount's row lock on `users` (a different table), so suspension could commit having
+  // read no active grant, followed by the grant's own users-row UPDATE finally proceeding once that
+  // lock released -- leaving a suspended account with an active administrator grant underneath.
+  // grantApplicationRole now takes the same `users` row lock, before touching application_roles at
+  // all, making the two operations mutually exclusive: whichever call reaches the lock first
+  // determines the outcome the other must respect.
+  const superAdmin = await superAdminUser();
+  const admin = await adminUser();
+  const target = await createUser('active');
+
+  const results = await concurrently(
+    () => asSuperAdmin(superAdmin.id, () => grantApplicationRole(target.id, { reason: 'Promotion', role: 'administrator' })),
+    () => asAdmin(admin.id, () => suspendUserAccount(target.id, 'Compromised credentials')),
+  );
+  const outcomes = results.map((result) => result.status);
+
+  const [user] = await sql`select account_state from idoc.users where id=${target.id}`;
+  const activeGrants = (await sql`select count(*)::int as count from idoc.application_roles where user_id=${target.id} and revoked_at is null`)[0].count;
+
+  if (user.account_state === 'suspended') {
+    // Suspension won the race: it must have found no active grant, and the grant attempt must have
+    // been rejected (either because suspension's lock made it see the now-suspended state, or -- if
+    // it ran first and inserted, hit the row lock -- but then it would have committed and the
+    // suspension check for an active grant would have thrown instead; the assertion below is the
+    // actual invariant that matters regardless of which interleaving occurred).
+    assert.equal(activeGrants, 0, 'a suspended account must never carry an active role grant');
+  } else {
+    // The grant won the race and committed first; suspension must then see it and refuse to proceed.
+    assert.equal(outcomes[1], 'rejected', 'suspension must be rejected once an active grant exists');
+    assert.equal(activeGrants, 1);
+  }
 });
 
 test('a plain administrator (not Super Admin) cannot grant or revoke roles', async () => {
