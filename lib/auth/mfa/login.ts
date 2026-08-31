@@ -5,10 +5,12 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { applicationRoles, type User } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
-import { decideMfa } from './decision';
+import { decideMfa, roleRequiresTotp } from './decision';
 import { mfaStore } from './store';
 import { beginTotpEnrollment } from './totp';
 import { setPendingPrimaryAuth } from './pending-primary-auth';
+import { readRememberedTotpDeviceToken } from './remembered-device-cookie';
+import { verifyRememberedDevice } from './remembered-device';
 import { webauthnStore } from './webauthn-store';
 import type { MfaRole } from './types';
 
@@ -26,9 +28,23 @@ export async function beginPrimaryMfa(user: User, method: 'google' | 'password',
   const subjectId = String(user.id);
   const role = await authoritativeMfaRole(user.id);
   const factor = await mfaStore.getActiveTotp(subjectId, MFA_APPLICATION_ID);
-  const decision = decideMfa({ hasActiveTotp: Boolean(factor), rememberedDeviceValid: false,
-    rememberTotpDevice: false, requirement: 'privileged-users', role });
-  if (decision === 'not-required') return false;
+  // Only touch MFA config/the remembered-device cookie for roles that could possibly need TOTP at
+  // all -- a plain member must never be forced through mfaConfiguration()'s fail-closed secret
+  // checks just because this function ran, and never had a reason to before this feature existed.
+  let rememberedDeviceValid = false;
+  let rememberTotpDevicePolicy = false;
+  if (factor && roleRequiresTotp('privileged-users', role)) {
+    const config = mfaConfiguration();
+    rememberTotpDevicePolicy = config.rememberedDevice.enabled;
+    if (config.rememberedDevice.enabled && config.rememberedDevice.digestSecret) {
+      const token = await readRememberedTotpDeviceToken();
+      rememberedDeviceValid = await verifyRememberedDevice({ applicationId: MFA_APPLICATION_ID,
+        digestSecrets: [config.rememberedDevice.digestSecret], store: mfaStore, subjectId, token });
+    }
+  }
+  const decision = decideMfa({ hasActiveTotp: Boolean(factor), rememberedDeviceValid,
+    rememberTotpDevice: rememberTotpDevicePolicy, requirement: 'privileged-users', role });
+  if (decision === 'not-required' || decision === 'remembered-device-satisfied') return false;
   if (decision === 'challenge-required' && factor) {
     const transactionId = randomUUID();
     const hasWebAuthn = (await webauthnStore.getActiveCredentials(subjectId, MFA_APPLICATION_ID)).length > 0;

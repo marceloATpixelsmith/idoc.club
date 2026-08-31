@@ -83,3 +83,31 @@ test('MFA crypto configuration fails closed without or with malformed keys', () 
   assert.throws(() => mfaConfiguration({ MFA_PENDING_AUTH_SIGNING_KEY: 'bad', MFA_RECOVERY_CODE_DIGEST_KEY: 'bad',
     MFA_TOTP_ACTIVE_KEY_ID: 'v1', MFA_TOTP_ENCRYPTION_KEYS: '{"v1":"bad"}' }), /MFA_TOTP_ENCRYPTION_KEYS/);
 });
+
+test('AUTH-REMEMBER-001: beginPrimaryMfa only reads MFA config/the remembered-device cookie for roles that could need TOTP, and feeds the real verification result to the shared decision, not a hardcoded false', () => {
+  const login = source('lib/auth/mfa/login.ts');
+  assert.match(login, /roleRequiresTotp\('privileged-users', role\)/);
+  const guardedBlock = login.slice(login.indexOf("if (factor && roleRequiresTotp"), login.indexOf('const decision = decideMfa('));
+  assert.match(guardedBlock, /mfaConfiguration\(\)/);
+  assert.match(guardedBlock, /readRememberedTotpDeviceToken\(\)/);
+  assert.match(guardedBlock, /verifyRememberedDevice\(\{/);
+  assert.doesNotMatch(login, /rememberedDeviceValid: false/);
+  assert.doesNotMatch(login, /rememberTotpDevice: false/);
+  assert.match(login, /decision === 'not-required' \|\| decision === 'remembered-device-satisfied'/);
+});
+
+test('AUTH-REMEMBER-001: a remembered device is only ever issued after the TOTP code is actually accepted, and only when the policy is enabled', () => {
+  const actions = source('app/(login)/mfa/actions.ts');
+  const verify = actions.slice(actions.indexOf('export const verifyLoginTotp'), actions.indexOf('export async function beginLoginWebAuthn'));
+  assert.ok(verify.indexOf("result.status !== 'accepted'") < verify.indexOf('issueRememberedDevice('));
+  assert.match(verify, /remember === 'on' && config\.rememberedDevice\.enabled && config\.rememberedDevice\.digestSecret/);
+  assert.ok(verify.indexOf('issueRememberedDevice(') < verify.indexOf('setRememberedTotpDeviceCookie('));
+  assert.ok(verify.indexOf('setRememberedTotpDeviceCookie(') < verify.indexOf('await setSession(context.user)'));
+});
+
+test('AUTH-REMEMBER-001: the remember-this-device checkbox is only rendered for a live login challenge when the policy is enabled, never for step-up/enrollment/recovery', () => {
+  const form = source('app/(login)/mfa/mfa-form.tsx');
+  assert.match(form, /mode === 'challenge' && rememberDeviceEnabled/);
+  const page = source('app/(login)/mfa/page.tsx');
+  assert.match(page, /pending\.stage === 'challenge' \? mfaConfiguration\(\)\.rememberedDevice : undefined/);
+});

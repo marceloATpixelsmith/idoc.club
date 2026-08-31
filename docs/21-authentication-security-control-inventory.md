@@ -519,6 +519,20 @@ No migration. No compatibility impact: the default fallback (`support@idoc.club`
 
 No migration. No compatibility impact: only a subject-line prefix changes on three existing alert emails; no recipient, body content, or delivery behavior changes.
 
+## 8t. Changes made by the remember-totp-device-wiring pull request (this revision)
+
+`docs/22`'s AUTH-REMEMBER-001/002/003/004 rows and its "Major structural finding" documented that the TOTP remembered-device subsystem was fully implemented, unit/integration-tested, and correctly designed -- but entirely unreachable in production: `beginPrimaryMfa` hardcoded `rememberTotpDevice: false, rememberedDeviceValid: false`, and `mfaConfiguration()` had no policy fields for it at all. Following the earlier team_members/ip_address precedent of never leaving a half-built feature ambiguous, and given a decision to wire this one up rather than remove it, this pull request completes the wiring.
+
+1. **`lib/runtime/configuration.ts`.** New `rememberedTotpDeviceConfiguration()`, exposed as `mfaConfiguration().rememberedDevice`: `enabled` (`REMEMBER_TOTP_DEVICE_ENABLED`, off unless explicitly `'true'`), `days` (`REMEMBER_TOTP_DEVICE_DAYS`, 1-90, default 30), `digestSecret` (a new required key, `MFA_REMEMBERED_DEVICE_DIGEST_KEY`, but only required once the feature is actually enabled -- an unset flag must never force a new secret onto a deployment that doesn't use this feature).
+2. **`lib/auth/mfa/decision.ts`.** `roleRequiresTotp` exported (previously private) so `login.ts` can gate the remembered-device check to only the roles that could ever need TOTP, without forcing `mfaConfiguration()`'s fail-closed checks onto every login.
+3. **`lib/auth/mfa/login.ts`.** `beginPrimaryMfa` now reads the remembered-device cookie and calls the already-existing `verifyRememberedDevice` before computing the shared MFA decision, feeding it real values instead of hardcoded `false`s; a `'remembered-device-satisfied'` decision short-circuits the same way `'not-required'` already did.
+4. **`lib/auth/mfa/remembered-device-cookie.ts` (new).** Cookie glue only -- `remembered-device.ts` itself stays `next/headers`-free and independently unit-testable, mirroring the split `login-device-trust.ts` already established for the unrelated ordinary-member "remember this browser" feature. `__Host-idoc-mfa-remember`, httpOnly/secure/sameSite=lax, `maxAge` bound to the configured day count.
+5. **`app/(login)/mfa/actions.ts`.** `verifyLoginTotp` now accepts an optional `remember` field and, only after the TOTP code is actually accepted and only when the policy is enabled, calls `issueRememberedDevice` and sets the cookie.
+6. **`app/(login)/mfa/mfa-form.tsx` / `page.tsx`.** A "Remember this device for N days" checkbox is rendered only for a live login challenge (`mode === 'challenge'`) when the policy is enabled -- never for step-up, enrollment, replacement, or recovery.
+7. **Tests.** `tests/runtime-configuration.test.ts` gained coverage for the new policy's off-by-default behavior and its fail-closed day/secret bounds once enabled. `tests/remembered-totp-device.integration.ts` (new) exercises `issueRememberedDevice`/`verifyRememberedDevice` directly against real Postgres -- issuance, correct-token acceptance, wrong-token/wrong-secret/expired/missing-token rejection, multi-secret rotation, and (through the real function pair rather than raw store calls) that replacing the bound TOTP factor invalidates a remembered device issued through it. `tests/live-privileged-mfa.test.ts` gained source-inspection tests proving the exact call ordering (`beginPrimaryMfa` reads/verifies before deciding; `verifyLoginTotp` issues only after acceptance; the checkbox is gated correctly).
+
+No migration (only new environment variables; the existing `idoc.mfa_remembered_devices` table already had every column this needed). No compatibility impact: the feature is off by default (`REMEMBER_TOTP_DEVICE_ENABLED` unset), so no existing deployment's login behavior changes until an operator explicitly opts in.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)

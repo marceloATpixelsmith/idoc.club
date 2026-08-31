@@ -22,9 +22,12 @@ import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
+import { issueRememberedDevice } from '@/lib/auth/mfa/remembered-device';
+import { setRememberedTotpDeviceCookie } from '@/lib/auth/mfa/remembered-device-cookie';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
+const loginCodeSchema = codeSchema.extend({ remember: z.string().optional() });
 const webAuthnResponseSchema = z.object({ ceremonyId: z.string().uuid(), credentialJson: z.string().min(1).max(8192) });
 
 function parseWebAuthnResponse(credentialJson: string): AuthenticationResponseJSON | null {
@@ -97,7 +100,7 @@ async function failAndRestart(message: string) {
   return { error: message };
 }
 
-export const verifyLoginTotp = validatedAction(codeSchema, async ({ code }) => {
+export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, remember }) => {
   const context = await pendingAccount('challenge');
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
   if (!(await allowed(context.user.id, 'mfa_login_verify'))) return { error: 'Too many attempts. Sign in again later.' };
@@ -108,6 +111,15 @@ export const verifyLoginTotp = validatedAction(codeSchema, async ({ code }) => {
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') return failAndRestart(result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Sign in again.' : 'Your verification session expired. Sign in again.');
+  // AUTH-REMEMBER-001: only ever offered when the policy is on, and only ever bound to the factor
+  // that was just used to pass this exact challenge -- store.ts's revokeFactor/replacement paths
+  // already revoke any remembered device tied to a factor once that factor stops being active.
+  if (remember === 'on' && config.rememberedDevice.enabled && config.rememberedDevice.digestSecret) {
+    const issued = await issueRememberedDevice({ applicationId: MFA_APPLICATION_ID,
+      days: config.rememberedDevice.days, digestSecret: config.rememberedDevice.digestSecret,
+      factorId: context.pending.factorId, store: mfaStore, subjectId: String(context.user.id) });
+    await setRememberedTotpDeviceCookie(issued.token, issued.expiresAtMs, config.rememberedDevice.days);
+  }
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   await setSession(context.user);
