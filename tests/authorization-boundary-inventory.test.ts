@@ -78,6 +78,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
+  'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
