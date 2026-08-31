@@ -461,6 +461,16 @@ This section records the fix for two Codex review findings caught on the pull re
 
 No migration in this pull request (the `idoc.teams`/`idoc.team_members` tables and the `activity_logs.ip_address` column are left in place). No compatibility impact for any current user of the running application: this PR only removes code paths, and neither removed read path is something a user could have observed. It does **not** claim these tables/columns hold no historical data from before this PR -- see the corrections above and the residual-risk note this section adds to `docs/22`. `pnpm build` was run locally to confirm the root-layout change doesn't break any page.
 
+## 8n. Changes made by the no-store-auth-responses pull request (this revision)
+
+`docs/22`'s `AUTH-TRANSPORT-002` row noted that no explicit `Cache-Control: no-store` was set on session/auth API responses -- only Next.js's implicit dynamic-rendering behavior from `cookies()` usage stood in for it.
+
+1. **`app/api/user/route.ts`.** Every response (both the "not logged in" `null` and the real identity payload) now carries an explicit `Cache-Control: no-store` header, on top of the existing implicit dynamic behavior.
+2. **`app/api/auth/google/link/status/route.ts`.** Same treatment: the 401 "no session" response and the real `{linked: boolean}` payload both now carry the header.
+3. **`tests/security-e2e/cookies-and-headers.spec.ts`.** New test asserts `cache-control: no-store` on both routes against the real running app.
+
+No migration. No compatibility impact: this only adds a response header, and does not change any response body or status code.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
