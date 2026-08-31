@@ -170,6 +170,37 @@ Retry delay is `min(3,600, 30 × 2^(attempt − 1))` seconds according to the cu
 
 Vercel Cron calls `/api/cron/reconciliation-scan` on `0 7 * * *` (daily, UTC — an hour after the renewal-notice scan). It is gated by the same `CRON_SECRET` bearer header as every other Cron route. A run replaces the current findings snapshot only on success; a failure (e.g. Stripe temporarily unreachable) leaves the prior snapshot untouched and is recorded as a failed run, and the Cron route itself returns a non-2xx status so a missed or broken run is visible in Vercel's own Cron monitoring, not just on the `/admin/reconciliation` page. Investigate a run of consecutive failures the same way as any other Cron failure (§12) before assuming a specific finding is stale.
 
+### Data-retention-purge schedule
+
+Vercel Cron calls `/api/cron/data-retention-purge` on `0 8 * * *` (daily, UTC — an hour after the reconciliation scan), gated by the same `CRON_SECRET` bearer header as every other Cron route. Each run permanently deletes rows from `email_otp_codes`, `mfa_challenge_transactions`, `mfa_enrollment_transactions`, `account_tokens`, `auth_sessions`, and `login_trusted_devices` once each row's own expiry is more than 30 days in the past (`lib/security/data-retention-purge.ts`). This is routine, expected data loss by design — do not treat a nonzero delete count as an anomaly requiring investigation, and do not attempt to restore purged rows from a backup (§12.2): they were already logically unauthorized well before physical deletion.
+
+## 12.2 Render PostgreSQL backup and recovery
+
+The production database runs on Render, whose **Hobby** plan includes two backup mechanisms automatically — nothing in this codebase implements or manages either of them:
+
+- **Point-in-time recovery (PITR).** Render continuously archives write-ahead log data. On the Hobby plan, this gives a **3-day recovery window** — a new database can be restored to any point within the last 3 days. (Render's Pro tier and above extend this to 7 days; upgrading does not retroactively extend an already-elapsed window, only going forward.)
+- **Logical backups.** Render also retains an exportable logical (`pg_dump`-style) backup, created and retained for **7 days**, downloadable from the Render dashboard.
+
+**What this means operationally:**
+
+- A data-corruption or destructive-write incident discovered **within 3 days** can be recovered via PITR — restore to a new Render Postgres instance at a timestamp just before the bad write, verify, then cut the application over (`POSTGRES_URL`) to the restored instance. This is a Render dashboard operation, not something scripted in this repository.
+- An incident discovered **after the 3-day window has elapsed** cannot be recovered via PITR at all — this is the single most consequential fact an operator must know about this backup posture, and is exactly why the quarterly check below exists.
+- A restore is a genuinely destructive, production-affecting operation (a new database instance, a `POSTGRES_URL` cutover, and a window of data loss between the incident and the restore point) — treat it with the same care as any other action in this category (see the top-level operating principles this document opens with), and prefer read-only investigation via a database export or replica-like inspection before deciding a restore is actually necessary.
+
+**Quarterly verification (§12's existing "Render PostgreSQL backup/recovery posture" line refers to this procedure):**
+
+1. Confirm in the Render dashboard that the production database is still on a paid plan (PITR and logical backups are **not** available on Render's free tier at all) and that PITR is showing as active with a 3-day (or better) window.
+2. Confirm a recent logical backup exists and is downloadable.
+3. This is a posture check, not a restore drill — actually restoring to a scratch/staging Render instance to prove the procedure works end-to-end is valuable but is a separate, deliberate exercise to schedule on its own, not something to perform against production as part of this routine check.
+
+### Mandatory post-restore reconciliation
+
+A point-in-time restore rolls the entire database back to an earlier moment — including every security-relevant row this application relies on being current. A restore that is not followed by this reconciliation can silently **resurrect** a session, account, or role grant that had been correctly revoked between the restore point and the incident. This is not optional cleanup; complete it before resuming production traffic against the restored database:
+
+1. **Rotate `AUTH_SECRET` immediately.** Every session cookie is a JWT signed with this secret and is only ever honored alongside a matching, non-revoked `idoc.auth_sessions` row — but a restore can bring back a since-revoked row (its `revoked_at` un-set again) exactly as it existed at the restore point. Rotating `AUTH_SECRET` invalidates every existing session JWT regardless of what the restored database now says, closing this off unconditionally rather than depending on a manual per-row audit to catch every case.
+2. **Re-apply any account suspension, deletion, or role revocation that happened between the restore point and the incident.** Compare the restored `idoc.users.account_state`/`deleted_at`, `idoc.memberships.status`, and `idoc.application_roles.revoked_at` against the most recent pre-incident audit-log export (`/admin/exports`) or admin recollection of recent actions, for that specific window. Manually re-apply anything the restore rolled back (re-suspend, re-delete, re-revoke) before treating the restored database as authoritative.
+3. **TOTP/session encryption keys need no restore-specific action.** Key material lives in Vercel environment configuration, not the Postgres database, so a database restore cannot resurrect a key that was deliberately removed from the active key ring for being compromised — a restored `mfa_factors` row encrypted under a since-removed key simply fails to decrypt (a safe failure), it does not become usable again.
+
 # 13. Data export and reporting
 
 Administrative exports should be generated through authorized server-side reporting functions. Export only the fields necessary for the stated business purpose and avoid distributing raw migration exports or unnecessary billing identifiers.

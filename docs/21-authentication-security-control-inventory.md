@@ -547,6 +547,19 @@ No migration. No compatibility impact: a new, unauthenticated-by-design webhook 
 
 **Residual, explicitly flagged**: the signature algorithm is implemented against Mandrill's documented specification but has not been exercised against a live Mandrill webhook delivery in this sandbox (no live Mandrill account/webhook was available to test against). An operator should use Mandrill's own "send test webhook" feature after configuring the webhook in the dashboard, before relying on this in production.
 
+## 8v. Changes made by the render-backup-runbook pull request (this revision)
+
+`docs/22`'s `AUTH-STORAGE-008` row noted that no backup/restore code, script, or documented step-by-step procedure existed anywhere in the repository -- only a one-line quarterly "check the posture" reminder -- and separately flagged that even a documented procedure would still leave a real gap open: nothing addressed restore-time reconciliation, so a restore could silently resurrect a revoked session, a deleted account, or a revoked role grant.
+
+The production database runs on Render's Hobby plan. Confirmed directly against Render's own documentation and changelog (web research performed in this session; no live access to the production Render dashboard was available or needed for this): Hobby includes automatic point-in-time recovery (a 3-day recovery window) and a 7-day-retained logical backup, both entirely Render's managed responsibility -- there was never anything for this codebase to implement for the backup mechanism itself.
+
+1. **`docs/07` §12.2 (new).** Documents the actual PITR/logical-backup mechanism and figures, what a 3-day recovery window means operationally (an incident discovered after 3 days cannot be recovered via PITR at all), and the quarterly verification checklist that `docs/07` §12's existing checklist line already referred to without ever defining.
+2. **`docs/07` §12.2 "Mandatory post-restore reconciliation" (new).** Closes the deeper concern: rotating `AUTH_SECRET` immediately after any restore invalidates every session JWT regardless of what the restored database says, unconditionally closing the "resurrected revoked session" risk rather than depending on a manual per-row audit to catch every case; a restored `account_state`/`deleted_at`/membership `status`/role `revoked_at` must be manually re-compared against the audit log for the restore-to-incident window and re-applied; TOTP/session encryption keys need no restore-specific action since key material lives in Vercel configuration, not the Postgres database being restored.
+3. **`docs/07` §12.1 "Data-retention-purge schedule" (new subsection).** A separate, unrelated documentation gap noticed while editing this exact section: the data-retention-purge Cron route added by an earlier pull request in this program was never given the same documented-schedule subsection every other Cron route already has. Added while here, since it's directly adjacent content, not a new pull request's worth of scope on its own.
+4. **docs/22** (`AUTH-STORAGE-008` moved to `verified`; consequential-gaps list and summary-counts table updated -- **the "missing" count is now zero**).
+
+No migration. No code change. No compatibility impact: documentation only.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
