@@ -34,7 +34,16 @@ This document is the authoritative control-by-control traceability matrix for ev
 - **Documented but not implemented** — an existing document claims this behavior; code does not yet provide it. Recorded as a gap, not silently removed from the record.
 - **Contradictory (corrected)** — two or more existing documents (or one document and the code) disagreed; this review resolved the contradiction against the code and corrected the stale document in this pull request.
 
-**Canonical reference baseline.** Per `docs/13-canonical-auth-reference-retrofit.md`, the canonical authority for what a correct implementation should look like is `marceloATpixelsmith/pixelsmith-auth-reference` contract `1.10.0` / machine schema `13.0.0` / validator `10.0.0` / mapping schema `1.0.0` / portable-config schema `2.0.0`. This matrix inventories IDOC's *actual current implementation*, which docs/13 already tracks against that baseline; it does not re-derive canonical requirements independently. Where docs/13 lists something as still-remaining reference-adoption work, that status is carried into this matrix rather than contradicted.
+**Canonical reference baseline.** Per `docs/13-canonical-auth-reference-retrofit.md`, the canonical authority for what a correct implementation should look like is `marceloATpixelsmith/pixelsmith-auth-reference` contract `2.0.0` / machine schema `14.0.0` / validator `11.0.0` / mapping schema `1.0.0` / portable-config schema `2.0.0`. This matrix inventories IDOC's *actual current implementation*, which docs/13 already tracks against that baseline; it does not re-derive canonical requirements independently. Where docs/13 lists something as still-remaining reference-adoption work, that status is carried into this matrix rather than contradicted.
+
+**Current authoritative status source.** This document's own per-requirement rows use IDOC's local
+`AUTH-*` numbering, which only coincidentally matches canonical IDs at low numbers and has not been kept
+in 1:1 sync with the canonical requirement list as it has grown. `docs/22-canonical-auth-evidence-matrix.md`
+is a from-scratch, canonical-ID-keyed evidence matrix built directly against the current canonical
+contract; treat it as the current authoritative status source for every canonical `AUTH-*` requirement,
+and treat this document's per-requirement status claims below as historical narrative and descriptive
+detail (cookie attribute table, CSRF/rate/header/Turnstile/config/log/DB/supply-chain notes, and the
+pull-request changelog in §8) rather than current status.
 
 ---
 

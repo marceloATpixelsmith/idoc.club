@@ -97,9 +97,9 @@ test('real Turnstile stays flexible and is forced to the canonical light theme',
 
 test('canonical reference version is pinned in implementation documentation', () => {
   const doc = read('docs/13-canonical-auth-reference-retrofit.md');
-  assertContains(doc, /contract\s+`?1\.10\.0`?/i, 'docs/13 must pin canonical auth contract 1.10.0');
-  assertContains(doc, /schema\s+`?13\.0\.0`?/i, 'docs/13 must pin canonical auth schema 13.0.0');
-  assertContains(doc, /validator\s+`?10\.0\.0`?/i, 'docs/13 must pin canonical auth validator 10.0.0');
+  assertContains(doc, /contract\s+`?2\.0\.0`?/i, 'docs/13 must pin canonical auth contract 2.0.0');
+  assertContains(doc, /schema\s+`?14\.0\.0`?/i, 'docs/13 must pin canonical auth schema 14.0.0');
+  assertContains(doc, /validator\s+`?11\.0\.0`?/i, 'docs/13 must pin canonical auth validator 11.0.0');
 });
 
 test('product roadmap tracks Google OIDC as enabled Release 1 scope with explicit remaining launch gates', () => {

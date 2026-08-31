@@ -20,8 +20,9 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 14. [Canonical Authentication Reference Retrofit](13-canonical-auth-reference-retrofit.md)
 15. [Authentication Security Test Acceptance](20-authentication-security-test-acceptance.md)
 16. [Authentication & Account-Security Control Inventory](21-authentication-security-control-inventory.md)
+17. [Canonical Auth Contract Evidence Matrix](22-canonical-auth-evidence-matrix.md)
 
-Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult document 13, document 21, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
+Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult document 13, document 21, document 22, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Document 22 is the current authoritative canonical-ID-keyed status source; document 21 retains descriptive detail and its pull-request changelog but its own per-requirement status claims should be read as historical narrative. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
 
 ## Document ownership
 
@@ -43,6 +44,7 @@ Start with document 08 when planning the next development phase, then consult th
 | Canonical authentication retrofit, version baseline, and remaining auth gaps | 13 |
 | Authentication/account-security automated acceptance gate | 20 |
 | Authentication/account-security control-by-control traceability matrix | 21 |
+| Current canonical-ID-keyed authentication evidence matrix (authoritative status) | 22 |
 
 ## Maintenance rule
 
