@@ -421,6 +421,18 @@ No migration, no compatibility impact on any existing password (every existing p
 
 ---
 
+## 8k. Changes made by the trusted-proxy-header-validation pull request (this revision)
+
+This section records the fix for the canonical `AUTH-RATE-004` gap recorded in `docs/22`: `requestOrigin()` read `X-Forwarded-For`/`X-Real-IP` unconditionally, with no verification that a trusted proxy actually set them and no validation that the resulting value even looked like an IP address -- a real spoofing vector for the origin-keyed half of the dual-bucket rate limit (AUTH-RATE-001) outside Vercel's own edge network.
+
+1. **`lib/security/request-origin.ts` (new).** `resolveRequestOrigin(forwardedForHeader, realIpHeader, isVercelDeployment)` -- pure logic, no `next/headers` import, so it is directly unit-testable without a Next.js request context. When `isVercelDeployment` is false, always returns `'unknown'`: Vercel's edge network is this application's sole documented deployment topology (`docs/07` SS15) and the only hop that sets these headers itself, stripping any client-supplied value before it reaches this process; outside that topology these are ordinary, client-controllable request headers with no proxy verifying them. When true, the chosen candidate (first `X-Forwarded-For` entry, or `X-Real-IP` if absent) must match a plausible IPv4/IPv6 shape or it also collapses to `'unknown'` -- a non-IP string is never used verbatim as a rate-limit bucket identifier. An invalid `X-Forwarded-For` value fails safe rather than falling through to try `X-Real-IP` as a second candidate.
+2. **`lib/security/rate-limit.ts`.** `requestOrigin()` is now a thin wrapper: reads the two headers and `process.env.VERCEL`, and delegates to `resolveRequestOrigin`. No change to its exported signature or any call site.
+3. **Tests.** `tests/trusted-proxy-headers.test.ts` (new, 9 unit tests, real function calls, no mocking): not-on-Vercel always resolves to `'unknown'` regardless of header presence or well-formedness; on-Vercel a valid IPv4/IPv6 value is accepted; a multi-hop `X-Forwarded-For` takes the first entry; `X-Real-IP` is used as a fallback; an out-of-range-octet IPv4-shaped value and a non-IP-shaped string are both rejected; a valid `X-Forwarded-For` takes priority over a present `X-Real-IP`; an invalid `X-Forwarded-For` does not fall through to a valid `X-Real-IP`.
+
+No migration, no compatibility impact in production: `process.env.VERCEL` is always set in every real Vercel build/runtime environment, so this preserves the exact same header-trust behavior there, with IP-shape validation added on top. The only behavior change is outside that topology (local development, a self-hosted instance, or a deployment missing the trusted proxy this application assumes), where these headers are no longer trusted at all -- and a real browser never sets either header on its own requests, so this only changes behavior for a client that deliberately injects one.
+
+---
+
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
 
 These are controls that are implemented in code (per the tables above) but whose proof rests on source-inspection tests (regex/string assertions against production files) rather than a test that actually executes the behavior, or that have no test at all. None of these are claims that the control does not work — they are claims that the *repository's own test suite* does not yet prove it end-to-end, per `docs/20`'s own distinction between what Playwright/integration tests prove and what they don't.

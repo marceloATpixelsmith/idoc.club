@@ -79,15 +79,17 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 87 | 56.1% |
+| verified | 88 | 56.8% |
 | implemented-but-unverified | 28 | 18.1% |
-| partial | 27 | 17.4% |
+| partial | 26 | 16.8% |
 | missing | 5 | 3.2% |
 | not-applicable | 8 | 5.2% |
 
-(This table also reflects two further corrections made in the same review pass as the recount: AUTH-
-TENANT-001/002 moved from not-applicable to partial, and AUTH-PRIVACY-002 moved from verified to
-partial — see their rows below for detail.)
+(This table also reflects three further corrections made after the initial recount: AUTH-TENANT-001/002
+moved from not-applicable to partial and AUTH-PRIVACY-002 moved from verified to partial, both per a
+Codex review on the pull request that introduced this document; AUTH-RATE-004 moved from partial to
+verified in a later pull request that gated proxy-header trust on the actual Vercel deployment topology
+and added IP-shape validation — see their rows below for detail.)
 
 This reflects a codebase with strong, often real-Postgres/real-browser behavioral coverage for its core
 authentication surface (session lifecycle, password storage, MFA challenge/replay defense, OAuth
@@ -135,16 +137,13 @@ and a fresh audit is run against the final proposed head.
    genuinely supports multi-key rotation, but session-key (`AUTH_SECRET`) rotation has no ring/overlap at
    all (documented hard cutover), and there is no distinct "compromised key" state — only full removal,
    which is all-or-nothing and generates no dedicated audit event.
-11. **AUTH-RATE-004 (untrusted proxy headers)** — `partial`. `requestOrigin()` reads `X-Forwarded-For`/
-   `X-Real-IP` unconditionally with no configured-proxy allowlist or documented IP normalization — a real
-   spoofing risk outside Vercel's own edge network.
-12. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
+11. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
     not issued/rotated CSRF tokens; effective in practice but does not literally satisfy this control.
-13. **AUTH-TRANSPORT-002 (explicit no-store)** — `partial`. No explicit `Cache-Control: no-store` is set
+12. **AUTH-TRANSPORT-002 (explicit no-store)** — `partial`. No explicit `Cache-Control: no-store` is set
     on session/auth API responses; relies only on Next.js's implicit dynamic-rendering behavior.
-14. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
+13. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
     callers get an in-band cooldown message instead.
-15. **AUTH-API-005 (health/readiness endpoint)** — `partial`. No dedicated `/api/health` or
+14. **AUTH-API-005 (health/readiness endpoint)** — `partial`. No dedicated `/api/health` or
     `/api/readiness` route exists at all.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
@@ -198,7 +197,7 @@ PKCE binding (AUTH-TRANSACTION-010, AUTH-OAUTH-002), audit-log DB-level immutabi
 | AUTH-RATE-001 | `lib/security/rate-limit.ts:37-49` `checkRateLimit` (dual bucket: email + origin, keyed by `purpose`) | `idoc.account_request_limits` | `tests/rate-limit-normalization.integration.ts` (7 real-Postgres tests) | verified | |
 | AUTH-RATE-002 | `lib/security/rate-limit.ts:9-13` fixed windows/max-requests constants; no explicit `Retry-After` header emission found on 429-equivalent responses (actions return generic `error` strings, not HTTP 429) | `idoc.account_request_limits` | `tests/rate-limit-normalization.integration.ts` | partial | Burst/sustained bounded windows exist; "safe Retry-After behavior" is not implemented as an HTTP header — callers get a generic cooldown message instead (`lib/auth/email-otp.ts:55` `retryAfterMs` is returned in-band, not as `Retry-After`). |
 | AUTH-RATE-003 | `lib/security/response-timing.ts` (`equalizeAnonymousResponse`, constant ≥350ms + jitter); `lib/membership/account-recovery.ts` returns identical response regardless of account existence | N/A | `tests/response-timing.test.ts` | verified | |
-| AUTH-RATE-004 | `lib/security/rate-limit.ts:84-89` `requestOrigin()` reads first `X-Forwarded-For` entry / `X-Real-IP` unconditionally — **no allowlist of trusted proxies, no documented IPv4/IPv6 normalization** | N/A | NOT FOUND | partial | Relies implicitly on the deployment platform (Vercel) stripping/setting these headers at the edge; no explicit configured-proxy validation or IP normalization logic exists in-repo. This is a real gap if ever deployed behind an untrusted or misconfigured proxy. |
+| AUTH-RATE-004 | **Fixed in a later pull request.** `lib/security/request-origin.ts` `resolveRequestOrigin()` (pure logic) + `lib/security/rate-limit.ts` `requestOrigin()` (thin `next/headers` wrapper): X-Forwarded-For/X-Real-IP are now trusted only when `process.env.VERCEL` is set (Vercel's edge network is this application's sole documented deployment topology and the only hop that sets these headers itself); outside that, always `'unknown'`. Even when trusted, the resolved value must match a plausible IPv4/IPv6 shape or it also collapses to `'unknown'` — a garbage or attacker-injected string is never used verbatim as a rate-limit bucket identifier. | N/A | `tests/trusted-proxy-headers.test.ts` (9 unit tests, real function calls: not-on-Vercel always unknown regardless of header presence/well-formedness; on-Vercel valid IPv4/IPv6 accepted; multi-hop XFF takes the first entry; X-Real-IP fallback; out-of-range-octet and non-IP-shaped values rejected; an invalid XFF entry fails safe rather than falling through to X-Real-IP) | verified | The Vercel-detection branch itself cannot be exercised against a literal production Vercel runtime from this repository (the same inherent limit as every other `env.VERCEL`-gated branch in this codebase, e.g. `resolveGoogleOidcProvider`); the security-relevant validation logic — never trusting these headers unless that flag is set, and always validating IP shape — is fully and directly unit-tested. |
 | AUTH-BOT-001..009 (layered defense, fail-closed, flow-entry, Siteverify binding, single-use, defense-in-depth, no client booleans, key separation, presentation non-authoritative) | `lib/auth/turnstile.ts` (server verify, hostname+action binding, fail-closed); `components/turnstile-widget.tsx` (client presentation only, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` public key, secret server-only); wired at signup/login/password-reset entry (`app/(login)/*/actions.ts`) | N/A (Cloudflare-side single-use enforcement, not app-tracked) | `tests/turnstile-contract.test.ts` (12 tests: hostname/action binding, fail-closed on missing config/network/malformed JSON/non-2xx, no NODE_ENV bypass); `tests/turnstile-widget-resilience.test.ts` | verified (for 001,002,004,005,006,007,008,009); implemented-but-unverified (003) | AUTH-BOT-003 ("provider fail-closed behavior") is proven; single-use-token enforcement (part of 005) relies on Cloudflare's own one-time-token semantics — not independently verified against replay in this codebase's tests. |
 | AUTH-ERROR-001 | Generic messages for persistent failures, e.g. `app/(login)/sign-in/actions.ts:74` "We could not finish signing you in automatically. Contact IDOC for help." | N/A | none found (no test asserts error-message class taxonomy) | implemented-but-unverified | |
 | AUTH-ERROR-002 | No stack/SQL/exception text ever returned to client; `lib/observability/logger.ts` + `deliveryFailureCategory`/`operationalFailureCategory` helpers deliberately discard exception text before logging | N/A | `tests/evidence-safety-scan.integration.ts` | verified | |
@@ -208,11 +207,11 @@ PKCE binding (AUTH-TRANSACTION-010, AUTH-OAUTH-002), audit-log DB-level immutabi
 | AUTH-TRANSPORT-001 | `next.config.ts:15` HSTS header (`max-age=63072000; includeSubDomains; preload`); `secure: NODE_ENV==='production'` cookie flags throughout | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:3` | verified | |
 | AUTH-TRANSPORT-002 | No explicit `Cache-Control: no-store` set on session/auth API responses (e.g. `app/api/user/route.ts`); relies on Next.js's implicit dynamic-rendering behavior from `cookies()` usage rather than an explicit header | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:3` (checks security headers, not cache-control) | partial | Dynamic rendering avoids static caching, but no explicit no-store directive was found or tested for sensitive API/pages. |
 | AUTH-API-001 | Consistent pattern across `app/api/*/route.ts` and Server Actions: trusted server derives identity/role, client only receives shaped output (e.g. `app/api/user/route.ts`) | N/A | `tests/authorization-boundary-inventory.test.ts` | verified | |
-| AUTH-FRAMEWORK-003 | `middleware.ts` explicit cookie/CSRF handling; `lib/security/rate-limit.ts:84-89` explicit (if incomplete) proxy header handling; `next.config.ts` explicit headers | N/A | `tests/security-e2e/csrf.spec.ts`, `cookies-and-headers.spec.ts` | partial | Cookies/CSRF/caching are explicit; proxy trust configuration (AUTH-RATE-004) is not — see above. |
+| AUTH-FRAMEWORK-003 | `middleware.ts` explicit cookie/CSRF handling; `lib/security/request-origin.ts` explicit, Vercel-gated proxy header handling (AUTH-RATE-004, fixed in a later pull request); `next.config.ts` explicit headers | N/A | `tests/security-e2e/csrf.spec.ts`, `cookies-and-headers.spec.ts`, `tests/trusted-proxy-headers.test.ts` | verified | Cookies/CSRF/caching/proxy-trust are all now explicit. |
 | AUTH-STORAGE-003 | Secrets encrypted/hashed at rest: `lib/auth/password-hash.ts` (Argon2id), `lib/security/encrypted-payload.ts` (delivery payloads), TOTP secrets `encryptedSecret`/`keyId` in `lib/auth/mfa/types.ts:21-22` | `idoc.mfa_totp_factors`, `idoc.account_tokens` (hash only) | `tests/canonical-mfa-runtime.test.ts:163` ("TOTP secrets encrypted with authenticated encryption and key IDs"); `tests/evidence-safety-scan.integration.ts` (no plaintext secrets in logs) | verified | |
 | AUTH-OPERATIONS-002 | All revocation/rate-limit/transaction-consumption state lives in Postgres (`idoc.auth_sessions`, `idoc.account_request_limits`, `idoc.mfa_*`), not in-process memory, so it's consistent across serverless instances; DB errors propagate (fail closed) per `lib/auth/session.ts:41-42` comment | multiple tables | `tests/session-registry-adversarial.integration.ts` | verified | |
 
-**Summary of most significant gaps:** (1) **AUTH-RATE-004** — `requestOrigin()` trusts `X-Forwarded-For`/`X-Real-IP` unconditionally with no configured-proxy allowlist or documented IP normalization, a real spoofing risk outside Vercel's own edge. (2) **AUTH-CSRF-003** — no token-based CSRF mechanism exists; the app relies solely on Origin-header validation (effective, but not what this control literally requires). (3) **AUTH-ERROR-003** — no policy-configured, non-secret `supportEmail` used in persistent-error UX. (4) **AUTH-TRANSPORT-002** — no explicit `Cache-Control: no-store` on sensitive API/pages, only implicit Next.js dynamic-rendering avoidance. (5) **AUTH-RATE-002** — no `Retry-After`-style server contract, only in-band cooldown messages. Everything else audited (session lifecycle, MFA, recovery, OAuth CSRF/state binding, password hashing, bot defense, cookie hardening) is well-implemented with strong behavioral (often real-Postgres/real-browser) test coverage.
+**Summary of most significant gaps:** (1) **AUTH-RATE-004 — fixed in a later pull request** (`requestOrigin()` no longer trusts `X-Forwarded-For`/`X-Real-IP` unless `process.env.VERCEL` is set, and always validates IP shape; see the row above). (2) **AUTH-CSRF-003** — no token-based CSRF mechanism exists; the app relies solely on Origin-header validation (effective, but not what this control literally requires). (3) **AUTH-ERROR-003** — no policy-configured, non-secret `supportEmail` used in persistent-error UX. (4) **AUTH-TRANSPORT-002** — no explicit `Cache-Control: no-store` on sensitive API/pages, only implicit Next.js dynamic-rendering avoidance. (5) **AUTH-RATE-002** — no `Retry-After`-style server contract, only in-band cooldown messages. Everything else audited (session lifecycle, MFA, recovery, OAuth CSRF/state binding, password hashing, bot defense, cookie hardening) is well-implemented with strong behavioral (often real-Postgres/real-browser) test coverage.
 
 
 ## Stage 3 — Signup, Email Verification, OTP, Password
