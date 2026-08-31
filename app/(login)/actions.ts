@@ -14,7 +14,7 @@ import {
 import { normalizeEmail } from '@/lib/membership/validation';
 import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
-import { passwordSchema } from '@/lib/auth/password-policy';
+import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
 import { consumeAccountToken, requestAccountLink } from '@/lib/membership/account-recovery';
 import { issueEmailOtp } from '@/lib/auth/email-otp';
 import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/pending-login';
@@ -30,7 +30,7 @@ const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
   // Login verifies the existing credential exactly as supplied. Creation policy belongs only on
   // password creation/change boundaries and must not strand a valid legacy credential.
-  password: z.string().min(1).max(128)
+  password: passwordEntrySchema
 });
 
 /** Canonical login ordering from pixelsmith-auth-reference contract 1.9.0:
@@ -184,7 +184,7 @@ export async function signOut() {
 }
 
 const updatePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(128),
+  currentPassword: passwordEntrySchema,
   newPassword: passwordSchema,
   confirmPassword: passwordSchema
 });
@@ -225,7 +225,7 @@ export const updatePassword = validatedActionWithUser(
   }
 );
 
-const deleteAccountSchema = z.object({ password: z.string().min(1).max(128) });
+const deleteAccountSchema = z.object({ password: passwordEntrySchema });
 
 export const deleteAccount = validatedActionWithUser(
   deleteAccountSchema,

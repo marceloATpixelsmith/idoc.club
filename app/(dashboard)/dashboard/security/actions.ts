@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { passwordEntrySchema } from '@/lib/auth/password-policy';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
@@ -25,7 +26,7 @@ import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-securi
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 
-const currentPasswordSchema = z.object({ currentPassword: z.string().min(1).max(128) });
+const currentPasswordSchema = z.object({ currentPassword: passwordEntrySchema });
 const emptySchema = z.object({});
 const sessionSchema = z.object({ sessionId: z.string().uuid() });
 

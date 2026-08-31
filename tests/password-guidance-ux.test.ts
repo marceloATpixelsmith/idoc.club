@@ -22,7 +22,9 @@ test('password guidance disappears requirement-by-requirement and reports only o
   assert.match(component, /unmetRequirements = PASSWORD_REQUIREMENTS\.filter/);
   assert.match(component, /unmetRequirements\.length > 0/);
   assert.match(component, /unmetRequirements\.map/);
-  assert.match(component, /password\.length > MAX_PASSWORD_LENGTH/);
+  // Unicode code points, not UTF-16 units, so client and server length behavior agree (see
+  // countPasswordCharacters in lib/auth/password-policy.ts).
+  assert.match(component, /countPasswordCharacters\(password\) > MAX_PASSWORD_LENGTH/);
   assert.match(component, /Password must be 128 characters or fewer\./);
   assert.match(component, /disabled=\{!allMet \|\| pending\}/);
 });
