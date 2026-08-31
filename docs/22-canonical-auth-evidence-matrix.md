@@ -79,21 +79,23 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 87 | 56.1% |
+| verified | 88 | 56.8% |
 | implemented-but-unverified | 28 | 18.1% |
-| partial | 27 | 17.4% |
+| partial | 26 | 16.8% |
 | missing | 5 | 3.2% |
 | not-applicable | 8 | 5.2% |
 
-(This table also reflects two further corrections made in the same review pass as the recount: AUTH-
-TENANT-001/002 moved from not-applicable to partial, and AUTH-PRIVACY-002 moved from verified to
-partial — see their rows below for detail.)
+(This table also reflects three further corrections made after the initial recount: AUTH-TENANT-001/002
+moved from not-applicable to partial and AUTH-PRIVACY-002 moved from verified to partial, both per a
+Codex review on the pull request that introduced this document; AUTH-LIFECYCLE-006 moved from partial to
+verified in a later pull request that implemented admin-initiated account-authentication suspension — see
+their rows below for detail.)
 
 This reflects a codebase with strong, often real-Postgres/real-browser behavioral coverage for its core
 authentication surface (session lifecycle, password storage, MFA challenge/replay defense, OAuth
 transaction binding, CSRF, rate limiting, audit immutability), alongside a specific, named set of gaps —
 most concentrated in Stage 6 operational maturity (backups, bounce handling, alert taxonomy, purge jobs,
-account suspension, key-rotation completeness) rather than in the core authentication path itself.
+key-rotation completeness) rather than in the core authentication path itself.
 **This is not a "production ready" verdict.** It is evidence for scoping the remediation slices that
 follow; a full final verdict (limited to "not ready" or "ready for application-specific production
 validation") is reserved for the end of the remediation program, after all planned slices are complete
@@ -127,24 +129,20 @@ and a fresh audit is run against the final proposed head.
    rows are correctly treated as unauthorized) is solid and verified, but no purge job exists for any
    expired-record table (`email_otp_codes`, `mfa_challenge_transactions`, `mfa_enrollment_transactions`,
    `account_tokens`, `auth_sessions`, `login_trusted_devices` all grow unbounded).
-9. **AUTH-LIFECYCLE-006 (account suspension)** — `partial`. `users.account_state='suspended'` is defined
-   in the DB CHECK constraint but no code path was found that actually sets an authentication-stopping
-   account suspension for a user (only club-membership entitlement suspension exists, which does not
-   stop login).
-10. **AUTH-CRYPTO-005 / AUTH-SECRET-003 (key rotation completeness)** — `partial`. TOTP secret encryption
+9. **AUTH-CRYPTO-005 / AUTH-SECRET-003 (key rotation completeness)** — `partial`. TOTP secret encryption
    genuinely supports multi-key rotation, but session-key (`AUTH_SECRET`) rotation has no ring/overlap at
    all (documented hard cutover), and there is no distinct "compromised key" state — only full removal,
    which is all-or-nothing and generates no dedicated audit event.
-11. **AUTH-RATE-004 (untrusted proxy headers)** — `partial`. `requestOrigin()` reads `X-Forwarded-For`/
+10. **AUTH-RATE-004 (untrusted proxy headers)** — `partial`. `requestOrigin()` reads `X-Forwarded-For`/
    `X-Real-IP` unconditionally with no configured-proxy allowlist or documented IP normalization — a real
    spoofing risk outside Vercel's own edge network.
-12. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
+11. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
     not issued/rotated CSRF tokens; effective in practice but does not literally satisfy this control.
-13. **AUTH-TRANSPORT-002 (explicit no-store)** — `partial`. No explicit `Cache-Control: no-store` is set
+12. **AUTH-TRANSPORT-002 (explicit no-store)** — `partial`. No explicit `Cache-Control: no-store` is set
     on session/auth API responses; relies only on Next.js's implicit dynamic-rendering behavior.
-14. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
+13. **AUTH-RATE-002 (Retry-After contract)** — `partial`. No HTTP `Retry-After`-style header exists;
     callers get an in-band cooldown message instead.
-15. **AUTH-API-005 (health/readiness endpoint)** — `partial`. No dedicated `/api/health` or
+14. **AUTH-API-005 (health/readiness endpoint)** — `partial`. No dedicated `/api/health` or
     `/api/readiness` route exists at all.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
@@ -350,7 +348,7 @@ Methodology note: docs/21 uses its own AUTH-* numbering scheme that does **not**
 | AUTH-OPERATIONS-006 | `lib/notifications/breached-password-alert.ts`, `lib/notifications/google-oauth-failure-alert.ts`, `lib/notifications/profile-change-delivery.ts` — each sends a flat email to `IDOC_ADMIN_NOTIFICATION_EMAIL` for its own specific event | N/A | NONE found for correlation/anomaly logic itself | docs/07 §12 "Routine operational checks" table (daily/weekly/monthly/quarterly manual review cadence) | `missing` | No informational/warning/high/critical severity taxonomy or anomaly-correlation engine exists anywhere in the codebase — only three ad hoc single-purpose admin-email alerts and a manual runbook review cadence. This is a real gap, not softened. |
 | AUTH-OPERATIONS-007 | Session/device/factor revocation exists (`revokeAllUserSessions`, `forgetAllLoginDevices` in `app/(login)/actions.ts:239-240`) for **self-service** account compromise (password reset, recovery). No code path for **operator-initiated** infrastructure/account compromise response (e.g. an admin-triggered "revoke this user's everything" tool) | `idoc.auth_sessions`, `idoc.login_trusted_devices`, `idoc.mfa_factors` | `tests/account-security-management.test.ts:58-61` (self-service deletion path only) | docs/07 §11 "Security incident escalation": "Suspected unauthorized administrator access: revoke affected sessions/credentials and escalate immediately." / "Suspected secret leakage: rotate the affected Vercel, Render PostgreSQL, application-authentication, or Stripe secret, then investigate logs and the exposure window." | `partial` | Genuine incident-response runbook section exists (§11) with named actions per scenario, but it is a manual instruction list ("revoke... and escalate"), not a tool/script — an administrator has no dedicated "force-revoke all authority for user X" admin action in code; they'd have to improvise via existing per-user session-revocation primitives. Evidence preservation and incident-correlated audit events are not explicitly wired for this scenario. |
 | AUTH-LIFECYCLE-005 | `lib/db/schema.ts:25,34` — `users.accountState` CHECK `('unverified','onboarding','active','suspended','migrated_pending','deleted')`, server-owned (only set via `data-access.ts`/`status-actions.ts` transactions, never client-writable); `memberships.status` is a separate CHECK enum distinguishing club-membership state from account authentication state | `idoc.users.account_state`, `idoc.memberships.status` | `tests/audit-evidence.integration.ts:130-139` | None additional | `verified` | Clean separation: account authentication state (`users.account_state`) vs. club-membership entitlement state (`memberships.status`) are two independent, server-owned enums. No "org membership" concept exists (single-tenant). |
-| AUTH-LIFECYCLE-006 | `app/(login)/actions.ts:231-243` — deletion sequence: `deleteOwnAccount()` (sets `account_state='deleted'`, mangles email, writes audit) → `revokeAllUserSessions` → `forgetAllLoginDevices` → `clearSession`. No explicit "disablement" (as distinct from deletion) code path was found for ordinary members — `suspended` account state exists in the enum but no code sets it for a user (only `memberships.status='suspended'`, which is club-entitlement, not authentication, suspension) | `idoc.users`, `idoc.auth_sessions`, `idoc.login_trusted_devices` | `tests/account-security-management.test.ts:58-61`, `tests/audit-evidence.integration.ts:130-139` | None | `partial` | Deletion is well-implemented (stops auth, revokes sessions+devices, preserves audit evidence via the append-only trigger). But `users.account_state='suspended'` appears to be a defined-but-unused state — no code path found that sets a user account to `suspended` (only membership entitlement is suspended, which doesn't stop login). This is a genuine gap: "disablement" as a distinct authentication-stopping state is not actually wired up. |
+| AUTH-LIFECYCLE-006 | **Fixed in a later pull request; hardened per two Codex review findings on that PR.** `app/(login)/actions.ts:231-243` — deletion sequence unchanged (`deleteOwnAccount()` → `revokeAllUserSessions` → `forgetAllLoginDevices` → `clearSession`). Admin-initiated disablement now exists separately: `lib/membership/account-suspension.ts` `suspendUserAccount`/`reinstateUserAccount` (`requireAccountAccess('administration')` + `requireAdministrator`), sets/clears `users.account_state='suspended'`, bumps `session_version`, revokes all sessions and login-trusted devices, writes audit + `account_suspended`/`account_reinstated` notifications. Rejects suspending a user who currently holds an `administrator`/`super_admin` grant. **P2 fix 1:** `grantApplicationRole` (`lib/membership/role-grants.ts`) now takes the same `users` row lock before touching `application_roles` at all, closing a real race where a concurrent grant's `application_roles` INSERT (a different table, not blocked by suspension's read of it) could commit after suspension's read but before suspension's own `users` update released the lock, leaving a suspended account with an active grant. **P2 fix 2:** both functions are now retry-idempotent — a retry after a partial failure (the transactional state/audit write commits, but the session/device revocation or notification-enqueue step afterward throws) completes the still-missing side effects instead of being rejected outright as "already suspended"/"not currently suspended," using the DB-committed transition timestamp (not call-time `Date.now()`) as the notification dedupe key so a retry converges rather than duplicating. | `idoc.users`, `idoc.auth_sessions`, `idoc.login_trusted_devices`, `idoc.audit_log`, `idoc.auth_security_notification_outbox`, `idoc.application_roles` | `tests/account-suspension.integration.ts` (real Postgres, 10 tests, including idempotent-retry coverage for both directions with duplicate-audit/duplicate-notification assertions); `tests/role-grants.integration.ts` (2 new tests: granting a role to a suspended/deleted account rejected; a concurrent grant-vs-suspend race, run for real via `concurrently()`, always leaves the DB in a consistent state — never a suspended account with an active grant) | None | `verified` | Distinct from `memberships.status='suspended'` (club-entitlement, unaffected) — the admin UI (`app/(dashboard)/admin/members/page.tsx`) labels the two separately to avoid operator confusion. |
 | AUTH-LIFECYCLE-007 | N/A | N/A | N/A | N/A | `not-applicable` | IDOC is a genuinely single-tenant platform: no organization/multi-tenant membership concept exists anywhere in schema or code (`memberships` = club entitlement, not org membership; single `applicationId='idoc-web'` throughout MFA/session code). Confirmed independently — docs/21 contains zero mentions of "tenant"/"organization". |
 | AUTH-STORAGE-007 | Logical invalidity is enforced on every read: `session-registry.ts:38-56` (`revoked_at is null and absolute_expires_at > now()`), `mfa_enrollment_transactions`/`mfa_challenge_transactions` expiry checks in `totp.ts:211-217`. **No physical cleanup/purge job was found anywhere** — grep of `lib/`, `app/api/cron/`, `scripts/` for DB `DELETE` statements against any expired-record table returns nothing (only `.delete(` hits are `cookies().delete(...)`, i.e. client cookie clears). | No purge/retention job exists | NONE | None found | `partial` | Logical invalidity (revoked/expired ⇒ unauthorized) is solidly enforced and verified — the "never restore/reactivate authority" half is satisfied by construction since nothing physically deletes rows. But the requirement's implicit expectation of bounded storage/cleanup is genuinely absent: `email_otp_codes`, `mfa_challenge_transactions`, `mfa_enrollment_transactions`, `account_tokens`, `auth_sessions`, `login_trusted_devices` grow unbounded with no purge job. Flagging this half as missing rather than glossing over it. |
 | AUTH-SECRET-002 | `lib/runtime/configuration.ts` (every secret is `server-only`, never `NEXT_PUBLIC_*`, fails closed if malformed/absent) | N/A | `tests/runtime-configuration.test.ts` | docs/07 §15.1 "Authoritative inventory" — a full table of every secret, its consumer, format, and rotation rule; §12.1 "never paste them in tickets, PRs, logs, screenshots or chat" | `verified` | This is a genuinely strong, explicit secret inventory with per-secret ownership/rotation rules — one of the best-covered items in this stage. |
@@ -379,6 +377,6 @@ Methodology note: docs/21 uses its own AUTH-* numbering scheme that does **not**
 2. **AUTH-EMAIL-007 (bounce/complaint handling)** — genuinely `missing`. Zero code or docs on the topic.
 3. **AUTH-OPERATIONS-006 (alert severity taxonomy)** — `missing`. Only three ad hoc single-event admin emails exist; no correlation/severity system.
 4. **AUTH-STORAGE-007 (physical cleanup)** — `partial`. Logical invalidation is solid and verified, but no purge job exists for any expired-record table, so several tables grow unbounded.
-5. **AUTH-LIFECYCLE-006** — `partial`. `users.account_state = 'suspended'` is defined in the schema's CHECK constraint but no code path was found that actually sets an authentication-stopping account suspension (only club-membership entitlement suspension exists, which does not stop login).
+5. **AUTH-LIFECYCLE-006 — fixed in a later pull request.** At the time of this stage audit, `users.account_state = 'suspended'` was defined in the schema's CHECK constraint but no code path set it. `lib/membership/account-suspension.ts` now provides admin-initiated suspend/reinstate actions; see the AUTH-LIFECYCLE-006 row above, now `verified`. Kept here as a record of what was true at the time of this stage's original audit, not a currently-open gap.
 6. **AUTH-CRYPTO-005 / AUTH-SECRET-003** — TOTP key rotation mechanism is real and better than a naive single-key design, but session-key (`AUTH_SECRET`) rotation has no ring/overlap at all (documented hard cutover), and there is no "compromised key" state distinct from "removed key."
 7. **AUTH-OPERATIONS-009** and **AUTH-AUDIT-002** are the strongest items in this stage — both are genuinely `verified` with real fail-closed code and a DB-level immutability trigger, respectively.

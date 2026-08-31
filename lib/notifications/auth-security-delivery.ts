@@ -42,6 +42,8 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
 
   try {
     const content: Record<string, { heading: string; subject: string }> = {
+      account_reinstated: { heading: 'Account access restored', subject: 'Your IDOC account access was restored' },
+      account_suspended: { heading: 'Account suspended', subject: 'Your IDOC account was suspended' },
       authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },
       authenticator_replaced: { heading: 'Authenticator replaced', subject: 'Authenticator replaced for IDOC' },
       google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },

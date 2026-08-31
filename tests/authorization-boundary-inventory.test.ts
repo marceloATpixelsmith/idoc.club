@@ -59,6 +59,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
     grantRoleForm: 'delegates-to-data-access', revokeRoleForm: 'delegates-to-data-access',
+    suspendUserAccountForm: 'delegates-to-data-access', reinstateUserAccountForm: 'delegates-to-data-access',
   },
 };
 
@@ -143,6 +144,8 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
       { from: '@/lib/membership/status-actions', functionName: 'correctEntitlement' },
       { from: '@/lib/membership/role-grants', functionName: 'grantApplicationRole' },
       { from: '@/lib/membership/role-grants', functionName: 'revokeApplicationRole' },
+      { from: '@/lib/membership/account-suspension', functionName: 'suspendUserAccount' },
+      { from: '@/lib/membership/account-suspension', functionName: 'reinstateUserAccount' },
     ],
   };
   for (const [file, entries] of Object.entries(expected)) {
@@ -157,6 +160,8 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
   assert.match(statusActions, /requireAccountAccess\('administration'\)/); assert.match(statusActions, /requireAdministrator\(/);
   const roleGrants = readFileSync(path.join(root, 'lib/membership/role-grants.ts'), 'utf8');
   assert.match(roleGrants, /requireAccountAccess\('administration'\)/); assert.match(roleGrants, /requireSuperAdmin\(/);
+  const accountSuspension = readFileSync(path.join(root, 'lib/membership/account-suspension.ts'), 'utf8');
+  assert.match(accountSuspension, /requireAccountAccess\('administration'\)/); assert.match(accountSuspension, /requireAdministrator\(/);
 });
 
 test('the Google OIDC Route Handlers are bound to canonical transaction, authentication, and link boundaries', () => {
