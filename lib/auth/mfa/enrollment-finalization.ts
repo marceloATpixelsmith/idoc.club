@@ -3,6 +3,8 @@ import 'server-only';
 import { client } from '@/lib/db/drizzle';
 import type { RecoveryCodeRecord } from './types';
 
+const RECOVERY_ACK_TTL_MS = 10 * 60 * 1000;
+
 function timestamp(ms: number) {
   return new Date(ms).toISOString();
 }
@@ -51,7 +53,8 @@ export async function finalizeInitialAuthenticatorEnrollment(input: {
         and factor_type='totp' and status='active' for update`;
     if (activeFactor) return { status: 'invalid-transaction' as const };
 
-    await tx`update idoc.mfa_enrollment_transactions set consumed_at=${timestamp(nowMs)}
+    await tx`update idoc.mfa_enrollment_transactions
+      set consumed_at=${timestamp(nowMs)}, expires_at=${timestamp(nowMs + RECOVERY_ACK_TTL_MS)}
       where transaction_id=${input.transactionId}`;
     await tx`update idoc.mfa_factors set status='active',activated_at=${timestamp(nowMs)},
       last_accepted_counter=${input.acceptedCounter},updated_at=${timestamp(nowMs)} where factor_id=${input.factorId}`;
