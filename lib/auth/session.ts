@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { requestCookies } from '@/lib/auth/request-cookies';
+import { requestCookies, testRequestEnvironment } from '@/lib/auth/request-cookies';
 import { NewUser } from '@/lib/db/schema';
 import {
   readActiveSession,
@@ -37,6 +37,10 @@ import {
   verifyToken,
 } from '@/lib/auth/session-tokens';
 
+function requestEnvironment() {
+  return testRequestEnvironment() ?? process.env;
+}
+
 async function registeredSessionIsValid(session: SessionData, now = new Date()) {
   // Database failures intentionally propagate. Only an absent/mismatched registry record is an
   // authentication-validation failure that should be treated as an invalid session.
@@ -51,7 +55,7 @@ async function registeredSessionIsValid(session: SessionData, now = new Date()) 
 
 export async function getSession() {
   const cookieStore = await requestCookies();
-  const canonicalValue = cookieStore.get(sessionCookieName())?.value;
+  const canonicalValue = cookieStore.get(sessionCookieName(requestEnvironment()))?.value;
   if (!canonicalValue) return null;
 
   let session: SessionData;
@@ -87,14 +91,16 @@ export async function setSession(user: NewUser) {
     absoluteExpiresAt: new Date(session.absoluteExpiresAt),
   });
 
+  const environment = requestEnvironment();
   const cookieStore = await requestCookies();
-  cookieStore.set(sessionCookieName(), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt));
+  cookieStore.set(sessionCookieName(environment), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt, environment));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
 }
 
 export async function clearSession() {
+  const environment = requestEnvironment();
   const cookieStore = await requestCookies();
-  const canonicalValue = cookieStore.get(sessionCookieName())?.value;
+  const canonicalValue = cookieStore.get(sessionCookieName(environment))?.value;
   if (canonicalValue) {
     let session: SessionData | null = null;
     try {
@@ -108,7 +114,7 @@ export async function clearSession() {
       await revokeSession(session.sessionId, session.user.id, 'user-signout');
     }
   }
-  cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions());
+  cookieStore.set(sessionCookieName(environment), '', expiredSessionCookieOptions(environment));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
   cookieStore.delete('idoc_pending_step_up');
   cookieStore.delete('idoc_fresh_step_up');
