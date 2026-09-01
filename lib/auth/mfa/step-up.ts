@@ -2,8 +2,8 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
 import { eq } from 'drizzle-orm';
+import { requestCookies } from '@/lib/auth/request-cookies';
 import { getSession, type SessionData } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { users, type User } from '@/lib/db/schema';
@@ -50,7 +50,7 @@ async function sign(value: PendingStepUp | FreshStepUp) {
 }
 
 async function read<T extends BoundEvidence>(name: string): Promise<T | null> {
-  const token = (await cookies()).get(name)?.value;
+  const token = (await requestCookies()).get(name)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, mfaConfiguration().continuationKey, { algorithms: ['HS256'] });
@@ -108,7 +108,7 @@ export async function requireFreshStepUp(actor: Pick<User, 'id'>, action: Sensit
   if ((hasFreshTotp || hasFreshWebAuthn) && fresh) {
     const claimed = await mfaStore.consumeStepUpAuthority({ applicationId: MFA_APPLICATION_ID,
       factorId: fresh.factorId, nowMs: Date.now(), subjectId: String(user.id), transactionId: fresh.transactionId });
-    (await cookies()).delete(AUTHORITY_COOKIE);
+    (await requestCookies()).delete(AUTHORITY_COOKIE);
     if (claimed === 'consumed') return { required: false as const };
   }
 
@@ -120,7 +120,7 @@ export async function requireFreshStepUp(actor: Pick<User, 'id'>, action: Sensit
   const pending: PendingStepUp = { action, applicationId: MFA_APPLICATION_ID, factorId: factor.factorId,
     returnTo: safeReturnTo(returnTo), role: binding.role, sessionId: binding.session.sessionId,
     sessionVersion: user.sessionVersion, subjectId: user.id, transactionId };
-  (await cookies()).set(PENDING_COOKIE, await sign(pending), cookieOptions(TTL_SECONDS));
+  (await requestCookies()).set(PENDING_COOKIE, await sign(pending), cookieOptions(TTL_SECONDS));
   return { required: true as const };
 }
 
@@ -142,17 +142,17 @@ export async function grantFreshStepUp(pending: PendingStepUp, evidence: { facto
   const authority: FreshStepUp = { action: pending.action, applicationId: pending.applicationId,
     factorId: evidence.factorId, method: evidence.method, role: pending.role, sessionId: pending.sessionId,
     sessionVersion: pending.sessionVersion, subjectId: pending.subjectId, transactionId: pending.transactionId };
-  const store = await cookies();
+  const store = await requestCookies();
   store.set(AUTHORITY_COOKIE, await sign(authority), cookieOptions(TTL_SECONDS));
   store.delete(PENDING_COOKIE);
 }
 
 export async function consumeFreshStepUp() {
-  (await cookies()).delete(AUTHORITY_COOKIE);
+  (await requestCookies()).delete(AUTHORITY_COOKIE);
 }
 
 export async function clearStepUpEvidence() {
-  const store = await cookies();
+  const store = await requestCookies();
   store.delete(PENDING_COOKIE);
   store.delete(AUTHORITY_COOKIE);
 }
