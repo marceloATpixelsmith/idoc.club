@@ -39,7 +39,7 @@ test('live recovery remains constrained through replacement and acknowledgement'
   await expect(page).toHaveURL(/\/mfa$/);
   await page.getByLabel('Recovery code').fill(E2E_RECOVERY_CODE);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Set up authenticator')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Set up authenticator' })).toBeVisible();
 
   const afterRecovery = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
   expect(afterRecovery[0].count).toBe(before[0].count);
