@@ -1,4 +1,4 @@
-import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -7,10 +7,11 @@ import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 import { startGoogleMockIdp } from './google-mock-idp';
 
-const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'super-administrator'] as const;
+const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'recovery-administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
 
 export const E2E_TOTP_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+export const E2E_RECOVERY_CODE = 'A1B2C3D4-E5F60718-192A3B4C-5D6E7F80';
 
 // Mirrors lib/auth/mfa/totp.ts's encryptTotpSecret serialization exactly (keyId.iv.tag.ciphertext,
 // AES-256-GCM, all base64url) without importing that module: Playwright 1.55's CommonJS-compatible
@@ -53,14 +54,19 @@ export default async function globalSetup() {
       await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
         values(${profile.id},${name === 'expired' ? 'expired' : 'active'},'2025-01-01',${name === 'expired' ? '2025-12-31' : '2099-12-31'},'migration')`;
     }
-    if (name === 'administrator' || name === 'super-administrator') {
-      await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'administrator' ? 'administrator' : 'super_admin'},${user.id})`;
+    if (name === 'administrator' || name === 'recovery-administrator' || name === 'super-administrator') {
+      await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'super-administrator' ? 'super_admin' : 'administrator'},${user.id})`;
       // Mandatory MFA requires an active TOTP factor before any privileged flow (including WebAuthn
       // registration, which requires this as its fallback) can be exercised; the raw secret is fixed
       // and exported so specs can compute a valid current code without re-deriving it from the DB.
       const encryptedSecret = encryptE2eTotpSecret(E2E_TOTP_SECRET, 'e2e-v1', Buffer.from('uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw', 'base64url'));
       await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id,activated_at)
         values(${randomUUID()},${user.id},'idoc.club','totp','active',${encryptedSecret},'e2e-v1',now())`;
+      const recoveryDigest = createHmac('sha256', Buffer.from('zaoDYF2rFZXfbool4YgF40tqjFyibcoukUB8Q13y1Nc', 'base64url'))
+        .update(E2E_RECOVERY_CODE.replace(/[^A-Z0-9]/g, ''), 'utf8').digest('base64url');
+      await sql`insert into idoc.mfa_recovery_codes
+        (recovery_code_id,user_id,application_id,generation_id,digest)
+        values(${randomUUID()},${user.id},'idoc.club',${randomUUID()},${recoveryDigest})`;
     }
     const now = new Date();
     const sessionId = randomUUID();
