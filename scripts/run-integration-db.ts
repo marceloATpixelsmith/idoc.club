@@ -36,6 +36,8 @@ export async function runSuite(url: string, environment = process.env) {
   await run(process.execPath, [
     '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
     '--import',
+    './tests/register-next-navigation-test-hook.mjs',
+    '--import',
     'tsx',
     '--conditions=react-server',
     '--test',
