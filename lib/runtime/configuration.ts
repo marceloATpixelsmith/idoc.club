@@ -127,6 +127,38 @@ function rememberedTotpDeviceConfiguration(environment: Environment) {
   return { days, digestSecret: base64Key(environment, 'MFA_REMEMBERED_DEVICE_DIGEST_KEY') as Buffer | null, enabled: true };
 }
 
+// AUTH-SECRET-003: distinguishes "compromised" from "removed" for a TOTP key ID. Removing a key ID
+// from MFA_TOTP_ENCRYPTION_KEYS entirely is all-or-nothing -- every factor still encrypted under it
+// becomes permanently undecryptable, locking those users out with no recovery path but support
+// intervention. Marking a key compromised instead keeps its material in the ring (so this fail-closed
+// validation and any future migration tooling can still see it) while resolveMfaEncryptionKey
+// (lib/auth/mfa/totp.ts) refuses to use it for decryption, giving affected users a controlled
+// "re-enroll" outcome instead of an opaque failure, and giving operators a dedicated audit trail
+// (AUTH-OPERATIONS-004-style auth_security_notification_outbox/audit_log entries, written at the
+// call sites in app/(login)/mfa/actions.ts and app/(login)/recover-password/actions.ts) for exactly
+// when a since-compromised key was actually presented for use, not just when it was retired.
+function compromisedMfaKeyIds(environment: Environment, encryptionKeys: Map<string, Buffer>, activeKeyId: string): Set<string> {
+  const raw = environment.MFA_TOTP_COMPROMISED_KEY_IDS?.trim();
+  if (!raw) return new Set();
+  let serialized: unknown;
+  try { serialized = JSON.parse(raw); } catch {
+    throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+  }
+  if (!Array.isArray(serialized) || serialized.some((value) => typeof value !== 'string')) {
+    throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+  }
+  const compromisedKeyIds = new Set(serialized as string[]);
+  // A key ID absent from the ring is meaningless to mark compromised (likely an operator typo) and
+  // the active key can never be compromised -- it is, by definition, the key new encryptions still
+  // trust; an operator marking it compromised must rotate MFA_TOTP_ACTIVE_KEY_ID to a different ring
+  // entry first. Both fail closed rather than silently doing nothing.
+  for (const keyId of compromisedKeyIds) {
+    if (!encryptionKeys.has(keyId)) throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+  }
+  if (compromisedKeyIds.has(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+  return compromisedKeyIds;
+}
+
 /** Server-only cryptographic material for the live canonical MFA flow. */
 export function mfaConfiguration(environment: Environment = process.env) {
   const activeKeyId = required(environment, 'MFA_TOTP_ACTIVE_KEY_ID');
@@ -154,8 +186,10 @@ export function mfaConfiguration(environment: Environment = process.env) {
     encryptionKeys.set(keyId, key);
   }
   if (!encryptionKeys.has(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_ACTIVE_KEY_ID.');
+  const compromisedKeyIds = compromisedMfaKeyIds(environment, encryptionKeys, activeKeyId);
   return {
     activeKeyId,
+    compromisedKeyIds,
     continuationKey: base64Key(environment, 'MFA_PENDING_AUTH_SIGNING_KEY'),
     encryptionKeys,
     recoveryDigestKey: base64Key(environment, 'MFA_RECOVERY_CODE_DIGEST_KEY'),

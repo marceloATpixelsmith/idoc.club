@@ -17,7 +17,8 @@ import { consumeRecoveryCodeWithEvidence } from '@/lib/auth/mfa/recovery-securit
 import { finalizeAuthenticatorReplacement } from '@/lib/auth/mfa/replacement-finalization';
 import { finalizeInitialAuthenticatorEnrollment } from '@/lib/auth/mfa/enrollment-finalization';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { beginTotpEnrollment, decryptTotpSecret, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
+import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, resolveMfaEncryptionKey, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
+import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
@@ -43,9 +44,16 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   if (!context) return { error: 'Your verification session expired. Try the action again.' };
   if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many attempts. Try again later.' };
   const config = mfaConfiguration();
-  const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'step-up',
-    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
-    store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+  let result;
+  try {
+    result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'step-up',
+      resolveKey: (keyId) => resolveMfaEncryptionKey(config, keyId),
+      store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+  } catch (error) {
+    if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    await auditCompromisedMfaKeyRejection(String(context.user.id), error.keyId);
+    return { error: 'This authenticator can no longer be used. Contact support to replace it.' };
+  }
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
@@ -105,9 +113,16 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
   if (!(await allowed(context.user.id, 'mfa_login_verify'))) return { error: 'Too many attempts. Sign in again later.' };
   const config = mfaConfiguration();
-  const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'login',
-    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
-    store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+  let result;
+  try {
+    result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'login',
+      resolveKey: (keyId) => resolveMfaEncryptionKey(config, keyId),
+      store: mfaStore, subjectId: String(context.user.id), transactionId: context.pending.transactionId });
+  } catch (error) {
+    if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    await auditCompromisedMfaKeyRejection(String(context.user.id), error.keyId);
+    return failAndRestart('This authenticator can no longer be used. Contact support to replace it.');
+  }
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
   if (result.status !== 'accepted') return failAndRestart(result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Sign in again.' : 'Your verification session expired. Sign in again.');
@@ -189,7 +204,7 @@ export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }
   if (!context) return failAndRestart('Your setup session expired. Sign in again.');
   if (!(await allowed(context.user.id, 'mfa_enrollment_confirm'))) return { error: 'Too many attempts. Sign in again later.' };
   const config = mfaConfiguration();
-  const resolveKey = (keyId: string) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; };
+  const resolveKey = (keyId: string) => resolveMfaEncryptionKey(config, keyId);
   const nowMs = Date.now();
 
   const enrollment = await mfaStore.getPendingTotpEnrollment({
@@ -201,7 +216,14 @@ export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }
     enrollment.enrollment.consumedAtMs !== null || enrollment.enrollment.expiresAtMs <= nowMs) {
     return failAndRestart('Your setup session expired. Sign in again.');
   }
-  const acceptedCounter = verifyTotpCode(decryptTotpSecret(enrollment.factor.encryptedSecret, resolveKey), code, nowMs);
+  let acceptedCounter;
+  try {
+    acceptedCounter = verifyTotpCode(decryptTotpSecret(enrollment.factor.encryptedSecret, resolveKey), code, nowMs);
+  } catch (error) {
+    if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    await auditCompromisedMfaKeyRejection(String(context.user.id), error.keyId);
+    return failAndRestart('This authenticator can no longer be used. Contact support to replace it.');
+  }
   if (acceptedCounter === null) return { error: 'That authenticator code is incorrect.' };
 
   const recovery = prepareRecoveryCodes({ applicationId: MFA_APPLICATION_ID,

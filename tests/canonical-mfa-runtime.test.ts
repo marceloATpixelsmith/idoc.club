@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import {
+  CompromisedMfaKeyError,
   decideMfa,
   decryptTotpSecret,
   digestRecoveryCode,
   encryptTotpSecret,
   generateRecoveryCode,
   generateTotpSecret,
+  resolveMfaEncryptionKey,
   sensitiveActionRequiresFreshStepUp,
   totpProvisioningUri,
   verifyActiveTotp,
@@ -168,6 +170,33 @@ test('TOTP secrets are encrypted with authenticated encryption and key IDs', () 
     assert.equal(keyId, 'v1');
     return key;
   }), 'JBSWY3DPEHPK3PXP');
+});
+
+test('AUTH-SECRET-003: resolveMfaEncryptionKey rejects a compromised key distinctly from an unavailable one', () => {
+  const key = Buffer.alloc(32, 7);
+  const config = { encryptionKeys: new Map([['v1', key], ['v2-compromised', Buffer.alloc(32, 8)]]),
+    compromisedKeyIds: new Set(['v2-compromised']) };
+  assert.deepEqual(resolveMfaEncryptionKey(config, 'v1'), key);
+  assert.throws(() => resolveMfaEncryptionKey(config, 'v2-compromised'), (error: unknown) => {
+    assert.ok(error instanceof CompromisedMfaKeyError);
+    assert.equal(error.keyId, 'v2-compromised');
+    return true;
+  });
+  assert.throws(() => resolveMfaEncryptionKey(config, 'never-existed'), (error: unknown) => {
+    assert.ok(!(error instanceof CompromisedMfaKeyError), 'an unknown key ID is a config-shape problem, not a compromise');
+    return /MFA key unavailable/.test(String(error));
+  });
+});
+
+test('AUTH-SECRET-003: a compromised key still blocks decryption end to end through decryptTotpSecret', () => {
+  const compromisedKey = Buffer.alloc(32, 8);
+  const encrypted = encryptTotpSecret('JBSWY3DPEHPK3PXP', { keyId: 'v2-compromised', key: compromisedKey });
+  const config = { encryptionKeys: new Map([['v2-compromised', compromisedKey]]),
+    compromisedKeyIds: new Set(['v2-compromised']) };
+  assert.throws(
+    () => decryptTotpSecret(encrypted, (keyId) => resolveMfaEncryptionKey(config, keyId)),
+    CompromisedMfaKeyError,
+  );
 });
 
 test('recovery codes carry the canonical 128 bits of random material and normalize safely', () => {

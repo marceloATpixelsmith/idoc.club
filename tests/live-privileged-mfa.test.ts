@@ -84,6 +84,39 @@ test('MFA crypto configuration fails closed without or with malformed keys', () 
     MFA_TOTP_ACTIVE_KEY_ID: 'v1', MFA_TOTP_ENCRYPTION_KEYS: '{"v1":"bad"}' }), /MFA_TOTP_ENCRYPTION_KEYS/);
 });
 
+test('AUTH-SECRET-003: every production TOTP decrypt call site routes through the shared compromised-key check and audits a rejection', () => {
+  const actions = source('app/(login)/mfa/actions.ts');
+  const recoverPassword = source('app/(login)/recover-password/actions.ts');
+  const totp = source('lib/auth/mfa/totp.ts');
+  const audit = source('lib/auth/mfa/compromised-key-audit.ts');
+
+  // Not one production call site is allowed to still build its own inline resolveKey closure --
+  // that was exactly how three of these four call sites had zero compromised-key check before this
+  // pull request.
+  assert.doesNotMatch(actions, /const key = config\.encryptionKeys\.get\(keyId\); if \(!key\)/);
+  assert.doesNotMatch(recoverPassword, /const key = config\.encryptionKeys\.get\(keyId\); if \(!key\)/);
+  const resolveKeyCallSites = [...actions.matchAll(/resolveMfaEncryptionKey\(config, keyId\)/g)].length;
+  assert.equal(resolveKeyCallSites, 3, 'verifyStepUpTotp, verifyLoginTotp, and confirmTotpEnrollment');
+  assert.match(recoverPassword, /resolveMfaEncryptionKey\(config, keyId\)/);
+
+  // Every one of those four call sites must catch CompromisedMfaKeyError and audit it -- never let it
+  // propagate as an uncaught 500, and never silently swallow it without a record.
+  // [\s\S]*? (not \s*) between the guard and the audit call, non-greedy: the guard is always
+  // immediately followed by the audit call, but an explanatory comment (e.g. the neutral-error
+  // rationale at the recover-password call site) may legitimately sit between them.
+  const catchCompromised = /catch \(error\) \{\s*if \(!\(error instanceof CompromisedMfaKeyError\)\) throw error;[\s\S]*?await auditCompromisedMfaKeyRejection\(/g;
+  assert.equal([...actions.matchAll(catchCompromised)].length, 3);
+  assert.equal([...recoverPassword.matchAll(catchCompromised)].length, 1);
+
+  // resolveMfaEncryptionKey itself must reject a compromised key before ever falling through to the
+  // "unavailable" branch, and never touch the database (kept synchronous, matching
+  // decryptTotpSecret's own contract) -- the audit write happens only at the call sites above.
+  const resolver = totp.slice(totp.indexOf('export function resolveMfaEncryptionKey'));
+  assert.ok(resolver.indexOf('compromisedKeyIds.has(keyId)') < resolver.indexOf('encryptionKeys.get(keyId)'));
+  assert.doesNotMatch(resolver.slice(0, resolver.indexOf('\n}')), /await|db\.|sql`/);
+  assert.match(audit, /auth\.mfa\.compromised_key_rejected/);
+});
+
 test('AUTH-REMEMBER-001: beginPrimaryMfa only reads MFA config/the remembered-device cookie for roles that could need TOTP, and feeds the real verification result to the shared decision, not a hardcoded false', () => {
   const login = source('lib/auth/mfa/login.ts');
   assert.match(login, /roleRequiresTotp\('privileged-users', role\)/);

@@ -17,7 +17,8 @@ import { authorizePendingPasswordReset, clearPendingPasswordReset, getPendingPas
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { verifyActiveTotp } from '@/lib/auth/mfa/totp';
+import { CompromisedMfaKeyError, resolveMfaEncryptionKey, verifyActiveTotp } from '@/lib/auth/mfa/totp';
+import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -104,9 +105,21 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
     return { error: 'Too many attempts. Please try again in a few minutes.' };
   }
   const config = mfaConfiguration();
-  const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'password-reset',
-    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
-    store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
+  let result;
+  try {
+    result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'password-reset',
+      resolveKey: (keyId) => resolveMfaEncryptionKey(config, keyId),
+      store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
+  } catch (error) {
+    if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    // Codex review finding: this unauthenticated password-recovery boundary must stay neutral like
+    // every other unresolved-code path here (unknown/member/missing-factor/ordinary-invalid) --
+    // returning a distinct "contact support" message would leak that this account exists, is
+    // privileged, and specifically that its TOTP key is compromised, contrary to docs/05's neutral-
+    // recovery requirements. Audit the rejection, but never let its message differ from theirs.
+    await auditCompromisedMfaKeyRejection(String(pending.subjectId), error.keyId);
+    return neutralVerificationError;
+  }
   if (result.status !== 'accepted') {
     if (result.status === 'attempts-exhausted' || result.status === 'invalid-transaction') await clearPendingPasswordReset();
     return neutralVerificationError;
