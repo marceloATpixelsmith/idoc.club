@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 // Keep this import Node-resolvable as well as bundler-resolvable, matching lib/auth/turnstile.ts:
 // unit tests execute this module directly under Node's ESM resolver without the Next.js @/* alias.
-import { authSecretForServer } from '../runtime/configuration.ts';
+import { authSecretRingForServer } from '../runtime/configuration.ts';
 import 'server-only';
 
 /**
@@ -17,7 +17,11 @@ export const PRODUCTION_SESSION_COOKIE_NAME = '__Host-idoc-session';
 export const DEVELOPMENT_SESSION_COOKIE_NAME = 'idoc-session';
 export const LEGACY_SESSION_COOKIE_NAME = 'session';
 
-const signingKey = () => new TextEncoder().encode(authSecretForServer());
+// The active (index 0) key signs every new token. All keys in the ring are accepted for
+// verification, so a rotation that retires an old AUTH_SECRET into AUTH_SECRET_RETIRED_KEYS does not
+// invalidate sessions already signed under it -- see authSecretRingForServer's doc comment.
+const signingKey = () => new TextEncoder().encode(authSecretRingForServer()[0]);
+const verificationKeys = () => authSecretRingForServer().map((key) => new TextEncoder().encode(key));
 
 export type SessionData = {
   version: 2;
@@ -132,8 +136,16 @@ export async function signToken(payload: SessionData) {
 }
 
 export async function verifyToken(input: string, now = new Date()) {
-  const { payload } = await jwtVerify(input, signingKey(), { algorithms: ['HS256'] });
-  const session = normalizeSessionPayload(payload as Record<string, unknown>);
-  assertSessionFresh(session, now);
-  return session;
+  let lastError: unknown;
+  for (const key of verificationKeys()) {
+    try {
+      const { payload } = await jwtVerify(input, key, { algorithms: ['HS256'] });
+      const session = normalizeSessionPayload(payload as Record<string, unknown>);
+      assertSessionFresh(session, now);
+      return session;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Invalid session token.');
 }

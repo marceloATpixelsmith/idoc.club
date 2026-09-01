@@ -127,6 +127,54 @@ test('a malformed (non-JWT) token is rejected', async () => {
   await assert.rejects(() => verifyToken(''));
 });
 
+// --- AUTH-CRYPTO-005: AUTH_SECRET rotation overlap, not a hard cutover -------------------------
+
+test('a session signed under a retired AUTH_SECRET still verifies once that value moves into AUTH_SECRET_RETIRED_KEYS', async () => {
+  const originalSecret = process.env.AUTH_SECRET;
+  const originalRetired = process.env.AUTH_SECRET_RETIRED_KEYS;
+  try {
+    process.env.AUTH_SECRET = 'pre-rotation-32-byte-secret-value';
+    const authenticatedAt = new Date();
+    const session = freshSession({}, authenticatedAt);
+    const tokenSignedBeforeRotation = await signToken(session);
+
+    // Rotate: the old value moves to the retired list, a new value becomes active.
+    process.env.AUTH_SECRET = 'post-rotation-32-byte-secret-val';
+    process.env.AUTH_SECRET_RETIRED_KEYS = JSON.stringify(['pre-rotation-32-byte-secret-value']);
+
+    const verified = await verifyToken(tokenSignedBeforeRotation, authenticatedAt);
+    assert.deepEqual(verified, session);
+
+    // A freshly signed token now uses the new active key alone, and would fail to verify if the
+    // retired key were somehow still used for signing (it is not).
+    const tokenSignedAfterRotation = await signToken(freshSession({}, authenticatedAt));
+    delete process.env.AUTH_SECRET_RETIRED_KEYS;
+    await assert.doesNotReject(() => verifyToken(tokenSignedAfterRotation, authenticatedAt));
+  } finally {
+    process.env.AUTH_SECRET = originalSecret;
+    if (originalRetired === undefined) delete process.env.AUTH_SECRET_RETIRED_KEYS;
+    else process.env.AUTH_SECRET_RETIRED_KEYS = originalRetired;
+  }
+});
+
+test('once a retired AUTH_SECRET is dropped from AUTH_SECRET_RETIRED_KEYS entirely, tokens signed under it are rejected again (hard-cutover option preserved)', async () => {
+  const originalSecret = process.env.AUTH_SECRET;
+  const originalRetired = process.env.AUTH_SECRET_RETIRED_KEYS;
+  try {
+    process.env.AUTH_SECRET = 'to-be-fully-retired-32-byte-value';
+    const authenticatedAt = new Date();
+    const token = await signToken(freshSession({}, authenticatedAt));
+
+    process.env.AUTH_SECRET = 'entirely-different-32-byte-value!';
+    delete process.env.AUTH_SECRET_RETIRED_KEYS;
+    await assert.rejects(() => verifyToken(token, authenticatedAt));
+  } finally {
+    process.env.AUTH_SECRET = originalSecret;
+    if (originalRetired === undefined) delete process.env.AUTH_SECRET_RETIRED_KEYS;
+    else process.env.AUTH_SECRET_RETIRED_KEYS = originalRetired;
+  }
+});
+
 test('a token signed with a different secret is rejected (invalid signature)', async () => {
   const authenticatedAt = new Date('2026-01-01T00:00:00.000Z');
   const payload = freshSession({}, authenticatedAt);

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   accountDeliveryConfiguration,
   authSecretForServer,
+  authSecretRingForServer,
   baseUrlForServer,
   databaseUrlForServer,
   loginDeviceTrustDigestKeyForServer,
@@ -57,6 +58,7 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
   assert.throws(() => baseUrlForServer({ BASE_URL: 'http://localhost:3000', NODE_ENV: 'production' }), /BASE_URL/);
   assert.throws(() => baseUrlForServer({ BASE_URL: 'http://idoc.club', NODE_ENV: 'development' }), /BASE_URL/);
   assert.throws(() => authSecretForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
+  assert.throws(() => authSecretRingForServer({ AUTH_SECRET: 'supplied-secret-value' }), /AUTH_SECRET/);
   assert.throws(() => loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: 'short' }), /LOGIN_DEVICE_TRUST_DIGEST_KEY/);
   assert.equal(loginDeviceTrustDigestKeyForServer({ LOGIN_DEVICE_TRUST_DIGEST_KEY: Buffer.alloc(32, 4).toString('base64url') }).length, 32);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: 'sk_fake_value' }), /STRIPE_SECRET_KEY/);
@@ -86,6 +88,26 @@ test('key rings reject malformed mappings and require the active version', () =>
     { ACCOUNT_DELIVERY_KEY_VERSION: 'current', ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ old: 'x'.repeat(32) }) },
     { ACCOUNT_DELIVERY_KEY_VERSION: 'current', ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ current: 'short' }) },
   ]) assert.throws(() => accountDeliveryConfiguration(environment), /ACCOUNT_DELIVERY/);
+});
+
+test('AUTH-CRYPTO-005: the AUTH_SECRET ring is a single-key hard-cutover by default and never demands its own variable when unset', () => {
+  assert.deepEqual(authSecretRingForServer({ AUTH_SECRET: 'a'.repeat(32) }), ['a'.repeat(32)]);
+  assert.deepEqual(authSecretRingForServer({ AUTH_SECRET: 'a'.repeat(32), AUTH_SECRET_RETIRED_KEYS: '   ' }), ['a'.repeat(32)]);
+});
+
+test('AUTH-CRYPTO-005: retired AUTH_SECRET values remain valid for verification, active key always first, duplicates collapsed', () => {
+  const environment = {
+    AUTH_SECRET: 'a'.repeat(32),
+    AUTH_SECRET_RETIRED_KEYS: JSON.stringify(['b'.repeat(32), 'a'.repeat(32), 'c'.repeat(32)]),
+  };
+  assert.deepEqual(authSecretRingForServer(environment), ['a'.repeat(32), 'b'.repeat(32), 'c'.repeat(32)]);
+});
+
+test('AUTH-CRYPTO-005: a malformed or undersized AUTH_SECRET_RETIRED_KEYS fails closed', () => {
+  const base = { AUTH_SECRET: 'a'.repeat(32) };
+  for (const AUTH_SECRET_RETIRED_KEYS of ['{', '{}', '"not-an-array"', JSON.stringify(['short']), JSON.stringify([1])]) {
+    assert.throws(() => authSecretRingForServer({ ...base, AUTH_SECRET_RETIRED_KEYS }), /AUTH_SECRET_RETIRED_KEYS/);
+  }
 });
 
 test('the Mailchimp Transactional API key is accepted at its real, shorter length and only rejected when actually blank or missing', () => {
