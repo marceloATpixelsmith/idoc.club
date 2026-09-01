@@ -594,6 +594,15 @@ No migration. No route or UI change.
 
 No database migration. No route or UI change.
 
+## 8z. Close AUTH-CRYPTO-005's remaining gap with a live two-key TOTP-ring integration test (this revision)
+
+`docs/22`'s `AUTH-CRYPTO-005` row had one gap left after the two pull requests above: no integration test built a real two-entry TOTP key ring via `mfaConfiguration()` and proved an old-key-encrypted factor still decrypts (and authenticates) while a *different* key is active -- only unit-level `resolveKey` plumbing was tested.
+
+1. **`tests/totp-key-ring.integration.ts` (new).** Two real-Postgres tests. The first builds a two-entry ring (`v1`, `v2`) via `mfaConfiguration()`, persists a factor encrypted under `v1` while `v1` is the active key, then rebuilds the configuration with `v2` as the new active key (both keys still present -- a routine, additive rotation) and drives the actual production `verifyActiveTotp` function (the one `app/(login)/mfa/actions.ts`'s login and step-up call sites use, via `resolveMfaEncryptionKey`) to prove the `v1`-encrypted factor still authenticates. It also confirms a value from the ring's active key, not the retired one, would be used for any new encryption. The second test proves the contrasting case: removing a key from the ring **entirely** (not merely retiring it) fails closed with the pre-existing "MFA key unavailable" error, distinct from `CompromisedMfaKeyError` -- the two failure modes this stage's earlier pull request deliberately kept separate.
+2. **docs/22** (`AUTH-CRYPTO-005` moved to `verified` -- its only remaining gap is now closed; summary-counts table and both "most consequential gaps" lists updated). **docs/23** (`AUTH-CRYPTO-005` row removed -- it is `verified` and no longer belongs in the non-verified backlog; its Slice 5 grouping list updated to drop it).
+
+No database migration. No route or UI change.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
