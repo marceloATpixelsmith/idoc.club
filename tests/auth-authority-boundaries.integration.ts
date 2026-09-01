@@ -96,23 +96,33 @@ async function redirected(operation: () => Promise<unknown>) {
 }
 
 test('AUTH-IDENTITY-002: real signup action ignores hostile authority fields and creates no privileged grant', async () => {
-  for (const authority of [
-    ['role', 'administrator'], ['role', 'super_admin'], ['applicationRole', 'administrator'],
-    ['applicationRole', 'super_admin'], ['isAdmin', 'true'], ['actorId', '1'],
-  ]) {
-    const cookies = new TestCookies();
-    const email = `hostile-${authority[0]}-${authority[1]}@example.test`;
-    await withTestRequestCookies(cookies, async () => {
-      await startPendingSignup(email);
-      await markPendingSignupVerified(email);
-      const form = new FormData();
-      form.set('password', password);
-      form.set(authority[0], authority[1]);
-      await redirected(() => completeSignup({}, form));
-    });
-    const [created] = await sql`select id,role from idoc.users where email=${email}`;
-    assert.equal(created.role, 'member');
-    assert.equal((await sql`select count(*)::int count from idoc.application_roles where user_id=${created.id}`)[0].count, 0);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.startsWith('https://api.pwnedpasswords.com/range/')) return new Response('', { status: 200 });
+    return originalFetch(input, init);
+  };
+  try {
+    for (const authority of [
+      ['role', 'administrator'], ['role', 'super_admin'], ['applicationRole', 'administrator'],
+      ['applicationRole', 'super_admin'], ['isAdmin', 'true'], ['actorId', '1'],
+    ]) {
+      const cookies = new TestCookies();
+      const email = `hostile-${authority[0]}-${authority[1]}@example.test`;
+      await withTestRequestCookies(cookies, async () => {
+        await startPendingSignup(email);
+        await markPendingSignupVerified(email);
+        const form = new FormData();
+        form.set('password', password);
+        form.set(authority[0], authority[1]);
+        await redirected(() => completeSignup({}, form));
+      });
+      const [created] = await sql`select id,role from idoc.users where email=${email}`;
+      assert.equal(created.role, 'member');
+      assert.equal((await sql`select count(*)::int count from idoc.application_roles where user_id=${created.id}`)[0].count, 0);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
