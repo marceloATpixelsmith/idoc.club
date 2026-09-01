@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
 import { resolveRequestOrigin } from './request-origin';
+import { testRequestOrigin } from '@/lib/auth/request-cookies';
 
 const WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_MAX_REQUESTS = 3;
@@ -86,6 +87,8 @@ export async function checkOriginRateLimit(purpose: string, origin: string, now:
  * entry of X-Forwarded-For (Vercel's proxy chain), falling back to X-Real-IP, then 'unknown' -- see
  * resolveRequestOrigin (./request-origin.ts) for the trust/validation rules. */
 export async function requestOrigin(): Promise<string> {
+  const isolatedOrigin = testRequestOrigin();
+  if (isolatedOrigin) return isolatedOrigin;
   const requestHeaders = await headers();
   return resolveRequestOrigin(requestHeaders.get('x-forwarded-for'), requestHeaders.get('x-real-ip'), Boolean(process.env.VERCEL));
 }

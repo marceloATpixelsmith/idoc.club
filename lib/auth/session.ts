@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { cookies } from 'next/headers';
+import { requestCookies } from '@/lib/auth/request-cookies';
 import { NewUser } from '@/lib/db/schema';
 import {
   readActiveSession,
@@ -50,7 +50,7 @@ async function registeredSessionIsValid(session: SessionData, now = new Date()) 
 }
 
 export async function getSession() {
-  const cookieStore = await cookies();
+  const cookieStore = await requestCookies();
   const canonicalValue = cookieStore.get(sessionCookieName())?.value;
   if (!canonicalValue) return null;
 
@@ -87,13 +87,13 @@ export async function setSession(user: NewUser) {
     absoluteExpiresAt: new Date(session.absoluteExpiresAt),
   });
 
-  const cookieStore = await cookies();
+  const cookieStore = await requestCookies();
   cookieStore.set(sessionCookieName(), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
 }
 
 export async function clearSession() {
-  const cookieStore = await cookies();
+  const cookieStore = await requestCookies();
   const canonicalValue = cookieStore.get(sessionCookieName())?.value;
   if (canonicalValue) {
     let session: SessionData | null = null;
