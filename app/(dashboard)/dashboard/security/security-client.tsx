@@ -22,7 +22,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
   const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
   const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
   const [replaceState, replaceAction] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
-  const [recoveryState, recoveryAction] = useActionState<RecoveryState, FormData>(regenerateRecoveryCodes, {});
+  const [recoveryState, recoveryAction, isRecoveryPending] = useActionState<RecoveryState, FormData>(regenerateRecoveryCodes, {});
   const [forgetCurrentState, forgetCurrentAction] = useActionState<PasswordState, FormData>(forgetThisDevice, {});
   const [forgetAllState, forgetAllAction] = useActionState<PasswordState, FormData>(forgetAllRememberedDevices, {});
   const [logoutOneState, logoutOneAction] = useActionState<PasswordState, FormData>(logOutSession, {});
@@ -59,7 +59,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         {recoveryState.recoveryCodes ? <><p className="text-sm font-medium">Save these codes now. They will not be shown again.</p>
           <ul aria-label="New recovery codes">{recoveryState.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
         {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><Button type="submit" variant="outline">Replace authenticator</Button></form>
-          <form action={recoveryAction}><Button type="submit" variant="outline">Generate new recovery codes</Button></form></div> : null}
+          <form action={recoveryAction}><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
       <PasskeysCard passkeys={passkeys} />
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">

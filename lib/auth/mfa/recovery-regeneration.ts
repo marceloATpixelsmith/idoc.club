@@ -10,6 +10,7 @@ function timestamp(ms: number): string {
 /** Atomically replaces a user's recovery authority without changing their authenticator. */
 export async function regenerateRecoveryCodesWithEvidence(input: {
   applicationId: string;
+  expectedSessionVersion: number;
   generationId: string;
   nowMs?: number;
   records: readonly RecoveryCodeRecord[];
@@ -23,10 +24,10 @@ export async function regenerateRecoveryCodesWithEvidence(input: {
   }
 
   return client.begin(async (tx) => {
-    const [user] = await tx<{ email: string }[]>`
-      select email from idoc.users where id=${input.userId} and deleted_at is null
+    const [user] = await tx<{ email: string; session_version: number }[]>`
+      select email,session_version from idoc.users where id=${input.userId} and deleted_at is null
         and account_state in ('active','onboarding') for update`;
-    if (!user) return 'invalid' as const;
+    if (!user || user.session_version !== input.expectedSessionVersion) return 'invalid' as const;
     const [factor] = await tx`
       select factor_id from idoc.mfa_factors where user_id=${input.userId}
         and application_id=${input.applicationId} and factor_type='totp' and status='active' for update`;

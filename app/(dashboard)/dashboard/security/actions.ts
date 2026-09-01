@@ -110,7 +110,8 @@ export const regenerateRecoveryCodes = validatedActionWithUser(emptySchema, asyn
   const prepared = prepareRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
     digestSecret: config.recoveryDigestKey, subjectId: String(user.id) });
   const result = await regenerateRecoveryCodesWithEvidence({ applicationId: MFA_APPLICATION_ID,
-    generationId: prepared.generationId, nowMs: prepared.nowMs, records: prepared.records, userId: user.id });
+    expectedSessionVersion: user.sessionVersion, generationId: prepared.generationId, nowMs: prepared.nowMs,
+    records: prepared.records, userId: user.id });
   await consumeFreshStepUp();
   if (result !== 'regenerated') return { error: 'Recovery codes could not be regenerated.' };
   refreshSecurityPage();

@@ -59,7 +59,7 @@ test('production recovery consumption has exactly one winner and secret-free evi
   const owner = await createUser();
   const stranger = await createUser();
   const recovery = codes(owner.id, randomUUID(), 'raw-code-must-not-appear');
-  await regenerateRecoveryCodesWithEvidence({ applicationId, generationId: recovery.generationId,
+  await regenerateRecoveryCodesWithEvidence({ applicationId, expectedSessionVersion: 0, generationId: recovery.generationId,
     records: recovery.records, userId: owner.id }).then((result) => assert.equal(result, 'invalid'));
   await sql`insert into idoc.mfa_recovery_codes(recovery_code_id,user_id,application_id,generation_id,digest)
     values(${recovery.records[0].recoveryCodeId},${owner.id},${applicationId},${recovery.generationId},${recovery.records[0].digest})`;
@@ -101,10 +101,15 @@ test('standalone production regeneration atomically replaces the generation and 
   await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id)
     values(${randomUUID()},${owner.id},${applicationId},'totp','active','encrypted','v1')`;
   const old = codes(owner.id, randomUUID(), 'old');
-  assert.equal(await regenerateRecoveryCodesWithEvidence({ applicationId, generationId: old.generationId,
+  assert.equal(await regenerateRecoveryCodesWithEvidence({ applicationId, expectedSessionVersion: 0, generationId: old.generationId,
     records: old.records, userId: owner.id }), 'regenerated');
+  await sql`update idoc.users set session_version=1 where id=${owner.id}`;
+  const stale = codes(owner.id, randomUUID(), 'stale');
+  assert.equal(await regenerateRecoveryCodesWithEvidence({ applicationId, expectedSessionVersion: 0, generationId: stale.generationId,
+    records: stale.records, userId: owner.id }), 'invalid');
+  await sql`update idoc.users set session_version=0 where id=${owner.id}`;
   const next = codes(owner.id, randomUUID(), 'new');
-  assert.equal(await regenerateRecoveryCodesWithEvidence({ applicationId, generationId: next.generationId,
+  assert.equal(await regenerateRecoveryCodesWithEvidence({ applicationId, expectedSessionVersion: 0, generationId: next.generationId,
     records: next.records, userId: owner.id }), 'regenerated');
   const rows = await sql<{ digest: string; generation_id: string }[]>`select digest,generation_id from idoc.mfa_recovery_codes where user_id=${owner.id}`;
   assert.equal(rows.length, 3);
