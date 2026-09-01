@@ -268,22 +268,29 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
 
   await t.test('action and session binding reject otherwise-valid authority', async () => {
     await resetIdoc();
-    const fixture = await privilegedTotpUser();
-    const cookies = new TestCookies();
-    await withTestRequestCookies(cookies, async () => {
-      await setSession(fixture.user);
-      await fulfilledStepUp(cookies, fixture.user, fixture.secret, 'change-security-settings');
-      const before = await recoveryCodeCount(fixture.user.id);
-      await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
-        .then(() => assert.fail('wrong-action authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
-      assert.equal(await recoveryCodeCount(fixture.user.id), before);
 
-      await fulfilledStepUp(cookies, fixture.user, fixture.secret);
-      await setSession(fixture.user);
-      await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+    const actionFixture = await privilegedTotpUser();
+    const actionCookies = new TestCookies();
+    await withTestRequestCookies(actionCookies, async () => {
+      await setSession(actionFixture.user);
+      await fulfilledStepUp(actionCookies, actionFixture.user, actionFixture.secret, 'change-security-settings');
+      const before = await recoveryCodeCount(actionFixture.user.id);
+      await actorBoundary(actionFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+        .then(() => assert.fail('wrong-action authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.equal(await recoveryCodeCount(actionFixture.user.id), before);
+    }, 'step-up-action-binding.example.test');
+
+    const sessionFixture = await privilegedTotpUser();
+    const sessionCookies = new TestCookies();
+    await withTestRequestCookies(sessionCookies, async () => {
+      await setSession(sessionFixture.user);
+      await fulfilledStepUp(sessionCookies, sessionFixture.user, sessionFixture.secret);
+      const before = await recoveryCodeCount(sessionFixture.user.id);
+      await setSession(sessionFixture.user);
+      await actorBoundary(sessionFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
         .then(() => assert.fail('different-session authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
-      assert.equal(await recoveryCodeCount(fixture.user.id), before);
-    }, 'step-up-binding.example.test');
+      assert.equal(await recoveryCodeCount(sessionFixture.user.id), before);
+    }, 'step-up-session-binding.example.test');
   });
 
   await t.test('sessionVersion, role, expiry, remembered-device, cross-user, and forged fields fail closed', async () => {
