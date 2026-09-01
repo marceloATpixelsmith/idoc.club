@@ -75,8 +75,8 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 105 | 67.7% |
-| implemented-but-unverified | 28 | 18.1% |
+| verified | 110 | 71.0% |
+| implemented-but-unverified | 23 | 14.8% |
 | partial | 15 | 9.7% |
 | missing | 0 | 0.0% |
 | not-applicable | 7 | 4.5% |
