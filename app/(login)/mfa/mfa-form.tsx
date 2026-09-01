@@ -10,7 +10,7 @@ import {
 } from './actions';
 
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
-type Mode = 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'step-up';
+type Mode = 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack' | 'step-up';
 
 function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   const [error, setError] = useState<string>();
@@ -63,6 +63,13 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
       <ul aria-label="Recovery codes">{state.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
       <label><input name="saved" required type="checkbox" value="yes" /> I saved my recovery codes.</label>
       <button className="idoc-auth-button" disabled={acknowledging} type="submit">Finish sign in</button>
+    </form>
+  );
+  if (mode === 'recovery-ack') return (
+    <form action={cancel} className="idoc-auth-form">
+      <p className="idoc-auth-error" role="alert">The one-time recovery-code display is no longer available. Sign in again with your new authenticator, then generate a fresh recovery-code set from account security.</p>
+      <input name="cancel" type="hidden" value="yes" />
+      <button className="idoc-auth-button" type="submit">Sign in again</button>
     </form>
   );
   if (mode === 'recovery-entry') return (
