@@ -18,7 +18,6 @@ export default async function MfaPage() {
     return <AuthShell description="Enter the current 6-digit code from your authenticator app to continue."
       title="Verify it's you"><MfaForm hasWebAuthn={stepUp.hasWebAuthn} mode="step-up" /></AuthShell>;
   }
-  if (pending.stage === 'recovery-ack') redirect('/sign-in');
   let provisioningUri: string | undefined;
   if (pending.stage === 'enrollment' || pending.stage === 'replacement') {
     const enrollment = await mfaStore.getPendingTotpEnrollment({ applicationId: pending.applicationId,
@@ -32,10 +31,13 @@ export default async function MfaPage() {
       }) });
   }
   const setup = pending.stage === 'enrollment' || pending.stage === 'replacement';
+  const recoveryAck = pending.stage === 'recovery-ack';
   const rememberedDevice = pending.stage === 'challenge' ? mfaConfiguration().rememberedDevice : undefined;
   return <AuthShell description={pending.stage === 'recovery-entry' ? 'Use a saved recovery code to replace your authenticator.'
+    : recoveryAck ? 'Save the new recovery codes before finishing sign in.'
     : setup ? 'Add the new account to your authenticator app.' : 'Enter the current code from your authenticator app.'}
-    title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : setup ? 'Set up authenticator' : 'Two-step verification'}>
+    title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : recoveryAck ? 'Finish authenticator recovery'
+      : setup ? 'Set up authenticator' : 'Two-step verification'}>
     <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri}
       rememberDeviceDays={rememberedDevice?.days} rememberDeviceEnabled={rememberedDevice?.enabled} />
   </AuthShell>;
