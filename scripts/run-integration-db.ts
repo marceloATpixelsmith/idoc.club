@@ -40,7 +40,7 @@ export async function runSuite(url: string, environment = process.env) {
     '--conditions=react-server',
     '--test',
     '--test-concurrency=1',
-    '--test-reporter=dot',
+    '--test-reporter=spec',
     ...integrationTests,
   ], { ...environment, NODE_ENV: 'test', TEST_DATABASE_URL: validated });
 }
