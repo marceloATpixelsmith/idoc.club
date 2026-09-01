@@ -29,9 +29,9 @@ function totp(secret: string) {
 test('live recovery remains constrained through replacement and acknowledgement', async ({ browser }) => {
   test.setTimeout(60_000);
   const sql = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
-  const context = await browser.newContext({ storageState: '.security-e2e/administrator.json' });
+  const context = await browser.newContext({ storageState: '.security-e2e/recovery-administrator.json' });
   const page = await context.newPage();
-  const [fixture] = await sql<{ id: number }[]>`select id from idoc.users where email='administrator@security.example.test'`;
+  const [fixture] = await sql<{ id: number }[]>`select id from idoc.users where email='recovery-administrator@security.example.test'`;
   const before = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
 
   await page.goto('/dashboard/security');
@@ -46,7 +46,7 @@ test('live recovery remains constrained through replacement and acknowledgement'
   expect((await context.cookies()).some(({ name }) => name === '__Host-idoc-session')).toBe(false);
   await page.getByLabel('Authenticator code').fill('000000');
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect(page.getByRole('alert')).toContainText('incorrect');
+  await expect(page.locator('.idoc-auth-error')).toContainText('incorrect');
 
   const uri = await page.getByLabel('Authenticator setup key').inputValue();
   const replacementSecret = new URL(uri).searchParams.get('secret');
@@ -85,7 +85,7 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
     await page.getByLabel('Authenticator code').fill('000000');
     await page.getByRole('button', { name: 'Verify' }).click();
   }
-  await expect(page.getByRole('alert')).toContainText('Too many attempts');
+  await expect(page.locator('.idoc-auth-error')).toContainText('Too many attempts');
   const rows = await sql<{ purpose: string; request_count: number }[]>`select purpose,request_count from idoc.account_request_limits
     where purpose like 'mfa_%' order by purpose,request_count desc`;
   expect(rows.filter(({ purpose }) => purpose === 'mfa_step_up_verify')).toHaveLength(2);

@@ -7,7 +7,7 @@ import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 import { startGoogleMockIdp } from './google-mock-idp';
 
-const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'super-administrator'] as const;
+const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'recovery-administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
 
 export const E2E_TOTP_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -54,8 +54,8 @@ export default async function globalSetup() {
       await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
         values(${profile.id},${name === 'expired' ? 'expired' : 'active'},'2025-01-01',${name === 'expired' ? '2025-12-31' : '2099-12-31'},'migration')`;
     }
-    if (name === 'administrator' || name === 'super-administrator') {
-      await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'administrator' ? 'administrator' : 'super_admin'},${user.id})`;
+    if (name === 'administrator' || name === 'recovery-administrator' || name === 'super-administrator') {
+      await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'super-administrator' ? 'super_admin' : 'administrator'},${user.id})`;
       // Mandatory MFA requires an active TOTP factor before any privileged flow (including WebAuthn
       // registration, which requires this as its fallback) can be exercised; the raw secret is fixed
       // and exported so specs can compute a valid current code without re-deriving it from the DB.
