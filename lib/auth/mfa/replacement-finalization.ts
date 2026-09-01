@@ -3,6 +3,8 @@ import 'server-only';
 import { client } from '@/lib/db/drizzle';
 import type { RecoveryCodeRecord } from './types';
 
+const RECOVERY_ACK_TTL_MS = 10 * 60 * 1000;
+
 function timestamp(ms: number): string {
   return new Date(ms).toISOString();
 }
@@ -68,7 +70,8 @@ export async function finalizeAuthenticatorReplacement(input: {
       set revoked_at=${timestamp(nowMs)}, revoke_reason='factor_replaced'
       where factor_id=${String(activeFactor.factor_id)} and revoked_at is null`;
     await tx`update idoc.mfa_enrollment_transactions
-      set consumed_at=${timestamp(nowMs)} where transaction_id=${input.transactionId}`;
+      set consumed_at=${timestamp(nowMs)}, expires_at=${timestamp(nowMs + RECOVERY_ACK_TTL_MS)}
+      where transaction_id=${input.transactionId}`;
     await tx`update idoc.mfa_factors
       set status='active', activated_at=${timestamp(nowMs)}, last_accepted_counter=${input.acceptedCounter},
         updated_at=${timestamp(nowMs)} where factor_id=${input.factorId}`;
