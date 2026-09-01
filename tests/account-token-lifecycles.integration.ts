@@ -80,7 +80,12 @@ test('conflicting normalized registration verification email fails atomically wi
   await sql`insert into idoc.email_verification_tokens(user_id,token_hash,pending_email,expires_at)
     values(${graph.user.id},${digest(raw)},'OCCUPIED@example.test',now()+interval '1 hour')`;
   const before = await persistedGraph(graph.user.id);
-  await assert.rejects(consumeEmailVerification(raw));
+  // The conflicting existing row is 'occupied@example.test' (lowercase) and this token's
+  // pending_email is 'OCCUPIED@example.test' (uppercase, inserted directly to bypass normalizeEmail)
+  // -- an exact-match existence check misses that collision, so it is caught instead by the
+  // case-insensitive users_normalized_email_unique constraint, and consumeEmailVerification resolves
+  // to the same graceful 'invalid' outcome as any other conflicting claim, not an uncaught rejection.
+  assert.deepEqual(await consumeEmailVerification(raw), { status: 'invalid' });
   assert.deepEqual(await persistedGraph(graph.user.id), before);
   assert.equal((await sql`select consumed_at from idoc.email_verification_tokens where token_hash=${digest(raw)}`)[0].consumed_at, null);
 });
