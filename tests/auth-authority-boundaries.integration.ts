@@ -162,10 +162,10 @@ test('AUTH-MFA-004: beginPrimaryMfa composes authoritative role, factor, policy,
     await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
 
   const staleFactor = await issueRememberedCookies(privileged.id, factor.factorId);
-  await sql`update idoc.mfa_factors set status='revoked', revoked_at=now() where id=${factor.factorId}`;
+  await sql`update idoc.mfa_factors set status='revoked', revoked_at=now() where factor_id=${factor.factorId}`;
   await withTestRequestCookies(staleFactor.cookies, async () => assert.equal(
     await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
-  await sql`update idoc.mfa_factors set status='active', revoked_at=null where id=${factor.factorId}`;
+  await sql`update idoc.mfa_factors set status='active', revoked_at=null where factor_id=${factor.factorId}`;
 
   const wrongUser = await issueRememberedCookies(privileged.id, factor.factorId);
   const other = await userWithPassword();
@@ -185,7 +185,9 @@ test('AUTH-MFA-004: beginPrimaryMfa composes authoritative role, factor, policy,
 
 test('AUTH-SESSION-008: password login creates only pending MFA until a valid TOTP completes', async () => {
   const user = await userWithPassword();
-  const { secret } = await activeFactor(user);
+  // Enrollment itself consumes a TOTP counter. Enroll on the prior 30-second step so the
+  // subsequent login proves a fresh TOTP can complete MFA rather than replaying enrollment's code.
+  const { secret } = await activeFactor(user, Date.now() - 30_000);
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, async () => {
     await startPendingLogin(user.email);
