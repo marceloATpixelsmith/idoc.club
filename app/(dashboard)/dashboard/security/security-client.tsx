@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Lock, Trash2, Loader2 } from 'lucide-react';
-import { beginAuthenticatorReplacement, forgetAllRememberedDevices, forgetThisDevice, logOutOtherSessions, logOutSession } from './actions';
+import { beginAuthenticatorReplacement, forgetAllRememberedDevices, forgetThisDevice, logOutOtherSessions, logOutSession, regenerateRecoveryCodes } from './actions';
 import { Suspense, useActionState } from 'react';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
 import { GoogleIdentityCard } from './google-identity-card';
 import { PasskeysCard } from './passkeys-card';
 
 type PasswordState = { error?: string; success?: string };
+type RecoveryState = PasswordState & { recoveryCodes?: string[] };
 type DeleteState = { error?: string; success?: string };
 type Passkey = { credentialId: string; deviceName: string | null; createdAt: string; lastUsedAt: string | null };
 type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; passkeys: Passkey[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
@@ -21,6 +22,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
   const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
   const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
   const [replaceState, replaceAction] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
+  const [recoveryState, recoveryAction, isRecoveryPending] = useActionState<RecoveryState, FormData>(regenerateRecoveryCodes, {});
   const [forgetCurrentState, forgetCurrentAction] = useActionState<PasswordState, FormData>(forgetThisDevice, {});
   const [forgetAllState, forgetAllAction] = useActionState<PasswordState, FormData>(forgetAllRememberedDevices, {});
   const [logoutOneState, logoutOneAction] = useActionState<PasswordState, FormData>(logOutSession, {});
@@ -51,9 +53,13 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
 
       {privileged ? <>
       <Card className="mb-8"><CardHeader><CardTitle>Authenticator app</CardTitle></CardHeader><CardContent className="space-y-4">
-        <p className="text-sm text-gray-500">Status: {totpConfigured ? 'Configured' : 'Setup required'}. Recovery codes are one-time. New codes are issued when you replace your authenticator.</p>
+        <p className="text-sm text-gray-500">Status: {totpConfigured ? 'Configured' : 'Setup required'}. Recovery codes are one-time.</p>
         {replaceState.error ? <p className="text-sm text-red-500">{replaceState.error}</p> : null}
-        {totpConfigured ? <form action={replaceAction}><Button type="submit" variant="outline">Replace authenticator</Button></form> : null}
+        {recoveryState.error ? <p className="text-sm text-red-500">{recoveryState.error}</p> : null}
+        {recoveryState.recoveryCodes ? <><p className="text-sm font-medium">Save these codes now. They will not be shown again.</p>
+          <ul aria-label="New recovery codes">{recoveryState.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
+        {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><Button type="submit" variant="outline">Replace authenticator</Button></form>
+          <form action={recoveryAction}><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
       <PasskeysCard passkeys={passkeys} />
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">

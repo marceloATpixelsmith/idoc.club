@@ -51,7 +51,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     beginPasskeyRegistration: 'session-boundary', disconnectGoogleIdentity: 'session-boundary',
     finishPasskeyRegistration: 'session-boundary', forgetAllRememberedDevices: 'session-boundary',
     forgetThisDevice: 'session-boundary', logOutOtherSessions: 'session-boundary', logOutSession: 'session-boundary',
-    removePasskeyCredential: 'session-boundary',
+    regenerateRecoveryCodes: 'session-boundary', removePasskeyCredential: 'session-boundary',
   },
   'lib/payments/actions.ts': { checkoutAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access' },
