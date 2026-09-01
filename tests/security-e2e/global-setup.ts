@@ -67,6 +67,20 @@ export default async function globalSetup() {
     const expires = new Date(now.getTime() + 12 * 60 * 60 * 1000);
     await sql`insert into idoc.auth_sessions(session_id,user_id,session_version,authenticated_at,last_activity_at,absolute_expires_at)
       values(${sessionId},${user.id},${user.session_version},${now.toISOString()},${now.toISOString()},${expires.toISOString()})`;
+    if (name === 'member-a') {
+      const secondSessionId = randomUUID();
+      const revokedSessionId = randomUUID();
+      const expiredSessionId = randomUUID();
+      await sql`insert into idoc.auth_sessions
+        (session_id,user_id,session_version,authenticated_at,last_activity_at,absolute_expires_at,revoked_at,revoke_reason)
+        values
+        (${secondSessionId},${user.id},${user.session_version},${now.toISOString()},${now.toISOString()},${expires.toISOString()},null,null),
+        (${revokedSessionId},${user.id},${user.session_version},${now.toISOString()},${now.toISOString()},${expires.toISOString()},now(),'fixture-revoked'),
+        (${expiredSessionId},${user.id},${user.session_version},${new Date(now.getTime() - 13 * 60 * 60 * 1000).toISOString()},${now.toISOString()},${new Date(now.getTime() - 60_000).toISOString()},null,null)`;
+      await writeFile('.security-e2e/member-a-sessions.json', JSON.stringify({
+        currentSessionId: sessionId, expiredSessionId, revokedSessionId, secondSessionId, userId: user.id,
+      }));
+    }
     const token = await new SignJWT({
       version: 2,
       sessionId,
