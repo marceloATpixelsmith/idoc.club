@@ -79,7 +79,7 @@ async function activeFactor(user: { email: string; id: number }, nowMs = Date.no
   const result = await completeTotpEnrollment({ applicationId: MFA_APPLICATION_ID,
     code: generateTotpCode(secret, nowMs), factorId: enrollment.factorId, nowMs,
     resolveKey: () => encryptionKey, store, subjectId: String(user.id), transactionId: enrollment.transactionId });
-  assert.equal(result.status, 'accepted');
+  assert.equal(result.status, 'activated');
   return { factorId: enrollment.factorId, secret };
 }
 
