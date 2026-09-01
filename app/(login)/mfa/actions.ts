@@ -264,6 +264,14 @@ export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.lite
   if (!context) return failAndRestart('Your setup session expired. Sign in again.');
   const activeFactor = await mfaStore.getActiveTotp(String(context.user.id), MFA_APPLICATION_ID);
   if (!activeFactor || activeFactor.factorId !== context.pending.factorId) return failAndRestart('Your setup session expired. Sign in again.');
+  const acknowledgement = await mfaStore.consumeRecoveryAcknowledgement({
+    applicationId: MFA_APPLICATION_ID,
+    factorId: context.pending.factorId,
+    nowMs: Date.now(),
+    subjectId: String(context.user.id),
+    transactionId: context.pending.transactionId,
+  });
+  if (acknowledgement !== 'consumed') return failAndRestart('Your setup session expired. Sign in again.');
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   await setSession(context.user);

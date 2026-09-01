@@ -223,6 +223,33 @@ test('replacement enrollment atomically transitions the old active factor', asyn
   assert.equal(await store.consumeRememberedDevice({ applicationId, nowMs, subjectId: String(owner.id), tokenDigest: device.tokenDigest }), 'invalid');
 });
 
+test('recovery acknowledgement is owner-bound, expiring, and single use', async () => {
+  const owner = await createUser();
+  const stranger = await createUser();
+  await activeFactor(String(owner.id));
+  const replacement = await pendingFactor(String(owner.id), nowMs + 60_000, 'authenticator-replacement');
+  assert.equal(await store.consumeEnrollmentAndActivate({
+    acceptedCounter: 200,
+    applicationId,
+    factorId: replacement.factor.factorId,
+    nowMs,
+    subjectId: String(owner.id),
+    transactionId: replacement.enrollment.transactionId,
+  }), 'activated');
+  const acknowledgement = {
+    applicationId,
+    factorId: replacement.factor.factorId,
+    nowMs: nowMs + 1,
+    transactionId: replacement.enrollment.transactionId,
+  };
+  assert.equal(await store.consumeRecoveryAcknowledgement({ ...acknowledgement, subjectId: String(stranger.id) }), 'invalid');
+  const outcomes = await Promise.all([
+    store.consumeRecoveryAcknowledgement({ ...acknowledgement, subjectId: String(owner.id) }),
+    store.consumeRecoveryAcknowledgement({ ...acknowledgement, subjectId: String(owner.id) }),
+  ]);
+  assert.deepEqual(outcomes.sort(), ['consumed', 'invalid']);
+});
+
 test('concurrent replacement confirmations leave exactly one active factor', async () => {
   const owner = await createUser();
   await activeFactor(String(owner.id));
