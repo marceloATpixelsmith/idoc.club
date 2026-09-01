@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { validatedActionWithUser } from '@/lib/auth/middleware';
-import { comparePasswords, getSession } from '@/lib/auth/session';
+import { clearSession, comparePasswords, getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import {
   createImmediateGoogleUnlinkFreshEvidence,
@@ -97,6 +97,9 @@ export const beginAuthenticatorReplacement = validatedActionWithUser(emptySchema
   await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, hasWebAuthn: false,
     method: 'password', returnTo: '/dashboard/security', sessionVersion: user.sessionVersion,
     stage: 'recovery-entry', subjectId: user.id, transactionId });
+  // Recovery is intentionally a constrained primary-auth continuation, never an authenticated
+  // account session. Revoke the initiating session before any recovery code can be consumed.
+  await clearSession();
   redirect('/mfa');
 });
 

@@ -42,8 +42,15 @@ test('live recovery remains constrained through replacement and acknowledgement'
   await expect(page.getByRole('heading', { name: 'Set up authenticator' })).toBeVisible();
 
   const afterRecovery = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
-  expect(afterRecovery[0].count).toBe(before[0].count);
+  expect(before[0].count).toBe(1);
+  expect(afterRecovery[0].count).toBe(0);
   expect((await context.cookies()).some(({ name }) => name === '__Host-idoc-session')).toBe(false);
+  const beforeReplacementProbe = await browser.newContext();
+  await beforeReplacementProbe.addCookies((await context.cookies()).filter(({ name }) => name === 'idoc_pending_primary_mfa'));
+  const beforeReplacementPage = await beforeReplacementProbe.newPage();
+  await beforeReplacementPage.goto('/dashboard/admin');
+  await expect(beforeReplacementPage).toHaveURL(/\/sign-in/);
+  await beforeReplacementProbe.close();
   await page.getByLabel('Authenticator code').fill('000000');
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.locator('.idoc-auth-error')).toContainText('incorrect');
@@ -57,6 +64,12 @@ test('live recovery remains constrained through replacement and acknowledgement'
   const beforeAck = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
   expect(beforeAck[0].count).toBe(0);
   expect((await context.cookies()).some(({ name }) => name === 'idoc_pending_primary_mfa')).toBe(true);
+  const beforeAcknowledgementProbe = await browser.newContext();
+  await beforeAcknowledgementProbe.addCookies((await context.cookies()).filter(({ name }) => name === 'idoc_pending_primary_mfa'));
+  const beforeAcknowledgementPage = await beforeAcknowledgementProbe.newPage();
+  await beforeAcknowledgementPage.goto('/dashboard/admin');
+  await expect(beforeAcknowledgementPage).toHaveURL(/\/sign-in/);
+  await beforeAcknowledgementProbe.close();
 
   await page.getByLabel('I saved my recovery codes.').check();
   await page.getByRole('button', { name: 'Finish sign in' }).click();
