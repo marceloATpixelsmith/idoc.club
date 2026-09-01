@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
-import { E2E_RECOVERY_CODE, E2E_TOTP_SECRET } from './global-setup';
+import { E2E_RECOVERY_CODE } from './global-setup';
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
