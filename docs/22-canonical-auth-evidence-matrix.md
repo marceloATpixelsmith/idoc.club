@@ -75,8 +75,8 @@ current status breaks down as:
 
 | Status | ID count | Share |
 |---|---|---|
-| verified | 115 | 74.2% |
-| implemented-but-unverified | 19 | 12.3% |
+| verified | 116 | 74.8% |
+| implemented-but-unverified | 18 | 11.6% |
 | partial | 14 | 9.0% |
 | missing | 0 | 0.0% |
 | not-applicable | 7 | 4.5% |
@@ -160,7 +160,7 @@ PKCE binding (AUTH-TRANSACTION-010, AUTH-OAUTH-002), audit-log DB-level immutabi
 | AUTH-SESSION-004 | `lib/auth/session.ts:70-93` `setSession` mints new `sessionId`/registry row on every auth event (login, google, MFA, recovery); `sessionVersion` bump invalidates prior tokens on password reset/migration activation (`lib/membership/account-recovery.ts:120,184`) | `idoc.auth_sessions`, `idoc.users.session_version` | `tests/role-grant-session-invalidation.test.ts` | verified | |
 | AUTH-SESSION-005 (policy) | `lib/auth/session-tokens.ts:14-15` `SESSION_IDLE_SECONDS=1800`, `SESSION_ABSOLUTE_SECONDS=43200`; `lib/auth/mfa/step-up.ts:21` step-up TTL 5 min; `lib/auth/mfa/remembered-device.ts:17` 1-90 days | N/A | `tests/session-token-boundaries.test.ts` (boundary math) | verified | |
 | AUTH-SESSION-006 | `lib/auth/session.ts:95-115` `clearSession` (revokes registry before clearing cookie); `lib/auth/session-registry.ts:78-114` `revokeAllUserSessions`/`revokeOtherUserSessionsWithEvidence` | `idoc.auth_sessions.revoked_at/revoke_reason` | `tests/security-e2e/sessions.spec.ts:3` ("logout revokes registry session so copied cookie can't be replayed") | verified | |
-| AUTH-SESSION-007 (policy) | `lib/auth/session-registry.ts:116-134` `listActiveSessions` (per-session revocability by `sessionId`) | `idoc.auth_sessions` | integration coverage only (no e2e for multi-session UI found beyond `revokeOtherUserSessionsWithEvidence`) | implemented-but-unverified | |
+| AUTH-SESSION-007 (policy) | `/dashboard/security`; `listActiveSessions`; real `logOutSession` and `logOutOtherSessions` Server Actions | `idoc.auth_sessions` | `tests/security-e2e/sessions.spec.ts` drives the rendered Chromium surface with signed production-format JWT authority and real PostgreSQL: active-only/user-only safe rendering, individual and all-other revocation, current-session survival, copied-target denial, and forged owner-field indifference | verified | The browser test asserts raw session IDs and JWT-shaped values are absent from rendered text while PostgreSQL proves the exact owned rows changed and cross-user rows did not. |
 | AUTH-COOKIE-001 | `lib/auth/session-tokens.ts:41-48` `canonicalCookieSecurityAttributes` (httpOnly, sameSite=lax, secure in prod, path=/) | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:49` | verified | |
 | AUTH-COOKIE-002 | `lib/auth/session-tokens.ts:16` `PRODUCTION_SESSION_COOKIE_NAME='__Host-idoc-session'`, no Domain set, `path:'/'` | N/A | `tests/security-e2e/cookies-and-headers.spec.ts:49` (dev-mode contract only, per test title) | implemented-but-unverified | `__Host-` prefix only takes effect in production; the e2e test explicitly covers the *development* cookie name, not the `__Host-` production variant — production behavior is code-verified but not e2e-proven in this suite. |
 | AUTH-COOKIE-003 | `sameSite:'lax'` used throughout (session, pending-MFA, pending-reset, Google OAuth binding cookies), paired with Origin-based CSRF check in `middleware.ts` | N/A | `tests/security-e2e/csrf.spec.ts` | verified | Lax is deliberate and paired with server-side origin validation, not relied on alone. |
