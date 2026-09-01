@@ -140,6 +140,40 @@ test('canonical MFA configuration accepts a valid explicit key ring', () => {
   assert.deepEqual(configuration.encryptionKeys.get('current'), Buffer.alloc(32, 7));
 });
 
+test('AUTH-SECRET-003: MFA_TOTP_COMPROMISED_KEY_IDS is empty by default and never demands its own variable when unset', () => {
+  assert.deepEqual(mfaConfiguration(validMfa).compromisedKeyIds, new Set());
+  assert.deepEqual(mfaConfiguration({ ...validMfa, MFA_TOTP_COMPROMISED_KEY_IDS: '   ' }).compromisedKeyIds, new Set());
+});
+
+test('AUTH-SECRET-003: a retired-but-still-present key can be marked compromised without disturbing the ring', () => {
+  const key32b = Buffer.alloc(32, 8).toString('base64url');
+  const withRetired = {
+    ...validMfa,
+    MFA_TOTP_COMPROMISED_KEY_IDS: JSON.stringify(['retired']),
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ current: key32, retired: key32b }),
+  };
+  const configuration = mfaConfiguration(withRetired);
+  assert.deepEqual(configuration.compromisedKeyIds, new Set(['retired']));
+  // Marking a key compromised must never remove it from the ring: decrypt-time rejection lives in
+  // resolveMfaEncryptionKey, not here, and the material must stay visible to this validation and any
+  // future migration tooling.
+  assert.deepEqual(configuration.encryptionKeys.get('retired'), Buffer.alloc(32, 8));
+});
+
+test('AUTH-SECRET-003: fails closed marking an unknown key ID or the active key ID compromised', () => {
+  assert.throws(
+    () => mfaConfiguration({ ...validMfa, MFA_TOTP_COMPROMISED_KEY_IDS: JSON.stringify(['never-enrolled']) }),
+    /MFA_TOTP_COMPROMISED_KEY_IDS/,
+  );
+  assert.throws(
+    () => mfaConfiguration({ ...validMfa, MFA_TOTP_COMPROMISED_KEY_IDS: JSON.stringify(['current']) }),
+    /MFA_TOTP_COMPROMISED_KEY_IDS/,
+  );
+  for (const MFA_TOTP_COMPROMISED_KEY_IDS of ['{', '{}', '"not-an-array"', JSON.stringify([1])]) {
+    assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_COMPROMISED_KEY_IDS }), /MFA_TOTP_COMPROMISED_KEY_IDS/);
+  }
+});
+
 test('remembered-TOTP-device policy is off by default and never demands its own secret when unset', () => {
   const configuration = mfaConfiguration(validMfa);
   assert.equal(configuration.rememberedDevice.enabled, false);

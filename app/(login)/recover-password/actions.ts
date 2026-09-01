@@ -17,7 +17,8 @@ import { authorizePendingPasswordReset, clearPendingPasswordReset, getPendingPas
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { verifyActiveTotp } from '@/lib/auth/mfa/totp';
+import { CompromisedMfaKeyError, resolveMfaEncryptionKey, verifyActiveTotp } from '@/lib/auth/mfa/totp';
+import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -104,9 +105,16 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
     return { error: 'Too many attempts. Please try again in a few minutes.' };
   }
   const config = mfaConfiguration();
-  const result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'password-reset',
-    resolveKey: (keyId) => { const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key; },
-    store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
+  let result;
+  try {
+    result = await verifyActiveTotp({ applicationId: MFA_APPLICATION_ID, code, purpose: 'password-reset',
+      resolveKey: (keyId) => resolveMfaEncryptionKey(config, keyId),
+      store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
+  } catch (error) {
+    if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    await auditCompromisedMfaKeyRejection(String(pending.subjectId), error.keyId);
+    return { error: 'This authenticator can no longer be used. Contact support to replace it.' };
+  }
   if (result.status !== 'accepted') {
     if (result.status === 'attempts-exhausted' || result.status === 'invalid-transaction') await clearPendingPasswordReset();
     return neutralVerificationError;

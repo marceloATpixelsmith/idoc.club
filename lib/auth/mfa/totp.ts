@@ -122,6 +122,36 @@ export function encryptTotpSecret(secret: string, input: { keyId: string; key: B
   return `${input.keyId}.${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}`;
 }
 
+// AUTH-SECRET-003: thrown by resolveMfaEncryptionKey when a caller-supplied keyId names a key the
+// operator has marked compromised (lib/runtime/configuration.ts mfaConfiguration()'s
+// compromisedKeyIds). Distinct from "key unavailable" (a keyId not present in the ring at all, e.g.
+// after a full removal) so callers can tell "this factor needs to be replaced" apart from "this
+// deployment's configuration is broken."
+export class CompromisedMfaKeyError extends Error {
+  readonly keyId: string;
+  constructor(keyId: string) {
+    super(`MFA encryption key "${keyId}" is marked compromised.`);
+    this.name = 'CompromisedMfaKeyError';
+    this.keyId = keyId;
+  }
+}
+
+// Shared resolveKey implementation for every production decrypt call site (previously four
+// near-identical inline closures in app/(login)/mfa/actions.ts and
+// app/(login)/recover-password/actions.ts, none of which checked for a compromised key). Deliberately
+// synchronous and free of any database/audit dependency, matching decryptTotpSecret's own synchronous
+// contract -- callers that need to record a compromised-key rejection do so themselves after catching
+// CompromisedMfaKeyError, since that requires an async database write this function cannot perform.
+export function resolveMfaEncryptionKey(
+  config: { encryptionKeys: Map<string, Buffer>; compromisedKeyIds: Set<string> },
+  keyId: string,
+): Buffer {
+  if (config.compromisedKeyIds.has(keyId)) throw new CompromisedMfaKeyError(keyId);
+  const key = config.encryptionKeys.get(keyId);
+  if (!key) throw new Error('MFA key unavailable.');
+  return key;
+}
+
 export function decryptTotpSecret(serialized: string, resolveKey: (keyId: string) => Buffer): string {
   const [keyId, ivText, tagText, ciphertextText, extra] = serialized.split('.');
   if (!keyId || !ivText || !tagText || !ciphertextText || extra) {
