@@ -91,6 +91,14 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
   });
 }
 
+const EMAIL_RACE_CONSTRAINTS = new Set(['users_email_unique', 'users_normalized_email_unique']);
+
+function isEmailUniqueRaceViolation(error: unknown): boolean {
+  return !!error && typeof error === 'object'
+    && (error as { code?: unknown }).code === '23505'
+    && EMAIL_RACE_CONSTRAINTS.has((error as { constraint_name?: unknown }).constraint_name as string);
+}
+
 export async function consumeEmailVerification(token: string): Promise<VerificationResult> {
   if (token.length < 32 || token.length > 100) return { status: 'invalid' };
   let result: EmailVerificationTransactionResult;
@@ -98,12 +106,17 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
     result = await consumeEmailVerificationTransaction(token);
   } catch (error) {
     // Two members racing to claim the same new email can both pass the in-transaction existence
-    // check before either commits (a plain read takes no lock against a concurrent writer), so the
-    // `users_email_unique` constraint is what actually decides the winner -- the loser's UPDATE
-    // raises this exact race here, not an application bug. Treat it exactly like the pre-commit
-    // existence check above: a normal, expected 'invalid' outcome, not a server error.
-    const pg = error as { code?: unknown; constraint_name?: unknown } | null;
-    if (pg && typeof pg === 'object' && pg.code === '23505' && pg.constraint_name === 'users_email_unique') {
+    // check before either commits (a plain read takes no lock against a concurrent writer), so a
+    // unique constraint is what actually decides the winner -- the loser's UPDATE raises this exact
+    // race here, not an application bug. Treat it exactly like the pre-commit existence check above:
+    // a normal, expected 'invalid' outcome, not a server error. Two distinct constraints can fire:
+    // `users_email_unique` (exact match) and `users_normalized_email_unique` (`lower(email)`, schema.ts)
+    // -- the pre-commit check compares against the already-lowercased `pendingEmail`, so it misses an
+    // existing user stored with different casing (e.g. `Member@example.com`), and that race resolves
+    // via the normalized index instead. drizzle-orm wraps the driver's PostgresError in its own error
+    // with the original attached as `.cause` (confirmed by direct reproduction), rather than always
+    // exposing `code`/`constraint_name` on the outer object, so both are checked.
+    if (isEmailUniqueRaceViolation(error) || isEmailUniqueRaceViolation((error as { cause?: unknown } | null)?.cause)) {
       return { status: 'invalid' };
     }
     throw error;

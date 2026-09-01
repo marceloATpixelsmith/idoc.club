@@ -129,3 +129,38 @@ test('two members racing to claim the same new email atomically resolve to exact
     globalThis.fetch = originalFetch;
   }
 });
+
+// Regression test for a Codex review finding on the pull request that fixed the exact-match race
+// above: the pre-commit existence check compares against the already-lowercased `pendingEmail`, so it
+// misses an existing user stored with different casing (plausible for legacy/migrated data, since the
+// `users.email` column itself has no case-enforcing constraint) -- that collision is caught only by
+// `users_normalized_email_unique` (`lower(email)`, schema.ts), a distinct constraint from
+// `users_email_unique`, and must resolve to the same graceful 'invalid' outcome, not an uncaught error.
+test('claiming an address that collides only case-insensitively with an existing member resolves to invalid, not a server error', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  try {
+    const [mixedCaseOwner] = await sql<{ id: number }[]>`
+      insert into idoc.users (email,password_hash,email_verified_at,account_state)
+      values ('Mixed.Case@Example.TEST', 'fixture-password-hash', now(), 'active')
+      returning id`;
+    const claimant = await createUser();
+    let raw = '';
+    globalThis.fetch = async (_input, init) => {
+      raw = capturedToken(JSON.parse(String(init?.body)).message.html);
+      return new Response('[]', { status: 200 });
+    };
+    await issueEmailVerification(claimant.id, 'mixed.case@example.test');
+    assert.ok(raw);
+
+    const result = await consumeEmailVerification(raw);
+    assert.deepEqual(result, { status: 'invalid' });
+
+    const [claimantAfter] = await sql`select email from idoc.users where id=${claimant.id}`;
+    assert.notEqual(claimantAfter.email, 'mixed.case@example.test');
+    const [ownerAfter] = await sql`select email from idoc.users where id=${mixedCaseOwner.id}`;
+    assert.equal(ownerAfter.email, 'Mixed.Case@Example.TEST', "the existing member's row must be untouched");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
