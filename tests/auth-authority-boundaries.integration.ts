@@ -10,7 +10,7 @@ import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pendi
 import { requireLoginOtp, startPendingLogin } from '../lib/auth/pending-login.ts';
 import { getPendingPrimaryAuth } from '../lib/auth/mfa/pending-primary-auth.ts';
 import { beginPrimaryMfa, MFA_APPLICATION_ID } from '../lib/auth/mfa/login.ts';
-import { issueRememberedDevice } from '../lib/auth/mfa/remembered-device.ts';
+import { digestRememberedDeviceToken, issueRememberedDevice } from '../lib/auth/mfa/remembered-device.ts';
 import { REMEMBERED_TOTP_DEVICE_COOKIE } from '../lib/auth/mfa/remembered-device-cookie.ts';
 import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
 import { beginTotpEnrollment, completeTotpEnrollment } from '../lib/auth/mfa/totp.ts';
@@ -83,6 +83,14 @@ async function activeFactor(user: { email: string; id: number }, nowMs = Date.no
   return { factorId: enrollment.factorId, secret };
 }
 
+async function issueRememberedCookies(userId: number, factorId: string) {
+  const issued = await issueRememberedDevice({ applicationId: MFA_APPLICATION_ID, days: 30,
+    digestSecret: rememberedKey, factorId, store, subjectId: String(userId) });
+  const cookies = new TestCookies();
+  cookies.set(REMEMBERED_TOTP_DEVICE_COOKIE, issued.token);
+  return { cookies, digest: digestRememberedDeviceToken(issued.token, rememberedKey) };
+}
+
 async function redirected(operation: () => Promise<unknown>) {
   await assert.rejects(operation, (error: unknown) => String(error).includes('NEXT_REDIRECT'));
 }
@@ -124,35 +132,42 @@ test('AUTH-MFA-004: beginPrimaryMfa composes authoritative role, factor, policy,
   });
 
   process.env.REMEMBER_TOTP_DEVICE_ENABLED = 'true';
-  const issued = await issueRememberedDevice({ applicationId: MFA_APPLICATION_ID, days: 30,
-    digestSecret: rememberedKey, factorId: factor.factorId, store, subjectId: String(privileged.id) });
-  const remembered = new TestCookies();
-  remembered.set(REMEMBERED_TOTP_DEVICE_COOKIE, issued.token);
-  await withTestRequestCookies(remembered, async () => assert.equal(
+  const validRemembered = await issueRememberedCookies(privileged.id, factor.factorId);
+  await withTestRequestCookies(validRemembered.cookies, async () => assert.equal(
     await beginPrimaryMfa(privileged, 'password', '/dashboard'), false));
 
   process.env.REMEMBER_TOTP_DEVICE_ENABLED = 'false';
-  await withTestRequestCookies(remembered, async () => assert.equal(
+  await withTestRequestCookies(validRemembered.cookies, async () => assert.equal(
     await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
   process.env.REMEMBER_TOTP_DEVICE_ENABLED = 'true';
 
-  for (const mutation of [
-    () => sql`update idoc.mfa_remembered_devices set expires_at=now()-interval '1 second'`,
-    () => sql`update idoc.mfa_remembered_devices set revoked_at=now()`,
-    () => sql`update idoc.mfa_factors set status='revoked', revoked_at=now() where id=${factor.factorId}`,
-  ]) {
-    await mutation();
-    await withTestRequestCookies(remembered, async () => assert.equal(
-      await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
-    await sql`update idoc.mfa_factors set status='active', revoked_at=null where id=${factor.factorId}`;
-  }
+  const expired = await issueRememberedCookies(privileged.id, factor.factorId);
+  await sql`update idoc.mfa_remembered_devices set expires_at=now()-interval '1 second' where token_digest=${expired.digest}`;
+  await withTestRequestCookies(expired.cookies, async () => assert.equal(
+    await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
+
+  const revoked = await issueRememberedCookies(privileged.id, factor.factorId);
+  await sql`update idoc.mfa_remembered_devices set revoked_at=now() where token_digest=${revoked.digest}`;
+  await withTestRequestCookies(revoked.cookies, async () => assert.equal(
+    await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
+
+  const staleFactor = await issueRememberedCookies(privileged.id, factor.factorId);
+  await sql`update idoc.mfa_factors set status='revoked', revoked_at=now() where id=${factor.factorId}`;
+  await withTestRequestCookies(staleFactor.cookies, async () => assert.equal(
+    await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
+  await sql`update idoc.mfa_factors set status='active', revoked_at=null where id=${factor.factorId}`;
+
+  const wrongUser = await issueRememberedCookies(privileged.id, factor.factorId);
   const other = await userWithPassword();
   await activeFactor(other);
-  await withTestRequestCookies(remembered, async () => assert.equal(
+  await withTestRequestCookies(wrongUser.cookies, async () => assert.equal(
     await beginPrimaryMfa(other, 'password', '/dashboard'), true));
-  remembered.set(REMEMBERED_TOTP_DEVICE_COOKIE, 'malformed-token');
-  await withTestRequestCookies(remembered, async () => assert.equal(
+
+  const malformed = new TestCookies();
+  malformed.set(REMEMBERED_TOTP_DEVICE_COOKIE, 'malformed-token');
+  await withTestRequestCookies(malformed, async () => assert.equal(
     await beginPrimaryMfa(privileged, 'password', '/dashboard'), true));
+
   const member = await userWithPassword(false);
   await withTestRequestCookies(new TestCookies(), async () => assert.equal(
     await beginPrimaryMfa(member, 'password', '/dashboard'), false));
@@ -189,13 +204,15 @@ test('AUTH-OTP-002: valid email OTP cannot become MFA, step-up, or privileged se
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, async () => {
     await requireLoginOtp(user.email, user.id, user.sessionVersion, false);
+    const pendingLoginToken = cookies.get('idoc_pending_login')?.value;
+    assert.ok(pendingLoginToken);
     const form = new FormData(); form.set('code', code);
     await redirected(() => verifyLoginOtp({}, form));
     assert.equal((await getPendingPrimaryAuth())?.stage, 'challenge');
     assert.equal(cookies.get(sessionCookieName()), undefined);
     assert.equal(cookies.get('idoc_fresh_step_up'), undefined);
     assert.equal((await sql`select count(*)::int count from idoc.auth_sessions where user_id=${user.id}`)[0].count, 0);
-    cookies.set('idoc_pending_primary_mfa', cookies.get('idoc_pending_login')?.value ?? '');
+    cookies.set('idoc_pending_primary_mfa', pendingLoginToken);
     assert.equal(await getPendingPrimaryAuth(), null);
   });
 });
