@@ -45,6 +45,32 @@ export function stripeRecurringProductIdForServer(environment: Environment = pro
 export function stripeOneTimeProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_ONE_TIME_PRODUCT_ID'); }
 
 export function authSecretForServer(environment: Environment = process.env) { return secret(environment, 'AUTH_SECRET'); }
+
+// AUTH-CRYPTO-005: session-token signing previously had no rotation overlap at all -- rotating
+// AUTH_SECRET was a hard cutover that invalidated every outstanding session JWT immediately (see
+// docs/07 §15.1). AUTH_SECRET_RETIRED_KEYS is optional; when unset this changes nothing, since the
+// ring is just [AUTH_SECRET]. When set, it lists prior AUTH_SECRET values that remain valid for
+// *verifying* (never signing) session tokens, so an outstanding session survives rotation until it
+// naturally re-signs under the new active key on its next activity refresh (middleware.ts) or expires
+// on its own absolute lifetime, whichever comes first. The active key is always index 0 and is always
+// AUTH_SECRET itself -- there is no separate "active key ID" concept here, unlike the TOTP ring,
+// because session tokens have never carried a key identifier and adding one is unnecessary complexity
+// for a value that only ever needs "current" plus a short list of "still acceptable."
+export function authSecretRingForServer(environment: Environment = process.env): string[] {
+  const activeKey = authSecretForServer(environment);
+  const raw = environment.AUTH_SECRET_RETIRED_KEYS?.trim();
+  if (!raw) return [activeKey];
+  let serialized: unknown;
+  try { serialized = JSON.parse(raw); } catch {
+    throw new Error('Invalid production configuration: AUTH_SECRET_RETIRED_KEYS.');
+  }
+  if (!Array.isArray(serialized) || serialized.some((value) => typeof value !== 'string' || value.length < MIN_SECRET_LENGTH)) {
+    throw new Error('Invalid production configuration: AUTH_SECRET_RETIRED_KEYS.');
+  }
+  const retired = (serialized as string[]).filter((key) => key !== activeKey);
+  return [activeKey, ...retired];
+}
+
 export function baseUrlForServer(environment: Environment = process.env) {
   const value = url(environment, 'BASE_URL', environment.NODE_ENV === 'production' ? ['https:'] : ['http:', 'https:']);
   const parsed = new URL(value);
