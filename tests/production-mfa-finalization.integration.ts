@@ -10,6 +10,7 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 
 const applicationId = 'idoc-web';
 const nowMs = 1_800_000_000_000;
+const recoveryAckTtlMs = 10 * 60 * 1000;
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -49,6 +50,9 @@ test('production initial finalizer is owner-bound, expiring, atomic, and single-
     (select count(*)::int from idoc.mfa_recovery_codes where user_id=${owner.id}) codes,
     (select count(*)::int from idoc.audit_log where actor_id=${owner.id} and action='auth.mfa.authenticator.enrolled') events`;
   assert.deepEqual(state, { active: 1, codes: 3, events: 1 });
+  const [ackWindow] = await sql<{ expires_at: string | Date }[]>`select expires_at from idoc.mfa_enrollment_transactions
+    where transaction_id=${enrollment.transactionId}`;
+  assert.equal(new Date(ackWindow.expires_at).getTime(), nowMs + recoveryAckTtlMs);
   const expired = await pending(stranger.id, 'mfa-enrollment', nowMs - 1);
   const expiredCodes = codes(stranger.id);
   assert.equal((await finalizeInitialAuthenticatorEnrollment({ acceptedCounter: 1, applicationId, ...expired, nowMs,
@@ -94,6 +98,9 @@ test('production replacement serializes competing confirmations and rotates all 
     (select count(*)::int from idoc.mfa_remembered_devices where user_id=${owner.id} and revoked_at is not null) "revokedDevices",
     (select session_version::int from idoc.users where id=${owner.id}) version`;
   assert.deepEqual(state, { active: 1, codes: 3, events: 1, revokedDevices: 1, version: 1 });
+  const [ackWindow] = await sql<{ expires_at: string | Date }[]>`select expires_at from idoc.mfa_enrollment_transactions
+    where transaction_id in ${sql(candidates.map((candidate) => candidate.transactionId))} and consumed_at is not null`;
+  assert.equal(new Date(ackWindow.expires_at).getTime(), nowMs + recoveryAckTtlMs);
 });
 
 test('standalone production regeneration atomically replaces the generation and leaves no plaintext evidence', async () => {
