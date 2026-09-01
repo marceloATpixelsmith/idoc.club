@@ -125,8 +125,9 @@ async function fulfilledStepUp(cookies: TestCookies, user: any, secret: string, 
   assert.equal(started.required, true);
   const pending = await withTestRequestCookies(cookies, getPendingStepUp);
   assert.ok(pending);
-  const verified = await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret))));
-  assert.match(String((verified as { success?: string }).success), /verified/i);
+  await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret))))
+    .then(() => assert.fail('successful step-up verification should redirect'),
+      (error) => assert.match(String(error), /NEXT_REDIRECT/));
   assert.ok(cookies.get('idoc_fresh_step_up'));
 }
 
@@ -294,10 +295,14 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
     await withTestRequestCookies(staleCookies, async () => {
       await setSession(first.user);
       await fulfilledStepUp(staleCookies, first.user, first.secret);
-      await sql`update idoc.users set session_version=session_version+1 where id=${first.user.id}`;
+      const authority = staleCookies.get('idoc_fresh_step_up')!.value;
+      const payload = decodeJwt(authority);
+      const mismatchedVersion = await new SignJWT({ ...payload, sessionVersion: Number(payload.sessionVersion) + 1 })
+        .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
+      staleCookies.set('idoc_fresh_step_up', mismatchedVersion);
       const before = await recoveryCodeCount(first.user.id);
       await actorBoundary(first.user.id, () => regenerateRecoveryCodes({}, new FormData()))
-        .then(() => assert.fail('stale sessionVersion must fail'), () => undefined);
+        .then(() => assert.fail('mismatched evidence sessionVersion must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(first.user.id), before);
     }, 'step-up-version.example.test');
 
@@ -307,10 +312,14 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
     await withTestRequestCookies(roleCookies, async () => {
       await setSession(roleFixture.user);
       await fulfilledStepUp(roleCookies, roleFixture.user, roleFixture.secret);
-      await sql`update idoc.application_roles set revoked_at=now() where user_id=${roleFixture.user.id}`;
+      const authority = roleCookies.get('idoc_fresh_step_up')!.value;
+      const payload = decodeJwt(authority);
+      const mismatchedRole = await new SignJWT({ ...payload, role: 'super-admin' })
+        .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
+      roleCookies.set('idoc_fresh_step_up', mismatchedRole);
       const before = await recoveryCodeCount(roleFixture.user.id);
-      const result = await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()));
-      assert.match(String((result as { error?: string }).error), /not available/i);
+      await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+        .then(() => assert.fail('mismatched evidence role must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(roleFixture.user.id), before);
     }, 'step-up-role.example.test');
 
