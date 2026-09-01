@@ -93,9 +93,11 @@ the actual Vercel deployment topology and added IP-shape validation — see thei
 
 This reflects a codebase with strong, often real-Postgres/real-browser behavioral coverage for its core
 authentication surface (session lifecycle, password storage, MFA challenge/replay defense, OAuth
-transaction binding, CSRF, rate limiting, audit immutability), alongside a specific, named set of gaps —
-most concentrated in Stage 6 operational maturity (backups, bounce handling, alert taxonomy, purge jobs,
-key-rotation completeness) rather than in the core authentication path itself.
+transaction binding, CSRF, rate limiting, audit immutability), alongside a specific, named set of gaps.
+Backups, bounce/complaint handling, physical-cleanup purge jobs, and key-rotation completeness --
+originally the bulk of Stage 6's operational-maturity gaps -- have since been closed by later pull
+requests (see the "Most consequential gaps" list above for what remains current); alert
+correlation/anomaly-detection is the one Stage 6 gap still open, alongside token-based CSRF.
 **This is not a "production ready" verdict.** It is evidence for scoping the remediation slices that
 follow; a full final verdict (limited to "not ready" or "ready for application-specific production
 validation") is reserved for the end of the remediation program, after all planned slices are complete
@@ -119,20 +121,7 @@ and a fresh audit is run against the final proposed head.
    taxonomy now exists and every existing admin-email alert's subject is tagged with it, but no
    correlation/anomaly-detection engine exists — each alert still fires independently, with no
    pattern or frequency detection across events.
-3. **AUTH-CRYPTO-005 (key rotation completeness) — fixed in later pull requests, now `verified`.** At
-   the time of this audit it was `partial`: session-key (`AUTH_SECRET`) rotation had no ring/overlap,
-   TOTP keys had no "compromised" state distinct from "removed," and no integration test proved a live
-   two-entry TOTP ring end to end. A pull request added an optional `AUTH_SECRET_RETIRED_KEYS` ring for
-   session-key rotation — a routine rotation no longer force-signs-out every session, while a
-   suspected-compromise rotation still supports the original immediate hard cutover on request. A
-   further pull request added an optional `MFA_TOTP_COMPROMISED_KEY_IDS` set that stops decryption
-   under a compromised key while keeping it visible in the ring, generating a dedicated
-   `auth.mfa.compromised_key_rejected` audit event — closing **AUTH-SECRET-003**, now `verified`. A
-   further pull request added `tests/totp-key-ring.integration.ts`, building a real two-entry ring via
-   `mfaConfiguration()` and proving, through the actual production `verifyActiveTotp` function against
-   real Postgres, that a factor encrypted under a retired key still authenticates after rotation. No
-   remaining gap.
-4. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
+3. **AUTH-CSRF-003 (token-based CSRF)** — `partial`. IDOC relies entirely on Origin-header validation,
     not issued/rotated CSRF tokens; effective in practice but does not literally satisfy this control.
 
 The strongest, most genuinely verified items across all five stages: session-registry replay defense
