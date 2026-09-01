@@ -10,7 +10,7 @@ const migration = readFileSync('lib/db/migrations/0016_persisted_auth_sessions.s
 
 test('new canonical sessions are persisted before the cookie is issued', () => {
   const register = session.indexOf('await registerSession({');
-  const cookie = session.indexOf('cookieStore.set(sessionCookieName()');
+  const cookie = session.indexOf('cookieStore.set(sessionCookieName(environment)');
   assert.ok(register >= 0 && cookie > register);
   assert.match(session, /sessionId: randomUUID\(\)/);
 });
@@ -39,7 +39,7 @@ test('canonical cookie authentication requires an active persisted registry row 
 
 test('sign-out revokes the current persisted session before clearing the cookie and propagates revocation failure', () => {
   const revoke = session.indexOf("await revokeSession(session.sessionId, session.user.id, 'user-signout')");
-  const clear = session.indexOf("cookieStore.set(sessionCookieName(), '', expiredSessionCookieOptions())");
+  const clear = session.indexOf("cookieStore.set(sessionCookieName(environment), '', expiredSessionCookieOptions(environment))");
   assert.ok(revoke >= 0 && clear > revoke);
   assert.match(session, /if \(session\) \{[\s\S]*?await revokeSession\(session\.sessionId, session\.user\.id, 'user-signout'\);[\s\S]*?\}/);
   assert.doesNotMatch(session, /try \{[\s\S]*?await revokeSession\(session\.sessionId, session\.user\.id, 'user-signout'\);[\s\S]*?catch/);
