@@ -15,6 +15,8 @@ import {
 } from '@/lib/auth/google-identity-link-evidence';
 import { unlinkGoogleIdentity } from '@/lib/auth/google-identity-linking';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
+import { regenerateRecoveryCodesWithEvidence } from '@/lib/auth/mfa/recovery-regeneration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/login-device-trust';
 import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
@@ -24,6 +26,7 @@ import { beginWebAuthnRegistration, finishWebAuthnRegistration } from '@/lib/aut
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
+import { mfaConfiguration } from '@/lib/runtime/configuration';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 
 const currentPasswordSchema = z.object({ currentPassword: passwordEntrySchema });
@@ -95,6 +98,23 @@ export const beginAuthenticatorReplacement = validatedActionWithUser(emptySchema
     method: 'password', returnTo: '/dashboard/security', sessionVersion: user.sessionVersion,
     stage: 'recovery-entry', subjectId: user.id, transactionId });
   redirect('/mfa');
+});
+
+export const regenerateRecoveryCodes = validatedActionWithUser(emptySchema, async (_, __, user) => {
+  const role = await authoritativeMfaRole(user.id);
+  if (role !== 'admin' && role !== 'super-admin') {
+    return { error: 'Recovery-code management is not available for this account.' };
+  }
+  if ((await requireFreshStepUp(user, 'generate-recovery-codes', '/dashboard/security')).required) redirect('/mfa');
+  const config = mfaConfiguration();
+  const prepared = prepareRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
+    digestSecret: config.recoveryDigestKey, subjectId: String(user.id) });
+  const result = await regenerateRecoveryCodesWithEvidence({ applicationId: MFA_APPLICATION_ID,
+    generationId: prepared.generationId, nowMs: prepared.nowMs, records: prepared.records, userId: user.id });
+  await consumeFreshStepUp();
+  if (result !== 'regenerated') return { error: 'Recovery codes could not be regenerated.' };
+  refreshSecurityPage();
+  return { recoveryCodes: prepared.codes, success: 'New recovery codes generated. Save them now.' };
 });
 
 async function privilegedUser(user: { id: number }) {

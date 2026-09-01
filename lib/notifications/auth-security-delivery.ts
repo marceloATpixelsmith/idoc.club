@@ -53,6 +53,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
       password_changed: { heading: 'Password changed', subject: 'Your IDOC password was changed' },
       password_reset_completed: { heading: 'Password reset completed', subject: 'Your IDOC password was reset' },
       recovery_code_used: { heading: 'Recovery code used', subject: 'An IDOC recovery code was used' },
+      recovery_codes_regenerated: { heading: 'Recovery codes regenerated', subject: 'Your IDOC recovery codes changed' },
       role_granted: { heading: 'Administrator access granted', subject: 'Your IDOC access changed' },
       role_revoked: { heading: 'Administrator access removed', subject: 'Your IDOC access changed' },
       verified_email_changed: { heading: 'Login email changed', subject: 'Your IDOC login email changed' },
