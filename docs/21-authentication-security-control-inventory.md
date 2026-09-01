@@ -560,6 +560,15 @@ The production database runs on Render's Hobby plan. Confirmed directly against 
 
 No migration. No code change. No compatibility impact: documentation only.
 
+## 8w. Fix a genuine race in email-change verification (this revision)
+
+`docs/22`'s `AUTH-EMAIL-003`/`AUTH-TRANSACTION-008` rows claimed the concurrent-email-claim race in `consumeEmailVerification` "resolved atomically," citing `tests/email-change.integration.ts`'s race test as proof. That claim was not accurate: the pre-commit existence check the row relied on (`SELECT ... FROM users WHERE email = ...`) is a plain read with no lock against a concurrent writer, so two members racing to claim the same address could both pass it before either transaction committed. The `idoc.users_email_unique` constraint then correctly let only one `UPDATE` through, but the loser's write raised an uncaught `PostgresError` (code `23505`) that propagated out of `db.transaction()` as an unhandled rejection -- a 500, not the `{status:'invalid'}` outcome the row and the test both expected. This surfaced as a genuine, intermittent CI failure (dependent on real transaction scheduling, not a flaky/infra issue) rather than as something found by inspection.
+
+1. **`lib/membership/email-verification.ts`.** `consumeEmailVerification` now wraps the transaction call and catches exactly this case -- `error.code === '23505'` on the `users_email_unique` constraint specifically, so no other, unrelated constraint violation is silently swallowed -- and returns `{status: 'invalid'}`, the same outcome the pre-commit check already produces for every other "someone else got there first" path. The transaction body itself is unchanged (extracted into `consumeEmailVerificationTransaction` only to make the try/catch boundary clean); no schema or migration change.
+2. **docs/22** (`AUTH-EMAIL-003`/`AUTH-TRANSACTION-008` notes corrected to record what was actually wrong and now fixed; both remain `verified`, since the underlying behavior is now genuinely what they always claimed).
+
+No migration. No route or UI change.
+
 ---
 
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
