@@ -40,7 +40,7 @@ export function testRequestOrigin(): string | undefined {
   return testStore.getStore()?.origin;
 }
 
-/** Test-only runtime environment override used to exercise production cookie semantics without
+/** Isolated runtime-environment override used to exercise production cookie semantics without
  * weakening the real production path or changing the integration test process out of NODE_ENV=test. */
 export function testRequestEnvironment(): NodeJS.ProcessEnv | undefined {
   return testStore.getStore()?.environment;
