@@ -101,7 +101,10 @@ test('AUTH-SECRET-003: every production TOTP decrypt call site routes through th
 
   // Every one of those four call sites must catch CompromisedMfaKeyError and audit it -- never let it
   // propagate as an uncaught 500, and never silently swallow it without a record.
-  const catchCompromised = /catch \(error\) \{\s*if \(!\(error instanceof CompromisedMfaKeyError\)\) throw error;\s*await auditCompromisedMfaKeyRejection\(/g;
+  // [\s\S]*? (not \s*) between the guard and the audit call, non-greedy: the guard is always
+  // immediately followed by the audit call, but an explanatory comment (e.g. the neutral-error
+  // rationale at the recover-password call site) may legitimately sit between them.
+  const catchCompromised = /catch \(error\) \{\s*if \(!\(error instanceof CompromisedMfaKeyError\)\) throw error;[\s\S]*?await auditCompromisedMfaKeyRejection\(/g;
   assert.equal([...actions.matchAll(catchCompromised)].length, 3);
   assert.equal([...recoverPassword.matchAll(catchCompromised)].length, 1);
 

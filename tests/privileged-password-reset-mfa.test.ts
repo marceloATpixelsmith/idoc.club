@@ -33,6 +33,21 @@ test('anonymous recovery keeps one neutral verification surface for every unreso
   assert.doesNotMatch(otpStep, /We sent a 6-digit code to/);
 });
 
+// AUTH-SECRET-003, Codex review finding on the compromised-mfa-key pull request: a compromised TOTP
+// key must never surface as a distinct error at this unauthenticated boundary -- doing so leaks that
+// the account exists, is privileged, and specifically that its key is compromised, contrary to the
+// neutral-surface property proven above.
+test('a compromised TOTP key returns the same neutral error as every other unresolved recovery state', () => {
+  const totpBranch = actions.slice(actions.indexOf('const role = await authoritativeMfaRole(pending.subjectId)'));
+  const compromisedCatch = totpBranch.slice(0, totpBranch.indexOf("if (result.status !== 'accepted')"));
+  assert.match(compromisedCatch, /CompromisedMfaKeyError/);
+  assert.match(compromisedCatch, /auditCompromisedMfaKeyRejection/);
+  assert.doesNotMatch(compromisedCatch.slice(compromisedCatch.indexOf('CompromisedMfaKeyError')),
+    /error:\s*'[^']*(can no longer be used|contact support)/i);
+  assert.match(compromisedCatch.slice(compromisedCatch.lastIndexOf('await auditCompromisedMfaKeyRejection')),
+    /return neutralVerificationError;/);
+});
+
 test('completion revokes persisted sessions and requires fresh sign-in', () => {
   assert.match(actions, /tx\.update\(authSessions\)/);
   assert.match(actions, /sessionVersion: sql/);

@@ -112,8 +112,13 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
       store: mfaStore, subjectId: String(pending.subjectId), transactionId: pending.transactionId });
   } catch (error) {
     if (!(error instanceof CompromisedMfaKeyError)) throw error;
+    // Codex review finding: this unauthenticated password-recovery boundary must stay neutral like
+    // every other unresolved-code path here (unknown/member/missing-factor/ordinary-invalid) --
+    // returning a distinct "contact support" message would leak that this account exists, is
+    // privileged, and specifically that its TOTP key is compromised, contrary to docs/05's neutral-
+    // recovery requirements. Audit the rejection, but never let its message differ from theirs.
     await auditCompromisedMfaKeyRejection(String(pending.subjectId), error.keyId);
-    return { error: 'This authenticator can no longer be used. Contact support to replace it.' };
+    return neutralVerificationError;
   }
   if (result.status !== 'accepted') {
     if (result.status === 'attempts-exhausted' || result.status === 'invalid-transaction') await clearPendingPasswordReset();
