@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { requestCookies } from '@/lib/auth/request-cookies';
 import { authSecretForServer } from '@/lib/runtime/configuration';
 
 // Tracks an anonymous, in-progress signup (email submitted, awaiting OTP verification, then a
@@ -20,7 +20,7 @@ async function setPendingSignupCookie(data: PendingSignup) {
     .setIssuedAt()
     .setExpirationTime('15m')
     .sign(signingKey());
-  (await cookies()).set(COOKIE_NAME, token, {
+  (await requestCookies()).set(COOKIE_NAME, token, {
     expires: new Date(Date.now() + LIFETIME_MS), httpOnly: true, sameSite: 'lax', secure: true,
   });
 }
@@ -34,7 +34,7 @@ export async function markPendingSignupVerified(email: string) {
 }
 
 export async function getPendingSignup(): Promise<PendingSignup | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = (await requestCookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, signingKey(), { algorithms: ['HS256'] });
@@ -46,5 +46,5 @@ export async function getPendingSignup(): Promise<PendingSignup | null> {
 }
 
 export async function clearPendingSignup() {
-  (await cookies()).delete(COOKIE_NAME);
+  (await requestCookies()).delete(COOKIE_NAME);
 }

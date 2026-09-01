@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { requestCookies } from '@/lib/auth/request-cookies';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 
 const COOKIE_NAME = 'idoc_pending_primary_mfa';
@@ -26,11 +26,11 @@ function options(expires: Date) {
 export async function setPendingPrimaryAuth(value: PendingPrimaryAuth) {
   const token = await new SignJWT(value).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime(`${TTL_SECONDS}s`)
     .sign(mfaConfiguration().continuationKey);
-  (await cookies()).set(COOKIE_NAME, token, options(new Date(Date.now() + TTL_SECONDS * 1000)));
+  (await requestCookies()).set(COOKIE_NAME, token, options(new Date(Date.now() + TTL_SECONDS * 1000)));
 }
 
 export async function getPendingPrimaryAuth(): Promise<PendingPrimaryAuth | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = (await requestCookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, mfaConfiguration().continuationKey, { algorithms: ['HS256'] });
@@ -43,4 +43,4 @@ export async function getPendingPrimaryAuth(): Promise<PendingPrimaryAuth | null
   } catch { return null; }
 }
 
-export async function clearPendingPrimaryAuth() { (await cookies()).delete(COOKIE_NAME); }
+export async function clearPendingPrimaryAuth() { (await requestCookies()).delete(COOKIE_NAME); }
