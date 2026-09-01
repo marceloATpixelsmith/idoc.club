@@ -11,7 +11,7 @@ export type MutableCookieStore = {
   set(name: string, value: string, options?: Record<string, unknown>): void;
 };
 
-type TestRequest = { cookies: MutableCookieStore; origin: string };
+type TestRequest = { cookies: MutableCookieStore; environment?: NodeJS.ProcessEnv; origin: string };
 const testStore = new AsyncLocalStorage<TestRequest>();
 
 function assertIsolatedTestProcess() {
@@ -26,11 +26,22 @@ export async function requestCookies(): Promise<MutableCookieStore> {
   return testStore.getStore()?.cookies ?? await cookies();
 }
 
-export function withTestRequestCookies<T>(store: MutableCookieStore, operation: () => Promise<T>, origin = '127.0.0.1'): Promise<T> {
+export function withTestRequestCookies<T>(
+  store: MutableCookieStore,
+  operation: () => Promise<T>,
+  origin = '127.0.0.1',
+  environment?: NodeJS.ProcessEnv,
+): Promise<T> {
   assertIsolatedTestProcess();
-  return testStore.run({ cookies: store, origin }, operation);
+  return testStore.run({ cookies: store, environment, origin }, operation);
 }
 
 export function testRequestOrigin(): string | undefined {
   return testStore.getStore()?.origin;
+}
+
+/** Isolated runtime-environment override used to exercise production cookie semantics without
+ * weakening the real production path or changing the integration test process out of NODE_ENV=test. */
+export function testRequestEnvironment(): NodeJS.ProcessEnv | undefined {
+  return testStore.getStore()?.environment;
 }

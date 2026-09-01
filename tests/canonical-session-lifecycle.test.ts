@@ -29,8 +29,8 @@ test('canonical session clearing preserves __Host cookie attributes', () => {
   assert.match(tokens, /expiredSessionCookieOptions/);
   assert.match(tokens, /expires: new Date\(0\)/);
   assert.match(tokens, /maxAge: 0/);
-  assert.match(session, /cookieStore\.set\(sessionCookieName\(\), '', expiredSessionCookieOptions\(\)\)/);
-  assert.doesNotMatch(session, /cookieStore\.delete\(sessionCookieName\(\)\)/);
+  assert.match(session, /cookieStore\.set\(sessionCookieName\(environment\), '', expiredSessionCookieOptions\(environment\)\)/);
+  assert.doesNotMatch(session, /cookieStore\.delete\(sessionCookieName\(/);
   assert.match(middleware, /res\.cookies\.set\(\{ name: canonicalName, value: '', \.\.\.expiredSessionCookieOptions\(\) \}\)/);
   assert.doesNotMatch(middleware, /res\.cookies\.delete\(canonicalName\)/);
 });
