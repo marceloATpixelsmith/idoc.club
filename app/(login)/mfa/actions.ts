@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
 import { clearPendingLogin } from '@/lib/auth/pending-login';
-import { setSession } from '@/lib/auth/session';
+import { clearSession, getSession, setSession } from '@/lib/auth/session';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
@@ -90,6 +90,8 @@ export const verifyStepUpWebAuthn = validatedAction(webAuthnResponseSchema, asyn
 async function pendingAccount(expected: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack') {
   const pending = await getPendingPrimaryAuth();
   if (!pending || pending.stage !== expected || pending.applicationId !== MFA_APPLICATION_ID) return null;
+  const surroundingSession = await getSession();
+  if (surroundingSession && surroundingSession.user.id !== pending.subjectId) return null;
   const [user] = await db.select().from(users).where(eq(users.id, pending.subjectId)).limit(1);
   if (!user || !['active', 'onboarding'].includes(user.accountState) || !user.emailVerifiedAt || user.deletedAt ||
     user.sessionVersion !== pending.sessionVersion) return null;
