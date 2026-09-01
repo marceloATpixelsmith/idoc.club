@@ -1,4 +1,4 @@
-import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -11,6 +11,7 @@ const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'a
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
 
 export const E2E_TOTP_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+export const E2E_RECOVERY_CODE = 'A1B2C3D4-E5F60718-192A3B4C-5D6E7F80';
 
 // Mirrors lib/auth/mfa/totp.ts's encryptTotpSecret serialization exactly (keyId.iv.tag.ciphertext,
 // AES-256-GCM, all base64url) without importing that module: Playwright 1.55's CommonJS-compatible
@@ -61,6 +62,11 @@ export default async function globalSetup() {
       const encryptedSecret = encryptE2eTotpSecret(E2E_TOTP_SECRET, 'e2e-v1', Buffer.from('uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw', 'base64url'));
       await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id,activated_at)
         values(${randomUUID()},${user.id},'idoc.club','totp','active',${encryptedSecret},'e2e-v1',now())`;
+      const recoveryDigest = createHmac('sha256', Buffer.from('zaoDYF2rFZXfbool4YgF40tqjFyibcoukUB8Q13y1Nc', 'base64url'))
+        .update(E2E_RECOVERY_CODE.replace(/[^A-Z0-9]/g, ''), 'utf8').digest('base64url');
+      await sql`insert into idoc.mfa_recovery_codes
+        (recovery_code_id,user_id,application_id,generation_id,digest)
+        values(${randomUUID()},${user.id},'idoc.club',${randomUUID()},${recoveryDigest})`;
     }
     const now = new Date();
     const sessionId = randomUUID();
