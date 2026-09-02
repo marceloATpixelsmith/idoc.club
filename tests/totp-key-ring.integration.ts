@@ -213,3 +213,36 @@ test('mfaEncryptionKeyLifecycle flags a key declared retired that a real factor 
   const entry = states.find((state) => state.keyId === 'mistakenly-retired');
   assert.deepEqual(entry, { keyId: 'mistakenly-retired', state: 'retired', factorCount: 1, retiredWithActiveFactors: true });
 });
+
+test('mfaEncryptionKeyLifecycle treats a key referenced only by revoked factors as unused, never stuck at retiring', async () => {
+  const user = await createUser();
+  const subjectId = String(user.id);
+  const nowMs = Date.now();
+  const keyActive = Buffer.alloc(32, 28);
+  const keyFullyMigrated = Buffer.alloc(32, 29);
+
+  const config = mfaConfiguration({
+    ...otherRequiredMfaEnv,
+    MFA_TOTP_ACTIVE_KEY_ID: 'active',
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({
+      active: keyActive.toString('base64url'),
+      'fully-migrated': keyFullyMigrated.toString('base64url'),
+    }),
+    MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['fully-migrated']),
+  });
+
+  // The only factor ever encrypted under this key has since been revoked (a terminal, historical
+  // state), not merely disabled -- so this key is genuinely done, not "still needed."
+  const encrypted = encryptTotpSecret('JBSWY3DPEHPK3PXP', { key: keyFullyMigrated, keyId: 'fully-migrated' });
+  const factorId = await insertActiveFactor(subjectId, encrypted, 'fully-migrated', nowMs);
+  assert.equal(
+    await store.revokeFactor({ applicationId, factorId, nowMs, reason: 'user_revocation', subjectId }),
+    true,
+  );
+
+  const states = await mfaEncryptionKeyLifecycle(config, sql);
+  const entry = states.find((state) => state.keyId === 'fully-migrated');
+  // A correct 'retired' declaration must not be falsely flagged as an anomaly once its only factor is
+  // revoked, and the count must not still include that historical row.
+  assert.deepEqual(entry, { factorCount: 0, keyId: 'fully-migrated', retiredWithActiveFactors: false, state: 'retired' });
+});

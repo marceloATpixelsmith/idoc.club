@@ -26,9 +26,14 @@ async function main() {
     throw new Error('Usage: --reason must be one of scheduled_rotation, rollback, compromise_response.');
   }
 
-  const versions = googleOauthClientSecretVersions();
-  if (!versions.has(toVersion)) {
-    throw new Error(`--to-version "${toVersion}" is not present in this process's current GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS ring. Deploy with the new version already configured before recording its rotation.`);
+  const { activeVersion, versions } = googleOauthClientSecretVersions();
+  // Presence in the ring alone is not enough -- during the overlap window BOTH the old and new
+  // versions are legitimately present at once, so that check alone cannot catch an operator typo
+  // (e.g. --to-version=v1 after actually deploying with v2 active), which would otherwise record
+  // an immutable audit entry claiming the wrong cutover. The target must be the version this
+  // process is actually configured to use right now.
+  if (toVersion !== activeVersion) {
+    throw new Error(`--to-version "${toVersion}" does not match this process's actual configured GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION ("${activeVersion}"). Deploy with the new version already active before recording its rotation -- this prevents an immutable audit entry from recording the wrong cutover.`);
   }
 
   let fromVersion: string | null;

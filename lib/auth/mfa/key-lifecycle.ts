@@ -27,11 +27,17 @@ export type MfaEncryptionKeyState = 'pending' | 'active' | 'retiring' | 'retired
 export type MfaEncryptionKeyLifecycle = {
   keyId: string;
   state: MfaEncryptionKeyState;
-  /** Count of idoc.mfa_factors rows (any status) currently encrypted under this key ID. */
+  /** Count of idoc.mfa_factors rows *still live* (status 'pending', 'active', or 'disabled' -- the
+   * same set revokeFactor() in store.ts treats as revokable, i.e. not yet in a terminal state)
+   * currently encrypted under this key ID. Deliberately excludes 'revoked'/'replaced' rows: those
+   * are historical and permanently done, so a key that only such rows still reference has genuinely
+   * completed migration, not one still "mid-migration" -- counting them would keep a fully-migrated
+   * key stuck at 'retiring' forever and could falsely flag a correct 'retired' declaration as an
+   * anomaly. */
   factorCount: number;
-  /** True only for a key declared MFA_TOTP_RETIRED_KEY_IDS that still has >0 referencing factors --
-   * a real data-integrity anomaly (the declaration is premature or wrong), surfaced rather than
-   * silently overridden either direction. */
+  /** True only for a key declared MFA_TOTP_RETIRED_KEY_IDS that still has >0 live referencing
+   * factors -- a real data-integrity anomaly (the declaration is premature or wrong), surfaced
+   * rather than silently overridden either direction. */
   retiredWithActiveFactors: boolean;
 };
 
@@ -49,7 +55,7 @@ export async function mfaEncryptionKeyLifecycle(
   const rows = await sql<{ encryptionKeyId: string; factorCount: string }[]>`
     select encryption_key_id as "encryptionKeyId", count(*)::text as "factorCount"
     from idoc.mfa_factors
-    where factor_type = 'totp' and encryption_key_id is not null
+    where factor_type = 'totp' and encryption_key_id is not null and status in ('pending', 'active', 'disabled')
     group by encryption_key_id
   `;
   const factorCountByKeyId = new Map(rows.map((row) => [row.encryptionKeyId, Number(row.factorCount)]));

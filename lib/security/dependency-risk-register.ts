@@ -40,8 +40,8 @@ export const DEPENDENCY_RISK_REGISTER: readonly DependencyRiskEntry[] = [
     name: 'stripe',
     posture: 'fail-closed',
     authorityRisk: 'authoritative',
-    rationale: 'Payment/subscription state derived from Stripe is authoritative for membership entitlement; a failed API call or an unverifiable webhook signature must never be treated as a successful payment or a valid event.',
-    evidence: 'lib/payments/stripe.ts / app/api/stripe/webhook/route.ts: signature verification failure and API errors throw/reject rather than defaulting to success. tests/dependency-risk-register.test.ts asserts no production file wraps a Stripe call in a catch that returns a fallback "success" value.',
+    rationale: "Membership entitlement authority is the IDOC database record, never Stripe status itself (docs/09-codex-working-rules.md §2.3, §3.7); Stripe is a verified input that updates that record. Because that update path can grant or falsify the database's own authoritative entitlement state, a failed API call or an unverifiable webhook signature must never be treated as, or allowed to write, a successful payment or a valid event -- the database must stay unchanged rather than trust an unverified signal.",
+    evidence: 'lib/payments/stripe.ts / app/api/stripe/webhook/route.ts: signature verification failure and API errors throw/reject rather than writing an entitlement change. tests/dependency-risk-register.test.ts asserts no production file wraps a Stripe call in a catch that returns a fallback "success" value.',
   },
   {
     name: 'google-jwks',

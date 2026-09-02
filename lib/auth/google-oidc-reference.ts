@@ -167,13 +167,19 @@ function validRedirectUri(value: string): string {
 // google-oidc-secret-audit.ts provides the (secret-free) audit record of when the active version
 // last changed -- "audit" for a pure operator-driven config value has no runtime code path to hook
 // automatically, so it is a small function an operator's rotation runbook step calls explicitly.
-export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process.env): ReadonlyMap<string, string> {
-  return googleOauthClientSecret(env).versions;
+export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process.env): { activeVersion: string; versions: ReadonlyMap<string, string> } {
+  const { version, versions } = googleOauthClientSecret(env);
+  return { activeVersion: version, versions };
 }
 
 function googleOauthClientSecret(env: NodeJS.ProcessEnv): { secret: string; version: string; versions: ReadonlyMap<string, string> } {
   const versionsRaw = env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim();
   if (!versionsRaw) {
+    // A lone GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION with no matching VERSIONS map is not "use
+    // the legacy secret" -- it is a botched or partial rotation deploy (the ring was removed, or
+    // never added, while the pointer still names a version) and must fail closed rather than
+    // silently authenticating with a possibly-obsolete or revoked credential.
+    if (env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()) throw new GoogleOidcError('configuration');
     const secret = required(env, GOOGLE_OAUTH_ENV.clientSecret);
     return { secret, version: 'v1', versions: new Map([['v1', secret]]) };
   }

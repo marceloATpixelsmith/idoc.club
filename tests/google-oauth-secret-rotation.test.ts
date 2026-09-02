@@ -18,7 +18,7 @@ test('a plain GOOGLE_OAUTH_CLIENT_SECRET (no rotation config) resolves as an imp
   const config = loadGoogleOidcConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' });
   assert.equal(config.clientSecret, 'plain-secret-value');
   assert.equal(config.clientSecretVersion, 'v1');
-  assert.deepEqual([...googleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' })], [['v1', 'plain-secret-value']]);
+  assert.deepEqual([...googleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' }).versions], [['v1', 'plain-secret-value']]);
 });
 
 test('the versioned rotation ring resolves the configured active version, with the prior version still present for rollback', () => {
@@ -30,7 +30,9 @@ test('the versioned rotation ring resolves the configured active version, with t
   const config = loadGoogleOidcConfig(environment);
   assert.equal(config.clientSecret, 'new-secret');
   assert.equal(config.clientSecretVersion, 'v2');
-  assert.deepEqual([...googleOauthClientSecretVersions(environment)], [['v1', 'old-secret'], ['v2', 'new-secret']]);
+  const versions = googleOauthClientSecretVersions(environment);
+  assert.equal(versions.activeVersion, 'v2');
+  assert.deepEqual([...versions.versions], [['v1', 'old-secret'], ['v2', 'new-secret']]);
 });
 
 test('rollback is just reverting the active-version pointer -- the prior secret value never needs to be re-entered', () => {
@@ -58,6 +60,13 @@ test('the rotation ring fails closed on malformed JSON, non-object shapes, empty
       (error: unknown) => error instanceof GoogleOidcError && error.code === 'configuration',
     );
   }
+});
+
+test('an active-version pointer with no matching versions map fails closed rather than silently falling back to the legacy single secret', () => {
+  assert.throws(
+    () => loadGoogleOidcConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value', GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v2' }),
+    (error: unknown) => error instanceof GoogleOidcError && error.code === 'configuration',
+  );
 });
 
 test('the rotation ring requires an explicit active version and rejects a malformed version label', () => {
