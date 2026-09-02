@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { getUser } from '@/lib/db/queries';
 import { validatedAction } from '@/lib/auth/middleware';
+import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { requireCsrfToken } from '@/lib/security/csrf';
 import { createMembershipPortalSession } from './stripe';
 import { createMembershipCheckoutSession } from './checkout';
 
@@ -16,7 +18,8 @@ export const checkoutAction = validatedAction(checkoutSchema, async ({ mode }) =
   redirect(url);
 });
 
-export async function manageBillingAction(): Promise<void> {
+export async function manageBillingAction(formData: FormData): Promise<void> {
+  await requireCsrfToken(formData, await rawCanonicalSessionId());
   const url = await createMembershipPortalSession();
   redirect(url);
 }

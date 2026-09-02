@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
+import { CsrfField } from '@/components/security/csrf-field';
 import { completeOnboarding } from './actions';
 
 type Classification = 'judge' | 'judge_steward' | 'steward' | 'veterinarian';
@@ -180,6 +181,7 @@ export function OnboardingWizard() {
         onInput={(event) => setDetailsComplete(isDetailsFormComplete(event.currentTarget, classification))}
         ref={detailsFormRef}
       >
+        <CsrfField />
         <input name="classification" type="hidden" value={classification ?? ''} />
 
         <div className="grid gap-4 sm:grid-cols-2">

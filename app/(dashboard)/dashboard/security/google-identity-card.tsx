@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CsrfField } from '@/components/security/csrf-field';
 import { beginGoogleIdentityLink, disconnectGoogleIdentity } from './actions';
 
 const fetcher = (url: string) => fetch(url).then((response) => response.json());
@@ -44,6 +45,7 @@ export function GoogleIdentityCard() {
           {linked ? 'A Google account is connected to your IDOC account.' : 'Connect Google as an additional way to sign in to IDOC.'}
         </p>
         <form action={linked ? unlinkAction : linkAction} className="space-y-4">
+          <CsrfField />
           <div>
             <Label htmlFor="google-current-password" className="mb-2">Current Password</Label>
             <Input

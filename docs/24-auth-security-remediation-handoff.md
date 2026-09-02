@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1, 2, and 3, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 4, the repository baseline is:
 
-- **126 verified**
+- **127 verified**
 - **8 implemented-but-unverified**
-- **14 partial**
+- **13 partial**
 - **0 missing**
 - **7 not-applicable**
-- **22 applicable non-verified controls remaining**
+- **21 applicable non-verified controls remaining**
 
-Slices 1, 2, and 3 are complete. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1, 2, 3, and 4 are complete. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -58,13 +58,13 @@ Controls (all now `verified`):
 
 Goal (met): prove server-side authorization, lifecycle rejection, fresh verification/session rotation for password changes, collision-safe external-identity linking, and protected API/data boundaries through real production paths. Direct cross-account and disallowed-lifecycle requests fail closed without unauthorized mutation or protected-resource disclosure, proven in `tests/authorization-privilege-boundaries.integration.ts`, `tests/role-grants.integration.ts`, and `tests/security-e2e/api-authorization-disclosure.spec.ts`. This slice also found and fixed a real production defect: the Google-identity-linking audit-log write passed untyped bind parameters into `jsonb_build_object(...)`, which real PostgreSQL rejects — linking/unlinking a Google identity would have thrown in production the first time either path actually ran.
 
-### Slice 4 — CSRF / request integrity
+### Slice 4 — CSRF / request integrity (COMPLETE)
 
-Control:
+Control (now `verified`):
 
 - `AUTH-CSRF-003`
 
-Goal: implement and behaviorally prove the canonical token-based CSRF property where it applies: unpredictable purpose/session-bound tokens, server validation, expiry/rotation, and rejection of missing, replayed, and cross-session submissions. Preserve Origin validation as defense in depth. This is a current application-code readiness blocker.
+Goal (met): implemented and behaviorally proved the canonical token-based CSRF property: a signed, expiring (4-hour), session-bound double-submit-cookie token (`lib/security/csrf-tokens.ts`, `lib/security/csrf.ts`), issued/rotated at `setSession()`/`clearSession()`, enforced on every mutating Server Action, and proven with real-browser tests in `tests/security-e2e/csrf.spec.ts` (tampered form field, removed cookie) plus the existing real-Postgres adversarial suites, which now thread real production-issued tokens through every `validatedAction` call they exercise. Origin validation (AUTH-CSRF-001) is preserved as defense in depth. This slice also found and fixed a real production defect: an attempt to preserve the root layout's Partial Prerendering static shell by moving the CSRF-cookie read behind a Suspense boundary silently degraded a deep `redirect()` call (e.g. an anonymous visitor's `/admin` authorization check) from a real HTTP 3xx into a client-JS-only redirect — confirmed with a real dev-server request returning HTTP 200 instead of a redirect. Fixed by keeping that read synchronous and unwrapped, trading away the (experimental, opt-in) PPR static shell app-wide for guaranteed-correct authorization/CSRF behavior on every request.
 
 ### Slice 5 — Credential and key lifecycle
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-Slice 3 — Authorization and privilege is complete as of this revision. When this file is used as a handoff, begin with **Slice 4 — CSRF / request integrity** unless current `docs/22`/`docs/23` show that it has already been completed. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 4 — CSRF / request integrity is complete as of this revision. When this file is used as a handoff, begin with **Slice 5 — Credential and key lifecycle** unless current `docs/22`/`docs/23` show that it has already been completed. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.

@@ -24,6 +24,8 @@ import {
   setSession,
 } from '../lib/auth/session.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
+import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
+import { issueTestCsrfToken } from './csrf-test-helper.ts';
 import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const applicationId = MFA_APPLICATION_ID;
@@ -77,7 +79,9 @@ function totp(secret: string, nowMs = Date.now()) {
   return String(binary % 1_000_000).padStart(6, '0');
 }
 
-function form(name: string, value: string) { const data = new FormData(); data.set(name, value); return data; }
+function form(name: string, value: string, csrfToken: string) { const data = new FormData(); data.set(name, value); data.set('csrf_token', csrfToken); return data; }
+function csrfTokenFrom(cookies: TestCookies): string { return cookies.get(csrfCookieName())?.value ?? ''; }
+function emptyForm(cookies: TestCookies): FormData { const data = new FormData(); data.set('csrf_token', csrfTokenFrom(cookies)); return data; }
 
 async function dbUser(id: number) {
   const [user] = await sql<Record<string, unknown>[]>`select * from idoc.users where id=${id}`;
@@ -125,7 +129,7 @@ async function fulfilledStepUp(cookies: TestCookies, user: any, secret: string, 
   assert.equal(started.required, true);
   const pending = await withTestRequestCookies(cookies, getPendingStepUp);
   assert.ok(pending);
-  await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret))))
+  await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret), csrfTokenFrom(cookies))))
     .then(() => assert.fail('successful step-up verification should redirect'),
       (error) => assert.match(String(error), /NEXT_REDIRECT/));
   assert.ok(cookies.get('idoc_fresh_step_up'));
@@ -176,9 +180,10 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
   await t.test('mfa_login_verify', async () => {
     const fixture = await privilegedTotpUser();
     const cookies = new TestCookies();
+    await issueTestCsrfToken(cookies, null);
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(fixture.user, 'password', '/dashboard'), true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => verifyLoginTotp({}, form('code', '000000'))));
+      const results = await Promise.all(Array.from({ length: 5 }, () => verifyLoginTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'login-rate.example.test');
     const rows = await rateRows('mfa_login_verify');
@@ -191,10 +196,11 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await resetIdoc();
     const fixture = await privilegedTotpUser();
     const cookies = new TestCookies();
+    await issueTestCsrfToken(cookies, null);
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(fixture.user, 'password', '/dashboard'), true);
-      assert.deepEqual(await beginAuthenticatorRecovery({}, form('recover', 'yes')), { success: 'Enter one of your recovery codes.' });
-      const results = await Promise.all(Array.from({ length: 5 }, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', `invalid-${randomUUID()}`))));
+      assert.deepEqual(await beginAuthenticatorRecovery({}, form('recover', 'yes', csrfTokenFrom(cookies))), { success: 'Enter one of your recovery codes.' });
+      const results = await Promise.all(Array.from({ length: 5 }, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', `invalid-${randomUUID()}`, csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'recovery-rate.example.test');
     const rows = await rateRows('mfa_recovery_code_verify');
@@ -209,9 +215,10 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await grantRole(user.id, 'administrator');
     const account = await dbUser(user.id);
     const cookies = new TestCookies();
+    await issueTestCsrfToken(cookies, null);
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(account, 'password', '/dashboard'), true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => confirmTotpEnrollment({}, form('code', '000000'))));
+      const results = await Promise.all(Array.from({ length: 5 }, () => confirmTotpEnrollment({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'enrollment-rate.example.test');
     const rows = await rateRows('mfa_enrollment_confirm');
@@ -227,7 +234,7 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await withTestRequestCookies(cookies, async () => {
       await setSession(fixture.user);
       assert.equal((await requireFreshStepUp(fixture.user, 'generate-recovery-codes', '/dashboard/security')).required, true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => verifyStepUpTotp({}, form('code', '000000'))));
+      const results = await Promise.all(Array.from({ length: 5 }, () => verifyStepUpTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'step-up-rate.example.test');
     const rows = await rateRows('mfa_step_up_verify');
@@ -247,20 +254,20 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await setSession(fixture.user);
       const before = await recoveryCodeCount(fixture.user.id);
       await actorBoundary(fixture.user.id, async () => {
-        const blocked = await regenerateRecoveryCodes({}, new FormData());
+        const blocked = await regenerateRecoveryCodes({}, emptyForm(cookies));
         assert.equal(blocked, undefined);
       }).then(() => assert.fail('missing fresh proof should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(fixture.user.id), before);
       await fulfilledStepUp(cookies, fixture.user, fixture.secret);
       const savedAuthority = cookies.get('idoc_fresh_step_up')!.value;
-      const result = await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, new FormData()));
+      const result = await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(cookies)));
       assert.ok((result as { recoveryCodes?: string[] }).recoveryCodes?.length);
       const after = await recoveryCodeCount(fixture.user.id);
       assert.ok(after > 0);
       assert.equal(cookies.get('idoc_fresh_step_up'), undefined);
 
       cookies.set('idoc_fresh_step_up', savedAuthority);
-      await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(cookies)))
         .then(() => assert.fail('replayed fresh authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(fixture.user.id), after);
     }, 'step-up-use.example.test');
@@ -275,7 +282,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await setSession(actionFixture.user);
       await fulfilledStepUp(actionCookies, actionFixture.user, actionFixture.secret, 'change-security-settings');
       const before = await recoveryCodeCount(actionFixture.user.id);
-      await actorBoundary(actionFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(actionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(actionCookies)))
         .then(() => assert.fail('wrong-action authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(actionFixture.user.id), before);
     }, 'step-up-action-binding.example.test');
@@ -287,7 +294,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await fulfilledStepUp(sessionCookies, sessionFixture.user, sessionFixture.secret);
       const before = await recoveryCodeCount(sessionFixture.user.id);
       await setSession(sessionFixture.user);
-      await actorBoundary(sessionFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(sessionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(sessionCookies)))
         .then(() => assert.fail('different-session authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(sessionFixture.user.id), before);
     }, 'step-up-session-binding.example.test');
@@ -308,7 +315,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
         .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
       staleCookies.set('idoc_fresh_step_up', mismatchedVersion);
       const before = await recoveryCodeCount(first.user.id);
-      await actorBoundary(first.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(first.user.id, () => regenerateRecoveryCodes({}, emptyForm(staleCookies)))
         .then(() => assert.fail('mismatched evidence sessionVersion must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(first.user.id), before);
     }, 'step-up-version.example.test');
@@ -325,7 +332,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
         .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
       roleCookies.set('idoc_fresh_step_up', mismatchedRole);
       const before = await recoveryCodeCount(roleFixture.user.id);
-      await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(roleCookies)))
         .then(() => assert.fail('mismatched evidence role must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(roleFixture.user.id), before);
     }, 'step-up-role.example.test');
@@ -344,7 +351,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       expiryCookies.set('idoc_fresh_step_up', expired);
       expiryCookies.set(REMEMBERED_TOTP_DEVICE_COOKIE, 'remembered-device-alone');
       const before = await recoveryCodeCount(expiryFixture.user.id);
-      await actorBoundary(expiryFixture.user.id, () => regenerateRecoveryCodes({}, new FormData()))
+      await actorBoundary(expiryFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(expiryCookies)))
         .then(() => assert.fail('expired/remembered-only authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
       assert.equal(await recoveryCodeCount(expiryFixture.user.id), before);
     }, 'step-up-expiry.example.test');
@@ -360,6 +367,7 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await setSession(attacker.user);
       crossCookies.set('idoc_fresh_step_up', authority);
       const forged = new FormData();
+      forged.set('csrf_token', csrfTokenFrom(crossCookies));
       forged.set('userId', String(owner.user.id));
       forged.set('action', 'generate-recovery-codes');
       forged.set('sessionId', 'forged');

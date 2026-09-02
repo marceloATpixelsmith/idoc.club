@@ -7,6 +7,7 @@ import {
   revokeSession,
   touchSession,
 } from '@/lib/auth/session-registry';
+import { clearCsrfToken, issueCsrfToken } from '@/lib/security/csrf';
 import 'server-only';
 
 export { comparePasswords, hashPassword, passwordHashNeedsUpgrade } from '@/lib/auth/password-hash';
@@ -71,6 +72,33 @@ export async function getSession() {
   return (await registeredSessionIsValid(session)) ? session : null;
 }
 
+/** The session id claimed by the canonical cookie's JWT, verified only for a valid signature and
+ * expiry -- deliberately NOT registry-checked (contrast getSession() above), and NOT sufficient
+ * authentication authority on its own. This exists solely for AUTH-CSRF-003 session-binding:
+ * middleware.ts mints the CSRF cookie's sessionRef from this same, registry-independent notion (it
+ * cannot cheaply consult the registry on every request), so every Server Action that validates CSRF
+ * evidence must resolve its "expected" session id the same way middleware minted it. Using
+ * getSession()'s registry-checked id here instead would diverge the moment a session is revoked or
+ * superseded elsewhere while its JWT is still cryptographically valid (e.g. a password reset from
+ * another device, or an admin-initiated revoke): the CSRF cookie would still carry that session's
+ * raw id, but getSession() would now return null, so the two could never match again until the JWT
+ * itself expired -- locking that browser out of sign-out, sign-in, and recovery, not just the
+ * revoked session's own actions. Binding CSRF evidence to "the same JWT-holding browser" rather than
+ * "a still-authoritative session" is also the semantically correct property for a CSRF check: it
+ * proves the request came from the browser that holds this session cookie, not that the session
+ * remains authorized -- authorization is getSession()'s job, and stays enforced wherever it already
+ * was, completely independent of this. */
+export async function rawCanonicalSessionId(): Promise<string | null> {
+  const cookieStore = await requestCookies();
+  const canonicalValue = cookieStore.get(sessionCookieName(requestEnvironment()))?.value;
+  if (!canonicalValue) return null;
+  try {
+    return (await verifyToken(canonicalValue)).sessionId;
+  } catch {
+    return null;
+  }
+}
+
 export async function setSession(user: NewUser) {
   const now = new Date();
   const session: SessionData = {
@@ -95,6 +123,9 @@ export async function setSession(user: NewUser) {
   const cookieStore = await requestCookies();
   cookieStore.set(sessionCookieName(environment), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt, environment));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
+  // AUTH-CSRF-003: rotate CSRF evidence to the newly-established session. A token minted before
+  // login (anonymous, sessionRef: null) or under a prior session is not valid evidence afterward.
+  await issueCsrfToken(session.sessionId);
 }
 
 export async function clearSession() {
@@ -118,4 +149,7 @@ export async function clearSession() {
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
   cookieStore.delete('idoc_pending_step_up');
   cookieStore.delete('idoc_fresh_step_up');
+  // AUTH-CSRF-003: a token bound to the now-revoked session must not remain valid evidence. The
+  // next page load's middleware mints a fresh, anonymously-bound one lazily.
+  await clearCsrfToken();
 }

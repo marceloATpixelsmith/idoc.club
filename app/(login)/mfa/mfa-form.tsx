@@ -3,6 +3,8 @@
 import { useActionState, useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
+import { CsrfField } from '@/components/security/csrf-field';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import {
   acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, beginLoginWebAuthn,
   beginStepUpWebAuthn, cancelMfa, confirmTotpEnrollment, verifyLoginTotp, verifyLoginWebAuthn,
@@ -20,7 +22,8 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
     setPending(true);
     setError(undefined);
     try {
-      const begin = mode === 'challenge' ? await beginLoginWebAuthn() : await beginStepUpWebAuthn();
+      const csrfToken = readCsrfTokenFromDocumentCookie();
+      const begin = mode === 'challenge' ? await beginLoginWebAuthn(csrfToken) : await beginStepUpWebAuthn(csrfToken);
       let response;
       try {
         response = await startAuthentication({ optionsJSON: begin.options });
@@ -31,6 +34,7 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
       const formData = new FormData();
       formData.set('ceremonyId', begin.ceremonyId);
       formData.set('credentialJson', JSON.stringify(response));
+      formData.set('csrf_token', csrfToken);
       const verify = mode === 'challenge' ? verifyLoginWebAuthn : verifyStepUpWebAuthn;
       const result = await verify({}, formData);
       if (result?.error) setError(result.error);
@@ -59,6 +63,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
   const [, cancel] = useActionState<State, FormData>(cancelMfa, {});
   if (state.recoveryCodes) return (
     <form action={acknowledge} className="idoc-auth-form">
+      <CsrfField />
       <p>Store these recovery codes somewhere safe. They will not be shown again.</p>
       <ul aria-label="Recovery codes">{state.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
       <label><input name="saved" required type="checkbox" value="yes" /> I saved my recovery codes.</label>
@@ -67,6 +72,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
   );
   if (mode === 'recovery-ack') return (
     <form action={cancel} className="idoc-auth-form">
+      <CsrfField />
       <p className="idoc-auth-error" role="alert">The one-time recovery-code display is no longer available. Sign in again with your new authenticator, then generate a fresh recovery-code set from account security.</p>
       <input name="cancel" type="hidden" value="yes" />
       <button className="idoc-auth-button" type="submit">Sign in again</button>
@@ -75,16 +81,18 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
   if (mode === 'recovery-entry') return (
     <>
       <form action={formAction} className="idoc-auth-form">
+        <CsrfField />
         <label>Recovery code<input autoComplete="off" autoFocus maxLength={64} name="recoveryCode" required /></label>
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
         <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Checking" /> : 'Continue'}</button>
       </form>
-      <form action={cancel}><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
+      <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
     </>
   );
   return (
     <>
     <form action={formAction} className="idoc-auth-form">
+      <CsrfField />
       {(mode === 'enrollment' || mode === 'replacement') && provisioningUri ? <>
         <p>Add this account in your authenticator app, then enter its current code.</p>
         <label>Authenticator setup key<textarea readOnly rows={4} value={provisioningUri} /></label>
@@ -100,9 +108,9 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
     {(mode === 'challenge' || mode === 'step-up') && hasWebAuthn ? <PasskeyButton mode={mode} /> : null}
-    {mode === 'challenge' ? <form action={recover}><input name="recover" type="hidden" value="yes" />
+    {mode === 'challenge' ? <form action={recover}><CsrfField /><input name="recover" type="hidden" value="yes" />
       <button disabled={recovering} type="submit">Use a recovery code</button></form> : null}
-    {mode === 'replacement' ? <form action={cancel}><input name="cancel" type="hidden" value="yes" />
+    {mode === 'replacement' ? <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" />
       <button type="submit">Cancel and sign in again</button></form> : null}
     </>
   );

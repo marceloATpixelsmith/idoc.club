@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { CsrfField } from '@/components/security/csrf-field';
 import { saveMemberProfileByAdminForm } from './actions';
 import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 
@@ -16,6 +17,7 @@ export function AdminProfileForm({ member, profileId }: { member: Member; profil
   const [state, action, pending] = useActionState(saveMemberProfileByAdminForm, {} as { error?: string; success?: string });
   const official = judge ?? steward;
   return <form action={action} className="max-w-2xl space-y-4">
+    <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
     {fields.map(([name, label]) => <label className="block" key={name}>{label}<input className="block w-full border p-2" defaultValue={String(member.profile[name] ?? '')} name={name} required={name !== 'address2'} /></label>)}
     <Select initial={String(member.profile.countryCode)} label="Country" name="countryCode" required values={ISO_COUNTRY_CODES} />

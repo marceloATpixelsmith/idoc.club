@@ -6,6 +6,7 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { CsrfField } from '@/components/security/csrf-field';
 import type { ActionState } from '@/lib/auth/middleware';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -50,6 +51,7 @@ export function OtpEntryStep({
     <AuthShell description={description} title={title}>
       <div className="idoc-auth-otp">
         <form action={formAction} className="idoc-auth-form" ref={formRef}>
+          <CsrfField />
           <InputOTP
             autoComplete="one-time-code"
             containerClassName="w-full"
@@ -93,6 +95,7 @@ export function OtpEntryStep({
             <span>Resend in {secondsLeft}s</span>
           ) : (
             <form action={resendFormAction} className="inline">
+              <CsrfField />
               <button disabled={resendPending} type="submit">Resend</button>
             </form>
           )}
@@ -101,6 +104,7 @@ export function OtpEntryStep({
         {resendState.error ? <p className="idoc-auth-error" role="alert">{resendState.error}</p> : null}
 
         <form action={cancelFormAction} className="idoc-auth-actions__center">
+          <CsrfField />
           <button className="idoc-auth-link border-0 bg-transparent p-0" type="submit">{cancelLabel}</button>
         </form>
       </div>

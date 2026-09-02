@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { CsrfField } from '@/components/security/csrf-field';
 import { grantRoleForm, revokeRoleForm } from './actions';
 
 type FormState = { error?: string; success?: string };
@@ -15,6 +16,7 @@ export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; use
       {activeRoles.length === 0 && <p className="text-sm text-gray-500">None.</p>}
       {activeRoles.map((role) => (
         <form key={role.id} action={revokeAction} className="mt-1 flex items-center gap-2">
+          <CsrfField />
           <input type="hidden" name="userId" value={userId} />
           <input type="hidden" name="role" value={role.role} />
           <span className="text-sm">{role.role}</span>
@@ -26,6 +28,7 @@ export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; use
       {revokeState.success && <p className="text-sm text-green-700">{revokeState.success}</p>}
     </div>
     <form action={grantAction} className="space-y-2">
+      <CsrfField />
       <input type="hidden" name="userId" value={userId} />
       <label className="block text-sm">Grant role
         <select className="mt-1 block w-full border p-2" defaultValue="administrator" name="role" required>

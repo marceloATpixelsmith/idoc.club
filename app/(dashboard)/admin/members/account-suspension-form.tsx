@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { CsrfField } from '@/components/security/csrf-field';
 import { reinstateUserAccountForm, suspendUserAccountForm } from './actions';
 
 type FormState = { error?: string; success?: string };
@@ -8,6 +9,7 @@ type FormState = { error?: string; success?: string };
 export function SuspendAccountForm({ userId }: { userId: number }) {
   const [state, action, pending] = useActionState(suspendUserAccountForm, {} as FormState);
   return <form action={action} className="mt-2 max-w-md space-y-2">
+    <CsrfField />
     <input type="hidden" name="userId" value={userId} />
     <p className="text-sm text-gray-700">Immediately blocks this user from signing in and revokes all active sessions and remembered devices.</p>
     <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
@@ -25,6 +27,7 @@ const REINSTATE_ACCOUNT_LABELS: Record<string, string> = {
 export function ReinstateAccountForm({ userId }: { userId: number }) {
   const [state, action, pending] = useActionState(reinstateUserAccountForm, {} as FormState);
   return <form action={action} className="mt-2 max-w-md space-y-2">
+    <CsrfField />
     <input type="hidden" name="userId" value={userId} />
     <label className="block text-sm">Restore to state
       <select className="mt-1 block w-full border p-2" defaultValue="active" name="accountState" required>

@@ -6,6 +6,7 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { PasswordField } from '@/components/auth/password-field';
 import { countPasswordCharacters, MAX_PASSWORD_LENGTH, PASSWORD_REQUIREMENTS } from '@/lib/auth/password-policy';
+import { CsrfField } from '@/components/security/csrf-field';
 import type { ActionState } from '@/lib/auth/middleware';
 
 type CompleteAction = (prevState: ActionState, formData: FormData) => Promise<ActionState>;
@@ -36,6 +37,7 @@ export function PasswordCreateStep({
   return (
     <AuthShell description={description} title={title}>
       <form action={formAction} className="idoc-auth-form">
+        <CsrfField />
         <PasswordField
           autoComplete="new-password"
           label={label}

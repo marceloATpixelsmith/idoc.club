@@ -19,7 +19,7 @@ test('the pending-primary-auth cookie strictly validates hasWebAuthn is boolean 
 
 test('login-time WebAuthn actions require the pending challenge to have offered a passkey and never trust a factorId supplied outside that binding', () => {
   const actions = source('app/(login)/mfa/actions.ts');
-  assert.match(actions, /export async function beginLoginWebAuthn\(\)/);
+  assert.match(actions, /export async function beginLoginWebAuthn\(csrfToken: string\)/);
   assert.match(actions, /if \(!context \|\| !context\.pending\.hasWebAuthn\) throw new Error/);
   assert.match(actions, /export const verifyLoginWebAuthn = validatedAction\(webAuthnResponseSchema/);
   const verifyLoginWebAuthn = actions.slice(actions.indexOf('export const verifyLoginWebAuthn'), actions.indexOf('export const beginAuthenticatorRecovery'));

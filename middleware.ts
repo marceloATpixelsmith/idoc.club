@@ -10,6 +10,7 @@ import {
   verifyToken,
 } from '@/lib/auth/session';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
+import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 
 const protectedRoutes = '/dashboard';
 
@@ -47,10 +48,6 @@ export async function middleware(request: NextRequest) {
     return res;
   }
 
-  const forwardedHeaders = new Headers(request.headers);
-  forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
-  const next = () => NextResponse.next({ request: { headers: forwardedHeaders } });
-
   const { pathname } = request.nextUrl;
   const canonicalName = sessionCookieName();
   const canonicalCookie = request.cookies.get(canonicalName);
@@ -62,9 +59,33 @@ export async function middleware(request: NextRequest) {
   const legacyCookie = request.cookies.get(LEGACY_SESSION_COOKIE_NAME);
   const isProtectedRoute = pathname.startsWith(protectedRoutes);
 
+  // AUTH-CSRF-003: ensure a valid, correctly session-bound CSRF cookie exists before this request
+  // reaches any Server Component render or Server Action. A token minted anonymously (or under a
+  // different session) is replaced once the real current session is known, so a stale/foreign token
+  // is never carried forward. Mutating request.cookies -- not only the outgoing response -- before
+  // building the forwarded request is what makes a freshly-minted token visible to *this same*
+  // request's page render (the hidden form field on a visitor's very first page load), not only a
+  // later one; middleware has no next/headers, so this calls the pure csrf-tokens.ts functions
+  // directly rather than lib/security/csrf.ts's request-scoped wrappers.
+  let sessionIdForCsrf: string | null = null;
+  if (canonicalCookie) {
+    try { sessionIdForCsrf = (await verifyToken(canonicalCookie.value)).sessionId; } catch { /* handled below */ }
+  }
+  const existingCsrfCookie = request.cookies.get(csrfCookieName());
+  const existingCsrfPayload = existingCsrfCookie ? await verifyCsrfToken(existingCsrfCookie.value) : null;
+  let mintedCsrfToken: string | null = null;
+  if (!existingCsrfPayload || existingCsrfPayload.sessionRef !== sessionIdForCsrf) {
+    mintedCsrfToken = await signCsrfToken(sessionIdForCsrf);
+    request.cookies.set(csrfCookieName(), mintedCsrfToken);
+  }
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
+  const next = () => NextResponse.next({ request: { headers: forwardedHeaders } });
+
   const finish = (res: NextResponse) => {
     res.headers.set(REQUEST_ID_HEADER, requestId);
     if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
+    if (mintedCsrfToken) res.cookies.set({ name: csrfCookieName(), value: mintedCsrfToken, ...csrfCookieOptions() });
     return res;
   };
 

@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { TurnstileWidget } from '@/components/turnstile-widget';
+import { CsrfField } from '@/components/security/csrf-field';
 import type { ActionState } from '@/lib/auth/middleware';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -42,6 +43,7 @@ export function EmailEntryStep({
   return (
     <AuthShell description={description} title={title}>
       <form action={formAction} className="idoc-auth-form">
+        <CsrfField />
         <input name="turnstileToken" type="hidden" value={turnstileToken} />
 
         <div className="idoc-auth-field">
