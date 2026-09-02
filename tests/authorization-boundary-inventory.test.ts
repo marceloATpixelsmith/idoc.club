@@ -76,6 +76,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/auth/google/start/route.ts': 'oauth-transaction-boundary',
   'app/api/client-error/route.ts': 'log-only-no-data-access',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
+  'app/api/cron/clock-skew-check/route.ts': 'shared-secret-header',
   'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',

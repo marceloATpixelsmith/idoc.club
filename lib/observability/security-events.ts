@@ -46,6 +46,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   bounce_complaint_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'bounce-complaint-alert', retentionClass: 'operational' },
   breached_password_alert_failed: { attribution: 'system', category: 'delivery', resource: 'breached-password-alert', retentionClass: 'security' },
   breached_password_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'breached-password-alert', retentionClass: 'operational' },
+  clock_skew_check_failed: { attribution: 'system', category: 'operational', resource: 'clock-skew-check', retentionClass: 'operational' },
   client_error: { attribution: 'anonymous', category: 'operational', resource: 'client-error-report', retentionClass: 'operational' },
   data_retention_purge_failed: { attribution: 'system', category: 'operational', resource: 'data-retention-purge', retentionClass: 'operational' },
   email_otp_delivery_failed: { attribution: 'subject', category: 'delivery', resource: 'email-otp', retentionClass: 'security' },

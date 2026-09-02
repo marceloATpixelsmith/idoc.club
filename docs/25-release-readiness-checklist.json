@@ -1,0 +1,16 @@
+{
+  "note": "AUTH-OPERATIONS-011: machine-readable mirror of docs/07 section 15.6's release-signoff checklist. Never edit an item's description here without updating the matching markdown checkbox in docs/07 (and vice versa) -- scripts/validate-release-checklist.mjs fails CI the moment the two diverge, in either direction. Filling in status/evidence for a real release is an operator's job; nothing in this repository or its CI can set status to \"verified\" on its own -- see AUTH-OPERATIONS-011's own canonical requirement text: production readiness must be an explicit machine-readable evidence checklist, 'never a certification or automatic security claim.' A status of \"verified\" with no evidence, or evidence that is empty/placeholder text, fails validation just as hard as a stale item list does.",
+  "source": "docs/07-administrator-and-operations-runbook.md#156-release-signoff-leave-unchecked-until-manually-proved",
+  "items": [
+    { "id": "release-1-verification-green", "description": "Release 1 Verification is green on final deployed code head", "status": "unchecked", "evidence": null },
+    { "id": "production-migrations-applied", "description": "Production database migrations are applied", "status": "unchecked", "evidence": null },
+    { "id": "production-auth-variables-configured", "description": "Required Production auth variables are configured in Vercel", "status": "unchecked", "evidence": null },
+    { "id": "google-production-origin-callback-configured", "description": "Google production origin/callback are configured", "status": "unchecked", "evidence": null },
+    { "id": "security-email-delivery-retry-verified", "description": "Security-email delivery and retry operation are verified", "status": "unchecked", "evidence": null },
+    { "id": "privileged-totp-enrollment-login-verified", "description": "Privileged TOTP enrollment and password/Google login are verified", "status": "unchecked", "evidence": null },
+    { "id": "ordinary-password-otp-remembered-device-verified", "description": "Ordinary password+OTP and remembered-device behavior are verified", "status": "unchecked", "evidence": null },
+    { "id": "password-reset-recovery-replacement-verified", "description": "Password reset and authenticator recovery/replacement are verified", "status": "unchecked", "evidence": null },
+    { "id": "step-up-session-role-invalidation-verified", "description": "Fresh step-up, session management, and role-change invalidation are verified", "status": "unchecked", "evidence": null },
+    { "id": "production-smoke-test-passed", "description": "Production smoke test passed; operator/date/deployment SHA", "status": "unchecked", "evidence": null }
+  ]
+}

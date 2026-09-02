@@ -31,6 +31,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # AUTH-OPERATIONS-010: "Pull-request CI MUST ... fail on contract validation ... or whitespace
+      # checks including contract documentation changes." Both scripts already existed in the
+      # repository (validate-auth-docs.mjs since Slice 3) but neither was ever actually wired into a
+      # CI workflow -- a PR could silently drift docs/22/23's own evidence claims out of sync with
+      # reality, or introduce whitespace hygiene issues, with nothing failing the build.
+      - run: node scripts/validate-auth-docs.mjs
+      - run: node scripts/validate-release-checklist.mjs
+      - run: node scripts/check-whitespace.mjs
       # Two-tier dependency scan: fails the build on a critical advisory (none exist in the current
       # dependency tree, so this is a real, enforced gate today, not aspirational); high/moderate
       # advisories are reported but do not fail the build yet, since the tree currently carries

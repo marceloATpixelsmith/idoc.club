@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 7, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 8, the repository baseline is:
 
-- **144 verified**
+- **145 verified**
 - **0 implemented-but-unverified**
-- **4 partial**
+- **3 partial**
 - **0 missing**
 - **7 not-applicable**
-- **4 applicable non-verified controls remaining**
+- **3 applicable non-verified controls remaining**
 
-Slices 1 through 7 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1 through 8 are complete -- every repository-addressable gap in the ordered remediation-slice list has been implemented and behaviorally proven. Three controls remain `partial`, each gated exclusively on external/operational evidence this repository cannot produce on its own: `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), `AUTH-OPERATIONS-008`, and `AUTH-OPERATIONS-011` (both from Slice 8, repository half complete) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -105,15 +105,15 @@ Controls (all five verified):
 
 Goal (met): `tests/auth-error-classes.integration.ts` behaviorally proves the real production `verifyLoginOtp` surfaces the canonical generic support message only for a genuinely persistent failure (a `migrated_pending` account with no imported foundation record), keeping ordinary mistakes specific; `tests/auth-email-resend-safety.integration.ts` proves the real production `resendSignupOtp`/`verifySignupOtp` enforce the cooldown, genuinely supersede a prior code, and stay enumeration-resistant. A new `mfa_replay_detected` security-event kind (migration `0031_mfa_replay_notification_kind.sql`) closes the "replay attempts have no dedicated security event" gap, wired into both `verifyLoginTotp` and `verifyLoginWebAuthn` in `app/(login)/mfa/actions.ts` and proven end to end for the TOTP path in `tests/mfa-replay-notifications.integration.ts`; `production-mfa-finalization.integration.ts` was extended to assert the real enrollment/replacement/recovery notification kinds too. `lib/notifications/rate-limit-correlation.ts` adds a real, narrow correlation engine (3-of-4-window sustained blocking of the same bucket pages an operator once, severity-tagged) proven in `tests/rate-limit-correlation.integration.ts`. `lib/membership/incident-response.ts`'s `forceRevokeAllAuthority` adds the previously-missing operator-initiated "force-revoke all authority for user X" admin tool (Super-Admin-gated, incident-correlated audit trail, wired to a real Server Action and admin form), proven in `tests/incident-response.integration.ts`.
 
-### Slice 8 — Deployment readiness and operational validation
+### Slice 8 — Deployment readiness and operational validation (REPOSITORY HALF COMPLETE)
 
 Controls:
 
-- `AUTH-OPERATIONS-008`
-- `AUTH-OPERATIONS-010`
-- `AUTH-OPERATIONS-011`
+- `AUTH-OPERATIONS-008` (repository half complete, remains `partial` pending external evidence)
+- `AUTH-OPERATIONS-010` (verified)
+- `AUTH-OPERATIONS-011` (repository half complete, remains `partial` pending external evidence)
 
-Goal: close both the repository-addressable gaps and the external/manual evidence requirements for these controls. Specifically, implement and verify the missing clock-skew monitoring/alerting called out by `AUTH-OPERATIONS-008`; add the missing CI lint/format and auth-contract documentation-drift checks called out by `AUTH-OPERATIONS-010`; and add the machine-readable readiness/checklist freshness enforcement required by `AUTH-OPERATIONS-011`. After those repository gaps are closed, obtain dated operational evidence for the real deployed environment, restore/reconciliation drills, provider validation, and incident readiness. Do not promote these controls from code/CI alone or from manual evidence alone when the authoritative row requires both.
+Goal (repository half met): `lib/observability/clock-skew-check.ts` (new) implements and behaviorally proves the clock-skew monitoring/alerting `AUTH-OPERATIONS-008` called out, wired to a scheduled cron route (`tests/clock-skew-check.integration.ts`). `scripts/validate-auth-docs.mjs` (existed since Slice 3, never wired into CI until now) and a new `scripts/check-whitespace.mjs` close and fully verify `AUTH-OPERATIONS-010` -- both are now real, enforced steps in both CI workflows. `docs/25-release-readiness-checklist.json` plus `scripts/validate-release-checklist.mjs` (new) implement the machine-readable readiness/checklist freshness and anti-self-certification enforcement `AUTH-OPERATIONS-011` called out (`tests/validate-release-checklist.test.ts`). What remains, for `AUTH-OPERATIONS-008` and `AUTH-OPERATIONS-011` only, is exclusively external/operational evidence this repository cannot produce on its own: dated operator confirmation that the deployed cron fires and pages on real drift, and a real, evidence-backed completion of the release-readiness checklist for an actual production release. Do not promote either of those two controls from code/CI alone; their authoritative rows require both halves closed.
 
 ## Required workflow for each remaining slice
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-Slice 7 — Operations and observability is complete as of this revision. `AUTH-SECRET-004` (from Slice 5) remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 8 — Deployment readiness and operational validation** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 8. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 8 — Deployment readiness and operational validation is repository-complete as of this revision: every gap this ordered remediation-slice list named has been implemented and behaviorally proven in the repository. Three controls remain `partial`, each gated exclusively on external/operational evidence no repository session can produce on its own: `AUTH-SECRET-004` (from Slice 5), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (from Slice 8) — see each control's docs/23 row for the precise remaining gap. When this file is used as a handoff, there is no next numbered slice to start; inspect current `main`, `docs/22`, and `docs/23` first to confirm this baseline still holds (a regression or a canonical-reference change could reopen a control), and if a Codex review or the user identifies further real gaps, treat those as their own scoped follow-up rather than assuming another slice is pending. Obtaining the three controls' external/operational evidence (a real deployed clock-skew alert, a real completed release-readiness checklist, a real recorded OAuth-secret-rotation event) is an operator/deployment action, not further repository code.
