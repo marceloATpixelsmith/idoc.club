@@ -64,7 +64,7 @@ The Release 1 automated suite covers cross-account denial, administrator and Sup
 | Stripe webhook delivered twice                | No duplicate payment or duplicate extension.                                   |
 | Stripe payment fails                          | Configured grace/notification behavior occurs.                                 |
 | Automatic renewal fails                       | Stripe retries; the member retains full access for five days, then becomes payment-only if unpaid. |
-| Non-recurring term reaches paid-through       | Member retains full access for five calendar days, then receives only payment and logout if still unpaid. |
+| Non-recurring term reaches paid-through       | Paid-through remains entitled; member then retains full access for the five complete calendar days beginning the following day, and receives only payment/logout after that if still unpaid. |
 | Early renewal                                 | Exactly 12 months is added to the existing paid-through date.                  |
 | Late renewal                                  | New 12-month term begins on the actual successful payment date.                |
 | Bank-transfer member logs in                  | Sees active membership without Stripe subscription.                            |

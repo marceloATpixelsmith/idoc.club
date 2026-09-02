@@ -11,7 +11,7 @@ This document is the actionable implementation and acceptance source for the Rel
 - No preference change charges immediately, shortens paid time, or creates duplicate billing.
 - Creating an account or profile does not create membership access.
 - Never-paid and post-grace expired accounts receive only the membership-payment gate and logout after authentication.
-- A previously paid member retains full member access for five calendar days after either a failed recurring renewal or expiration of a non-recurring term.
+- A previously paid member retains full member access during a five-calendar-day grace window: recurring failure starts on the failed scheduled-renewal date; non-recurring grace consists of the five full calendar days beginning the day after `valid_until`.
 - Payment received during grace continues/restores active entitlement. After grace without payment, member access ends and the payment-only state applies.
 - Suspension overrides payment/grace and requires separate administrator reinstatement.
 
@@ -124,7 +124,7 @@ Requirements:
 
 ### 4.5 Grace and post-grace
 
-1. Failed recurring renewal or non-recurring paid-through expiration enters `grace` for exactly five calendar days.
+1. Failed recurring renewal enters `grace` for five calendar days beginning on the failed scheduled-renewal date. A non-recurring membership remains entitled through `valid_until`, then enters `grace` for the five full calendar days beginning on the following day.
 2. During grace, full member and professional-role access remains available with billing notice.
 3. Eligible payment during grace returns/continues `active` entitlement.
 4. Grace end without payment sets `expired` and routes every subsequent authenticated request to payment/logout only.
