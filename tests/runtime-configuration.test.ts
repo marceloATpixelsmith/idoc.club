@@ -174,6 +174,49 @@ test('AUTH-SECRET-003: fails closed marking an unknown key ID or the active key 
   }
 });
 
+test('AUTH-CRYPTO-004: MFA_TOTP_RETIRED_KEY_IDS is empty by default and never demands its own variable when unset', () => {
+  assert.deepEqual(mfaConfiguration(validMfa).retiredKeyIds, new Set());
+  assert.deepEqual(mfaConfiguration({ ...validMfa, MFA_TOTP_RETIRED_KEY_IDS: '   ' }).retiredKeyIds, new Set());
+});
+
+test('AUTH-CRYPTO-004: an operator can declare a decommissioned key retired without disturbing the ring', () => {
+  const key32b = Buffer.alloc(32, 8).toString('base64url');
+  const configuration = mfaConfiguration({
+    ...validMfa,
+    MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['old']),
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ current: key32, old: key32b }),
+  });
+  assert.deepEqual(configuration.retiredKeyIds, new Set(['old']));
+  assert.deepEqual(configuration.encryptionKeys.get('old'), Buffer.alloc(32, 8));
+});
+
+test('AUTH-CRYPTO-004: fails closed marking an unknown key ID or the active key ID retired', () => {
+  assert.throws(
+    () => mfaConfiguration({ ...validMfa, MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['never-enrolled']) }),
+    /MFA_TOTP_RETIRED_KEY_IDS/,
+  );
+  assert.throws(
+    () => mfaConfiguration({ ...validMfa, MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['current']) }),
+    /MFA_TOTP_RETIRED_KEY_IDS/,
+  );
+  for (const MFA_TOTP_RETIRED_KEY_IDS of ['{', '{}', '"not-an-array"', JSON.stringify([1])]) {
+    assert.throws(() => mfaConfiguration({ ...validMfa, MFA_TOTP_RETIRED_KEY_IDS }), /MFA_TOTP_RETIRED_KEY_IDS/);
+  }
+});
+
+test('AUTH-CRYPTO-004: a key cannot be declared both retired and compromised at once', () => {
+  const key32b = Buffer.alloc(32, 8).toString('base64url');
+  assert.throws(
+    () => mfaConfiguration({
+      ...validMfa,
+      MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ current: key32, contested: key32b }),
+      MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['contested']),
+      MFA_TOTP_COMPROMISED_KEY_IDS: JSON.stringify(['contested']),
+    }),
+    /MFA_TOTP_RETIRED_KEY_IDS/,
+  );
+});
+
 test('remembered-TOTP-device policy is off by default and never demands its own secret when unset', () => {
   const configuration = mfaConfiguration(validMfa);
   assert.equal(configuration.rememberedDevice.enabled, false);

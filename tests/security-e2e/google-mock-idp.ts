@@ -51,9 +51,24 @@ function json(res: import('node:http').ServerResponse, status: number, body: unk
 }
 
 export async function startGoogleMockIdp(): Promise<{ close: () => Promise<void> }> {
-  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
-  const kid = 'mock-google-signing-key-1';
-  const jwk = { ...(await exportJWK(publicKey)), alg: 'RS256', kid, use: 'sig' };
+  const initialKeyPair = await generateKeyPair('RS256', { extractable: true });
+  const initialKid = 'mock-google-signing-key-1';
+  const knownJwks = new Map<string, { privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey']; jwk: Record<string, unknown> }>();
+  knownJwks.set(initialKid, {
+    privateKey: initialKeyPair.privateKey,
+    jwk: { ...(await exportJWK(initialKeyPair.publicKey)), alg: 'RS256', kid: initialKid, use: 'sig' },
+  });
+  // `/token` always signs with whichever kid is current; rotating adds a genuinely new key/kid
+  // (never seen by jose's remote-JWKS cache before) rather than reusing one an earlier spec in this
+  // shared suite has already cached, so a later /certs fetch for it is a real, forced network call.
+  let currentKid = initialKid;
+  // AUTH-OPERATIONS-005: "Provider and JWKS failures MUST fail authentication closed... bounded
+  // unknown-key refresh may support rotation but MUST NOT... expose raw provider failures." 'ok'
+  // serves every known key normally (a realistic key-rotation JWKS response); 'broken' makes /certs
+  // fail closed with a plain 503 -- no JSON body, no stack trace, nothing a caller could mistake for
+  // real provider detail -- so a spec can prove the real callback route rejects rather than silently
+  // accepting an unverifiable token when the identity provider's key endpoint is unreachable.
+  let jwksMode: 'ok' | 'broken' = 'ok';
 
   let nextIdentity: MockGoogleIdentity = DEFAULT_IDENTITY;
   const pendingByCode = new Map<string, PendingAuthorization>();
@@ -130,20 +145,44 @@ export async function startGoogleMockIdp(): Promise<{ close: () => Promise<void>
           nonce: pending.nonce,
           picture: pending.identity.picture ?? undefined,
         })
-          .setProtectedHeader({ alg: 'RS256', kid })
+          .setProtectedHeader({ alg: 'RS256', kid: currentKid })
           .setIssuer(GOOGLE_MOCK_IDP_URL)
           .setAudience(pending.clientId)
           .setSubject(pending.identity.sub)
           .setIssuedAt()
           .setExpirationTime('10m')
-          .sign(privateKey);
+          .sign(knownJwks.get(currentKid)!.privateKey);
 
         json(res, 200, { access_token: randomUUID(), expires_in: 3600, id_token: idToken, token_type: 'Bearer' });
         return;
       }
 
+      // Test-only side channels for AUTH-OPERATIONS-005 (see the jwksMode declaration above).
+      if (req.method === 'POST' && url.pathname === '/mock/rotate-signing-key') {
+        const rotated = await generateKeyPair('RS256', { extractable: true });
+        currentKid = `mock-google-signing-key-rotated-${randomUUID()}`;
+        knownJwks.set(currentKid, {
+          privateKey: rotated.privateKey,
+          jwk: { ...(await exportJWK(rotated.publicKey)), alg: 'RS256', kid: currentKid, use: 'sig' },
+        });
+        json(res, 200, { kid: currentKid });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/mock/jwks-mode') {
+        const body = JSON.parse(await readBody(req)) as { mode?: unknown };
+        if (body.mode !== 'ok' && body.mode !== 'broken') return json(res, 400, { error: 'invalid_mode' });
+        jwksMode = body.mode;
+        json(res, 200, { ok: true });
+        return;
+      }
+
       if (req.method === 'GET' && url.pathname === '/certs') {
-        json(res, 200, { keys: [jwk] });
+        if (jwksMode === 'broken') {
+          res.writeHead(503, { 'content-type': 'text/plain' });
+          res.end('mock identity provider key endpoint unavailable');
+          return;
+        }
+        json(res, 200, { keys: [...knownJwks.values()].map((entry) => entry.jwk) });
         return;
       }
 

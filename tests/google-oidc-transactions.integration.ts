@@ -14,6 +14,7 @@ const ORIGIN = 'http://127.0.0.1:3100';
 const config: GoogleOidcConfig = {
   clientId: 'test-client-id',
   clientSecret: 'test-client-secret',
+  clientSecretVersion: 'v1',
   redirectUri: `${ORIGIN}/api/auth/google/callback`,
 };
 

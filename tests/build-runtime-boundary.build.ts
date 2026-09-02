@@ -7,7 +7,14 @@ import test from 'node:test';
 
 const root = process.cwd();
 const preloader = path.join(root, 'tests/fixtures/deny-network.cjs');
-const sensitiveNames = ['POSTGRES_URL', 'AUTH_SECRET', 'ACCOUNT_DELIVERY_ENCRYPTION_KEYS', 'ACCOUNT_DELIVERY_KEY_VERSION', 'RATE_LIMIT_HASH_KEY', 'CRON_SECRET', 'MAILCHIMP_TRANSACTIONAL_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'];
+// AUTH-SECRET-001: "Provider client secrets MUST be server-only... excluded from browser bundles,
+// portable JSON, logs and errors." GOOGLE_OAUTH_CLIENT_SECRET is included here alongside IDOC's own
+// self-generated secrets so the same real-build scan below (not source inspection) proves it too
+// never reaches any browser-visible build output. GOOGLE_OAUTH_CLIENT_ID and
+// GOOGLE_OAUTH_REDIRECT_URI are deliberately excluded: neither is a secret (the client ID is
+// unavoidably visible to Google and the redirect URI is a public callback URL), so scanning for
+// them would only produce false positives.
+const sensitiveNames = ['POSTGRES_URL', 'AUTH_SECRET', 'ACCOUNT_DELIVERY_ENCRYPTION_KEYS', 'ACCOUNT_DELIVERY_KEY_VERSION', 'RATE_LIMIT_HASH_KEY', 'CRON_SECRET', 'MAILCHIMP_TRANSACTIONAL_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET'];
 const sentinelValues = sensitiveNames.map((name, index) => `IDOC_SENTINEL_${index}_${'z'.repeat(40)}`);
 
 function filesBelow(directory: string): string[] {

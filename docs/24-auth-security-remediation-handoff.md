@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 4, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 5, the repository baseline is:
 
-- **127 verified**
-- **8 implemented-but-unverified**
-- **13 partial**
+- **134 verified**
+- **3 implemented-but-unverified**
+- **11 partial**
 - **0 missing**
 - **7 not-applicable**
-- **21 applicable non-verified controls remaining**
+- **14 applicable non-verified controls remaining**
 
-Slices 1, 2, 3, and 4 are complete. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1 through 5 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -66,9 +66,9 @@ Control (now `verified`):
 
 Goal (met): implemented and behaviorally proved the canonical token-based CSRF property: a signed, expiring (4-hour), session-bound double-submit-cookie token (`lib/security/csrf-tokens.ts`, `lib/security/csrf.ts`), issued/rotated at `setSession()`/`clearSession()`, enforced on every mutating Server Action, and proven with real-browser tests in `tests/security-e2e/csrf.spec.ts` (tampered form field, removed cookie) plus the existing real-Postgres adversarial suites, which now thread real production-issued tokens through every `validatedAction` call they exercise. Origin validation (AUTH-CSRF-001) is preserved as defense in depth. This slice also found and fixed a real production defect: an attempt to preserve the root layout's Partial Prerendering static shell by moving the CSRF-cookie read behind a Suspense boundary silently degraded a deep `redirect()` call (e.g. an anonymous visitor's `/admin` authorization check) from a real HTTP 3xx into a client-JS-only redirect — confirmed with a real dev-server request returning HTTP 200 instead of a redirect. Fixed by keeping that read synchronous and unwrapped, trading away the (experimental, opt-in) PPR static shell app-wide for guaranteed-correct authorization/CSRF behavior on every request.
 
-### Slice 5 — Credential and key lifecycle
+### Slice 5 — Credential and key lifecycle (COMPLETE, one control left narrowed but open)
 
-Controls:
+Controls (all now `verified` except as noted):
 
 - `AUTH-STORAGE-005`
 - `AUTH-STORAGE-006`
@@ -76,10 +76,10 @@ Controls:
 - `AUTH-OPERATIONS-005`
 - `AUTH-SECRET-001`
 - `AUTH-CRYPTO-004`
-- `AUTH-SECRET-004`
+- `AUTH-SECRET-004` (still `partial` — see below)
 - `AUTH-DEPENDENCY-001`
 
-Goal: behaviorally prove password-hash upgrade, MFA-secret confidentiality, secret-free security events, key/JWKS/secret rotation and separation, build-output exclusion, and intentional fail-open/fail-closed behavior for security dependencies. Implement missing lifecycle properties where the evidence matrix marks them partial.
+Goal (met for seven of eight): behaviorally proved password-hash upgrade (`tests/password-hash-migration.integration.ts`, real Postgres, real `signIn`), MFA-secret/recovery-code confidentiality across a real enrollment/recovery/replacement/acknowledgement cycle (`tests/auth-recovery-adversarial.integration.ts`), a real forced JWKS-outage-during-unknown-key-refresh fail-closed proof (`tests/security-e2e/google-oauth.spec.ts`), Google OAuth client secret exclusion from real build output (`tests/build-runtime-boundary.build.ts`), an explicit MFA key lifecycle state model derived from real database usage (`lib/auth/mfa/key-lifecycle.ts`, `tests/totp-key-ring.integration.ts`), and an explicit, code-level dependency risk register held against real forced-failure behavior (`lib/security/dependency-risk-register.ts`, `tests/dependency-risk-register.test.ts`). `AUTH-SECRET-004` gained real bounded-overlap rotation/rollback/retirement/audit support for the Google OAuth client secret (`lib/auth/google-oidc-reference.ts`, `lib/auth/google-oidc-secret-audit.ts`, `pnpm google:rotate-secret`) but remains `partial`: recording a rotation depends on an operator running the script, since a pure environment-variable change has no application code path that runs automatically "at the moment" it happens.
 
 ### Slice 6 — Privacy and logging
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-Slice 4 — CSRF / request integrity is complete as of this revision. When this file is used as a handoff, begin with **Slice 5 — Credential and key lifecycle** unless current `docs/22`/`docs/23` show that it has already been completed. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 5 — Credential and key lifecycle is complete as of this revision, except that `AUTH-SECRET-004` remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 6 — Privacy and logging** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 6. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.

@@ -137,26 +137,40 @@ function rememberedTotpDeviceConfiguration(environment: Environment) {
 // (AUTH-OPERATIONS-004-style auth_security_notification_outbox/audit_log entries, written at the
 // call sites in app/(login)/mfa/actions.ts and app/(login)/recover-password/actions.ts) for exactly
 // when a since-compromised key was actually presented for use, not just when it was retired.
-function compromisedMfaKeyIds(environment: Environment, encryptionKeys: Map<string, Buffer>, activeKeyId: string): Set<string> {
-  const raw = environment.MFA_TOTP_COMPROMISED_KEY_IDS?.trim();
+function keyIdSet(environment: Environment, name: string, encryptionKeys: Map<string, Buffer>, activeKeyId: string): Set<string> {
+  const raw = environment[name]?.trim();
   if (!raw) return new Set();
   let serialized: unknown;
   try { serialized = JSON.parse(raw); } catch {
-    throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+    throw new Error(`Invalid production configuration: ${name}.`);
   }
   if (!Array.isArray(serialized) || serialized.some((value) => typeof value !== 'string')) {
-    throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+    throw new Error(`Invalid production configuration: ${name}.`);
   }
-  const compromisedKeyIds = new Set(serialized as string[]);
-  // A key ID absent from the ring is meaningless to mark compromised (likely an operator typo) and
-  // the active key can never be compromised -- it is, by definition, the key new encryptions still
-  // trust; an operator marking it compromised must rotate MFA_TOTP_ACTIVE_KEY_ID to a different ring
-  // entry first. Both fail closed rather than silently doing nothing.
-  for (const keyId of compromisedKeyIds) {
-    if (!encryptionKeys.has(keyId)) throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
+  const keyIds = new Set(serialized as string[]);
+  // A key ID absent from the ring is meaningless here (likely an operator typo) and the active key
+  // can never appear in either list -- it is, by definition, the key new encryptions still trust; an
+  // operator retiring or compromising it must rotate MFA_TOTP_ACTIVE_KEY_ID to a different ring entry
+  // first. Both fail closed rather than silently doing nothing.
+  for (const keyId of keyIds) {
+    if (!encryptionKeys.has(keyId)) throw new Error(`Invalid production configuration: ${name}.`);
   }
-  if (compromisedKeyIds.has(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_COMPROMISED_KEY_IDS.');
-  return compromisedKeyIds;
+  if (keyIds.has(activeKeyId)) throw new Error(`Invalid production configuration: ${name}.`);
+  return keyIds;
+}
+
+function compromisedMfaKeyIds(environment: Environment, encryptionKeys: Map<string, Buffer>, activeKeyId: string): Set<string> {
+  return keyIdSet(environment, 'MFA_TOTP_COMPROMISED_KEY_IDS', encryptionKeys, activeKeyId);
+}
+
+// AUTH-CRYPTO-004: an operator-declared complement to compromisedMfaKeyIds -- a key ID the operator
+// has confirmed is fully decommissioned (mfaEncryptionKeyLifecycle in lib/auth/mfa/key-lifecycle.ts
+// verifies this against the real idoc.mfa_factors table and flags it if any factor still references
+// a key declared retired here, rather than silently trusting the declaration). Distinct from a key
+// that is merely unreferenced today but never explicitly retired -- see key-lifecycle.ts's
+// pending/retiring distinction, which is derived from live factor usage, not operator declaration.
+function retiredMfaKeyIds(environment: Environment, encryptionKeys: Map<string, Buffer>, activeKeyId: string): Set<string> {
+  return keyIdSet(environment, 'MFA_TOTP_RETIRED_KEY_IDS', encryptionKeys, activeKeyId);
 }
 
 /** Server-only cryptographic material for the live canonical MFA flow. */
@@ -187,9 +201,17 @@ export function mfaConfiguration(environment: Environment = process.env) {
   }
   if (!encryptionKeys.has(activeKeyId)) throw new Error('Invalid production configuration: MFA_TOTP_ACTIVE_KEY_ID.');
   const compromisedKeyIds = compromisedMfaKeyIds(environment, encryptionKeys, activeKeyId);
+  const retiredKeyIds = retiredMfaKeyIds(environment, encryptionKeys, activeKeyId);
+  // A key ID cannot be both operator-declared retired (fully decommissioned, an ordinary if
+  // now-unused key) and compromised (actively dangerous, refused for decryption) at once -- that is
+  // a contradictory declaration, not a state this codebase resolves by picking one silently.
+  for (const keyId of retiredKeyIds) {
+    if (compromisedKeyIds.has(keyId)) throw new Error('Invalid production configuration: MFA_TOTP_RETIRED_KEY_IDS.');
+  }
   return {
     activeKeyId,
     compromisedKeyIds,
+    retiredKeyIds,
     continuationKey: base64Key(environment, 'MFA_PENDING_AUTH_SIGNING_KEY'),
     encryptionKeys,
     recoveryDigestKey: base64Key(environment, 'MFA_RECOVERY_CODE_DIGEST_KEY'),

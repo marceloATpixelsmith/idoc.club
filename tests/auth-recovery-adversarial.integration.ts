@@ -87,7 +87,7 @@ async function createRecoveryUser() {
     values(${randomUUID()},${user.id},${applicationId},${randomUUID()},${digestRecoveryCode(recoveryCode, recoveryKey)})`;
   const [fresh] = await sql<{ id: number; email: string; session_version: number }[]>`
     select id,email,session_version from idoc.users where id=${user.id}`;
-  return { factorId: enrollment.factorId, user: { ...user, sessionVersion: fresh.session_version } };
+  return { factorId: enrollment.factorId, originalSecret: secret, user: { ...user, sessionVersion: fresh.session_version } };
 }
 
 async function recoveryEntry(provided?: Awaited<ReturnType<typeof createRecoveryUser>>) {
@@ -114,13 +114,14 @@ async function recoveryAck(provided?: Awaited<ReturnType<typeof replacement>>) {
   const entry = provided ?? await replacement();
   const [factor] = await sql<{ encrypted_secret: string }[]>`
     select encrypted_secret from idoc.mfa_factors where factor_id=${entry.pending.factorId}`;
-  const secret = decryptTotpSecret(factor.encrypted_secret, () => encryptionKey);
+  const newSecret = decryptTotpSecret(factor.encrypted_secret, () => encryptionKey);
   const result = await withTestRequestCookies(entry.cookies, () =>
-    confirmTotpEnrollment({}, form('code', totp(secret), csrfTokenFrom(entry.cookies))));
+    confirmTotpEnrollment({}, form('code', totp(newSecret), csrfTokenFrom(entry.cookies))));
   assert.match(String((result as { success?: string }).success), /replaced/);
+  const newRecoveryCodes = (result as { recoveryCodes?: string[] }).recoveryCodes ?? [];
   const pending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
   assert.equal(pending?.stage, 'recovery-ack');
-  return { ...entry, pending: pending! };
+  return { ...entry, newRecoveryCodes, newSecret, pending: pending! };
 }
 
 async function state(userId: number) {
@@ -268,4 +269,106 @@ test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser ou
   // clearSession()'s own revoke is a safe no-op against the already-revoked row (revoke_reason is
   // coalesced, not overwritten) -- confirming signOut ran to completion rather than being rejected.
   assert.equal(row.revokeReason, 'test-revoked-elsewhere');
+});
+
+// AUTH-STORAGE-006 / AUTH-CRYPTO-003: "TOTP secrets MUST be encrypted... browser persistence, logs,
+// analytics, and telemetry are prohibited" / "Raw TOTP secrets, recovery codes, remembered tokens,
+// and provisioning artifacts MUST be excluded from logs and telemetry." This drives a real, complete
+// enrollment -> recovery -> replacement -> acknowledgement cycle through the actual production
+// Server Actions (not a synthetic fixture) and then scans every table these actions write to for
+// three genuinely raw, sensitive artifacts: the original TOTP secret, the (fixed, known) recovery
+// code consumed to authorize the replacement, and the newly issued replacement secret and recovery
+// codes -- proving each is excluded from idoc.audit_log and idoc.auth_security_notification_outbox
+// (the two tables backing the authenticator_replaced/recovery_code_used security-event kinds this
+// control specifically names -- authenticator_enrolled is covered separately below, since the
+// initial factor here is seeded directly rather than through the real enrollment action) as well as
+// every other MFA-adjacent table, with the sole correct exception of mfa_factors.encrypted_secret,
+// which structurally cannot equal its own plaintext (AES-256-GCM ciphertext, asserted separately).
+test('a real recovery/replacement/acknowledgement cycle excludes every raw TOTP secret and recovery code from audit, notification, and every other persisted table', async () => {
+  const acked = await recoveryAck();
+  await withTestRequestCookies(acked.cookies, () => redirected(() => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(acked.cookies)))));
+
+  assert.ok(acked.originalSecret.length > 0);
+  assert.ok(acked.newSecret.length > 0);
+  assert.notEqual(acked.originalSecret, acked.newSecret);
+  assert.ok(acked.newRecoveryCodes.length > 0);
+
+  const rawArtifacts = [acked.originalSecret, acked.newSecret, recoveryCode, ...acked.newRecoveryCodes];
+
+  const auditLog = await sql`select * from idoc.audit_log where actor_id=${acked.user.id}`;
+  const notifications = await sql`select * from idoc.auth_security_notification_outbox where user_id=${acked.user.id}`;
+  assert.ok(auditLog.length > 0, 'the flow must actually produce audit evidence to be a meaningful scan');
+  assert.ok(notifications.length > 0, 'the flow must actually produce notification evidence to be a meaningful scan');
+  const kinds = notifications.map((row) => row.kind);
+  assert.ok(kinds.includes('authenticator_replaced'));
+  assert.ok(kinds.includes('recovery_code_used'));
+
+  const evidence = JSON.stringify({ auditLog, notifications });
+  for (const artifact of rawArtifacts) {
+    assert.equal(evidence.includes(artifact), false, `raw MFA secret material leaked into audit/notification evidence: ${artifact}`);
+  }
+
+  // Every other MFA-adjacent table too, not only the two evidence tables above -- excluding the one
+  // column that legitimately, necessarily encrypts (not equals) the plaintext.
+  const factors = await sql`select factor_id,user_id,application_id,factor_type,status,encryption_key_id,
+    last_accepted_counter,activated_at,revoked_at,lifecycle_reason,replaced_by_factor_id,created_at,updated_at
+    from idoc.mfa_factors where user_id=${acked.user.id}`;
+  const enrollments = await sql`select * from idoc.mfa_enrollment_transactions where user_id=${acked.user.id}`;
+  const challenges = await sql`select * from idoc.mfa_challenge_transactions where user_id=${acked.user.id}`;
+  const recoveryCodeRows = await sql<{ digest: string }[]>`select recovery_code_id,user_id,application_id,generation_id,digest,consumed_at,created_at
+    from idoc.mfa_recovery_codes where user_id=${acked.user.id}`;
+  const otherEvidence = JSON.stringify({ challenges, enrollments, factors, recoveryCodeRows });
+  for (const artifact of rawArtifacts) {
+    assert.equal(otherEvidence.includes(artifact), false, `raw MFA secret material leaked outside its encrypted/digested column: ${artifact}`);
+  }
+
+  // The encrypted_secret column is checked separately: it must never literally equal (or, since it
+  // is base64url ciphertext, ever coincidentally embed) either raw secret as a substring.
+  const encryptedSecrets = (await sql<{ encrypted_secret: string }[]>`
+    select encrypted_secret from idoc.mfa_factors where user_id=${acked.user.id}`).map((row) => row.encrypted_secret);
+  assert.ok(encryptedSecrets.length > 0);
+  for (const encrypted of encryptedSecrets) {
+    assert.equal(encrypted.includes(acked.originalSecret), false);
+    assert.equal(encrypted.includes(acked.newSecret), false);
+  }
+
+  // And the digest column for recovery codes: never the plaintext code, always a distinct HMAC.
+  for (const row of recoveryCodeRows) {
+    assert.notEqual(row.digest, recoveryCode);
+    for (const code of acked.newRecoveryCodes) assert.notEqual(row.digest, code);
+  }
+});
+
+test('a real initial enrollment through confirmTotpEnrollment excludes its raw secret and recovery codes from audit and notification evidence', async () => {
+  const created = await createUser();
+  await grantRole(created.id, 'administrator');
+  const [fresh] = await sql<{ id: number; email: string; session_version: number }[]>`
+    select id,email,session_version from idoc.users where id=${created.id}`;
+  const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
+
+  const { newRecoveryCodes, secret } = await withTestRequestCookies(cookies, async () => {
+    // The real production entry point (lib/auth/mfa/login.ts) that a privileged account with no
+    // active TOTP factor actually hits during sign-in -- not a hand-built pending-enrollment cookie.
+    assert.equal(await beginPrimaryMfa({ ...created, sessionVersion: fresh.session_version } as never, 'password', '/dashboard/admin'), true);
+    const pending = await getPendingPrimaryAuth();
+    assert.equal(pending?.stage, 'enrollment');
+    const [factor] = await sql<{ encrypted_secret: string }[]>`
+      select encrypted_secret from idoc.mfa_factors where factor_id=${pending!.factorId}`;
+    const secret = decryptTotpSecret(factor.encrypted_secret, () => encryptionKey);
+    const result = await confirmTotpEnrollment({}, form('code', totp(secret), csrfTokenFrom(cookies)));
+    assert.match(String((result as { success?: string }).success), /enabled/);
+    return { newRecoveryCodes: (result as { recoveryCodes?: string[] }).recoveryCodes ?? [], secret };
+  });
+  assert.ok(secret.length > 0);
+  assert.ok(newRecoveryCodes.length > 0);
+
+  const auditLog = await sql`select * from idoc.audit_log where actor_id=${created.id}`;
+  const notifications = await sql`select * from idoc.auth_security_notification_outbox where user_id=${created.id}`;
+  assert.ok(notifications.map((row) => row.kind).includes('authenticator_enrolled'));
+
+  const evidence = JSON.stringify({ auditLog, notifications });
+  for (const artifact of [secret, ...newRecoveryCodes]) {
+    assert.equal(evidence.includes(artifact), false, `raw MFA secret material leaked into audit/notification evidence: ${artifact}`);
+  }
 });
