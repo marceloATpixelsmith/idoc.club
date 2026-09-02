@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
+import { eq } from 'drizzle-orm';
+import { updateAccount } from '../app/(login)/actions.ts';
 import { completeSignup } from '../app/(login)/sign-up/actions.ts';
+import { setSession } from '../lib/auth/session.ts';
 import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
+import { db } from '../lib/db/drizzle.ts';
+import { users } from '../lib/db/schema.ts';
 import { emailDisplayForm, normalizeEmail } from '../lib/membership/validation.ts';
+import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
+import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
-import { closeHarness, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 // AUTH-IDENTITY-003: "Trusted server code MUST trim surrounding email whitespace, apply
 // deterministic Unicode-aware case-insensitive comparison, preserve a display form where useful,
@@ -97,4 +104,34 @@ test('a second signup with only a different case/whitespace variant of an alread
 test('normalizeEmail and emailDisplayForm both trim surrounding whitespace and never strip dots or plus-tags', () => {
   assert.equal(normalizeEmail('  Jane.Q+Tag@Example.COM  '), 'jane.q+tag@example.com');
   assert.equal(emailDisplayForm('  Jane.Q+Tag@Example.COM  '), 'Jane.Q+Tag@Example.COM');
+});
+
+// AUTH-IDENTITY-003: a Codex review finding on this PR's earlier commit. A case/whitespace-only
+// edit (the normalized identity is unchanged) took the "no real change" branch of updateAccount,
+// which updated only `name` -- the display form the member actually resubmitted was silently
+// discarded even though the action reported success, contradicting the documented guarantee that
+// the submitted display form survives an account update.
+test('updateAccount persists a display-form-only casing correction even when the normalized email is unchanged', async () => {
+  const fixture = await createUser();
+  await sql`update idoc.users set email_display=${fixture.email} where id=${fixture.id}`;
+  const [user] = await db.select().from(users).where(eq(users.id, fixture.id)).limit(1);
+  const cookies = new TestCookies();
+
+  await withTestRequestCookies(cookies, async () => {
+    await setSession(user);
+    const csrfToken = cookies.get(csrfCookieName())?.value ?? '';
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, async () => {
+      const form = new FormData();
+      const correctedCasing = user.email.replace(/^([a-z])/, (first) => first.toUpperCase());
+      form.set('name', 'Same Member');
+      form.set('email', correctedCasing);
+      form.set('csrf_token', csrfToken);
+      const result = await updateAccount({}, form);
+      assert.deepEqual(result, { name: 'Same Member', success: 'Account updated successfully.' });
+
+      const [row] = await sql`select email, email_display from idoc.users where id=${user.id}`;
+      assert.equal(row.email, user.email, 'the normalized identity must not change for a casing-only edit');
+      assert.equal(row.email_display, correctedCasing, 'the corrected display casing must be persisted, not silently discarded');
+    });
+  });
 });

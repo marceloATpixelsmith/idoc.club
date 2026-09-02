@@ -11,7 +11,7 @@ import {
   validatedAction,
   validatedActionWithUser
 } from '@/lib/auth/middleware';
-import { normalizeEmail } from '@/lib/membership/validation';
+import { emailDisplayForm, normalizeEmail } from '@/lib/membership/validation';
 import { deleteOwnAccount } from '@/lib/membership/data-access';
 import { issueEmailVerification } from '@/lib/membership/email-verification';
 import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
@@ -266,7 +266,11 @@ export const updateAccount = validatedActionWithUser(
       await consumeFreshStepUp();
       return { name, success: 'Check the new address to verify your email change.' };
     }
-    await db.update(users).set({ name }).where(eq(users.id, user.id));
+    // The normalized identity is unchanged (only casing/whitespace may differ, or nothing did), so
+    // this never needs step-up, a duplicate check, or verification -- but the display form the
+    // member actually typed must still survive (AUTH-IDENTITY-003), or a pure casing correction
+    // would report success while silently leaving the old display casing in place.
+    await db.update(users).set({ emailDisplay: emailDisplayForm(data.email), name }).where(eq(users.id, user.id));
     return { name, success: 'Account updated successfully.' };
   }
 );

@@ -133,9 +133,13 @@ test('account deletion writes account.deleted audit evidence, mangles the email,
   await createMembership(profile.id);
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => deleteOwnAccount());
 
-  const [row] = await sql`select account_state, email, deleted_at from idoc.users where id=${user.id}`;
+  const [row] = await sql`select account_state, email, email_display, deleted_at from idoc.users where id=${user.id}`;
   assert.equal(row.account_state, 'deleted');
   assert.equal(row.email, `${user.email}-${user.id}-deleted`);
+  // AUTH-PRIVACY-002/docs/05 "Account deletion ... No deliverable address retained": the display
+  // form must be anonymized in lockstep with the normalized email, not left holding the real
+  // deliverable address indefinitely.
+  assert.equal(row.email_display, `${user.email}-${user.id}-deleted`);
   assert.ok(row.deleted_at);
 
   const [audit] = await sql`select action, actor_id, entity_type, entity_id from idoc.audit_log`;
