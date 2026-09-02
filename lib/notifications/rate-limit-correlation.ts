@@ -28,17 +28,38 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
  * bucket used (kept as-is, no further hashing needed) under a distinct, digest-derived purpose
  * namespace -- guaranteed to fit and never collide with a real rate-limited purpose, which are
  * always short, human-readable literals, never a 30-hex-character digest. */
+function cooldownWindow(purpose: string, now: Date) {
+  return {
+    cooldownPurpose: digest(`rate-limit-correlation-alert:${purpose}`).slice(0, 30),
+    windowStartedAt: new Date(Math.floor(now.getTime() / ALERT_COOLDOWN_MS) * ALERT_COOLDOWN_MS),
+  };
+}
+
+/** Read-only: never mutates the cooldown marker. A Codex review on this pull request caught that the
+ * original version recorded the marker (via an unconditional insert-or-increment) *before* attempting
+ * delivery, so a single transient `sendTransactionalEmail` failure would silently suppress every
+ * subsequent alert attempt for the same bucket for the rest of the hour -- losing the correlated
+ * attack alert entirely, not merely delaying it. Recording now happens only in recordAlertSent, called
+ * only after a successful send (see below). */
 async function alreadyAlertedRecently(purpose: string, identifierHash: string, originHash: string, now: Date): Promise<boolean> {
-  const windowStartedAt = new Date(Math.floor(now.getTime() / ALERT_COOLDOWN_MS) * ALERT_COOLDOWN_MS);
-  const cooldownPurpose = digest(`rate-limit-correlation-alert:${purpose}`).slice(0, 30);
-  const rows = await db.execute<{ request_count: number }>(sql`
+  const { cooldownPurpose, windowStartedAt } = cooldownWindow(purpose, now);
+  const rows = await db.execute<{ id: number }>(sql`
+    select id from idoc.account_request_limits
+    where purpose=${cooldownPurpose} and identifier_hash=${identifierHash} and origin_hash=${originHash}
+      and window_started_at=${windowStartedAt.toISOString()}
+    limit 1
+  `);
+  return rows.length > 0;
+}
+
+async function recordAlertSent(purpose: string, identifierHash: string, originHash: string, now: Date): Promise<void> {
+  const { cooldownPurpose, windowStartedAt } = cooldownWindow(purpose, now);
+  await db.execute(sql`
     insert into idoc.account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
     values (${cooldownPurpose}, ${identifierHash}, ${originHash}, ${windowStartedAt.toISOString()})
     on conflict (purpose, identifier_hash, origin_hash, window_started_at)
     do update set request_count = idoc.account_request_limits.request_count + 1, updated_at = now()
-    returning request_count
   `);
-  return (rows[0]?.request_count ?? 1) > 1;
 }
 
 /** Called by checkRateLimit whenever one of its two buckets just denied a request. Best-effort only
@@ -77,6 +98,9 @@ export async function correlateRepeatedRateLimitExceedance(input: {
       html, to,
       subject: taggedSubject('auth.repeated_rate_limit_exceeded', `IDOC: repeated rate-limit exceedance (${input.purpose})`),
     });
+    // Only reached once the send above did not throw -- see recordAlertSent's own comment for why
+    // this must never happen before a successful delivery.
+    await recordAlertSent(input.purpose, input.identifierHash, input.originHash, now);
   } catch {
     await logWarn('rate_limit_correlation_alert_failed');
   }

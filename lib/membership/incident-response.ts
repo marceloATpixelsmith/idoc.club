@@ -49,7 +49,12 @@ const REVOCABLE_FACTOR_STATUSES = ['pending', 'active', 'disabled'] as const;
  * owns to re-authenticate and re-enroll MFA from scratch -- so it is held to the same privilege tier
  * as revokeApplicationRole/grantApplicationRole, and an operator cannot use it against their own
  * account (a self-lockout an already-mid-incident operator could not undo without another
- * Super Admin).
+ * Super Admin). Matching grantApplicationRole/revokeApplicationRole's own established split: this
+ * request-context-agnostic data layer checks only requireSuperAdmin; the live Server Action
+ * (forceRevokeAllAuthorityForm in app/(dashboard)/admin/members/actions.ts) additionally requires and
+ * consumes canonical fresh step-up (action 'force-revoke-authority') before ever calling this
+ * function -- possession of an authenticated Super Admin session and its CSRF token alone is not
+ * sufficient to reach it.
  */
 export async function forceRevokeAllAuthority(userId: number, untrustedInput: unknown) {
   const input = incidentInputSchema.parse(untrustedInput);

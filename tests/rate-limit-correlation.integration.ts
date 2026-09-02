@@ -21,12 +21,15 @@ Object.assign(process.env, {
 
 const originalFetch = globalThis.fetch;
 let sentAlerts: { subject: string; to: string }[] = [];
+let failNextDelivery = false;
 beforeEach(async () => {
   await resetIdoc();
   sentAlerts = [];
+  failNextDelivery = false;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url === 'https://mandrillapp.com/api/1.0/messages/send.json') {
+      if (failNextDelivery) { failNextDelivery = false; return new Response('provider unavailable', { status: 502 }); }
       const body = JSON.parse(String(init?.body));
       sentAlerts.push({ subject: body.message.subject, to: body.message.to[0].email });
       return new Response('[{"status":"sent"}]', { status: 200 });
@@ -98,4 +101,32 @@ test('a second sustained streak for a different bucket is not suppressed by the 
     await exhaustEmailBucketOnce(purpose, 'second-account@example.test', origin, windowNow);
   }
   assert.equal(sentAlerts.length, 2, 'a distinct bucket hitting the same sustained pattern must alert independently');
+});
+
+test('a transient delivery failure on the threshold-crossing attempt does not suppress the retry within the same cooldown window', async () => {
+  // A Codex review on this pull request caught that the cooldown marker was originally recorded
+  // before the send was even attempted, so a single provider hiccup on the alert-worthy request would
+  // silently lose the correlated attack alert for the rest of the hour. This proves the fix: the first
+  // threshold-crossing request fails to deliver, and a subsequent denied request in the very same
+  // bucket/window still gets a real alert through rather than being suppressed by a falsely-recorded
+  // cooldown.
+  const purpose = 'test_retry_after_failure';
+  const email = 'attacker-retry@example.test';
+  const origin = '203.0.113.11';
+  const base = Date.UTC(2026, 0, 1, 0, 0, 0);
+
+  for (let windowIndex = 0; windowIndex < 2; windowIndex += 1) {
+    const windowNow = new Date(base + windowIndex * WINDOW_MS + 1_000);
+    await exhaustEmailBucketOnce(purpose, email, origin, windowNow);
+  }
+  assert.equal(sentAlerts.length, 0, 'sanity: below threshold, no alert yet');
+
+  const thresholdWindow = new Date(base + 2 * WINDOW_MS + 1_000);
+  failNextDelivery = true;
+  await exhaustEmailBucketOnce(purpose, email, origin, thresholdWindow);
+  assert.equal(sentAlerts.length, 0, 'the delivery failure must not be silently counted as a successful alert');
+
+  // A further denied request in the same bucket, still inside the same cooldown window.
+  await checkRateLimit(purpose, email, origin, new Date(thresholdWindow.getTime() + 100));
+  assert.equal(sentAlerts.length, 1, 'the retry must still succeed -- the earlier failed attempt must not have recorded a cooldown');
 });

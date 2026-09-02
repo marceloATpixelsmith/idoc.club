@@ -35,6 +35,16 @@ async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
   }
 }
 
+async function forceRevokeAllAuthorityNeedsStepUp(): Promise<FormState | boolean> {
+  try {
+    const actor = await requireAccountAccess('administration');
+    requireSuperAdmin(actor);
+    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members')).required;
+  } catch (error) {
+    return friendlyError(error, 'Authority could not be revoked safely.');
+  }
+}
+
 export async function saveMemberProfileByAdminForm(_state: FormState, formData: FormData): Promise<FormState> {
   try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The profile could not be updated safely.'); }
   const profileId = Number(formData.get('profileId'));
@@ -115,6 +125,9 @@ export async function reinstateUserAccountForm(_state: FormState, formData: Form
 export async function forceRevokeAllAuthorityForm(_state: FormState, formData: FormData): Promise<FormState> {
   try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'Authority could not be revoked.'); }
   const userId = Number(formData.get('userId'));
+  const stepUp = await forceRevokeAllAuthorityNeedsStepUp();
+  if (typeof stepUp !== 'boolean') return stepUp;
+  if (stepUp) redirect('/mfa');
   try {
     await forceRevokeAllAuthority(userId, { incidentReference: formData.get('incidentReference'), reason: formData.get('reason') });
     return { success: 'Every session, remembered device, and MFA factor for this user has been revoked.' };

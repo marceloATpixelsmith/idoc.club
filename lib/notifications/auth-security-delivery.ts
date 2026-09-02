@@ -4,8 +4,36 @@ import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
 import { sendTransactionalEmail } from './mailchimp-transactional';
 import { renderTransactionalEmail } from './email-template';
+import type { AuthSecurityKind } from './auth-security-events';
 
 const MAX_ATTEMPTS = 6;
+
+// Keyed by AuthSecurityKind (not a bare string) so the TypeScript compiler itself rejects this file
+// whenever a new kind is added to AUTH_SECURITY_KINDS without a matching delivery template here --
+// the exact class of bug a Codex review caught in this pull request: a kind with no content-map
+// entry throws 'Unsupported security notification kind' below, retries MAX_ATTEMPTS times, and is
+// dead-lettered without ever reaching the account owner.
+const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject: string }> = {
+  account_reinstated: { heading: 'Account access restored', subject: 'Your IDOC account access was restored' },
+  account_suspended: { heading: 'Account suspended', subject: 'Your IDOC account was suspended' },
+  authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },
+  authenticator_replaced: { heading: 'Authenticator replaced', subject: 'Authenticator replaced for IDOC' },
+  authority_force_revoked: { heading: 'Account access was reset by an administrator', subject: 'Your IDOC sessions, devices, and authenticator were reset' },
+  google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },
+  google_identity_unlinked: { heading: 'Google account disconnected', subject: 'Google account disconnected from IDOC' },
+  mfa_replay_detected: { heading: 'A repeated authenticator code or passkey response was blocked', subject: 'IDOC blocked a repeated sign-in attempt on your account' },
+  new_sign_in: { heading: 'New sign-in to your account', subject: 'New sign-in to your IDOC account' },
+  other_sessions_revoked: { heading: 'Other sessions logged out', subject: 'IDOC sessions were logged out' },
+  passkey_registered: { heading: 'Passkey added', subject: 'A passkey was added to your IDOC account' },
+  passkey_removed: { heading: 'Passkey removed', subject: 'A passkey was removed from your IDOC account' },
+  password_changed: { heading: 'Password changed', subject: 'Your IDOC password was changed' },
+  password_reset_completed: { heading: 'Password reset completed', subject: 'Your IDOC password was reset' },
+  recovery_code_used: { heading: 'Recovery code used', subject: 'An IDOC recovery code was used' },
+  recovery_codes_regenerated: { heading: 'Recovery codes regenerated', subject: 'Your IDOC recovery codes changed' },
+  role_granted: { heading: 'Administrator access granted', subject: 'Your IDOC access changed' },
+  role_revoked: { heading: 'Administrator access removed', subject: 'Your IDOC access changed' },
+  verified_email_changed: { heading: 'Login email changed', subject: 'Your IDOC login email changed' },
+};
 
 export async function deliverNextAuthSecurityNotification(owner: string = randomUUID()) {
   const rows = await client<{
@@ -41,24 +69,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   if (!record) return { status: 'empty' as const };
 
   try {
-    const content: Record<string, { heading: string; subject: string }> = {
-      account_reinstated: { heading: 'Account access restored', subject: 'Your IDOC account access was restored' },
-      account_suspended: { heading: 'Account suspended', subject: 'Your IDOC account was suspended' },
-      authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },
-      authenticator_replaced: { heading: 'Authenticator replaced', subject: 'Authenticator replaced for IDOC' },
-      google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },
-      google_identity_unlinked: { heading: 'Google account disconnected', subject: 'Google account disconnected from IDOC' },
-      new_sign_in: { heading: 'New sign-in to your account', subject: 'New sign-in to your IDOC account' },
-      other_sessions_revoked: { heading: 'Other sessions logged out', subject: 'IDOC sessions were logged out' },
-      password_changed: { heading: 'Password changed', subject: 'Your IDOC password was changed' },
-      password_reset_completed: { heading: 'Password reset completed', subject: 'Your IDOC password was reset' },
-      recovery_code_used: { heading: 'Recovery code used', subject: 'An IDOC recovery code was used' },
-      recovery_codes_regenerated: { heading: 'Recovery codes regenerated', subject: 'Your IDOC recovery codes changed' },
-      role_granted: { heading: 'Administrator access granted', subject: 'Your IDOC access changed' },
-      role_revoked: { heading: 'Administrator access removed', subject: 'Your IDOC access changed' },
-      verified_email_changed: { heading: 'Login email changed', subject: 'Your IDOC login email changed' },
-    };
-    const message = content[record.kind];
+    const message = (AUTH_SECURITY_CONTENT as Record<string, { heading: string; subject: string } | undefined>)[record.kind];
     if (!message) throw new Error('Unsupported security notification kind.');
     const html = renderTransactionalEmail({
       heading: message.heading,
