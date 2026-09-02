@@ -20,7 +20,8 @@
     "db:seed": "node --conditions=react-server --import tsx lib/db/seed.ts",
     "db:generate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs migrate",
-    "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio"
+    "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio",
+    "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

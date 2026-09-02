@@ -193,3 +193,59 @@ test('a declined Google consent sends the user back to the page they started fro
   expect(pathAndQuery(loginCallback.headers().location)).toBe('/sign-in?google=failed');
   await loginContext.close();
 });
+
+// AUTH-OPERATIONS-005: "Provider and JWKS failures MUST fail authentication closed; bounded
+// validated-key caching and one bounded unknown-key refresh may support rotation but MUST NOT
+// bypass validation or expose raw provider failures." Every other test in this file signs its mock
+// ID token with the mock IdP's original, long-cached signing key, so the app's own remote-JWKS cache
+// (lib/auth/google-oidc-reference.ts's resolveGoogleJwks, a real jose createRemoteJWKSet) never has
+// a reason to hit the network again -- it would pass even if /certs were completely broken. This
+// test forces a *genuine* unknown-key refresh (a freshly rotated kid the app has never seen) at the
+// exact moment /certs is failing, so the real production verification path has no choice but to
+// actually attempt, and fail, the live fetch this control is about.
+test('a real Google callback fails closed, without exposing any raw provider/JWKS error text, when the identity provider key endpoint is unreachable during an unknown-key refresh', async ({ page }) => {
+  const identity = freshIdentity();
+  await configureMockIdentity(identity);
+  const rotateResponse = await fetch(`${GOOGLE_MOCK_IDP_URL}/mock/rotate-signing-key`, { method: 'POST' });
+  expect(rotateResponse.ok).toBe(true);
+
+  const setJwksMode = async (mode: 'ok' | 'broken') => {
+    const response = await fetch(`${GOOGLE_MOCK_IDP_URL}/mock/jwks-mode`, {
+      body: JSON.stringify({ mode }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+    expect(response.ok).toBe(true);
+  };
+
+  try {
+    await setJwksMode('broken');
+    await page.goto('/api/auth/google/start?intent=signup');
+    await expect(page.locator('#continue')).toBeVisible();
+    await page.click('#continue');
+    await expect(page).toHaveURL(/\/sign-up\?google=failed$/);
+
+    // Only the rendered, user-visible text -- not page.content()'s full HTML source. In dev mode that
+    // source also carries Next.js's own RSC debug payload (arbitrary internal timing floats, module
+    // ids, source paths) inside inert <script> tags, which can coincidentally contain a short digit
+    // sequence like "503" with no relation to an actual leaked HTTP status. What this control cares
+    // about is what a user could actually see, which innerText reflects without that false-positive
+    // surface.
+    const pageText = await page.locator('body').innerText();
+    for (const rawProviderText of [
+      'mock identity provider key endpoint unavailable', 'ECONNREFUSED', 'fetch failed',
+      'JWKSNoMatchingKey', 'JWKSTimeout', 'JOSEError',
+    ]) {
+      expect(pageText).not.toContain(rawProviderText);
+    }
+
+    const users = await withDb((sql) => sql<{ id: number }[]>`select id from idoc.users where email = ${identity.email}`);
+    expect(users).toHaveLength(0);
+    const links = await withDb((sql) => sql<{ user_id: number }[]>`
+      select user_id from idoc.external_identities where subject = ${identity.sub}`);
+    expect(links).toHaveLength(0);
+  } finally {
+    // Restore the shared mock IdP for every other spec in this suite, regardless of outcome above.
+    await setJwksMode('ok');
+  }
+});

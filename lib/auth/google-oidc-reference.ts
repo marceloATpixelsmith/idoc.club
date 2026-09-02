@@ -4,6 +4,9 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 export type GoogleOidcConfig = {
   clientId: string;
   clientSecret: string;
+  /** Non-secret label identifying which configured version of the client secret is currently
+   * active (see googleOauthClientSecret below) -- safe to log/audit, unlike clientSecret itself. */
+  clientSecretVersion: string;
   redirectUri: string;
 };
 
@@ -81,6 +84,8 @@ export const GOOGLE_OIDC_PROVIDER = {
 export const GOOGLE_OAUTH_ENV = {
   clientId: 'GOOGLE_OAUTH_CLIENT_ID',
   clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET',
+  clientSecretActiveVersion: 'GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION',
+  clientSecretVersions: 'GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS',
   redirectUri: 'GOOGLE_OAUTH_REDIRECT_URI',
 } as const;
 
@@ -146,10 +151,59 @@ function validRedirectUri(value: string): string {
   return url.toString();
 }
 
+// AUTH-SECRET-004: "OAuth client secrets MUST support verified bounded-overlap replacement,
+// rollback, retirement and audit without client exposure." Google's own console already provides
+// the actual overlap window during rotation (a newly generated secret and the prior one both stay
+// valid there for a configurable period) -- what this app needs to support safely is configuring
+// across that window: both the incoming and the about-to-be-retired secret present at once
+// (bounded-overlap replacement), reverting to the prior one instantly if the new one turns out to be
+// wrong (rollback), and removing an old one once confident it is no longer needed (retirement) --
+// all without ever needing to re-enter or rediscover a secret value to do so, and the app only ever
+// sends the one active version to Google (there is no "try several" verification the way a signing
+// key ring needs, since the app is never the one validating this credential). A deployment that
+// never rotates needs nothing new: GOOGLE_OAUTH_CLIENT_SECRET alone is returned as an implicit
+// single-version ring, unchanged from before this row existed.
+// GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS + _ACTIVE_VERSION is the opt-in rotation-ready form.
+// google-oidc-secret-audit.ts provides the (secret-free) audit record of when the active version
+// last changed -- "audit" for a pure operator-driven config value has no runtime code path to hook
+// automatically, so it is a small function an operator's rotation runbook step calls explicitly.
+export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process.env): { activeVersion: string; versions: ReadonlyMap<string, string> } {
+  const { version, versions } = googleOauthClientSecret(env);
+  return { activeVersion: version, versions };
+}
+
+function googleOauthClientSecret(env: NodeJS.ProcessEnv): { secret: string; version: string; versions: ReadonlyMap<string, string> } {
+  const versionsRaw = env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim();
+  if (!versionsRaw) {
+    // A lone GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION with no matching VERSIONS map is not "use
+    // the legacy secret" -- it is a botched or partial rotation deploy (the ring was removed, or
+    // never added, while the pointer still names a version) and must fail closed rather than
+    // silently authenticating with a possibly-obsolete or revoked credential.
+    if (env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()) throw new GoogleOidcError('configuration');
+    const secret = required(env, GOOGLE_OAUTH_ENV.clientSecret);
+    return { secret, version: 'v1', versions: new Map([['v1', secret]]) };
+  }
+  let serialized: unknown;
+  try { serialized = JSON.parse(versionsRaw); } catch { throw new GoogleOidcError('configuration'); }
+  if (!serialized || Array.isArray(serialized) || typeof serialized !== 'object') throw new GoogleOidcError('configuration');
+  const versions = new Map<string, string>();
+  for (const [version, secret] of Object.entries(serialized)) {
+    if (!/^[A-Za-z0-9_-]{1,30}$/.test(version) || typeof secret !== 'string' || !secret) throw new GoogleOidcError('configuration');
+    versions.set(version, secret);
+  }
+  if (versions.size === 0) throw new GoogleOidcError('configuration');
+  const activeVersion = required(env, GOOGLE_OAUTH_ENV.clientSecretActiveVersion);
+  const secret = versions.get(activeVersion);
+  if (!secret) throw new GoogleOidcError('configuration');
+  return { secret, version: activeVersion, versions };
+}
+
 export function loadGoogleOidcConfig(env: NodeJS.ProcessEnv = process.env): GoogleOidcConfig {
+  const { secret, version } = googleOauthClientSecret(env);
   return {
     clientId: required(env, GOOGLE_OAUTH_ENV.clientId),
-    clientSecret: required(env, GOOGLE_OAUTH_ENV.clientSecret),
+    clientSecret: secret,
+    clientSecretVersion: version,
     redirectUri: validRedirectUri(required(env, GOOGLE_OAUTH_ENV.redirectUri)),
   };
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { encryptTotpSecret, resolveMfaEncryptionKey, totpCounter, verifyActiveTotp } from '../lib/auth/mfa/totp.ts';
+import { mfaEncryptionKeyLifecycle } from '../lib/auth/mfa/key-lifecycle.ts';
 import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
 import type { TotpEnrollmentRecord, TotpFactorRecord } from '../lib/auth/mfa/types.ts';
 import { mfaConfiguration } from '../lib/runtime/configuration.ts';
@@ -142,4 +143,106 @@ test('a factor encrypted under a key since removed from the ring entirely fails 
     }),
     /MFA key unavailable/,
   );
+});
+
+// AUTH-CRYPTO-004: "Cryptographic records MUST identify non-secret key versions across pending,
+// active, retiring, retired and compromised states." These two tests drive
+// mfaEncryptionKeyLifecycle against a real Postgres idoc.mfa_factors table -- not a synthetic count
+// -- to prove each state is derived from genuine factor usage (pending/retiring) or correctly
+// cross-checked against it (retired), not merely from the operator's own declaration.
+test('mfaEncryptionKeyLifecycle identifies pending, active, retiring, retired, and compromised states from real factor usage', async () => {
+  const user = await createUser();
+  const subjectId = String(user.id);
+  const nowMs = Date.now();
+  const keyActive = Buffer.alloc(32, 21);
+  const keyRetiring = Buffer.alloc(32, 22);
+  const keyPending = Buffer.alloc(32, 23);
+  const keyRetired = Buffer.alloc(32, 24);
+  const keyCompromised = Buffer.alloc(32, 25);
+
+  const config = mfaConfiguration({
+    ...otherRequiredMfaEnv,
+    MFA_TOTP_ACTIVE_KEY_ID: 'active',
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({
+      active: keyActive.toString('base64url'),
+      retiring: keyRetiring.toString('base64url'),
+      pending: keyPending.toString('base64url'),
+      retired: keyRetired.toString('base64url'),
+      compromised: keyCompromised.toString('base64url'),
+    }),
+    MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['retired']),
+    MFA_TOTP_COMPROMISED_KEY_IDS: JSON.stringify(['compromised']),
+  });
+
+  // Only "retiring" has a real factor still referencing it -- "pending" and "retired" have none,
+  // which is exactly what distinguishes a never-yet-adopted key from a fully decommissioned one.
+  const encryptedUnderRetiring = encryptTotpSecret('JBSWY3DPEHPK3PXP', { key: keyRetiring, keyId: 'retiring' });
+  await insertActiveFactor(subjectId, encryptedUnderRetiring, 'retiring', nowMs);
+
+  const states = await mfaEncryptionKeyLifecycle(config, sql);
+  const byKeyId = new Map(states.map((entry) => [entry.keyId, entry]));
+
+  assert.deepEqual(byKeyId.get('active'), { keyId: 'active', state: 'active', factorCount: 0, retiredWithActiveFactors: false });
+  assert.deepEqual(byKeyId.get('retiring'), { keyId: 'retiring', state: 'retiring', factorCount: 1, retiredWithActiveFactors: false });
+  assert.deepEqual(byKeyId.get('pending'), { keyId: 'pending', state: 'pending', factorCount: 0, retiredWithActiveFactors: false });
+  assert.deepEqual(byKeyId.get('retired'), { keyId: 'retired', state: 'retired', factorCount: 0, retiredWithActiveFactors: false });
+  assert.deepEqual(byKeyId.get('compromised'), { keyId: 'compromised', state: 'compromised', factorCount: 0, retiredWithActiveFactors: false });
+});
+
+test('mfaEncryptionKeyLifecycle flags a key declared retired that a real factor still references, rather than trusting the declaration silently', async () => {
+  const user = await createUser();
+  const subjectId = String(user.id);
+  const nowMs = Date.now();
+  const keyActive = Buffer.alloc(32, 26);
+  const keyMistakenlyRetired = Buffer.alloc(32, 27);
+
+  const config = mfaConfiguration({
+    ...otherRequiredMfaEnv,
+    MFA_TOTP_ACTIVE_KEY_ID: 'active',
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({
+      active: keyActive.toString('base64url'),
+      'mistakenly-retired': keyMistakenlyRetired.toString('base64url'),
+    }),
+    MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['mistakenly-retired']),
+  });
+
+  const encrypted = encryptTotpSecret('JBSWY3DPEHPK3PXP', { key: keyMistakenlyRetired, keyId: 'mistakenly-retired' });
+  await insertActiveFactor(subjectId, encrypted, 'mistakenly-retired', nowMs);
+
+  const states = await mfaEncryptionKeyLifecycle(config, sql);
+  const entry = states.find((state) => state.keyId === 'mistakenly-retired');
+  assert.deepEqual(entry, { keyId: 'mistakenly-retired', state: 'retired', factorCount: 1, retiredWithActiveFactors: true });
+});
+
+test('mfaEncryptionKeyLifecycle treats a key referenced only by revoked factors as unused, never stuck at retiring', async () => {
+  const user = await createUser();
+  const subjectId = String(user.id);
+  const nowMs = Date.now();
+  const keyActive = Buffer.alloc(32, 28);
+  const keyFullyMigrated = Buffer.alloc(32, 29);
+
+  const config = mfaConfiguration({
+    ...otherRequiredMfaEnv,
+    MFA_TOTP_ACTIVE_KEY_ID: 'active',
+    MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({
+      active: keyActive.toString('base64url'),
+      'fully-migrated': keyFullyMigrated.toString('base64url'),
+    }),
+    MFA_TOTP_RETIRED_KEY_IDS: JSON.stringify(['fully-migrated']),
+  });
+
+  // The only factor ever encrypted under this key has since been revoked (a terminal, historical
+  // state), not merely disabled -- so this key is genuinely done, not "still needed."
+  const encrypted = encryptTotpSecret('JBSWY3DPEHPK3PXP', { key: keyFullyMigrated, keyId: 'fully-migrated' });
+  const factorId = await insertActiveFactor(subjectId, encrypted, 'fully-migrated', nowMs);
+  assert.equal(
+    await store.revokeFactor({ applicationId, factorId, nowMs, reason: 'user_revocation', subjectId }),
+    true,
+  );
+
+  const states = await mfaEncryptionKeyLifecycle(config, sql);
+  const entry = states.find((state) => state.keyId === 'fully-migrated');
+  // A correct 'retired' declaration must not be falsely flagged as an anomaly once its only factor is
+  // revoked, and the count must not still include that historical row.
+  assert.deepEqual(entry, { factorCount: 0, keyId: 'fully-migrated', retiredWithActiveFactors: false, state: 'retired' });
 });
