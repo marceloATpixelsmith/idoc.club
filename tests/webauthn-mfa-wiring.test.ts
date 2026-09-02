@@ -81,6 +81,35 @@ test('WebAuthn credential storage never reuses TOTP secret material or its verif
   assert.doesNotMatch(source('lib/auth/mfa/webauthn.ts'), /encryptedSecret|encryptTotpSecret|decryptTotpSecret|totpCounter|verifyTotpCode/);
 });
 
+// AUTH-OPERATIONS-004: a WebAuthn login-time replay (a cloned authenticator or a resubmitted
+// assertion, surfaced by finishWebAuthnAuthentication's own 'replay' status -- proven real-Postgres
+// behavioral at the storage layer in tests/webauthn-store.integration.ts's updateSignCount coverage)
+// must enqueue the same dedicated mfa_replay_detected event as a TOTP replay, not merely fall through
+// to the same generic "could not be verified" message with no distinct security event. Proving this
+// specific branch end-to-end would require simulating a full WebAuthn authentication ceremony (a
+// real attestation keypair, COSE/CBOR encoding, and a signed assertion) that no test in this
+// repository builds; the wiring is verified here at the source level instead, layered on top of the
+// already-real-Postgres proof that the underlying replay signal itself is genuine.
+test('a WebAuthn login replay enqueues the same dedicated mfa_replay_detected event as a TOTP replay, not just a generic failure', () => {
+  const actions = source('app/(login)/mfa/actions.ts');
+  const verifyLoginWebAuthn = actions.slice(actions.indexOf('export const verifyLoginWebAuthn'), actions.indexOf('export const beginAuthenticatorRecovery'));
+  assert.match(verifyLoginWebAuthn, /if \(verification\.status === 'replay'\) \{/);
+  assert.ok(verifyLoginWebAuthn.indexOf("if (verification.status === 'replay')") <
+    verifyLoginWebAuthn.indexOf("if (verification.status !== 'verified')"), 'the replay branch must be checked before the generic not-verified branch');
+  const replayBranch = verifyLoginWebAuthn.slice(verifyLoginWebAuthn.indexOf("if (verification.status === 'replay')"),
+    verifyLoginWebAuthn.indexOf("if (verification.status !== 'verified')"));
+  assert.match(replayBranch, /enqueueAuthSecurityNotification\(/);
+  assert.match(replayBranch, /kind: 'mfa_replay_detected'/);
+  assert.match(replayBranch, /dedupeKey: `mfa-replay:webauthn:\$\{context\.pending\.transactionId\}`/);
+
+  const verifyLoginTotp = actions.slice(actions.indexOf('export const verifyLoginTotp'), actions.indexOf('export async function beginLoginWebAuthn'));
+  assert.match(verifyLoginTotp, /if \(result\.status === 'replay'\) \{/);
+  assert.match(verifyLoginTotp, /kind: 'mfa_replay_detected'/);
+
+  const events = source('lib/notifications/auth-security-events.ts');
+  assert.match(events, /'mfa_replay_detected'/);
+});
+
 test('every WebAuthn ceremony requires user verification and is bound to the configured relying-party origin and ID', () => {
   const webauthn = source('lib/auth/mfa/webauthn.ts');
   assert.match(webauthn, /requireUserVerification: true/g);

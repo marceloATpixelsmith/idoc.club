@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 5, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 7, the repository baseline is:
 
-- **134 verified**
-- **3 implemented-but-unverified**
-- **11 partial**
+- **144 verified**
+- **0 implemented-but-unverified**
+- **4 partial**
 - **0 missing**
 - **7 not-applicable**
-- **14 applicable non-verified controls remaining**
+- **4 applicable non-verified controls remaining**
 
-Slices 1 through 6 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1 through 7 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -93,9 +93,9 @@ Controls (all five verified):
 
 Goal (met): behaviorally proved NFC-normalized deterministic case-insensitive identity plus a separately preserved display form through the real signup/email-change paths (`tests/email-identity-normalization.integration.ts`, `tests/email-change.integration.ts`); a real, minimized-response behavioral test for the MFA security page that found and fixed a genuine production secret leak (the root layout's SWR fallback embedded the full `getUser()` row, including `passwordHash`, into every authenticated page's RSC payload -- see `lib/db/queries.ts`'s `getPublicUser()` and `tests/security-e2e/mfa-production-boundaries.spec.ts`); a closed, compile-time-enforced security-event taxonomy with auto-attached category/resource/retention-class and structural metadata minimization (`lib/observability/security-events.ts`, `lib/observability/logger.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/security-event-log-attribution.integration.ts`); and a bounded row cap on the temporally-growing admin exports plus a tested absence of any analytics integration (`lib/membership/exports.ts`, `tests/exports.integration.ts`, `tests/privacy-data-minimization.test.ts`).
 
-### Slice 7 — Operations and observability
+### Slice 7 — Operations and observability (COMPLETE)
 
-Controls:
+Controls (all five verified):
 
 - `AUTH-ERROR-001`
 - `AUTH-EMAIL-002`
@@ -103,7 +103,7 @@ Controls:
 - `AUTH-OPERATIONS-006`
 - `AUTH-OPERATIONS-007`
 
-Goal: prove stable generic authentication errors, email-verification resend/supersession behavior, actionable secret-free security events, severity/ownership, and the remaining alert-correlation/anomaly-response requirements.
+Goal (met): `tests/auth-error-classes.integration.ts` behaviorally proves the real production `verifyLoginOtp` surfaces the canonical generic support message only for a genuinely persistent failure (a `migrated_pending` account with no imported foundation record), keeping ordinary mistakes specific; `tests/auth-email-resend-safety.integration.ts` proves the real production `resendSignupOtp`/`verifySignupOtp` enforce the cooldown, genuinely supersede a prior code, and stay enumeration-resistant. A new `mfa_replay_detected` security-event kind (migration `0031_mfa_replay_notification_kind.sql`) closes the "replay attempts have no dedicated security event" gap, wired into both `verifyLoginTotp` and `verifyLoginWebAuthn` in `app/(login)/mfa/actions.ts` and proven end to end for the TOTP path in `tests/mfa-replay-notifications.integration.ts`; `production-mfa-finalization.integration.ts` was extended to assert the real enrollment/replacement/recovery notification kinds too. `lib/notifications/rate-limit-correlation.ts` adds a real, narrow correlation engine (3-of-4-window sustained blocking of the same bucket pages an operator once, severity-tagged) proven in `tests/rate-limit-correlation.integration.ts`. `lib/membership/incident-response.ts`'s `forceRevokeAllAuthority` adds the previously-missing operator-initiated "force-revoke all authority for user X" admin tool (Super-Admin-gated, incident-correlated audit trail, wired to a real Server Action and admin form), proven in `tests/incident-response.integration.ts`.
 
 ### Slice 8 — Deployment readiness and operational validation
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-Slice 6 — Privacy and logging is complete as of this revision. `AUTH-SECRET-004` (from Slice 5) remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 7 — Operations and observability** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 7. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 7 — Operations and observability is complete as of this revision. `AUTH-SECRET-004` (from Slice 5) remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 8 — Deployment readiness and operational validation** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 8. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.

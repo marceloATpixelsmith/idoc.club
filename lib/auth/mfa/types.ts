@@ -11,7 +11,8 @@ export type SensitiveAction =
   | 'generate-recovery-codes'
   | 'invite-privileged-user'
   | 'change-privileged-permissions'
-  | 'change-security-settings';
+  | 'change-security-settings'
+  | 'force-revoke-authority';
 
 export interface TotpFactorRecord {
   factorId: string;

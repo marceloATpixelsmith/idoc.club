@@ -23,6 +23,7 @@ import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
+import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { issueRememberedDevice } from '@/lib/auth/mfa/remembered-device';
 import { setRememberedTotpDeviceCookie } from '@/lib/auth/mfa/remembered-device-cookie';
@@ -128,6 +129,14 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
     return failAndRestart('This authenticator can no longer be used. Contact support to replace it.');
   }
   if (result.status === 'invalid-code') return { error: 'That authenticator code is incorrect.' };
+  if (result.status === 'replay') {
+    // A previously-accepted TOTP counter was resubmitted -- a cloned/replayed code, not an ordinary
+    // mistake. Notify the account owner via a dedicated security event; the caller-facing response
+    // stays the same generic "session expired" message so an attacker learns nothing extra.
+    await enqueueAuthSecurityNotification({ dedupeKey: `mfa-replay:totp:${context.pending.transactionId}`,
+      kind: 'mfa_replay_detected', userId: context.user.id });
+    return failAndRestart('Your verification session expired. Sign in again.');
+  }
   if (result.status !== 'accepted') return failAndRestart(result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Sign in again.' : 'Your verification session expired. Sign in again.');
   // AUTH-REMEMBER-001: only ever offered when the policy is on, and only ever bound to the factor
@@ -163,6 +172,14 @@ export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async
   if (!response) return { error: 'That passkey response was not understood.' };
   const verification = await finishWebAuthnAuthentication({ subjectId: String(context.user.id),
     applicationId: MFA_APPLICATION_ID, ceremonyId, response, baseUrl: baseUrlForServer(), store: webauthnStore });
+  if (verification.status === 'replay') {
+    // A non-increasing signature counter -- the signature of a cloned authenticator or a replayed
+    // response, not an ordinary failed verification. Notify the account owner via a dedicated
+    // security event; the caller-facing response stays the same generic message either way.
+    await enqueueAuthSecurityNotification({ dedupeKey: `mfa-replay:webauthn:${context.pending.transactionId}`,
+      kind: 'mfa_replay_detected', userId: context.user.id });
+    return { error: 'That passkey could not be verified.' };
+  }
   if (verification.status !== 'verified') return { error: 'That passkey could not be verified.' };
   const accepted = await mfaStore.acceptChallengeWithVerifiedFactor({ applicationId: MFA_APPLICATION_ID,
     factorId: verification.factorId, nowMs: Date.now(), purpose: 'login', subjectId: String(context.user.id),

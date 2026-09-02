@@ -57,6 +57,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   mailchimp_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
   mailchimp_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'security' },
   mailchimp_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
+  rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security' },
   reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational' },
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational' },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational' },

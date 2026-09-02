@@ -8,6 +8,7 @@ import { parseMemberProfileFormData } from '@/lib/membership/validation';
 import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
+import { forceRevokeAllAuthority } from '@/lib/membership/incident-response';
 import { rawCanonicalSessionId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
@@ -31,6 +32,16 @@ async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
     return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required;
   } catch (error) {
     return friendlyError(error, 'The role change could not be authorized safely.');
+  }
+}
+
+async function forceRevokeAllAuthorityNeedsStepUp(): Promise<FormState | boolean> {
+  try {
+    const actor = await requireAccountAccess('administration');
+    requireSuperAdmin(actor);
+    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members')).required;
+  } catch (error) {
+    return friendlyError(error, 'Authority could not be revoked safely.');
   }
 }
 
@@ -108,6 +119,20 @@ export async function reinstateUserAccountForm(_state: FormState, formData: Form
     return { success: 'Account reinstated.' };
   } catch (error) {
     return friendlyError(error, 'The account could not be reinstated.');
+  }
+}
+
+export async function forceRevokeAllAuthorityForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'Authority could not be revoked.'); }
+  const userId = Number(formData.get('userId'));
+  const stepUp = await forceRevokeAllAuthorityNeedsStepUp();
+  if (typeof stepUp !== 'boolean') return stepUp;
+  if (stepUp) redirect('/mfa');
+  try {
+    await forceRevokeAllAuthority(userId, { incidentReference: formData.get('incidentReference'), reason: formData.get('reason') });
+    return { success: 'Every session, remembered device, and MFA factor for this user has been revoked.' };
+  } catch (error) {
+    return friendlyError(error, 'Authority could not be revoked.');
   }
 }
 

@@ -21,7 +21,7 @@ const AUTHORITY_COOKIE = 'idoc_fresh_step_up';
 const TTL_SECONDS = 5 * 60;
 const ACTIONS: readonly SensitiveAction[] = ['change-email', 'change-password', 'change-mfa',
   'replace-authenticator', 'generate-recovery-codes', 'invite-privileged-user',
-  'change-privileged-permissions', 'change-security-settings'];
+  'change-privileged-permissions', 'change-security-settings', 'force-revoke-authority'];
 
 type BoundEvidence = {
   action: SensitiveAction;
