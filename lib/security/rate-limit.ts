@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { rateLimitHashKeyForServer } from '@/lib/runtime/configuration';
+import { correlateRepeatedRateLimitExceedance } from '@/lib/notifications/rate-limit-correlation';
 import { resolveRequestOrigin } from './request-origin';
 import { testRequestOrigin } from '@/lib/auth/request-cookies';
 
@@ -47,6 +48,16 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
     takeBucket(purpose, emailHash, allOriginsMarker, windowStartedAt, EMAIL_MAX_REQUESTS),
     takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, IP_MAX_REQUESTS),
   ]);
+  // AUTH-OPERATIONS-006: a single blocked request is routine and already fully handled by the
+  // rejection above; only sustained blocking across multiple windows for the *same* bucket is
+  // correlated into an operator alert -- see rate-limit-correlation.ts. Best-effort: never affects
+  // the boolean this function returns.
+  if (!emailAllowed) {
+    await correlateRepeatedRateLimitExceedance({ identifierHash: emailHash, max: EMAIL_MAX_REQUESTS, now, originHash: allOriginsMarker, purpose });
+  }
+  if (!ipAllowed) {
+    await correlateRepeatedRateLimitExceedance({ identifierHash: allEmailsMarker, max: IP_MAX_REQUESTS, now, originHash, purpose });
+  }
   return emailAllowed && ipAllowed;
 }
 

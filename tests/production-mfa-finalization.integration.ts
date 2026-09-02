@@ -50,6 +50,9 @@ test('production initial finalizer is owner-bound, expiring, atomic, and single-
     (select count(*)::int from idoc.mfa_recovery_codes where user_id=${owner.id}) codes,
     (select count(*)::int from idoc.audit_log where actor_id=${owner.id} and action='auth.mfa.authenticator.enrolled') events`;
   assert.deepEqual(state, { active: 1, codes: 3, events: 1 });
+  const [notification] = await sql<{ kind: string; recipient_email: string }[]>`select kind,recipient_email
+    from idoc.auth_security_notification_outbox where user_id=${owner.id}`;
+  assert.deepEqual(notification, { kind: 'authenticator_enrolled', recipient_email: owner.email });
   const [ackWindow] = await sql<{ expires_at: string | Date }[]>`select expires_at from idoc.mfa_enrollment_transactions
     where transaction_id=${enrollment.transactionId}`;
   assert.equal(new Date(ackWindow.expires_at).getTime(), nowMs + recoveryAckTtlMs);
@@ -75,6 +78,9 @@ test('production recovery consumption has exactly one winner and secret-free evi
   const evidence = JSON.stringify(await sql`select action,reason from idoc.audit_log where actor_id=${owner.id}
     union all select kind,dedupe_key from idoc.auth_security_notification_outbox where user_id=${owner.id}`);
   assert.doesNotMatch(evidence, /raw-code-must-not-appear/);
+  const [notification] = await sql<{ kind: string; recipient_email: string }[]>`select kind,recipient_email
+    from idoc.auth_security_notification_outbox where user_id=${owner.id}`;
+  assert.deepEqual(notification, { kind: 'recovery_code_used', recipient_email: owner.email });
 });
 
 test('production replacement serializes competing confirmations and rotates all dependent authority', async () => {
@@ -98,6 +104,9 @@ test('production replacement serializes competing confirmations and rotates all 
     (select count(*)::int from idoc.mfa_remembered_devices where user_id=${owner.id} and revoked_at is not null) "revokedDevices",
     (select session_version::int from idoc.users where id=${owner.id}) version`;
   assert.deepEqual(state, { active: 1, codes: 3, events: 1, revokedDevices: 1, version: 1 });
+  const [notification] = await sql<{ kind: string; recipient_email: string }[]>`select kind,recipient_email
+    from idoc.auth_security_notification_outbox where user_id=${owner.id}`;
+  assert.deepEqual(notification, { kind: 'authenticator_replaced', recipient_email: owner.email });
   const [ackWindow] = await sql<{ expires_at: string | Date }[]>`select expires_at from idoc.mfa_enrollment_transactions
     where transaction_id in ${sql(candidates.map((candidate) => candidate.transactionId))} and consumed_at is not null`;
   assert.equal(new Date(ackWindow.expires_at).getTime(), nowMs + recoveryAckTtlMs);

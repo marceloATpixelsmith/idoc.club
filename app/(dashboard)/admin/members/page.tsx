@@ -7,7 +7,7 @@ import { MEMBERSHIP_STATUS_LABELS } from '@/lib/membership/entitlement';
 import { AdminProfileForm } from './admin-profile-form';
 import { EntitlementCorrectionForm } from './entitlement-correction-form';
 import { ReinstateForm, SuspendForm } from './membership-status-form';
-import { ReinstateAccountForm, SuspendAccountForm } from './account-suspension-form';
+import { ForceRevokeAllAuthorityForm, ReinstateAccountForm, SuspendAccountForm } from './account-suspension-form';
 import { RolesSection } from './roles-section';
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; q?: string }> }) {
@@ -85,6 +85,13 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <section className="mt-8 max-w-2xl">
             <h3 className="font-medium text-gray-900">Application roles</h3>
             <RolesSection activeRoles={activeRoles} userId={selected.profile.userId} />
+          </section>
+        )}
+
+        {isSuperAdmin && (
+          <section className="mt-8 max-w-2xl">
+            <h3 className="font-medium text-gray-900">Incident response</h3>
+            <ForceRevokeAllAuthorityForm userId={selected.profile.userId} />
           </section>
         )}
 

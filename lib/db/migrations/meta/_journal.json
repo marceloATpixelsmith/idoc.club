@@ -218,6 +218,20 @@
       "when": 1788256800000,
       "tag": "0030_email_display_form",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788264000000,
+      "tag": "0031_mfa_replay_notification_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788271200000,
+      "tag": "0032_authority_force_revoked_notification",
+      "breakpoints": true
     }
   ]
 }

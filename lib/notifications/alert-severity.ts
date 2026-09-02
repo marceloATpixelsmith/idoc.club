@@ -23,6 +23,10 @@ export const ALERT_SEVERITY = {
   // An address that permanently can't be delivered to (bad mailbox, bad domain, ...) -- worth an
   // operator's attention, but not urgent the way a complaint is.
   'email.hard_bounce': 'warning',
+  // The same account or origin has been blocked by an auth-security rate limit across multiple
+  // consecutive windows -- a single blocked request is routine, but sustained repeated blocking is
+  // the correlated signal of an active credential-stuffing/brute-force attempt (AUTH-OPERATIONS-006).
+  'auth.repeated_rate_limit_exceeded': 'high',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;
