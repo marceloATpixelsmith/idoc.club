@@ -122,6 +122,96 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   await context.close();
 });
 
+// React's dev-only Server Components runtime (the `.development.js` build `next dev` always uses;
+// confirmed absent from every `.production.js` runtime bundle under node_modules) tags its own
+// internal owner-stack/timing/async-sequence instrumentation with single-letter debug row-type
+// markers (`D`, `J`, and others -- see react-server-dom-turbopack-server.node.development.js's
+// emitDebugChunk/emitTimingChunk, which literally write `<id>:D<json>` / `<id>:J<json>`) in the
+// Flight wire format embedded in each `self.__next_f.push(...)` script. That instrumentation exists
+// purely for the "Open Next.js Dev Tools" panel: it is never part of the real render tree or
+// hydration props (those arrive in ordinary, undecorated rows), and it is compiled out of the
+// production runtime entirely, so it can never reach a real deployment. Left unstripped, it makes
+// this scan below unusable: Next's own dev-only instrumentation can re-serialize a traced Server
+// Component's full awaited return value (here, getUser()'s raw row) purely for the devtools panel,
+// which would otherwise look identical to a genuine production-reachable leak. Rather than
+// enumerate every debug row-type letter (a moving target across Next versions), detection uses the
+// one marker every debug/timing row observed in practice carries -- the literal `"env":"Server"`
+// field, specific to this dev-only tracing vocabulary and never part of this app's actual page
+// props. This walks those rows and everything they transitively reference via Flight's chunk
+// reference conventions (`"$<id>"` and `"$@<id>"`, both observed in practice), and removes only
+// that debug-instrumentation subgraph before scanning -- ordinary rows (including the real
+// SWR-fallback-class leak this test exists to catch) are left untouched. Next streams the Flight
+// payload across many separate `self.__next_f.push(...)` script tags, and a debug row in one tag can
+// reference a value chunk emitted in an *earlier* tag (observed in practice), so exclusion is
+// computed once globally across every tag before any tag's rows are filtered -- computing it
+// per-tag would miss exactly that cross-tag case.
+function stripDevOnlyDebugFlightChunks(html: string): string {
+  const pushPattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+  const decodedByPush: string[] = [];
+  for (const match of html.matchAll(pushPattern)) {
+    try { decodedByPush.push(JSON.parse(`"${match[1]}"`)); } catch { decodedByPush.push(''); }
+  }
+
+  const byId = new Map<string, string>();
+  for (const decoded of decodedByPush) {
+    for (const row of decoded.split('\n')) {
+      const match = row.match(/^([0-9a-f]+):([\s\S]*)$/);
+      if (match) byId.set(match[1], match[2]);
+    }
+  }
+  const excluded = new Set<string>();
+  const queue: string[] = [];
+  for (const [id, rest] of byId) {
+    if (/^[A-Za-z]/.test(rest) && rest.includes('"env":"Server"')) { excluded.add(id); queue.push(id); }
+  }
+  while (queue.length > 0) {
+    const rest = byId.get(queue.pop()!) ?? '';
+    for (const referenceMatch of rest.matchAll(/"\$@?([0-9a-f]+)"/g)) {
+      const referencedId = referenceMatch[1];
+      if (!excluded.has(referencedId)) { excluded.add(referencedId); queue.push(referencedId); }
+    }
+  }
+
+  let pushIndex = 0;
+  return html.replace(pushPattern, (full) => {
+    const decoded = decodedByPush[pushIndex++];
+    const cleaned = decoded.split('\n').filter((row) => {
+      const match = row.match(/^([0-9a-f]+):/);
+      return !match || !excluded.has(match[1]);
+    }).join('\n');
+    return full.replace(/\[1,"(?:[^"\\]|\\.)*"\]/, `[1,${JSON.stringify(cleaned)}]`);
+  });
+}
+
+test('stripDevOnlyDebugFlightChunks removes only the debug-instrumentation subgraph, never an ordinary row', () => {
+  const debugValue = 'dev-only-debug-secret';
+  const timingTracedValue = 'dev-only-timing-traced-secret';
+  const realValue = 'genuine-hydrated-prop-secret';
+  const flightPayload = [
+    `1:D{"time":8.1}`,
+    `2:D{"awaited":"$3","env":"Server"}`,
+    `3:[["id",null,${JSON.stringify(debugValue)}]]`,
+    // A "J" (async-sequence/timing) row referencing its traced value via the "$@<id>" form
+    // observed in practice, distinct from the plain "$<id>" form used elsewhere.
+    `6:J{"name":"","start":1,"end":2,"env":"Server","owner":"$2","value":"$@7"}`,
+    `7:[["id",null,${JSON.stringify(timingTracedValue)}]]`,
+    `4:["$","$L5",null,{"value":${JSON.stringify(realValue)}}]`,
+  ].join('\n');
+  const html = `<script>self.__next_f.push([1,${JSON.stringify(flightPayload)}])</script>`;
+  const cleaned = stripDevOnlyDebugFlightChunks(html);
+  expect(cleaned).not.toContain(debugValue);
+  expect(cleaned).not.toContain(timingTracedValue);
+  expect(cleaned).toContain(realValue);
+});
+
+test('stripDevOnlyDebugFlightChunks resolves a debug-row reference into a value chunk emitted in an earlier, separate push tag', () => {
+  const crossChunkDebugValue = 'dev-only-cross-chunk-debug-secret';
+  const firstTag = `<script>self.__next_f.push([1,${JSON.stringify('8:[["id",null,"' + crossChunkDebugValue + '"]]')}])</script>`;
+  const secondTag = `<script>self.__next_f.push([1,${JSON.stringify('9:J{"name":"","start":1,"end":2,"env":"Server","owner":"$2","value":"$@8"}')}])</script>`;
+  const cleaned = stripDevOnlyDebugFlightChunks(firstTag + secondTag);
+  expect(cleaned).not.toContain(crossChunkDebugValue);
+});
+
 // AUTH-API-003: "Trusted MFA results MAY contain internal factor and failure detail, while client
 // responses and inventory MUST exclude raw secrets, hashes, internal identifiers, provider secrets,
 // and exact risk internals." docs/22's gap: prior evidence was source-inspection of the page
@@ -152,11 +242,12 @@ test("the real /dashboard/security HTTP response for a privileged account never 
   await expect(page.getByText('Status: Configured', { exact: false })).toBeVisible();
   expect(html).toContain('Authenticator app');
 
+  const productionReachableHtml = stripDevOnlyDebugFlightChunks(html);
   for (const secret of [
     E2E_TOTP_SECRET, factor.encrypted_secret, factor.factor_id, fixture.password_hash,
     recoveryCode.recovery_code_id, recoveryCode.digest, E2E_RECOVERY_CODE,
   ]) {
-    expect(html).not.toContain(secret);
+    expect(productionReachableHtml).not.toContain(secret);
   }
   await sql.end();
   await context.close();
