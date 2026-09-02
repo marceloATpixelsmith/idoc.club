@@ -87,7 +87,7 @@ async function atomicLink(input: {
         'auth.google_identity.linked',
         'external_identity',
         ${String(inserted[0].id)},
-        jsonb_build_object('issuer', ${issuer}, 'subject', ${input.subject}, 'verificationMethod', ${input.verificationMethod}),
+        jsonb_build_object('issuer', ${issuer}::text, 'subject', ${input.subject}::text, 'verificationMethod', ${input.verificationMethod}::text),
         ${`fresh-verification:${input.verificationTransactionId}`}
       )
     `;
@@ -126,7 +126,7 @@ async function atomicUnlink(input: {
         'auth.google_identity.unlinked',
         'external_identity',
         ${String(current[0].id)},
-        jsonb_build_object('issuer', ${issuer}, 'subject', ${input.subject}, 'verificationMethod', ${input.verificationMethod}),
+        jsonb_build_object('issuer', ${issuer}::text, 'subject', ${input.subject}::text, 'verificationMethod', ${input.verificationMethod}::text),
         ${`fresh-verification:${input.verificationTransactionId}`}
       )
     `;

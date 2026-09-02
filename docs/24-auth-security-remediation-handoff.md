@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 and 2, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1, 2, and 3, the repository baseline is:
 
-- **120 verified**
-- **14 implemented-but-unverified**
+- **126 verified**
+- **8 implemented-but-unverified**
 - **14 partial**
 - **0 missing**
 - **7 not-applicable**
-- **28 applicable non-verified controls remaining**
+- **22 applicable non-verified controls remaining**
 
-Slices 1 and 2 are complete. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1, 2, and 3 are complete. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -45,9 +45,9 @@ When a required behavioral test cannot run in the local Claude environment, impl
 
 ## Remaining remediation slices
 
-### Slice 3 — Authorization and privilege
+### Slice 3 — Authorization and privilege (COMPLETE)
 
-Controls:
+Controls (all now `verified`):
 
 - `AUTH-STORAGE-002`
 - `AUTH-LIFECYCLE-002`
@@ -56,7 +56,7 @@ Controls:
 - `AUTH-AUTHZ-005`
 - `AUTH-API-004`
 
-Goal: prove server-side authorization, lifecycle rejection, fresh verification/session rotation for password changes, collision-safe external-identity linking, and protected API/data boundaries through real production paths. Direct cross-account and disallowed-lifecycle requests must fail closed without unauthorized mutation or protected-resource disclosure.
+Goal (met): prove server-side authorization, lifecycle rejection, fresh verification/session rotation for password changes, collision-safe external-identity linking, and protected API/data boundaries through real production paths. Direct cross-account and disallowed-lifecycle requests fail closed without unauthorized mutation or protected-resource disclosure, proven in `tests/authorization-privilege-boundaries.integration.ts`, `tests/role-grants.integration.ts`, and `tests/security-e2e/api-authorization-disclosure.spec.ts`. This slice also found and fixed a real production defect: the Google-identity-linking audit-log write passed untyped bind parameters into `jsonb_build_object(...)`, which real PostgreSQL rejects — linking/unlinking a Google identity would have thrown in production the first time either path actually ran.
 
 ### Slice 4 — CSRF / request integrity
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-When this file is used as a handoff, begin with **Slice 3 — Authorization and privilege** unless current `docs/22`/`docs/23` show that it has already been completed. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 3 — Authorization and privilege is complete as of this revision. When this file is used as a handoff, begin with **Slice 4 — CSRF / request integrity** unless current `docs/22`/`docs/23` show that it has already been completed. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.

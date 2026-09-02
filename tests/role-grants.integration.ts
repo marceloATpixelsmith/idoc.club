@@ -22,6 +22,7 @@ test('a Super Admin can grant administrator and super_admin roles, each writing 
   const superAdmin = await superAdminUser();
   const target = await createUser();
 
+  const [before] = await sql`select session_version from idoc.users where id=${target.id}`;
   await asSuperAdmin(superAdmin.id, () => grantApplicationRole(target.id, { reason: 'New ops hire', role: 'administrator' }));
   const [row] = await sql`select role, granted_by from idoc.application_roles where user_id=${target.id} and revoked_at is null`;
   assert.equal(row.role, 'administrator');
@@ -32,6 +33,27 @@ test('a Super Admin can grant administrator and super_admin roles, each writing 
   assert.equal(audit.reason, 'New ops hire');
   assert.equal(audit.entity_type, 'user');
   assert.equal(audit.entity_id, String(target.id));
+
+  // AUTH-AUTHZ-005: a privileged role grant must invalidate the target's existing session
+  // authority, not merely record the grant -- proven here against real Postgres, not just the
+  // regex assertion in role-grant-session-invalidation.test.ts.
+  const [after] = await sql`select session_version from idoc.users where id=${target.id}`;
+  assert.equal(after.session_version, before.session_version + 1);
+});
+
+test('revoking a role also increments the target\'s session version, invalidating any session issued under the old grant', async () => {
+  const superAdmin = await superAdminUser();
+  const target = await createUser();
+  await asSuperAdmin(superAdmin.id, () => grantApplicationRole(target.id, { reason: 'First grant', role: 'administrator' }));
+  const [beforeRevoke] = await sql`select session_version from idoc.users where id=${target.id}`;
+
+  await asSuperAdmin(superAdmin.id, () => revokeApplicationRole(target.id, { reason: 'Role no longer needed', role: 'administrator' }));
+  const [afterRevoke] = await sql`select session_version from idoc.users where id=${target.id}`;
+  assert.equal(afterRevoke.session_version, beforeRevoke.session_version + 1);
+
+  const [audit] = await sql`select actor_id, reason from idoc.audit_log where action='admin.role.revoked' and entity_id=${String(target.id)}`;
+  assert.equal(audit.actor_id, superAdmin.id);
+  assert.equal(audit.reason, 'Role no longer needed');
 });
 
 test('granting a role the user already actively holds is a friendly rejection, not a raw constraint violation', async () => {
