@@ -8,8 +8,8 @@ Migration from WordPress Multisite + MemberPress to a purpose-built Next.js memb
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -29,6 +29,8 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 - Use one common annual membership price of €80 for new paid memberships unless IDOC later changes the fee.
 
+- Present one IDOC Annual Membership; automatic renewal is a member-controlled billing preference, not a separate product, plan, or membership type.
+
 - Separate authentication, membership entitlement, professional classification, and billing so none of those concepts is incorrectly used as a substitute for another.
 
 - Provide a secure administrative workflow for member management, payment reconciliation, professional level changes, and audit history.
@@ -43,6 +45,8 @@ This charter defines the objective, scope, constraints, major decisions, success
 | Professional categories | Judge, Steward, Judge + Steward, Veterinarian.                                                                                                  |
 | Levels                  | Stored as profile/membership attributes; not separate Stripe products unless pricing later differs.                                             |
 | Active membership       | Determined by an IDOC membership record and its validity/status, not solely by Stripe.                                                          |
+| Pre-payment access      | Creating an account does not make the account holder a member; never-paid and post-grace expired accounts receive only the payment gate and logout. |
+| Grace                   | A previously paid member retains full member access for five calendar days after a failed recurring renewal or non-recurring paid-through date. |
 | Stripe subscriptions    | Existing subscriptions remain attached to their current Stripe Customer/Subscription objects unless a specific exception requires intervention. |
 | Manual payments         | Can activate or extend membership without requiring a Stripe subscription.                                                                      |
 | Existing users          | Accounts are pre-created/imported. Members should only need to authenticate/activate access, not re-enroll or repay.                            |
@@ -93,6 +97,7 @@ This charter defines the objective, scope, constraints, major decisions, success
 | Security           | Server-side authorization, member-data isolation, webhook verification, secret management, input validation, rate limiting, logging and production security controls pass review. |
 | Cutover            | Production launch has a tested rollback procedure and signed reconciliation checklist.                                                                                            |
 | Member experience  | Existing members do not need to buy membership again; first access is an account-access step only.                                                                                |
+| New-member payment | A new account sees one €80 membership-payment step and chooses whether that membership renews automatically; dashboard/member access begins only after verified payment.        |
 
 # 7. Project roles
 

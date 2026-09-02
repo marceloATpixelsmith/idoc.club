@@ -178,6 +178,8 @@ The `secure:true`-unconditional cookies (pending-signup/login/password-reset, st
 
 # 6. Authorization and account-state controls (AUTH-AUTHZ)
 
+> Approved-policy delta (2 September 2026): the matrix below accurately inventories the current implementation, including the `active, not entitled` allowances. Those allowances no longer satisfy the approved product contract. Docs/02 and docs/25 require never-paid and post-five-day-grace ordinary accounts to retain only the membership-payment boundary and logout; profile, account-maintenance, security, history, Portal, and member access must be denied. AUTH-AUTHZ-001/004/005 therefore require remediation and new boundary evidence before this area can be considered aligned with current policy.
+
 | ID | Behavior / invariant | Code | DB | Docs | Tests | Status |
 |---|---|---|---|---|---|---|
 | AUTH-AUTHZ-001 | `requireAccountAccess(operation)` is the single central authorization function. It always performs a *fresh* database read of the actor's identity, application-role grants, and entitlement — never trusts a cached or client-supplied value — and evaluates the pure policy predicate `mayAccessAccountFunction()`. Full derived state × scope matrix (`accountState` values: `unverified`, `onboarding`, `active`, `suspended`, `migrated_pending`, `deleted` — note `expired` is **not** an `accountState`; it is a `memberships.status` value, see AUTH-AUTHZ-004): | `lib/membership/data-access.ts:38-68`; `lib/membership/account-access.ts:3-14` | `idoc.users.account_state` (plain `varchar(30)`, not a DB enum/CHECK — see §7 note) | docs/01 §4, §6; docs/05 line 150 | `tests/membership-foundation.test.ts:100-127` | Implemented |

@@ -8,8 +8,8 @@ Target design for IDOC membership, billing, authentication and administration
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -51,6 +51,7 @@ Release 1 implements these concepts in the `idoc` schema. Authentication users n
 | professional_roles     | Judge/steward/vet classifications and status history.                              | profile_id, role_type, official_statuses, national_federation_country_code, idoc_region, fei_id, is_technical_delegate, effective_from, effective_to, verified_by |
 | billing_accounts       | Links a member to external billing identities.                                     | profile_id, provider, external_customer_id                                                |
 | subscriptions          | Tracks recurring subscription references without owning the external subscription. | profile_id, provider, external_subscription_id, status, current_period_end, price_id      |
+| renewal_preferences    | Tracks member-controlled automatic-renewal intent and any future-effective transition. | profile_id, current_mode, pending_mode, effective_on, external_schedule_id, updated_at   |
 | payments               | Ledger-like payment/renewal evidence for Stripe and manual channels.               | profile_id, provider, amount, currency, paid_at, external_payment_id, method, recorded_by |
 | membership_adjustments | Manual grants/extensions/suspensions with reasons.                                 | profile_id, action, effective_at, reason, actor_id                                        |
 | audit_log              | Immutable administrative/event history.                                            | actor_id, action, entity_type, entity_id, before_json, after_json, created_at             |
@@ -61,8 +62,8 @@ Release 1 implements these concepts in the `idoc` schema. Authentication users n
 | **Status**      | **Meaning**                                                                  | **Member access**                         |
 |-----------------|------------------------------------------------------------------------------|-------------------------------------------|
 | active          | Entitlement is currently valid.                                              | Allowed                                   |
-| grace           | Temporary grace period after billing issue or pending manual reconciliation. | Allowed, optionally with notice           |
-| expired         | Validity period ended.                                                       | Denied                                    |
+| grace           | Five calendar days after a previously paid term fails to renew or expires.   | Full member access with notice            |
+| expired         | Grace ended without eligible payment.                                       | Payment gate and logout only              |
 | canceled        | Will not renew or was manually canceled; access depends on valid_until.      | Until valid_until                         |
 | suspended       | Administrative suspension regardless of paid-through date.                   | Denied                                    |
 | complimentary   | Active membership granted without payment.                                   | Allowed                                   |
@@ -86,7 +87,8 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 | **Actor**                | **Permitted capabilities**                                                                                                               |
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | Anonymous                | Public pages; no membership or private member data.                                                                                      |
-| Member                   | Read own profile, membership, professional role, payment summary and Stripe portal link; update explicitly allowed own-profile fields.   |
+| Account holder — never paid/post-grace expired | Membership-payment gate and logout only; no dashboard/member data reads or mutations.                                          |
+| Paid/grace Member        | Read own profile, membership, professional role, payment summary and Stripe portal link; update explicitly allowed own-profile fields.   |
 | Administrator            | Full application administration: member records, payments, entitlements, roles, content, seminars, publishing and audit access.          |
 | Super Admin              | All Administrator capabilities plus restricted application settings and functions reserved for the project owner.                         |
 
@@ -102,6 +104,8 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 
 - Client-submitted membership status, role, level, amount, Stripe identifiers or administrator flags are never trusted without server-side authorization.
 
+- Authentication alone never authorizes dashboard or member-site access. Every member page, action, route, and data-access boundary derives current paid/grace entitlement server-side. Navigation hiding is not an access control.
+
 - Migration records must retain the legacy primary identifiers needed to trace every imported value back to WordPress/MemberPress.
 
 # 8. Suggested deployment environments
@@ -115,7 +119,7 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 
 # 9. Architecture decision: do not normalize legacy Stripe Price IDs during cutover
 
-Legacy subscriptions may remain on their existing Stripe Price objects. New enrollments can use a canonical current €80/year Price. Both can map to the same IDOC membership entitlement. Price normalization, if ever required, should be a separate billing project after the migration is stable.
+Legacy subscriptions may remain on their existing Stripe Product and Price objects. New enrollments use one canonical IDOC Annual Membership Product with recurring and non-recurring €80 Price configurations beneath it. Both billing modes and all valid legacy Prices map to the same IDOC membership entitlement. Price normalization, if ever required, should be a separate billing project after the migration is stable.
 
 ## Release 1 account-token and session additions
 

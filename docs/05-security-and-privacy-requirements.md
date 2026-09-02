@@ -12,8 +12,8 @@ Production hardening requirements for member data, administration, Render Postgr
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -27,6 +27,7 @@ Protect member identity, professional information, membership entitlement and bi
 |-------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Authentication                | Use the application's authentication system with verified email changes, secure session handling and documented account-lifecycle controls.                                                                                            |
 | Authorization                 | Every sensitive server action/route checks the authenticated actor and required role/permission.                                                                                                                                     |
+| Paid-membership boundary      | Authentication or profile existence alone never grants dashboard/member access. Every member-only page, route, action, and data read requires current paid or five-day-grace entitlement; never-paid and post-grace expired accounts are limited to payment and logout. |
 | Member data isolation         | Keep the Render PostgreSQL database inaccessible to browsers. Enforce authenticated-user ownership and administrator permissions in every server-side data operation, using default-deny behavior.                                   |
 | Database credential isolation | The Render PostgreSQL connection URL and credentials are server-only Vercel environment variables; never expose them through NEXT_PUBLIC\_\* variables, client bundles or browser responses. Production connections require TLS/SSL. |
 | Stripe secrets                | Stripe secret and webhook signing secret are server-only Vercel environment variables.                                                                                                                                               |
@@ -43,6 +44,8 @@ Protect member identity, professional information, membership entitlement and bi
 Release 1 data-access functions resolve the actor from the server session, load server-managed active application-role grants, and then apply owner-or-administrator checks before private profile, role, membership, audit, or entitlement access. Registration and email-change verification store only a SHA-256 token digest. The raw random token exists only while the server constructs and sends the one-hour Mailchimp Transactional link; it is never returned in action state or persisted. Claiming a token is atomic, single-use, replay-safe, and invalidates earlier outstanding links for the account. Database triggers reject updates and deletes to audit and profile-change history.
 
 - A normal member can read only their own private profile, membership, professional roles and approved payment summary.
+
+- An authenticated account without current paid/grace entitlement cannot read even its ordinary member dashboard, profile, security, or payment-history surfaces. It receives only the server-authorized membership-payment gate and logout. Direct URLs, Server Actions, Route Handlers, and data-access calls must enforce the same denial.
 
 - A normal member cannot write membership status, validity dates, payment records, administrator flags, or audit records. Members may update approved signup and professional fields only through the server-side validation/history workflow.
 

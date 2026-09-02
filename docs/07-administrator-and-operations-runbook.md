@@ -8,8 +8,8 @@ Day-to-day procedures after the IDOC membership platform goes live
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -84,6 +84,8 @@ Before approving a classification change, confirm that every field required by t
 | Payment failed               | Check local event record and Stripe status; Stripe retries automatically; member remains active for five days, then expires if unpaid. Do not manually mark paid without evidence. |
 | Member updated card          | Normally no local action; Stripe Customer Portal/next invoice handles it.                                            |
 | Member canceled auto-renew   | Confirm cancel-at-period-end; membership remains active through paid-through date.                                   |
+| Member enables auto-renew    | Confirm payment authorization and future activation exist; verify no immediate charge and no start before the current paid-through date. |
+| Member reverses pending choice | Confirm the pending transition was canceled/replaced and that only one future billing path remains.                 |
 | Subscription missing locally | Do not create a second subscription. Reconcile by verified Stripe Customer/Subscription ID.                          |
 | Duplicate charge concern     | Inspect Stripe invoices/payments and local idempotency/audit records before changing membership.                     |
 | Reconciliation flags an anomaly | Review the finding on the Stripe reconciliation report (§13.1). Confirm against Stripe directly before acting; correct through the normal suspend/reinstate/entitlement-correction tools — never edit `reconciliation_findings` directly, and never let the report's own presence stand in for verified evidence. |
@@ -127,6 +129,8 @@ revokes all persisted sessions and requires a fresh sign-in.
 4. Correct only after evidence identifies the intended entitlement.
 
 5. Record reason/source for any manual extension.
+
+6. Confirm the five-calendar-day grace rule was applied whether the prior term ended after a failed recurring charge or a non-recurring paid-through date. During grace the person retains full member access; after grace the account receives only payment and logout.
 
 # 11. Security incident escalation
 
@@ -225,7 +229,7 @@ Any administrator can view `/admin/reconciliation`, a read-only report refreshed
 
 ## Production runtime configuration boundary
 
-Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `MAILCHIMP_TRANSACTIONAL_API_KEY`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_RECURRING_PRODUCT_ID`, `STRIPE_ONE_TIME_PRODUCT_ID`, `TURNSTILE_SECRET_KEY`, `MFA_PENDING_AUTH_SIGNING_KEY`, `MFA_TOTP_ACTIVE_KEY_ID`, `MFA_TOTP_ENCRYPTION_KEYS`, and `MFA_RECOVERY_CODE_DIGEST_KEY`. Secrets must be at least 32 characters where applicable, the two Stripe product IDs must match Stripe's `prod_...` identifier shape, and each active key/version must resolve to material in its corresponding key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists.
+Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `MAILCHIMP_TRANSACTIONAL_API_KEY`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_MEMBERSHIP_PRODUCT_ID`, `TURNSTILE_SECRET_KEY`, `MFA_PENDING_AUTH_SIGNING_KEY`, `MFA_TOTP_ACTIVE_KEY_ID`, `MFA_TOTP_ENCRYPTION_KEYS`, and `MFA_RECOVERY_CODE_DIGEST_KEY`. Secrets must be at least 32 characters where applicable, the Stripe membership Product ID must match Stripe's `prod_...` identifier shape, and each active key/version must resolve to material in its corresponding key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists. Until the code migration in docs/25 is complete, the deployed implementation still expects the legacy pair `STRIPE_RECURRING_PRODUCT_ID` and `STRIPE_ONE_TIME_PRODUCT_ID`; do not remove them from an existing environment before the replacement code is deployed.
 
 The live privileged-MFA variables use these formats:
 
@@ -238,7 +242,7 @@ Store all four as sensitive server-only Vercel environment variables in every en
 
 The signup/login/password-reset Turnstile challenge additionally requires `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (client-visible by design — it identifies the Turnstile widget, not a secret) alongside the server-only `TURNSTILE_SECRET_KEY` above. Without the public key the widget renders nothing and the signup submit button stays permanently disabled; without the secret key every server-side verification fails closed.
 
-`STRIPE_RECURRING_PRODUCT_ID` and `STRIPE_ONE_TIME_PRODUCT_ID` identify the two Stripe Products membership checkout builds Prices against (docs/08): one billed yearly (auto-renewal), one billed once. Both represent the same €80 membership fee — the split exists because Stripe requires separate Price objects for recurring versus one-time billing, not because of any difference in membership type or amount.
+`STRIPE_MEMBERSHIP_PRODUCT_ID` identifies the one IDOC Annual Membership Product against which Checkout builds recurring or non-recurring €80 Price configurations. Stripe requires different Price configurations for the two billing modes, not separate Products. The Product and both technical Price modes represent the same membership entitlement and are never shown as competing plans.
 
 
 ## Ordinary login trusted-device operations
