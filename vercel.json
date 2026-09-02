@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/data-retention-purge",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/clock-skew-check",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

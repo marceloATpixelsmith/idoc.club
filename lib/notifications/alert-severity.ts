@@ -27,6 +27,14 @@ export const ALERT_SEVERITY = {
   // consecutive windows -- a single blocked request is routine, but sustained repeated blocking is
   // the correlated signal of an active credential-stuffing/brute-force attempt (AUTH-OPERATIONS-006).
   'auth.repeated_rate_limit_exceeded': 'high',
+  // The application server's clock has drifted from the database's own clock beyond the bounded
+  // tolerance this codebase's time-based security decisions implicitly depend on (AUTH-OPERATIONS-008)
+  // -- session/challenge/pending-auth-cookie expiry, rate-limit window boundaries, and TOTP counter
+  // windows are all computed from the app server's own `Date.now()`/`jose`'s system clock, server-side
+  // and never client-supplied, but never independently cross-checked against anything until this
+  // check. A drifted app clock could make an expired token look current, or the reverse -- a genuine
+  // infrastructure-integrity signal, not itself proof of an active attack.
+  'auth.clock_skew_detected': 'high',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;

@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "check": "pnpm typecheck && pnpm test",
-    "check:release1": "pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build",
+    "check:release1": "node scripts/validate-auth-docs.mjs && node scripts/validate-release-checklist.mjs && node scripts/check-whitespace.mjs && pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "node --conditions=react-server --experimental-strip-types --test tests/*.test.ts",
     "test:ci": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server --experimental-strip-types --test --test-reporter=dot tests/*.test.ts",
