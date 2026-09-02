@@ -18,7 +18,6 @@ export async function POST(request: Request) {
     // The raw error object previously logged here is a signature-mismatch error, not request-body
     // or secret content, but only its message is logged now -- categorical, not the raw object.
     await logError('stripe_webhook_signature_verification_failed', {
-      category: 'operational',
       reason: err instanceof Error ? err.message : 'unknown',
     });
     return Response.json(

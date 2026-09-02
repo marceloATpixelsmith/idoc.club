@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     const state = request.nextUrl.searchParams.get('state');
     const binding = request.cookies.get(googleOauthBindingCookieName())?.value;
     if (!state || !verifyGoogleOauthBrowserBinding(binding, state)) {
-      await logError('google_oauth_callback_failed', { category: 'auth', reason: 'binding_cookie_invalid' });
+      await logError('google_oauth_callback_failed', { reason: 'binding_cookie_invalid' });
       await notifyWebmasterOfGoogleOauthFailure({ reason: 'binding_cookie_invalid', step: 'callback' });
       return clearBinding(
         NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     await clearGoogleLinkFreshEvidence();
     const { alert, reason } = classifyGoogleOauthFailure(error, request.nextUrl.searchParams.get('error'));
-    await logError('google_oauth_callback_failed', { category: 'auth', reason });
+    await logError('google_oauth_callback_failed', { reason });
     if (alert) await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'callback' });
     const user = await getUser().catch(() => null);
     if (user) return clearBinding(NextResponse.redirect(new URL('/dashboard/security?google=failed', request.url), 302));

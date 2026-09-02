@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { users, type NewUser } from '@/lib/db/schema';
 import { hashPassword, setSession } from '@/lib/auth/session';
 import { validatedAction } from '@/lib/auth/middleware';
-import { normalizeEmail } from '@/lib/membership/validation';
+import { emailDisplayForm, normalizeEmail } from '@/lib/membership/validation';
 import { passwordSchema } from '@/lib/auth/password-policy';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -27,6 +27,7 @@ const startSignupSchema = z.object({
 export const startSignup = validatedAction(startSignupSchema, async ({ email: rawEmail, turnstileToken }) => {
   const startedAt = defaultTiming.now();
   const email = normalizeEmail(rawEmail);
+  const emailDisplay = emailDisplayForm(rawEmail);
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin, 'signup'))) {
     return { email, error: 'Verification challenge failed. Please try again.' };
@@ -40,7 +41,7 @@ export const startSignup = validatedAction(startSignupSchema, async ({ email: ra
   }
   await equalizeAnonymousResponse(startedAt, defaultTiming);
   if (issueError) return { email, error: issueError };
-  await startPendingSignup(email);
+  await startPendingSignup(email, emailDisplay);
   // The signup steps intentionally share one pathname, but a distinct query target forces the
   // browser/RSC tree to navigate after the HttpOnly pending-signup cookie changes.
   redirect('/sign-up?stage=verify');
@@ -54,7 +55,7 @@ export const verifySignupOtp = validatedAction(verifyOtpSchema, async ({ code })
   const origin = await requestOrigin();
   const result = await verifyEmailOtp(pending.email, 'signup_verification', code, origin);
   if (result === 'verified') {
-    await markPendingSignupVerified(pending.email);
+    await markPendingSignupVerified(pending.email, pending.emailDisplay);
     redirect('/sign-up?stage=password');
   }
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
@@ -91,7 +92,7 @@ export const completeSignup = validatedAction(completeSignupSchema, async ({ pas
     return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
   }
   const newUser: NewUser = {
-    accountState: 'onboarding', email: pending.email, emailVerifiedAt: new Date(),
+    accountState: 'onboarding', email: pending.email, emailDisplay: pending.emailDisplay, emailVerifiedAt: new Date(),
     passwordHash: await hashPassword(password), role: 'member',
   };
   const [createdUser] = await db.insert(users).values(newUser).returning();

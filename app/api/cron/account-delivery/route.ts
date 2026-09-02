@@ -15,11 +15,11 @@ export async function GET(request: Request) {
       try {
         await processAuthSecurityNotificationBatch();
       } catch {
-        await logError('auth_security_delivery_worker_failed', { category: 'operational' });
+        await logError('auth_security_delivery_worker_failed');
       }
       return account;
     },
-    reportFailure: () => logError('account_delivery_worker_failed', { category: 'operational' }),
+    reportFailure: () => logError('account_delivery_worker_failed'),
     secret: cronSecretForServer(),
   });
 }

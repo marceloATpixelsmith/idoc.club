@@ -8,7 +8,7 @@ import { logError } from '@/lib/observability/logger';
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: processRenewalNoticeBatch,
-    reportFailure: () => logError('renewal_notice_delivery_failed', { category: 'operational' }),
+    reportFailure: () => logError('renewal_notice_delivery_failed'),
     secret: cronSecretForServer(),
   });
 }

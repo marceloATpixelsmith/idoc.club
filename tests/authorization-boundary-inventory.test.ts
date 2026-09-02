@@ -204,7 +204,7 @@ test('the Google OIDC Route Handlers are bound to canonical transaction, authent
 
 test('the user identity Route Handler requires requireAccountAccess before returning identity data', () => {
   const source = readFileSync(path.join(root, 'app/api/user/route.ts'), 'utf8');
-  const authorize = source.indexOf("requireAccountAccess('profile')"); const respond = source.indexOf('Response.json(user');
+  const authorize = source.indexOf("requireAccountAccess('profile')"); const respond = source.indexOf('Response.json(await getPublicUser()');
   assert.ok(authorize >= 0 && respond > authorize);
 });
 

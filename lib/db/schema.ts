@@ -21,6 +21,13 @@ export const users = idocSchema.table('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
+  // AUTH-IDENTITY-003: `email` is the normalized (trimmed, case-folded) identity used for lookup,
+  // comparison, and uniqueness -- every existing call site keeps using it unchanged. This column
+  // separately preserves the display form (trimmed, Unicode-normalized, but not case-folded) as the
+  // member actually typed it, so casing isn't silently discarded while normalization still governs
+  // identity. Nullable because it's populated at signup/email-change; existing rows are backfilled
+  // to their current `email` value by this column's own migration.
+  emailDisplay: varchar('email_display', { length: 255 }),
   passwordHash: text('password_hash').notNull(),
   accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
   sessionVersion: integer('session_version').notNull().default(0),
@@ -293,6 +300,9 @@ export const emailVerificationTokens = idocSchema.table('email_verification_toke
   userId: integer('user_id').notNull().references(() => users.id),
   tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
   pendingEmail: varchar('pending_email', { length: 255 }).notNull(),
+  // AUTH-IDENTITY-003: carries the requested address's display-form casing through the change
+  // transaction so completion can populate users.emailDisplay the same way signup does.
+  pendingEmailDisplay: varchar('pending_email_display', { length: 255 }),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

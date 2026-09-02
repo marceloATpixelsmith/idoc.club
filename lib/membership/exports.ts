@@ -8,6 +8,13 @@ import { requireAdministrator, requireSuperAdmin } from './authorization';
 
 type MemberExportRow = { email: string; firstName: string; lastName: string; status: string | null; validUntil: string | null };
 
+// AUTH-PRIVACY-001: "Authentication data MUST be ... bounded for retention/export ...". The
+// members roster is a current-state list (not a temporally-growing log) and is exported in full;
+// the three time-ordered history tables below are the ones a live production deployment can grow
+// without bound, so their exports cap at the most recent EXPORT_ROW_LIMIT rows (already ordered
+// newest-first) rather than allowing an unbounded, unreviewed full-history dump on every request.
+export const EXPORT_ROW_LIMIT = 25_000;
+
 export async function listAllMembersForExport() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
@@ -34,13 +41,14 @@ export async function listAllPaymentsForExport() {
   }).from(payments)
     .innerJoin(profiles, eq(payments.profileId, profiles.id))
     .innerJoin(users, eq(profiles.userId, users.id))
-    .orderBy(desc(payments.paidAt));
+    .orderBy(desc(payments.paidAt))
+    .limit(EXPORT_ROW_LIMIT);
 }
 
 export async function listAllAuditLogForExport() {
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  return db.select().from(auditLog).orderBy(desc(auditLog.createdAt));
+  return db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(EXPORT_ROW_LIMIT);
 }
 
 export async function listAllNotificationsForExport() {
@@ -52,5 +60,6 @@ export async function listAllNotificationsForExport() {
   }).from(notificationOutbox)
     .innerJoin(profiles, eq(notificationOutbox.profileId, profiles.id))
     .innerJoin(users, eq(profiles.userId, users.id))
-    .orderBy(desc(notificationOutbox.createdAt));
+    .orderBy(desc(notificationOutbox.createdAt))
+    .limit(EXPORT_ROW_LIMIT);
 }

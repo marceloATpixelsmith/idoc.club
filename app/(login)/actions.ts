@@ -173,7 +173,7 @@ const resendVerificationSchema = z.object({ email: z.string().email().max(255) }
 export const resendVerification = validatedAction(resendVerificationSchema, async (data) => {
   const email = normalizeEmail(data.email);
   const [user] = await db.select({ emailVerifiedAt: users.emailVerifiedAt, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (user && !user.emailVerifiedAt) await issueEmailVerification(user.id, email);
+  if (user && !user.emailVerifiedAt) await issueEmailVerification(user.id, data.email);
   return { success: 'If an unverified account uses this address, a verification email will be sent.' };
 });
 
@@ -262,7 +262,7 @@ export const updateAccount = validatedActionWithUser(
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (duplicate) return { error: 'That email address is unavailable.', name };
       await db.update(users).set({ name }).where(eq(users.id, user.id));
-      await issueEmailVerification(user.id, email);
+      await issueEmailVerification(user.id, data.email);
       await consumeFreshStepUp();
       return { name, success: 'Check the new address to verify your email change.' };
     }

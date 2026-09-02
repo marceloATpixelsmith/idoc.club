@@ -1,6 +1,6 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
-import { getUser } from '@/lib/db/queries';
+import { getPublicUser } from '@/lib/db/queries';
 import { currentCsrfToken } from '@/lib/security/csrf';
 import { CsrfProvider } from '@/components/security/csrf-provider';
 import { SWRConfig } from 'swr';
@@ -50,7 +50,14 @@ export default async function RootLayout({
               fallback: {
                 // We do NOT await here
                 // Only components that read this data will suspend
-                '/api/user': getUser()
+                //
+                // AUTH-API-003: this MUST resolve to the same minimized shape /api/user itself
+                // returns (getPublicUser(), never the raw getUser() row) -- whatever this promise
+                // resolves to is serialized into the RSC payload embedded in every authenticated
+                // page's initial HTML response, not merely into a same-origin fetch response, so an
+                // unminimized fallback here would leak passwordHash and other server-only fields to
+                // every page's page source regardless of what the API route itself returns.
+                '/api/user': getPublicUser()
               }
             }}
           >

@@ -18,7 +18,7 @@ const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 export async function notifyWebmasterOfEmailEvent(input: { email: string; kind: 'email.hard_bounce' | 'email.spam_complaint'; reasonCode?: string }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {
-    await logWarn('bounce_complaint_alert_skipped', { category: 'configuration' });
+    await logWarn('bounce_complaint_alert_skipped');
     return;
   }
   const label = input.kind === 'email.hard_bounce' ? 'hard bounce' : 'spam complaint';
@@ -34,6 +34,6 @@ export async function notifyWebmasterOfEmailEvent(input: { email: string; kind: 
       { signal: AbortSignal.timeout(ALERT_DELIVERY_TIMEOUT_MS) },
     );
   } catch {
-    await logWarn('bounce_complaint_alert_failed', { category: 'delivery' });
+    await logWarn('bounce_complaint_alert_failed');
   }
 }

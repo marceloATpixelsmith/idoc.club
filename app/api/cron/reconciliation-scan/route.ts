@@ -8,7 +8,7 @@ import { logError } from '@/lib/observability/logger';
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: runReconciliationScan,
-    reportFailure: () => logError('reconciliation_scan_failed', { category: 'operational' }),
+    reportFailure: () => logError('reconciliation_scan_failed'),
     secret: cronSecretForServer(),
   });
 }

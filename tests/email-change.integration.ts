@@ -38,14 +38,19 @@ test('issuing an email change for an active member does not mutate the email unt
 
     const afterIssuance = await persistedGraph(user.id);
     assert.deepEqual(afterIssuance, before, 'issuance must not mutate the identity graph');
-    const [pending] = await sql`select pending_email, consumed_at from idoc.email_verification_tokens where user_id=${user.id}`;
+    const [pending] = await sql`select pending_email, pending_email_display, consumed_at from idoc.email_verification_tokens where user_id=${user.id}`;
     assert.equal(pending.pending_email, 'changed@example.test');
+    // AUTH-IDENTITY-003: the normalized (lowercased) form governs identity/uniqueness, but the
+    // display form the member actually typed -- trimmed, casing intact -- is carried through the
+    // transaction separately so it can be shown back to them once the change completes.
+    assert.equal(pending.pending_email_display, 'Changed@Example.TEST');
     assert.equal(pending.consumed_at, null);
 
     assert.equal((await consumeEmailVerification(raw)).status, 'verified');
     const afterConsumption = await persistedGraph(user.id);
     assert.equal(afterConsumption.user.id, before.user.id);
     assert.equal(afterConsumption.user.email, 'changed@example.test');
+    assert.equal(afterConsumption.user.email_display, 'Changed@Example.TEST');
     assert.equal(afterConsumption.user.accountState, before.user.accountState);
     assert.equal(afterConsumption.profile.id, before.profile.id);
     assert.deepEqual(afterConsumption.roles, before.roles);

@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       // routine throttling (e.g. many members behind one institutional NAT), not an incident -- but
       // it must still be logged, so this specific failure isn't silently invisible to an operator
       // trying to explain a "failed" report from a real user.
-      await logWarn('google_oauth_start_failed', { category: 'auth', reason: 'rate_limited' });
+      await logWarn('google_oauth_start_failed', { reason: 'rate_limited' });
       return failureRedirect();
     }
 
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     const reason = error instanceof GoogleOidcError ? error.code : `unexpected_error:${phase}`;
-    await logError('google_oauth_start_failed', { category: 'auth', reason });
+    await logError('google_oauth_start_failed', { reason });
     await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'start' });
     return failureRedirect();
   }

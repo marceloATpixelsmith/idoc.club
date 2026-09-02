@@ -59,8 +59,8 @@ export async function requestAccountLink(
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
     await logError('account_link_request_failed', {
-      category: operationalFailureCategory(error),
       purpose,
+      reason: operationalFailureCategory(error),
     });
   } finally {
     await equalizeAnonymousResponse(startedAt, timing);

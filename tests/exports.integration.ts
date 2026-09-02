@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
-import { listAllAuditLogForExport, listAllMembersForExport, listAllNotificationsForExport, listAllPaymentsForExport } from '../lib/membership/exports.ts';
+import { EXPORT_ROW_LIMIT, listAllAuditLogForExport, listAllMembersForExport, listAllNotificationsForExport, listAllPaymentsForExport } from '../lib/membership/exports.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { GET as exportAuditLog } from '../app/api/admin/export/audit-log/route.ts';
 import { GET as exportMembers } from '../app/api/admin/export/members/route.ts';
@@ -75,6 +75,36 @@ test('listAllNotificationsForExport is reachable by a plain Administrator', asyn
   assert.equal(rows.length, 1);
   assert.equal(rows[0].email, member.email);
   assert.equal(rows[0].kind, 'membership.renewal_reminder');
+});
+
+// AUTH-PRIVACY-001: "Authentication data MUST be ... bounded for retention/export ...". A live
+// deployment's audit log grows without bound; an export of it must not therefore be an unbounded
+// full-history dump on every request. Bulk-inserted via generate_series (a single fast statement)
+// rather than one row at a time -- this needs real volume past the limit, not a handful of rows.
+test('listAllAuditLogForExport caps at EXPORT_ROW_LIMIT rows, keeping the most recent, when real volume exceeds it', async () => {
+  const admin = await adminUser();
+  const superAdmin = await superAdminUser();
+  const overflow = 3;
+  await sql`
+    insert into idoc.audit_log (actor_id, action, entity_type, entity_id, created_at)
+    select ${admin.id}, 'bulk.fixture.action', 'user', ${String(admin.id)},
+      now() - (n || ' seconds')::interval
+    from generate_series(1, ${EXPORT_ROW_LIMIT + overflow}) as n
+  `;
+  const rows = await asAdministration(superAdmin.id, () => listAllAuditLogForExport());
+  assert.equal(rows.length, EXPORT_ROW_LIMIT, 'the export must cap at EXPORT_ROW_LIMIT, not return every row');
+
+  const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log`;
+  assert.equal(totalCount, EXPORT_ROW_LIMIT + overflow, 'sanity check: real row volume in the table must actually exceed the cap');
+
+  // The oldest `overflow` rows (highest `n`, furthest in the past) must be the ones excluded --
+  // the cap keeps the most recent history, not an arbitrary or oldest-first slice. Rows arrive
+  // ordered newest-first, so the least-recent *kept* row's age should land near n=EXPORT_ROW_LIMIT
+  // seconds ago, never near n=EXPORT_ROW_LIMIT+overflow (which was excluded).
+  const ageSeconds = (row: { createdAt: Date | string }) => (Date.now() - new Date(row.createdAt).getTime()) / 1000;
+  const oldestKeptAge = ageSeconds(rows.at(-1)!);
+  assert.ok(oldestKeptAge < EXPORT_ROW_LIMIT + 1, `oldest kept row should be ~${EXPORT_ROW_LIMIT}s old, was ${oldestKeptAge}s`);
+  assert.ok(oldestKeptAge > EXPORT_ROW_LIMIT - 1, `oldest kept row should be ~${EXPORT_ROW_LIMIT}s old, was ${oldestKeptAge}s`);
 });
 
 test('no export function is reachable by a non-administrator', async () => {

@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
-import { E2E_RECOVERY_CODE } from './global-setup';
+import { E2E_RECOVERY_CODE, E2E_TOTP_SECRET } from './global-setup';
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -118,6 +118,46 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   expect(rows.every(({ purpose }) => purpose === 'mfa_step_up_verify')).toBe(true);
   expect(rows.every(({ request_count }) => request_count === 4)).toBe(true);
   expect(JSON.stringify(rows)).not.toContain('000000');
+  await sql.end();
+  await context.close();
+});
+
+// AUTH-API-003: "Trusted MFA results MAY contain internal factor and failure detail, while client
+// responses and inventory MUST exclude raw secrets, hashes, internal identifiers, provider secrets,
+// and exact risk internals." docs/22's gap: prior evidence was source-inspection of the page
+// component (a regex against the file) rather than a behavioral test that actually renders the page
+// and inspects the real HTTP response. This fetches the literal server response body for a
+// privileged account's own /dashboard/security page -- not the post-hydration DOM -- and scans it
+// against every secret/internal value real Postgres rows for that account actually hold.
+test("the real /dashboard/security HTTP response for a privileged account never contains its own raw TOTP secret, encrypted factor blob, internal factor id, password hash, or recovery-code digest", async ({ browser }) => {
+  const sql = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
+  const [fixture] = await sql<{ id: number; password_hash: string }[]>`
+    select id, password_hash from idoc.users where email='administrator@security.example.test'`;
+  const [factor] = await sql<{ factor_id: string; encrypted_secret: string }[]>`
+    select factor_id, encrypted_secret from idoc.mfa_factors where user_id=${fixture.id} and status='active'`;
+  const [recoveryCode] = await sql<{ recovery_code_id: string; digest: string }[]>`
+    select recovery_code_id, digest from idoc.mfa_recovery_codes where user_id=${fixture.id}`;
+  expect(factor.encrypted_secret).toBeTruthy();
+  expect(recoveryCode.digest).toBeTruthy();
+
+  const context = await browser.newContext({ storageState: '.security-e2e/administrator.json' });
+  const page = await context.newPage();
+  const response = await page.goto('/dashboard/security');
+  expect(response?.ok()).toBe(true);
+  const html = await response!.text();
+
+  // Positive control: the scan below is meaningless if the page never actually rendered the
+  // account's real MFA state.
+  await expect(page.getByText('Authenticator app', { exact: true })).toBeVisible();
+  await expect(page.getByText('Status: Configured', { exact: false })).toBeVisible();
+  expect(html).toContain('Authenticator app');
+
+  for (const secret of [
+    E2E_TOTP_SECRET, factor.encrypted_secret, factor.factor_id, fixture.password_hash,
+    recoveryCode.recovery_code_id, recoveryCode.digest, E2E_RECOVERY_CODE,
+  ]) {
+    expect(html).not.toContain(secret);
+  }
   await sql.end();
   await context.close();
 });

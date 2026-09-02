@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
-import { User } from '@/lib/db/schema';
+import type { PublicUser } from '@/lib/db/queries';
 import { userInitials } from '@/lib/format/user-initials';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import useSWR, { mutate } from 'swr';
@@ -22,7 +22,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { data: user } = useSWR<User>('/api/user', fetcher);
+  const { data: user } = useSWR<PublicUser>('/api/user', fetcher);
   const router = useRouter();
 
   async function handleSignOut() {
