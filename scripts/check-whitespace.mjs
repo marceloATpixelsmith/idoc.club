@@ -11,12 +11,23 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-const CHECKED_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.md', '.json', '.yml', '.yaml', '.css'];
+const CHECKED_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.md', '.json', '.yml', '.yaml', '.css', '.sql'];
 // Generated/vendored content this repository does not hand-author line by line -- a real linter
 // would exempt these the same way (via .eslintignore/.prettierignore); enforcing whitespace hygiene
 // on drizzle-kit's own generated snapshot JSON or the pnpm lockfile would fight the tool that writes
 // them, not this codebase's own authoring discipline.
 const EXCLUDED_PREFIXES = ['lib/db/migrations/meta/', 'pnpm-lock.yaml'];
+// Released migrations (and their snapshots) are checksum-frozen by tests/migration-immutability.test.ts
+// -- this whitespace check must never ask for a byte of them to change, so it excludes exactly the
+// path set that immutability contract itself protects, read live from the same source of truth
+// rather than a second, driftable hardcoded list.
+const RELEASED_MIGRATION_PATHS = (() => {
+  try {
+    return Object.keys(JSON.parse(readFileSync('lib/db/migrations/released-checksums.json', 'utf8')).files);
+  } catch {
+    return [];
+  }
+})();
 
 function trackedFiles() {
   return execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
@@ -24,6 +35,7 @@ function trackedFiles() {
 
 function shouldCheck(path) {
   if (!CHECKED_EXTENSIONS.some((extension) => path.endsWith(extension))) return false;
+  if (RELEASED_MIGRATION_PATHS.includes(path)) return false;
   return !EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 

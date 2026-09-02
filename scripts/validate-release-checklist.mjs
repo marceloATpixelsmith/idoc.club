@@ -29,6 +29,33 @@ export function extractRunbookItems(markdown) {
   return items;
 }
 
+const PLACEHOLDER_TEXT = /^(?:n\/?a|tbd|todo|xxx+|ok|done|complete[d]?|pending|verified|yes|test|placeholder|(.)\1{2,})$/i;
+
+// A single free-text string (a Codex review on this pull request caught) is trivially satisfied by
+// any 8+ character placeholder like "completed" or "aaaaaaaa", defeating the "never a certification
+// without evidence" guarantee this checklist exists to provide. Structured fields -- who verified it,
+// when, and what they actually checked -- are far harder to fake by accident and force a real operator
+// to record something concrete rather than an evidence-shaped string.
+function evidenceErrors(id, evidence) {
+  if (evidence === null || typeof evidence !== 'object' || Array.isArray(evidence)) {
+    return [`Item "${id}": status is "verified" but "evidence" must be an object with ` +
+      `"verifiedBy", "verifiedAt", and "notes" fields -- a bare string is not accepted.`];
+  }
+  const errors = [];
+  if (typeof evidence.verifiedBy !== 'string' || evidence.verifiedBy.trim().length < 2 || PLACEHOLDER_TEXT.test(evidence.verifiedBy.trim())) {
+    errors.push(`Item "${id}": evidence.verifiedBy must be a real operator identifier, not empty or a placeholder.`);
+  }
+  const verifiedAt = typeof evidence.verifiedAt === 'string' ? new Date(evidence.verifiedAt) : null;
+  if (!verifiedAt || Number.isNaN(verifiedAt.getTime()) || verifiedAt.getTime() > Date.now()) {
+    errors.push(`Item "${id}": evidence.verifiedAt must be a valid, non-future ISO 8601 timestamp.`);
+  }
+  if (typeof evidence.notes !== 'string' || evidence.notes.trim().length < 15 || PLACEHOLDER_TEXT.test(evidence.notes.trim())) {
+    errors.push(`Item "${id}": evidence.notes must be a real, non-placeholder description (at least 15 ` +
+      `characters) of what was actually checked -- not a bare confirmation word.`);
+  }
+  return errors;
+}
+
 export function validateChecklist(runbookMarkdown, checklistJsonText) {
   const errors = [];
   const runbookItems = extractRunbookItems(runbookMarkdown);
@@ -66,10 +93,7 @@ export function validateChecklist(runbookMarkdown, checklistJsonText) {
     if (item.status !== 'unchecked' && item.status !== 'verified') {
       errors.push(`Item "${item.id}": status must be "unchecked" or "verified", got ${JSON.stringify(item.status)}.`);
     }
-    if (item.status === 'verified' && (typeof item.evidence !== 'string' || item.evidence.trim().length < 8)) {
-      errors.push(`Item "${item.id}": status is "verified" but "evidence" is not a real, non-placeholder ` +
-        `string -- this checklist must never assert readiness without attached evidence.`);
-    }
+    if (item.status === 'verified') errors.push(...evidenceErrors(item.id, item.evidence));
     if (item.status === 'unchecked' && item.evidence !== null) {
       errors.push(`Item "${item.id}": status is "unchecked" but "evidence" is not null -- an item is either ` +
         `unchecked with no evidence, or verified with real evidence; no ambiguous in-between state.`);

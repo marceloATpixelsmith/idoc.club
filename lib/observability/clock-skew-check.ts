@@ -19,6 +19,7 @@ import { logError } from './logger';
 // arbitrary compute instance's is not), and a skew beyond the bound pages an operator.
 
 const SKEW_THRESHOLD_MS = 5_000;
+const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 
 export async function measureClockSkewMs(): Promise<number> {
   const requestedAt = Date.now();
@@ -51,10 +52,14 @@ export async function runClockSkewCheck(): Promise<{ alerted: number; skewMs: nu
       footerNote: 'IDOC operational monitoring.',
       heading: 'Application/database clock skew detected',
     });
+    // A Codex review on this pull request caught that an unbounded delivery call here could hold the
+    // cron invocation open until the platform itself kills it, so the catch below might never actually
+    // run (and clock_skew_check_failed would never be recorded) -- matching the timeout pattern already
+    // established in google-oauth-failure-alert.ts's own alert delivery.
     await sendTransactionalEmail({
       html, to,
       subject: taggedSubject('auth.clock_skew_detected', `IDOC: clock skew detected (${Math.abs(skewMs)}ms ${direction} database)`),
-    });
+    }, { signal: AbortSignal.timeout(ALERT_DELIVERY_TIMEOUT_MS) });
     return { alerted: 1, skewMs };
   } catch {
     await logError('clock_skew_check_failed');
