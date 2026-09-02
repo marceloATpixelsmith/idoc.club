@@ -225,12 +225,18 @@ test('a real Google callback fails closed, without exposing any raw provider/JWK
     await page.click('#continue');
     await expect(page).toHaveURL(/\/sign-up\?google=failed$/);
 
-    const pageContent = await page.content();
+    // Only the rendered, user-visible text -- not page.content()'s full HTML source. In dev mode that
+    // source also carries Next.js's own RSC debug payload (arbitrary internal timing floats, module
+    // ids, source paths) inside inert <script> tags, which can coincidentally contain a short digit
+    // sequence like "503" with no relation to an actual leaked HTTP status. What this control cares
+    // about is what a user could actually see, which innerText reflects without that false-positive
+    // surface.
+    const pageText = await page.locator('body').innerText();
     for (const rawProviderText of [
-      'mock identity provider key endpoint unavailable', '503', 'ECONNREFUSED', 'fetch failed',
+      'mock identity provider key endpoint unavailable', 'ECONNREFUSED', 'fetch failed',
       'JWKSNoMatchingKey', 'JWKSTimeout', 'JOSEError',
     ]) {
-      expect(pageContent).not.toContain(rawProviderText);
+      expect(pageText).not.toContain(rawProviderText);
     }
 
     const users = await withDb((sql) => sql<{ id: number }[]>`select id from idoc.users where email = ${identity.email}`);
