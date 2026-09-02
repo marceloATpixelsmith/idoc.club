@@ -18,11 +18,12 @@ import { getUser } from '../lib/db/queries.ts';
 import { GOOGLE_OIDC_PROVIDER } from '../lib/auth/google-oidc-reference.ts';
 import { linkGoogleIdentity, unlinkGoogleIdentity } from '../lib/auth/google-identity-linking.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
+import { getPrivateMember } from '../lib/membership/data-access.ts';
 import { db } from '../lib/db/drizzle.ts';
 import { users } from '../lib/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
-import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
 const encryptionKey = randomBytes(32);
@@ -413,4 +414,39 @@ test('AUTH-STORAGE-002: logOutSession revokes only a session the authenticated c
   // The owner's own current session and the bystander's session remain completely unaffected.
   assert.equal((await sql`select revoked_at from idoc.auth_sessions where session_id=${ownerSessionId}`)[0].revoked_at, null);
   assert.equal((await sql`select revoked_at from idoc.auth_sessions where session_id=${bystanderSessionId}`)[0].revoked_at, null);
+});
+
+// ---------------------------------------------------------------------------------------------
+// AUTH-API-004 (continued): the production `getPrivateMember` boundary itself, which docs/22
+// also cites for this control alongside /api/user. tests/security-e2e/api-authorization-
+// disclosure.spec.ts proves the /api/user HTTP pattern end-to-end; this proves the actual
+// getPrivateMember function's behavior directly against real Postgres, since no non-administrator
+// caller of it is reachable through any HTTP route in this application today (grep-confirmed: the
+// only production callers with a client-suppliable profile id, app/(dashboard)/admin/members/
+// page.tsx and app/(dashboard)/admin/payments/page.tsx, both call requireAdministrator() first and
+// unconditionally, so getPrivateMember's own requireOwnerOrAdmin check can never actually reject
+// there -- the caller is always already authorized for every profile by the time it runs).
+// ---------------------------------------------------------------------------------------------
+
+test('AUTH-API-004: getPrivateMember distinguishes a nonexistent profile (null, no throw) from an existing-but-cross-account profile (AuthorizationError) for a genuine non-owner, non-admin actor', async () => {
+  const owner = await realUser('active');
+  const profile = await createProfile(owner.id);
+  const attacker = await realUser('active');
+
+  const nonexistentProfileId = profile.id + 1_000_000;
+  const nonexistentResult = await withTestMembershipBoundary({ actor: { id: attacker.id, roles: [] } }, () => getPrivateMember(nonexistentProfileId));
+  assert.equal(nonexistentResult, null);
+
+  await assert.rejects(
+    withTestMembershipBoundary({ actor: { id: attacker.id, roles: [] } }, () => getPrivateMember(profile.id)),
+    (error: unknown) => error instanceof Error && error.name === 'AuthorizationError',
+  );
+
+  // The owner and an administrator can each read the real profile without error (positive control
+  // confirming the rejection above is genuinely about ownership, not a broken fixture).
+  const ownRead = await withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () => getPrivateMember(profile.id));
+  assert.equal(ownRead?.profile.id, profile.id);
+  const admin = await realUser('active', true);
+  const adminRead = await withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => getPrivateMember(profile.id));
+  assert.equal(adminRead?.profile.id, profile.id);
 });
