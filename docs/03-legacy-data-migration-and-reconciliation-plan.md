@@ -8,8 +8,8 @@ WordPress Multisite + MemberPress to Render PostgreSQL without forcing member re
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -18,6 +18,8 @@ Working project document. Update this document when project decisions change.
 Move the canonical membership information out of the existing IDOC WordPress/MemberPress implementation while preserving identity, membership status, professional classification, billing history references and recurring Stripe relationships.
 
 IDOC already uses member-specific rolling expiration dates. The migration must preserve each member's current paid-through/expiration date exactly; it must not normalize members to a common annual expiration date or restart a 12-month term on import.
+
+At import and cutover, derive access from that preserved date under docs/02: currently paid members are active; previously paid members within five calendar days after paid-through are in full-access grace; previously paid members beyond grace and accounts with no verified eligible payment are payment-only after authentication. Import must not manufacture a payment or extend a date merely to grant dashboard access.
 
 # 2. Source data inventory
 
@@ -93,6 +95,7 @@ IDOC already uses member-specific rolling expiration dates. The migration must p
 | Stripe active subscription with no clear WordPress user | Review Stripe customer metadata/email and legacy history; no automatic attachment.       |
 | Manual active member with no recent transaction         | Require administrator validation or documented legacy rule.                              |
 | Imported member with no confident Stripe match          | Retain the imported membership paid-through date and default the account to non-auto-renew; offer auto-renewal when renewal is due. |
+| Imported member has current Stripe cancellation/pending renewal evidence | Preserve the effective billing state and paid-through date; do not create a second subscription. Map the current/pending renewal preference only from verified evidence. |
 | Unknown judge/steward level value                       | Import original value to migration note; do not silently coerce.                         |
 | Required approved profile or role field missing         | Preserve the source value where available, mark the record review_required, and do not invent a value. |
 | Multiple Stripe subscriptions for one person            | Review whether duplicate, historical, or legitimate; avoid double entitlement extension. |

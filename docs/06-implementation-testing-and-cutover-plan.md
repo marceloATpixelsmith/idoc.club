@@ -8,8 +8,8 @@ Phased execution plan designed to minimize member disruption and billing risk
 |----------------------|------------------------------------------------|
 | **Current site**     | idoc.club                                      |
 | **Target platform**  | Next.js on Vercel + Render PostgreSQL + Stripe |
-| **Document version** | 1.1                                            |
-| **Date**             | 11 August 2026                                 |
+| **Document version** | 1.2                                            |
+| **Date**             | 2 September 2026                              |
 
 Working project document. Update this document when project decisions change.
 
@@ -54,25 +54,35 @@ The Release 1 automated suite covers cross-account denial, administrator and Sup
 |-----------------------------------------------|--------------------------------------------------------------------------------|
 | Existing active Stripe member logs in         | Sees active membership and correct professional role; no repurchase requested. |
 | Existing Stripe member canceled at period end | Sees active through valid-until date and non-renewing billing state.           |
-| Stripe renewal succeeds                       | One payment recorded; membership extended once.                                |\n| One-time €80 Stripe payment succeeds           | Payment-mode Checkout and verified webhook record one payment; a new 12-month term is granted once. |
+| First payment presentation                    | One IDOC Annual Membership and one €80 amount are shown; automatic renewal is one default-on control, not a second product/card/plan. |
+| Never-paid account logs in                    | Sees only the membership-payment gate and logout; every direct dashboard/member route and mutation is denied server-side. |
+| Stripe renewal succeeds                       | One payment recorded; membership extended once.                                |
+| One-time €80 Stripe payment succeeds          | Payment-mode Checkout and verified webhook record one payment; a new 12-month term is granted once. |
+| Recurring member turns automatic renewal off  | Subscription cancels at period end; no immediate charge or entitlement loss; preference/effective date are shown and audited. |
+| Non-recurring member turns automatic renewal on | Payment authorization is collected without an immediate charge; annual billing begins no earlier than paid-through; duplicate requests create no duplicate billing object. |
+| Member reverses pending renewal change        | Pending transition is safely canceled/replaced before its effective date without duplicate charge or lost entitlement. |
 | Stripe webhook delivered twice                | No duplicate payment or duplicate extension.                                   |
 | Stripe payment fails                          | Configured grace/notification behavior occurs.                                 |
-| Automatic renewal fails                       | Stripe retry occurs; member remains active for five days, then becomes expired if unpaid. |
+| Automatic renewal fails                       | Stripe retries; the member retains full access for five days, then becomes payment-only if unpaid. |
+| Non-recurring term reaches paid-through       | Member retains full access for five calendar days, then receives only payment and logout if still unpaid. |
 | Early renewal                                 | Exactly 12 months is added to the existing paid-through date.                  |
 | Late renewal                                  | New 12-month term begins on the actual successful payment date.                |
 | Bank-transfer member logs in                  | Sees active membership without Stripe subscription.                            |
 | Admin records bank transfer                   | Payment + entitlement change + audit entry committed together.                 |
 | Judge + Steward member                        | Both roles and separate levels display correctly.                              |
-| Each of four signup choices                    | Shows and requires exactly the approved common and conditional fields.          |
-| Veterinarian signup                            | Requires only the common member fields and does not require official fields.    |
-| Invalid Judge/Steward status or IDOC Region    | Rejected by server-side validation even if submitted outside the browser form.  |
-| Country and National Federation                | Use the same complete canonical country list and store valid canonical codes.   |
-| Classification change                         | Revalidates newly required fields, preserves role history, and does not alter membership billing. |
+| Each of four signup choices                   | Shows and requires exactly the approved common and conditional fields.          |
+| Veterinarian signup                           | Requires only the common member fields and does not require official fields.    |
+| Invalid Judge/Steward status or IDOC Region   | Rejected by server-side validation even if submitted outside the browser form. |
+| Country and National Federation               | Use the same complete canonical country list and store valid canonical codes.   |
+| Classification change                        | Revalidates newly required fields, preserves role history, and does not alter membership billing. |
 | Member changes signup/professional field      | Change is server-validated, history is retained, and administrators are notified. |
 | Member changes email/username                 | New address must be verified; Stripe Customer email is updated without changing Customer/Subscription linkage. |
 | Member guesses another member ID              | Private data remains inaccessible.                                             |
 | Unmatched legacy Stripe subscription          | Appears in migration exception report, not silently discarded.                 |
-| Expired legacy member                         | Account can exist but restricted member entitlement is denied.                 |\n| CMS/seminar audience set to Match any          | A member with any selected classification is eligible.                         |\n| CMS/seminar audience set to Match all          | Only a member holding every selected classification is eligible.               |
+| Expired legacy member within grace            | Receives full member access for the remainder of the five-day grace period.     |
+| Expired legacy member after grace             | Account remains, but only payment and logout are available after authentication. |
+| CMS/seminar audience set to Match any         | A member with any selected classification is eligible.                         |
+| CMS/seminar audience set to Match all         | Only a member holding every selected classification is eligible.               |
 
 # 3. Migration rehearsal requirements
 
@@ -107,6 +117,8 @@ The Release 1 automated suite covers cross-account denial, administrator and Sup
 8. Verify production environment variables and ensure preview deployments do not share inappropriate secrets.
 
 9. Run smoke tests for existing Stripe, manual-pay, expired and administrator accounts.
+
+9a. Run a real Stripe test-mode lifecycle covering one-time and recurring first payment, renewal-mode changes in both directions, reversal before effective date, Portal, webhook replay, failed payment, both grace-entry paths, reconciliation, and restricted-key permissions. Injected test clients are not sufficient for this signoff.
 
 10. Switch idoc.club routing/DNS as planned.
 
@@ -151,8 +163,8 @@ Because existing Stripe subscriptions are not canceled/recreated, rollback is pr
 | **Area**   | **Done when**                                                                                               |
 |------------|-------------------------------------------------------------------------------------------------------------|
 | Migration  | Every source member has an approved disposition and reconciliation is signed.                               |
-| Billing    | Existing Stripe subscriptions are linked and recurring events are processed idempotently.                   |
-| Membership | All supported payment channels can produce correct entitlement.                                             |
+| Billing    | Existing subscriptions are linked; one membership Product and both billing modes work; renewal-mode changes are future-effective/idempotent; real Stripe test-mode lifecycle passes. |
+| Membership | All supported payment channels produce correct entitlement; never-paid/post-grace accounts are payment-only and both expiry paths receive exactly five days of grace. |
 | Security   | Security acceptance checklist passes.                                                                       |
 | Operations | Administrator runbook is usable by the people who will operate the site.                                    |
 | Legacy     | Legacy system is retained only as long as required for rollback/audit, then safely decommissioned for IDOC. |
