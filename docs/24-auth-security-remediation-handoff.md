@@ -27,7 +27,7 @@ The remediation program tracks **155 canonical AUTH controls**. After completion
 - **7 not-applicable**
 - **14 applicable non-verified controls remaining**
 
-Slices 1 through 5 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+Slices 1 through 6 are complete (Slice 5 leaves one control, `AUTH-SECRET-004`, narrowed but still `partial` — see its docs/23 row). Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
 
 ## Definition of VERIFIED
 
@@ -81,9 +81,9 @@ Controls (all now `verified` except as noted):
 
 Goal (met for seven of eight): behaviorally proved password-hash upgrade (`tests/password-hash-migration.integration.ts`, real Postgres, real `signIn`), MFA-secret/recovery-code confidentiality across a real enrollment/recovery/replacement/acknowledgement cycle (`tests/auth-recovery-adversarial.integration.ts`), a real forced JWKS-outage-during-unknown-key-refresh fail-closed proof (`tests/security-e2e/google-oauth.spec.ts`), Google OAuth client secret exclusion from real build output (`tests/build-runtime-boundary.build.ts`), an explicit MFA key lifecycle state model derived from real database usage (`lib/auth/mfa/key-lifecycle.ts`, `tests/totp-key-ring.integration.ts`), and an explicit, code-level dependency risk register held against real forced-failure behavior (`lib/security/dependency-risk-register.ts`, `tests/dependency-risk-register.test.ts`). `AUTH-SECRET-004` gained real bounded-overlap rotation/rollback/retirement/audit support for the Google OAuth client secret (`lib/auth/google-oidc-reference.ts`, `lib/auth/google-oidc-secret-audit.ts`, `pnpm google:rotate-secret`) but remains `partial`: recording a rotation depends on an operator running the script, since a pure environment-variable change has no application code path that runs automatically "at the moment" it happens.
 
-### Slice 6 — Privacy and logging
+### Slice 6 — Privacy and logging (COMPLETE)
 
-Controls:
+Controls (all five verified):
 
 - `AUTH-IDENTITY-003`
 - `AUTH-API-003`
@@ -91,7 +91,7 @@ Controls:
 - `AUTH-LOG-003`
 - `AUTH-PRIVACY-001`
 
-Goal: prove canonical identity normalization/display semantics, minimized response surfaces, safe structured security logging, and enforceable privacy/retention boundaries without leaking MFA or authentication secret material.
+Goal (met): behaviorally proved NFC-normalized deterministic case-insensitive identity plus a separately preserved display form through the real signup/email-change paths (`tests/email-identity-normalization.integration.ts`, `tests/email-change.integration.ts`); a real, minimized-response behavioral test for the MFA security page that found and fixed a genuine production secret leak (the root layout's SWR fallback embedded the full `getUser()` row, including `passwordHash`, into every authenticated page's RSC payload -- see `lib/db/queries.ts`'s `getPublicUser()` and `tests/security-e2e/mfa-production-boundaries.spec.ts`); a closed, compile-time-enforced security-event taxonomy with auto-attached category/resource/retention-class and structural metadata minimization (`lib/observability/security-events.ts`, `lib/observability/logger.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/security-event-log-attribution.integration.ts`); and a bounded row cap on the temporally-growing admin exports plus a tested absence of any analytics integration (`lib/membership/exports.ts`, `tests/exports.integration.ts`, `tests/privacy-data-minimization.test.ts`).
 
 ### Slice 7 — Operations and observability
 
@@ -169,4 +169,4 @@ Do not declare IDOC production ready merely because all planned implementation P
 
 ## Continuation instruction for Claude
 
-Slice 5 — Credential and key lifecycle is complete as of this revision, except that `AUTH-SECRET-004` remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 6 — Privacy and logging** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 6. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.
+Slice 6 — Privacy and logging is complete as of this revision. `AUTH-SECRET-004` (from Slice 5) remains `partial` (narrowed, not closed — see its docs/23 row for the precise remaining gap and a concrete option for closing it). When this file is used as a handoff, begin with **Slice 7 — Operations and observability** unless current `docs/22`/`docs/23` show that it has already been completed; `AUTH-SECRET-004`'s remaining gap may be picked up opportunistically but does not block starting Slice 7. Inspect current `main` first; never assume the status in this handoff is newer than the authoritative matrix/backlog.

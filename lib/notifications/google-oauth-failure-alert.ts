@@ -12,7 +12,7 @@ const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 async function deliverAlert(input: { reason: string; step: 'start' | 'callback' }, to: string): Promise<void> {
   const origin = await requestOrigin();
   if (!(await checkOriginRateLimit('google_oauth_failure_alert', origin))) {
-    await logWarn('google_oauth_failure_alert_rate_limited', { category: 'auth' });
+    await logWarn('google_oauth_failure_alert_rate_limited');
     return;
   }
   const requestId = await currentRequestId();
@@ -72,12 +72,12 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function notifyWebmasterOfGoogleOauthFailure(input: { reason: string; step: 'start' | 'callback' }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {
-    await logWarn('google_oauth_failure_alert_skipped', { category: 'configuration' });
+    await logWarn('google_oauth_failure_alert_skipped');
     return;
   }
   try {
     await withDeadline(deliverAlert(input, to), ALERT_DELIVERY_TIMEOUT_MS);
   } catch {
-    await logWarn('google_oauth_failure_alert_failed', { category: 'delivery' });
+    await logWarn('google_oauth_failure_alert_failed');
   }
 }

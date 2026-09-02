@@ -25,7 +25,7 @@ const SOURCE_LABEL: Record<BreachedPasswordSource, string> = {
 export async function notifyWebmasterOfBreachedPasswordAttempt(input: { email?: string; source: BreachedPasswordSource }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {
-    await logWarn('breached_password_alert_skipped', { category: 'configuration' });
+    await logWarn('breached_password_alert_skipped');
     return;
   }
   try {
@@ -37,6 +37,6 @@ export async function notifyWebmasterOfBreachedPasswordAttempt(input: { email?: 
     });
     await sendTransactionalEmail({ html, subject: taggedSubject('auth.breached_password_rejected', 'IDOC: breached password rejected'), to });
   } catch {
-    await logWarn('breached_password_alert_failed', { category: 'delivery' });
+    await logWarn('breached_password_alert_failed');
   }
 }

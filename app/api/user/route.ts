@@ -1,4 +1,4 @@
-import { getUser } from '@/lib/db/queries';
+import { getPublicUser } from '@/lib/db/queries';
 import { AuthorizationError } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 
@@ -21,6 +21,5 @@ export async function GET() {
     if (!(error instanceof AuthorizationError)) throw error;
     return Response.json(null, { headers: NO_STORE });
   }
-  const user = await getUser();
-  return Response.json(user ? { email: user.email, id: user.id, name: user.name } : null, { headers: NO_STORE });
+  return Response.json(await getPublicUser(), { headers: NO_STORE });
 }

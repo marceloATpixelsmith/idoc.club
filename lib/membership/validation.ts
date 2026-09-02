@@ -83,6 +83,20 @@ export function parseMemberProfileFormData(formData: FormData): unknown {
   return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
 }
 
+// AUTH-IDENTITY-003: NFC normalization first makes the subsequent case-fold deterministic across
+// Unicode-equivalent representations of the same visible text (e.g. a precomposed accented
+// character vs. the same character built from a base letter plus a combining mark) before
+// `toLowerCase()` folds case -- `toLowerCase()` itself is already locale-independent (it does not
+// vary with the runtime's default locale, e.g. no Turkish dotless-i behavior), so no `toLocale...`
+// variant is used here.
 export function normalizeEmail(email: string): string {
-  return z.string().trim().email().max(255).parse(email).toLowerCase();
+  return z.string().trim().email().max(255).parse(email).normalize('NFC').toLowerCase();
+}
+
+/** The display form of an email as the member actually typed it: trimmed and Unicode-normalized
+ * for stable storage/comparison, but never case-folded. Stored alongside the normalizeEmail()
+ * result so a member's own casing can be shown back to them while `normalizeEmail()` continues to
+ * govern identity, comparison, and uniqueness everywhere unchanged. */
+export function emailDisplayForm(email: string): string {
+  return z.string().trim().email().max(255).parse(email).normalize('NFC');
 }

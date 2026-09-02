@@ -206,6 +206,11 @@ export async function deleteOwnAccount() {
       accountState: 'deleted',
       deletedAt: sql`current_timestamp`,
       email: sql`concat(${users.email}, '-', ${users.id}, '-deleted')`,
+      // AUTH-PRIVACY-002/docs/05 "Account deletion ... No deliverable address retained": email_display
+      // preserves the member's own casing for display purposes (AUTH-IDENTITY-003) and must be
+      // anonymized in lockstep with the normalized email, or a deleted account's real deliverable
+      // address would otherwise survive indefinitely in this column alone.
+      emailDisplay: sql`concat(${users.email}, '-', ${users.id}, '-deleted')`,
     }).where(eq(users.id, actor.id));
     await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
   });

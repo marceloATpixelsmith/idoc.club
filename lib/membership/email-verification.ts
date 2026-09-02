@@ -7,7 +7,7 @@ import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox,
 import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
 import { emailButton, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { updateStripeCustomerEmail } from '@/lib/payments/customer-email';
-import { normalizeEmail } from './validation';
+import { emailDisplayForm, normalizeEmail } from './validation';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000;
@@ -16,12 +16,13 @@ const recipientDiscriminator = (email: string) => createHash('sha256').update(em
 
 export async function issueEmailVerification(userId: number, untrustedEmail: string) {
   const pendingEmail = normalizeEmail(untrustedEmail);
+  const pendingEmailDisplay = emailDisplayForm(untrustedEmail);
   const token = randomBytes(32).toString('base64url');
   await db.update(emailVerificationTokens).set({ consumedAt: new Date() }).where(and(
     eq(emailVerificationTokens.userId, userId), isNull(emailVerificationTokens.consumedAt),
   ));
   await db.insert(emailVerificationTokens).values({
-    expiresAt: new Date(Date.now() + TOKEN_LIFETIME_MS), pendingEmail,
+    expiresAt: new Date(Date.now() + TOKEN_LIFETIME_MS), pendingEmail, pendingEmailDisplay,
     tokenHash: hashToken(token), userId,
   });
   const baseUrl = new URL(baseUrlForServer());
@@ -67,6 +68,7 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
     await tx.update(users).set({
       accountState: profile ? 'active' : 'onboarding',
       email: record.pendingEmail,
+      emailDisplay: record.pendingEmailDisplay,
       emailVerifiedAt: now,
       sessionVersion: sql`${users.sessionVersion} + 1`,
       updatedAt: now,

@@ -8,7 +8,7 @@ import { logError } from '@/lib/observability/logger';
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: purgeExpiredAuthRecords,
-    reportFailure: () => logError('data_retention_purge_failed', { category: 'operational' }),
+    reportFailure: () => logError('data_retention_purge_failed'),
     secret: cronSecretForServer(),
   });
 }

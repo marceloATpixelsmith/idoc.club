@@ -117,8 +117,8 @@ test('AUTH-IDENTITY-002: real signup action ignores hostile authority fields and
       const email = `hostile-${authority[0]}-${authority[1]}@example.test`;
       const csrfToken = await issueTestCsrfToken(cookies, null);
       await withTestRequestCookies(cookies, async () => {
-        await startPendingSignup(email);
-        await markPendingSignupVerified(email);
+        await startPendingSignup(email, email);
+        await markPendingSignupVerified(email, email);
         const form = new FormData();
         form.set('password', password);
         form.set('csrf_token', csrfToken);

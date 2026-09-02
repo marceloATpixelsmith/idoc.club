@@ -21,14 +21,14 @@ export async function POST(request: Request) {
 
   const signature = request.headers.get('x-mandrill-signature');
   if (!verifyMandrillSignature(request.url, entries, signature, webhookKey)) {
-    await logError('mailchimp_webhook_signature_verification_failed', { category: 'operational' });
+    await logError('mailchimp_webhook_signature_verification_failed');
     return Response.json({ error: 'Webhook signature verification failed.' }, { status: 400 });
   }
 
   const rawEvents = form.get('mandrill_events');
   const events = parseMandrillEvents(typeof rawEvents === 'string' ? rawEvents : undefined);
   if (events === null) {
-    await logWarn('mailchimp_webhook_malformed_payload', { category: 'operational' });
+    await logWarn('mailchimp_webhook_malformed_payload');
     return Response.json({ received: true });
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       // Transient by definition -- logged for operator visibility only, deliberately never an
       // alert email: a single soft bounce (mailbox full, greylisted, ...) is routine, and paging an
       // operator for every one of these would train them to ignore the alerts that actually matter.
-      await logWarn('mailchimp_webhook_soft_bounce', { category: 'operational' });
+      await logWarn('mailchimp_webhook_soft_bounce');
     }
   }
 

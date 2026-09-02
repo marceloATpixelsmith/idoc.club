@@ -165,8 +165,8 @@ test('AUTH-LIFECYCLE-002: completeSignup rejects duplicate registration for an e
   const cookies = new TestCookies();
   const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
-    await startPendingSignup(suspended.email);
-    await markPendingSignupVerified(suspended.email);
+    await startPendingSignup(suspended.email, suspended.email);
+    await markPendingSignupVerified(suspended.email, suspended.email);
     const result = await completeSignup({}, form({ csrf_token, password: 'Another Correct Battery 99!' }));
     assert.deepEqual(result, { error: 'An account with this email already exists. Sign in instead.' });
   });

@@ -32,7 +32,7 @@ test('the start route also logs a rate-limited attempt -- an ordinary, expected 
     startRoute.indexOf("if (!(await checkOriginRateLimit('google_oauth_start', origin)))"),
     startRoute.indexOf('await purgeExpiredGoogleOauthTransactions();'),
   );
-  assert.match(rateLimitBranch, /logWarn\('google_oauth_start_failed', \{ category: 'auth', reason: 'rate_limited' \}\)/);
+  assert.match(rateLimitBranch, /logWarn\('google_oauth_start_failed', \{ reason: 'rate_limited' \}\)/);
   assert.doesNotMatch(rateLimitBranch, /notifyWebmasterOfGoogleOauthFailure\(/);
 });
 
@@ -41,7 +41,7 @@ test('the callback route logs and alerts on an invalid/missing OAuth browser-bin
     callbackRoute.indexOf('if (!state || !verifyGoogleOauthBrowserBinding'),
     callbackRoute.indexOf('const config = loadGoogleOidcConfig();'),
   );
-  assert.match(bindingCheck, /logError\('google_oauth_callback_failed', \{ category: 'auth', reason: 'binding_cookie_invalid' \}\)/);
+  assert.match(bindingCheck, /logError\('google_oauth_callback_failed', \{ reason: 'binding_cookie_invalid' \}\)/);
   assert.match(bindingCheck, /notifyWebmasterOfGoogleOauthFailure\(\{ reason: 'binding_cookie_invalid', step: 'callback' \}\)/);
 });
 
@@ -59,7 +59,7 @@ test('the callback route classifies every failure and logs it, but only alerts f
 
   const catchBody = callbackRoute.slice(callbackRoute.lastIndexOf('} catch (error) {'));
   assert.match(catchBody, /const \{ alert, reason \} = classifyGoogleOauthFailure\(error, request\.nextUrl\.searchParams\.get\('error'\)\);/);
-  assert.match(catchBody, /await logError\('google_oauth_callback_failed', \{ category: 'auth', reason \}\);/);
+  assert.match(catchBody, /await logError\('google_oauth_callback_failed', \{ reason \}\);/);
   assert.match(catchBody, /if \(alert\) await notifyWebmasterOfGoogleOauthFailure/);
 });
 

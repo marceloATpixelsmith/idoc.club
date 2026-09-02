@@ -3,6 +3,17 @@ import { db } from './drizzle';
 import { activityLogs, users } from './schema';
 import { getSession } from '@/lib/auth/session';
 
+export type PublicUser = { email: string; id: number; name: string | null };
+
+/** AUTH-API-003: the only user-shaped value ever sent to the browser -- every server-rendered
+ * consumer of the current user's identity (the root layout's SWR fallback, the /api/user route
+ * both hydrate from) must go through this, never the full getUser() row, which also carries
+ * passwordHash, sessionVersion, accountState, and other server-only fields. */
+export async function getPublicUser(): Promise<PublicUser | null> {
+  const user = await getUser();
+  return user ? { email: user.emailDisplay ?? user.email, id: user.id, name: user.name } : null;
+}
+
 export async function getUser() {
   const sessionData = await getSession();
   if (!sessionData) return null;

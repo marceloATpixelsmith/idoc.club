@@ -79,7 +79,9 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   try {
     await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
   } catch (error) {
-    await logError('email_otp_delivery_failed', { category: deliveryFailureCategory(error), purpose });
+    await logError('email_otp_delivery_failed', {
+      purpose, reason: deliveryFailureCategory(error), subjectId: options.userId ?? null,
+    });
     return { status: 'delivery_failed' };
   }
   return { status: 'ok' };
