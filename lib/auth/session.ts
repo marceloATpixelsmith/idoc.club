@@ -7,6 +7,7 @@ import {
   revokeSession,
   touchSession,
 } from '@/lib/auth/session-registry';
+import { clearCsrfToken, issueCsrfToken } from '@/lib/security/csrf';
 import 'server-only';
 
 export { comparePasswords, hashPassword, passwordHashNeedsUpgrade } from '@/lib/auth/password-hash';
@@ -95,6 +96,9 @@ export async function setSession(user: NewUser) {
   const cookieStore = await requestCookies();
   cookieStore.set(sessionCookieName(environment), await signToken(session), sessionCookieOptions(session.absoluteExpiresAt, environment));
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
+  // AUTH-CSRF-003: rotate CSRF evidence to the newly-established session. A token minted before
+  // login (anonymous, sessionRef: null) or under a prior session is not valid evidence afterward.
+  await issueCsrfToken(session.sessionId);
 }
 
 export async function clearSession() {
@@ -118,4 +122,7 @@ export async function clearSession() {
   cookieStore.delete(LEGACY_SESSION_COOKIE_NAME);
   cookieStore.delete('idoc_pending_step_up');
   cookieStore.delete('idoc_fresh_step_up');
+  // AUTH-CSRF-003: a token bound to the now-revoked session must not remain valid evidence. The
+  // next page load's middleware mints a fresh, anonymously-bound one lazily.
+  await clearCsrfToken();
 }

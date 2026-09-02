@@ -8,6 +8,7 @@ import { Lock, Trash2, Loader2 } from 'lucide-react';
 import { beginAuthenticatorReplacement, forgetAllRememberedDevices, forgetThisDevice, logOutOtherSessions, logOutSession, regenerateRecoveryCodes } from './actions';
 import { Suspense, useActionState } from 'react';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
+import { CsrfField } from '@/components/security/csrf-field';
 import { GoogleIdentityCard } from './google-identity-card';
 import { PasskeysCard } from './passkeys-card';
 
@@ -35,6 +36,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         <CardHeader><CardTitle>Password</CardTitle></CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-gray-500">Changing your password logs you out on every device, including this one.</p><form className="space-y-4" action={passwordAction}>
+            <CsrfField />
             <div><Label htmlFor="current-password" className="mb-2">Current Password</Label><Input id="current-password" name="currentPassword" type="password" autoComplete="current-password" required minLength={8} maxLength={100} /></div>
             <div><Label htmlFor="new-password" className="mb-2">New Password</Label><Input id="new-password" name="newPassword" type="password" autoComplete="new-password" required minLength={8} maxLength={100} /></div>
             <div><Label htmlFor="confirm-password" className="mb-2">Confirm New Password</Label><Input id="confirm-password" name="confirmPassword" type="password" required minLength={8} maxLength={100} /></div>
@@ -58,16 +60,16 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         {recoveryState.error ? <p className="text-sm text-red-500">{recoveryState.error}</p> : null}
         {recoveryState.recoveryCodes ? <><p className="text-sm font-medium">Save these codes now. They will not be shown again.</p>
           <ul aria-label="New recovery codes">{recoveryState.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
-        {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><Button type="submit" variant="outline">Replace authenticator</Button></form>
-          <form action={recoveryAction}><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
+        {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline">Replace authenticator</Button></form>
+          <form action={recoveryAction}><CsrfField /><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
       <PasskeysCard passkeys={passkeys} />
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-gray-500">This browser is {currentDeviceRemembered ? 'remembered for password sign-in verification' : 'not currently remembered'}.</p>
         {(forgetCurrentState.error || forgetAllState.error) ? <p className="text-sm text-red-500">{forgetCurrentState.error || forgetAllState.error}</p> : null}
         {(forgetCurrentState.success || forgetAllState.success) ? <p className="text-sm text-green-500">{forgetCurrentState.success || forgetAllState.success}</p> : null}
-        <div className="flex flex-wrap gap-3"><form action={forgetCurrentAction}><Button disabled={!currentDeviceRemembered} type="submit" variant="outline">Forget this device</Button></form>
-        <form action={forgetAllAction}><Button type="submit" variant="outline">Forget all remembered devices</Button></form></div>
+        <div className="flex flex-wrap gap-3"><form action={forgetCurrentAction}><CsrfField /><Button disabled={!currentDeviceRemembered} type="submit" variant="outline">Forget this device</Button></form>
+        <form action={forgetAllAction}><CsrfField /><Button type="submit" variant="outline">Forget all remembered devices</Button></form></div>
       </CardContent></Card>}
 
       <Card className="mb-8"><CardHeader><CardTitle>Active sessions</CardTitle></CardHeader><CardContent className="space-y-5">
@@ -77,9 +79,9 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         {sessions.map((session) => <div className="rounded-md border p-4" key={session.sessionId}>
           <p className="font-medium">{session.sessionId === currentSessionId ? 'Current session' : 'Another session'}</p>
           <dl className="mt-2 grid gap-1 text-sm text-gray-600"><div>Authenticated: {formatDate(session.authenticatedAt)}</div><div>Last activity: {formatDate(session.lastActivityAt)}</div><div>Expires: {formatDate(session.absoluteExpiresAt)}</div></dl>
-          {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><input name="sessionId" type="hidden" value={session.sessionId} /><Button type="submit" variant="outline">Log out this session</Button></form> : null}
+          {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><CsrfField /><input name="sessionId" type="hidden" value={session.sessionId} /><Button type="submit" variant="outline">Log out this session</Button></form> : null}
         </div>)}
-        <form action={logoutOthersAction}><Button type="submit" variant="outline">Log out other sessions</Button></form>
+        <form action={logoutOthersAction}><CsrfField /><Button type="submit" variant="outline">Log out other sessions</Button></form>
       </CardContent></Card>
 
       <Card>
@@ -87,6 +89,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         <CardContent>
           <p className="text-sm text-gray-500 mb-4">Account deletion is irreversible. Please proceed with caution.</p>
           <form action={deleteAction} className="space-y-4">
+            <CsrfField />
             <div><Label htmlFor="delete-password" className="mb-2">Confirm Password</Label><Input id="delete-password" name="password" type="password" required minLength={8} maxLength={100} /></div>
             {deleteState.error && <p className="text-red-500 text-sm">{deleteState.error}</p>}
             <Button type="submit" variant="destructive" className="bg-red-600 hover:bg-red-700" disabled={isDeletePending}>

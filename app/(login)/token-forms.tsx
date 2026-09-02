@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
+import { CsrfField } from '@/components/security/csrf-field';
 
 type State = { error?: string; success?: string };
 type Action = (state: State, data: FormData) => Promise<State>;
@@ -14,6 +15,7 @@ export function AccountLinkForm({ action, heading }: { action: Action; heading: 
   return (
     <AuthShell title={heading}>
       <form action={formAction} className="idoc-auth-form">
+        <CsrfField />
         <div className="idoc-auth-field">
           <label className="idoc-auth-label" htmlFor="email">Email Address</label>
           <input autoComplete="email" className="idoc-auth-input" id="email" name="email" required type="email" />
@@ -36,6 +38,7 @@ export function TokenPasswordForm({ action, heading, token }: { action: Action; 
   return (
     <AuthShell title={heading}>
       <form action={formAction} className="idoc-auth-form">
+        <CsrfField />
         <input name="token" type="hidden" value={token} />
         <PasswordInput label="New Password" name="password" />
         <PasswordInput label="Confirm Password" name="confirmPassword" />

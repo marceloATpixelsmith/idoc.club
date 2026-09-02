@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { nextValidUntil } from '@/lib/payments/renewal';
 import { MANUAL_PAYMENT_SOURCES, PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
+import { CsrfField } from '@/components/security/csrf-field';
 import { recordManualPaymentForm } from './actions';
 
 type ManualPaymentActionState = { error?: string; success?: string };
@@ -18,6 +19,7 @@ export function ManualPaymentForm({ currentValidUntil, profileId }: { currentVal
 
   return (
     <form action={formAction} className="mt-4 max-w-md space-y-4">
+      <CsrfField />
       <input type="hidden" name="profileId" value={profileId} />
       <p className="text-sm text-gray-700">Amount: <strong>€80.00</strong> — no partial, discounted, or waived payments.</p>
       <div>

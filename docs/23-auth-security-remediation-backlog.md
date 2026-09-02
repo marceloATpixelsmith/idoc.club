@@ -7,10 +7,10 @@ machine contract and the production-path re-audit recorded in document 22. The r
 contract `2.0.0`, machine schema `14.0.0`, validator `11.0.0`, mapping schema `1.0.0`, and portable-config
 schema `2.0.0`. The audit independently expanded grouped matrix labels and reproduced **155 unique
 canonical AUTH IDs**: after Slice 3 (Authorization and privilege) closed AUTH-STORAGE-002,
-AUTH-LIFECYCLE-002, AUTH-PASSWORD-005, AUTH-IDENTITY-005, AUTH-AUTHZ-005, and AUTH-API-004 with real
-behavioral evidence, current status is **126 verified, 8 implemented-but-unverified, 14 partial, 0
-missing, and 7 not-applicable**. Consequently, the table below has exactly **22 applicable non-verified
-controls**.
+AUTH-LIFECYCLE-002, AUTH-PASSWORD-005, AUTH-IDENTITY-005, AUTH-AUTHZ-005, and AUTH-API-004, and Slice 4
+(CSRF/request integrity) closed AUTH-CSRF-003, each with real behavioral evidence, current status is
+**127 verified, 8 implemented-but-unverified, 13 partial, 0 missing, and 7 not-applicable**. Consequently,
+the table below has exactly **21 applicable non-verified controls**.
 
 `EXTERNAL/MANUAL` is a closure/evidence boundary in this document, not a sixth mutually exclusive status
 in document 22. A control can have repository implementation verified while its deployed configuration or
@@ -23,7 +23,6 @@ store. “Existing evidence” is deliberately candid when it is only source ins
 
 | Canonical ID | Canonical requirement | Current classification | Exact unmet property or evidence deficiency | Production implementation location | Actual production caller/path | Persistence/config location | Existing behavioral evidence | Why current evidence is insufficient | Closure type | Severity | Exploitability | Exact acceptance criteria | Required behavioral test | Recommended remediation slice | Dependencies | Blocks application-code readiness? | Blocks production deployment validation? |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| AUTH-CSRF-003 | Issue, validate, expire, and rotate unpredictable CSRF tokens where the token control applies. | partial | The requirement specifically describes token-based CSRF defense (unpredictable, server-validated, expiring/rotating tokens); IDOC's Origin-check mechanism is a legitimate alternative but does not literally satisfy "tokens…expired/rotated." | Not implemented as classic CSRF tokens — IDOC relies entirely on Origin-header validation (`middleware.ts` + Next.js's built-in Server Action check), not on issued/rotated CSRF tokens | Production route/action importing or invoking the named implementation; close with a call-path test rather than a parallel helper. | N/A | `tests/security-e2e/csrf.spec.ts` | Existing coverage cannot prove the named absent/incomplete mandatory property. | CODE+TEST | high | direct | Implement the missing property and prove it through the real production path. | Use the production route/action/function with real Postgres, signed cookies/JWTs, or Chromium as technically appropriate; assert success, denial, persistence, and concurrency/expiry boundaries. | Slice 4 | Production database/provider/configuration where named; otherwise existing test harness. | yes | no |
 | AUTH-ERROR-001 | Return stable, generic authentication errors without sensitive distinctions. | implemented-but-unverified | Production implementation exists, but no behavioral test exercises the actual production path. | Generic messages for persistent failures, e.g. `app/(login)/sign-in/actions.ts:74` "We could not finish signing you in automatically. Contact IDOC for help." | Production route/action importing or invoking the named implementation; close with a call-path test rather than a parallel helper. | N/A | none found (no test asserts error-message class taxonomy) | Current evidence is source inspection, indirect coverage, or a parallel helper; it does not prove the actual production boundary. | TEST | medium | defense-in-depth | A behavioral test invokes the production path and proves the requirement’s positive and adversarial cases. Non-behavioral regex evidence is not sufficient. | Use the production route/action/function with real Postgres, signed cookies/JWTs, or Chromium as technically appropriate; assert success, denial, persistence, and concurrency/expiry boundaries. | Slice 7 | Production database/provider/configuration where named; otherwise existing test harness. | no | no |
 | AUTH-IDENTITY-003 | Apply canonical identity normalization while preserving an appropriate display form. | partial | Case-folding is plain `.toLowerCase()`, not full Unicode-aware case folding (e.g., no `.normalize()`/locale casing for non-ASCII local parts); "preserve display form" is not implemented — normalized (lowercased) form is what's stored and shown, original casing is discarded. | `lib/membership/validation.ts:86-88` `normalizeEmail` (trim + ASCII lowercase); no dot/plus stripping | Production route/action importing or invoking the named implementation; close with a call-path test rather than a parallel helper. | `lib/db/schema.ts:23,33` `users.email` unique + `uniqueIndex('users_normalized_email_unique') on lower(email)` | `tests/rate-limit-normalization.integration.ts` (behavioral, real Postgres) proves case/whitespace variants collapse to one identity | Existing coverage cannot prove the named absent/incomplete mandatory property. | CODE+TEST | medium | defense-in-depth | Implement the missing property and prove it through the real production path. | Use the production route/action/function with real Postgres, signed cookies/JWTs, or Chromium as technically appropriate; assert success, denial, persistence, and concurrency/expiry boundaries. | Slice 6 | Production database/provider/configuration where named; otherwise existing test harness. | yes | no |
 | AUTH-EMAIL-002 | Throttle and supersede email-verification OTP resend without enabling enumeration. | partial | Cooldown + supersession code exists and is exercised indirectly, but no test specifically drives `issueEmailOtp` resend/cooldown timing or confirms enumeration-resistant response shape for signup resend. | `lib/auth/email-otp.ts:67-69` (30s cooldown), `:73-74` (supersede prior unconsumed code) | Production route/action importing or invoking the named implementation; close with a call-path test rather than a parallel helper. | same table | `tests/email-otp-cross-purpose.integration.ts` partially; no dedicated resend-throttle/enumeration-resistance integration test found | Existing coverage cannot prove the named absent/incomplete mandatory property. | TEST | medium | defense-in-depth | Implement the missing property and prove it through the real production path. | Use the production route/action/function with real Postgres, signed cookies/JWTs, or Chromium as technically appropriate; assert success, denial, persistence, and concurrency/expiry boundaries. | Slice 7 | Production database/provider/configuration where named; otherwise existing test harness. | no | no |
@@ -61,10 +60,25 @@ store. “Existing evidence” is deliberately candid when it is only source ins
    thrown the first time either code path actually ran in production. See docs/22 for the per-control
    evidence detail. Direct cross-account and lifecycle-state requests were proven, not merely
    architected, to be unable to mutate or distinguish protected resources.
-4. **CSRF/request integrity — AUTH-CSRF-003.** CODE+TEST. Likely files: middleware, form/action token
-   helper, relevant forms, Chromium CSRF suite. Migration: no. External provider: no. Acceptance:
-   unpredictable purpose/session-bound tokens are checked, expire/rotate, and reject missing, replayed,
-   and cross-session submissions while Origin validation remains defense in depth.
+4. **CSRF/request integrity — AUTH-CSRF-003. COMPLETE — verified.** CODE+TEST. A signed double-submit-
+   cookie CSRF token was implemented (`lib/security/csrf-tokens.ts`, `lib/security/csrf.ts`) alongside the
+   existing Origin-header validation: unpredictable (CSPRNG nonce), signed and expiring (4-hour JWT),
+   session-bound (`sessionRef` claim checked against the caller's live session id), issued/rotated at
+   `setSession()`/`clearSession()`, and enforced on every mutating Server Action either through the
+   `validatedAction`/`validatedActionWithUser` wrappers or an explicit call at the top of the handful of
+   bare actions outside them. Real-browser behavioral tests were added to `tests/security-e2e/csrf.spec.ts`
+   proving a tampered form field and a removed CSRF cookie both reject an otherwise-valid, correctly
+   authenticated, same-origin mutation on the real production path; `tests/security-e2e/mfa-production-
+   boundaries.spec.ts` exercises the token across a real mid-flow session rotation. Every real-Postgres
+   integration suite that drives a `validatedAction`-wrapped Server Action directly now threads a real,
+   production-issued token, so that existing adversarial coverage continues to prove the requirement too.
+   This pass also found and fixed a real production defect: an attempt to preserve Partial Prerendering's
+   static shell for the root layout (by moving the per-request CSRF-cookie read behind a Suspense
+   boundary) silently degraded a deep `redirect()` call — including an anonymous visitor's `/admin`
+   authorization check — from a real HTTP 3xx into a client-JS-only redirect, so the route returned HTTP
+   200 instead. Confirmed with a real dev-server request, then fixed by keeping that read synchronous and
+   unwrapped, accepting the app-wide loss of the (experimental, opt-in) PPR static shell as the explicit
+   tradeoff for guaranteed-correct authorization/CSRF behavior. See docs/22 for the full evidence detail.
 5. **Credential and key lifecycle — AUTH-STORAGE-005, AUTH-STORAGE-006, AUTH-CRYPTO-003,
    AUTH-OPERATIONS-005, AUTH-SECRET-001, AUTH-CRYPTO-004,
    AUTH-SECRET-004, AUTH-DEPENDENCY-001.** TEST and CODE+TEST. Likely files: password hash, MFA crypto,

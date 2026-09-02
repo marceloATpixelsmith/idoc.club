@@ -2,6 +2,8 @@
 
 import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
+import { getSession } from '@/lib/auth/session';
+import { requireCsrfToken } from '@/lib/security/csrf';
 
 export async function saveOwnMemberProfile(input: unknown) {
   const member = await getOwnPrivateMember();
@@ -16,5 +18,10 @@ export async function saveOwnMemberProfile(input: unknown) {
 }
 
 export async function saveOwnMemberProfileForm(_state: { error?: string; success?: string }, formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireCsrfToken(formData, (await getSession())?.sessionId ?? null);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
+  }
   return saveOwnMemberProfile(parseMemberProfileFormData(formData));
 }

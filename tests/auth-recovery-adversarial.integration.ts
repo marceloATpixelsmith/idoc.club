@@ -19,6 +19,8 @@ import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
 import { beginTotpEnrollment, completeTotpEnrollment, decryptTotpSecret } from '../lib/auth/mfa/totp.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { sessionCookieName, setSession } from '../lib/auth/session.ts';
+import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
+import { issueTestCsrfToken } from './csrf-test-helper.ts';
 import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const applicationId = MFA_APPLICATION_ID;
@@ -65,7 +67,8 @@ function totp(secret: string, nowMs = Date.now()) {
   return String(binary % 1_000_000).padStart(6, '0');
 }
 
-function form(name: string, value: string) { const data = new FormData(); data.set(name, value); return data; }
+function form(name: string, value: string, csrfToken: string) { const data = new FormData(); data.set(name, value); data.set('csrf_token', csrfToken); return data; }
+function csrfTokenFrom(cookies: TestCookies): string { return cookies.get(csrfCookieName())?.value ?? ''; }
 async function redirected(operation: () => Promise<unknown>) {
   await assert.rejects(operation, (error: unknown) => String(error).includes('NEXT_REDIRECT'));
 }
@@ -89,9 +92,10 @@ async function createRecoveryUser() {
 async function recoveryEntry(provided?: Awaited<ReturnType<typeof createRecoveryUser>>) {
   const fixture = provided ?? await createRecoveryUser();
   const cookies = new TestCookies();
+  await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     assert.equal(await beginPrimaryMfa(fixture.user as never, 'password', '/dashboard/admin'), true);
-    assert.deepEqual(await beginAuthenticatorRecovery({}, form('recover', 'yes')), { success: 'Enter one of your recovery codes.' });
+    assert.deepEqual(await beginAuthenticatorRecovery({}, form('recover', 'yes', csrfTokenFrom(cookies))), { success: 'Enter one of your recovery codes.' });
   });
   return { ...fixture, cookies };
 }
@@ -99,7 +103,7 @@ async function recoveryEntry(provided?: Awaited<ReturnType<typeof createRecovery
 async function replacement(provided?: Awaited<ReturnType<typeof recoveryEntry>>) {
   const entry = provided ?? await recoveryEntry();
   await withTestRequestCookies(entry.cookies, () => redirected(() =>
-    authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))));
+    authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(entry.cookies)))));
   const pending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
   assert.equal(pending?.stage, 'replacement');
   return { ...entry, pending: pending! };
@@ -111,7 +115,7 @@ async function recoveryAck(provided?: Awaited<ReturnType<typeof replacement>>) {
     select encrypted_secret from idoc.mfa_factors where factor_id=${entry.pending.factorId}`;
   const secret = decryptTotpSecret(factor.encrypted_secret, () => encryptionKey);
   const result = await withTestRequestCookies(entry.cookies, () =>
-    confirmTotpEnrollment({}, form('code', totp(secret))));
+    confirmTotpEnrollment({}, form('code', totp(secret), csrfTokenFrom(entry.cookies))));
   assert.match(String((result as { success?: string }).success), /replaced/);
   const pending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
   assert.equal(pending?.stage, 'recovery-ack');
@@ -148,7 +152,7 @@ test('AUTH-RECOVERY-005 expired recovery-entry, replacement, and acknowledgement
     const entry = await recoveryEntry(); const before = await state(entry.user.id);
     const pending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth); assert.ok(pending);
     entry.cookies.set(cookieName, await expiredToken(pending));
-    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))),
+    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(entry.cookies)))),
       { error: 'Your recovery session expired. Sign in again.' });
     assert.deepEqual(await state(entry.user.id), before); assert.equal(entry.cookies.get(cookieName), undefined);
     await assertNoSession(entry.cookies, entry.user.id);
@@ -156,7 +160,7 @@ test('AUTH-RECOVERY-005 expired recovery-entry, replacement, and acknowledgement
   await t.test('expired replacement preserves the old factor and recovery generation', async () => {
     await resetIdoc(); const entry = await replacement(); const before = await state(entry.user.id);
     entry.cookies.set(cookieName, await expiredToken(entry.pending));
-    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => confirmTotpEnrollment({}, form('code', '123456'))),
+    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => confirmTotpEnrollment({}, form('code', '123456', csrfTokenFrom(entry.cookies)))),
       { error: 'Your setup session expired. Sign in again.' });
     assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
   });
@@ -164,7 +168,7 @@ test('AUTH-RECOVERY-005 expired recovery-entry, replacement, and acknowledgement
     await resetIdoc(); const entry = await recoveryAck(); const before = await state(entry.user.id);
     await sql`update idoc.mfa_enrollment_transactions set expires_at=now()-interval '1 second'
       where transaction_id=${entry.pending.transactionId}`;
-    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => acknowledgeRecoveryCodes({}, form('saved', 'yes'))),
+    assert.deepEqual(await withTestRequestCookies(entry.cookies, () => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(entry.cookies)))),
       { error: 'Your setup session expired. Sign in again.' });
     assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
   });
@@ -178,9 +182,9 @@ test('AUTH-RECOVERY-005 stale session versions fail closed at every recovery act
       await sql`update idoc.users set session_version=session_version+1 where id=${entry.user.id}`;
       const before = await state(entry.user.id);
       const result = await withTestRequestCookies(entry.cookies, () => stage === 'recovery-entry'
-        ? authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))
-        : stage === 'replacement' ? confirmTotpEnrollment({}, form('code', '123456'))
-          : acknowledgeRecoveryCodes({}, form('saved', 'yes')));
+        ? authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(entry.cookies)))
+        : stage === 'replacement' ? confirmTotpEnrollment({}, form('code', '123456', csrfTokenFrom(entry.cookies)))
+          : acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(entry.cookies))));
       assert.match(String((result as { error?: string }).error), /expired/);
       assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
     });
@@ -197,9 +201,9 @@ test('AUTH-RECOVERY-005 cross-user substitution cannot advance entry, replacemen
       await withTestRequestCookies(forged, () => setSession(other.user as never));
       const ownerBefore = await state(owner.user.id); const otherBefore = await state(other.user.id);
       const result = await withTestRequestCookies(forged, () => stage === 'recovery-entry'
-        ? authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))
-        : stage === 'replacement' ? confirmTotpEnrollment({}, form('code', '123456'))
-          : acknowledgeRecoveryCodes({}, form('saved', 'yes')));
+        ? authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(forged)))
+        : stage === 'replacement' ? confirmTotpEnrollment({}, form('code', '123456', csrfTokenFrom(forged)))
+          : acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(forged))));
       assert.ok((result as { error?: string }).error); assert.deepEqual(await state(owner.user.id), ownerBefore);
       assert.deepEqual(await state(other.user.id), otherBefore);
     });
@@ -209,24 +213,24 @@ test('AUTH-RECOVERY-005 cross-user substitution cannot advance entry, replacemen
 test('AUTH-RECOVERY-005 old action cookies cannot replay entry, replacement, or successful acknowledgement', async (t) => {
   await t.test('old recovery-entry cannot consume twice or create duplicate enrollment/evidence', async () => {
     const entry = await recoveryEntry(); const old = entry.cookies.clone();
-    await withTestRequestCookies(entry.cookies, () => redirected(() => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))));
+    await withTestRequestCookies(entry.cookies, () => redirected(() => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(entry.cookies)))));
     const after = await state(entry.user.id);
-    assert.deepEqual(await withTestRequestCookies(old, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode))),
+    assert.deepEqual(await withTestRequestCookies(old, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(old)))),
       { error: 'That recovery code could not be used.' });
     assert.deepEqual(await state(entry.user.id), after); await assertNoSession(old, entry.user.id);
   });
   await t.test('old replacement cannot activate or rotate twice', async () => {
     await resetIdoc(); const entry = await replacement(); const old = entry.cookies.clone();
     await recoveryAck(entry); const after = await state(entry.user.id);
-    assert.deepEqual(await withTestRequestCookies(old, () => confirmTotpEnrollment({}, form('code', '123456'))),
+    assert.deepEqual(await withTestRequestCookies(old, () => confirmTotpEnrollment({}, form('code', '123456', csrfTokenFrom(old)))),
       { error: 'Your setup session expired. Sign in again.' });
     assert.deepEqual(await state(entry.user.id), after); await assertNoSession(old, entry.user.id);
   });
   await t.test('old recovery-ack produces exactly one session and no duplicate mutation', async () => {
     await resetIdoc(); const entry = await recoveryAck(); const old = entry.cookies.clone();
-    await withTestRequestCookies(entry.cookies, () => redirected(() => acknowledgeRecoveryCodes({}, form('saved', 'yes'))));
+    await withTestRequestCookies(entry.cookies, () => redirected(() => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(entry.cookies)))));
     const after = await state(entry.user.id); assert.equal(after.sessions, 1);
-    assert.deepEqual(await withTestRequestCookies(old, () => acknowledgeRecoveryCodes({}, form('saved', 'yes'))),
+    assert.deepEqual(await withTestRequestCookies(old, () => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(old)))),
       { error: 'Your setup session expired. Sign in again.' });
     assert.deepEqual(await state(entry.user.id), after); assert.equal(old.get(sessionCookieName()), undefined);
   });
@@ -236,7 +240,7 @@ test('AUTH-RECOVERY-005 acknowledgement cannot precede replacement', async () =>
   const entry = await replacement();
   await withTestRequestCookies(entry.cookies, () => setPendingPrimaryAuth({ ...entry.pending, stage: 'recovery-ack' }));
   const before = await state(entry.user.id);
-  assert.deepEqual(await withTestRequestCookies(entry.cookies, () => acknowledgeRecoveryCodes({}, form('saved', 'yes'))),
+  assert.deepEqual(await withTestRequestCookies(entry.cookies, () => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(entry.cookies)))),
     { error: 'Your setup session expired. Sign in again.' });
   assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
 });

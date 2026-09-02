@@ -15,6 +15,7 @@ import { signOut } from '@/app/(login)/actions';
 import { useRouter } from 'next/navigation';
 import { User } from '@/lib/db/schema';
 import { userInitials } from '@/lib/format/user-initials';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import useSWR, { mutate } from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -25,7 +26,7 @@ function UserMenu() {
   const router = useRouter();
 
   async function handleSignOut() {
-    await signOut();
+    await signOut(readCsrfTokenFromDocumentCookie());
     mutate('/api/user');
     router.push('/');
   }

@@ -23,6 +23,8 @@ import { db } from '../lib/db/drizzle.ts';
 import { users } from '../lib/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
+import { issueTestCsrfToken } from './csrf-test-helper.ts';
+import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
@@ -84,6 +86,12 @@ async function activeTotpFactor(user: { email: string; id: number }, nowMs = Dat
   return secret;
 }
 
+/** Reads back the CSRF token setSession()/clearSession() already minted into this cookie store as
+ * a side effect of establishing/clearing the session, rather than minting a second, separate one. */
+function csrfTokenFrom(cookies: TestCookies): string {
+  return cookies.get(csrfCookieName())?.value ?? '';
+}
+
 function form(entries: Record<string, string>) {
   const data = new FormData();
   for (const [key, value] of Object.entries(entries)) data.set(key, value);
@@ -102,7 +110,7 @@ async function grantRealFreshStepUp(cookies: TestCookies, user: { id: number; se
   assert.equal(started.required, true);
   const pending = await withTestRequestCookies(cookies, getPendingStepUp);
   assert.ok(pending);
-  await redirected(() => withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form({ code: totp(secret) }))));
+  await redirected(() => withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form({ code: totp(secret), csrf_token: csrfTokenFrom(cookies) }))));
   assert.ok(cookies.get('idoc_fresh_step_up'));
 }
 
@@ -113,9 +121,10 @@ async function grantRealFreshStepUp(cookies: TestCookies, user: { id: number; se
 test('AUTH-LIFECYCLE-002: signIn rejects a suspended account with the same generic error as a wrong password, and no session or MFA continuation is created', async () => {
   const suspended = await realUser('suspended');
   const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingLogin(suspended.email);
-    const result = await signIn({}, form({ email: suspended.email, password }));
+    const result = await signIn({}, form({ csrf_token, email: suspended.email, password }));
     assert.deepEqual(result, { email: suspended.email, error: 'Invalid email or password. Please try again.' });
     assert.equal(cookies.get(sessionCookieName()), undefined);
   });
@@ -125,9 +134,10 @@ test('AUTH-LIFECYCLE-002: signIn rejects a suspended account with the same gener
 test('AUTH-LIFECYCLE-002: signIn rejects a deleted account the same way', async () => {
   const deleted = await realUser('deleted');
   const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingLogin(deleted.email);
-    const result = await signIn({}, form({ email: deleted.email, password }));
+    const result = await signIn({}, form({ csrf_token, email: deleted.email, password }));
     assert.deepEqual(result, { email: deleted.email, error: 'Invalid email or password. Please try again.' });
     assert.equal(cookies.get(sessionCookieName()), undefined);
   });
@@ -141,9 +151,10 @@ test('AUTH-LIFECYCLE-002: signIn still proceeds past the account-state gate for 
   const admin = await realUser('active', true);
   await activeTotpFactor(admin);
   const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingLogin(admin.email);
-    await redirected(() => signIn({}, form({ email: admin.email, password })));
+    await redirected(() => signIn({}, form({ csrf_token, email: admin.email, password })));
     assert.equal((await getPendingPrimaryAuth())?.stage, 'challenge');
   });
   assert.equal(cookies.get(sessionCookieName()), undefined);
@@ -152,10 +163,11 @@ test('AUTH-LIFECYCLE-002: signIn still proceeds past the account-state gate for 
 test('AUTH-LIFECYCLE-002: completeSignup rejects duplicate registration for an email that already belongs to a suspended account, creating no second user row', async () => {
   const suspended = await realUser('suspended');
   const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingSignup(suspended.email);
     await markPendingSignupVerified(suspended.email);
-    const result = await completeSignup({}, form({ password: 'Another Correct Battery 99!' }));
+    const result = await completeSignup({}, form({ csrf_token, password: 'Another Correct Battery 99!' }));
     assert.deepEqual(result, { error: 'An account with this email already exists. Sign in instead.' });
   });
   assert.equal((await sql`select count(*)::int count from idoc.users where email=${suspended.email}`)[0].count, 1);
@@ -181,9 +193,10 @@ test('AUTH-PASSWORD-005: an ordinary member (no configured MFA factor) changes p
     assert.ok(await getSession());
   });
 
+  const csrf_token = csrfTokenFrom(cookies);
   await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, async () => {
     await redirected(() => updatePassword({}, form({
-      confirmPassword: 'A New Correct Battery 77!', currentPassword: password, newPassword: 'A New Correct Battery 77!',
+      confirmPassword: 'A New Correct Battery 77!', csrf_token, currentPassword: password, newPassword: 'A New Correct Battery 77!',
     })));
   }));
 
@@ -209,9 +222,10 @@ test('AUTH-PASSWORD-005: an incorrect current password is rejected without mutat
   const user = await realUser('active');
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, () => setSession(user));
+  const csrf_token = csrfTokenFrom(cookies);
 
   const result = await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
-    updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', currentPassword: 'wrong-password-entirely', newPassword: 'A New Correct Battery 77!' }))));
+    updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', csrf_token, currentPassword: 'wrong-password-entirely', newPassword: 'A New Correct Battery 77!' }))));
   assert.deepEqual(result, { error: 'Current password is incorrect.' });
 
   const [row] = await sql`select password_hash, session_version from idoc.users where id=${user.id}`;
@@ -225,8 +239,9 @@ test('AUTH-PASSWORD-005: reusing the current password as the new password is rej
   const user = await realUser('active');
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, () => setSession(user));
+  const csrf_token = csrfTokenFrom(cookies);
   const result = await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
-    updatePassword({}, form({ confirmPassword: password, currentPassword: password, newPassword: password }))));
+    updatePassword({}, form({ confirmPassword: password, csrf_token, currentPassword: password, newPassword: password }))));
   assert.deepEqual(result, { error: 'New password must be different from the current password.' });
   assert.equal((await sql`select session_version from idoc.users where id=${user.id}`)[0].session_version, user.sessionVersion);
 });
@@ -238,7 +253,7 @@ test('AUTH-PASSWORD-005: a privileged (administrator) account cannot change its 
   await withTestRequestCookies(cookies, () => setSession(admin));
 
   await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () =>
-    redirected(() => updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', currentPassword: password, newPassword: 'A New Correct Battery 77!' })))));
+    redirected(() => updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies), currentPassword: password, newPassword: 'A New Correct Battery 77!' })))));
   const [beforeStepUp] = await sql`select password_hash, session_version from idoc.users where id=${admin.id}`;
   assert.equal(beforeStepUp.password_hash, admin.passwordHash);
   assert.equal(beforeStepUp.session_version, admin.sessionVersion);
@@ -246,7 +261,7 @@ test('AUTH-PASSWORD-005: a privileged (administrator) account cannot change its 
   // Now grant real fresh step-up through the actual TOTP round trip and retry: it succeeds.
   await grantRealFreshStepUp(cookies, admin, secret);
   await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () =>
-    redirected(() => updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', currentPassword: password, newPassword: 'A New Correct Battery 77!' })))));
+    redirected(() => updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies), currentPassword: password, newPassword: 'A New Correct Battery 77!' })))));
   const [afterStepUp] = await sql`select password_hash, session_version from idoc.users where id=${admin.id}`;
   assert.notEqual(afterStepUp.password_hash, admin.passwordHash);
   assert.equal(afterStepUp.session_version, admin.sessionVersion + 1);
@@ -398,14 +413,15 @@ test('AUTH-STORAGE-002: logOutSession revokes only a session the authenticated c
 
   // Adversarial: the owner's authenticated action cannot revoke the bystander's session id, even
   // though it is a syntactically valid session id the caller can simply supply as form input.
+  const ownerCsrfToken = csrfTokenFrom(ownerCookies);
   await withTestRequestCookies(ownerCookies, () => withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () =>
-    logOutSession({}, form({ sessionId: bystanderSessionId }))));
+    logOutSession({}, form({ csrf_token: ownerCsrfToken, sessionId: bystanderSessionId }))));
   assert.equal((await sql`select revoked_at from idoc.auth_sessions where session_id=${bystanderSessionId}`)[0].revoked_at, null);
   const auditCountBeforeSuccess = (await sql`select count(*)::int count from idoc.audit_log where actor_id=${owner.id} and action='security.session.logged_out'`)[0].count;
 
   // Positive: the same action, given a session id the caller actually owns, succeeds.
   const result = await withTestRequestCookies(ownerCookies, () => withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () =>
-    logOutSession({}, form({ sessionId: targetSessionId }))));
+    logOutSession({}, form({ csrf_token: ownerCsrfToken, sessionId: targetSessionId }))));
   assert.deepEqual(result, { success: 'That session has been logged out.' });
   assert.ok((await sql`select revoked_at from idoc.auth_sessions where session_id=${targetSessionId}`)[0].revoked_at);
   const auditCountAfterSuccess = (await sql`select count(*)::int count from idoc.audit_log where actor_id=${owner.id} and action='security.session.logged_out'`)[0].count;

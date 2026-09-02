@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
 import { clearPendingLogin } from '@/lib/auth/pending-login';
 import { clearSession, getSession, setSession } from '@/lib/auth/session';
+import { requireCsrfTokenValue } from '@/lib/security/csrf';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
@@ -61,7 +62,8 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   redirect(context.pending.returnTo);
 });
 
-export async function beginStepUpWebAuthn() {
+export async function beginStepUpWebAuthn(csrfToken: string) {
+  await requireCsrfTokenValue(csrfToken, (await getSession())?.sessionId ?? null);
   const context = await getPendingStepUp();
   if (!context || !context.hasWebAuthn) throw new Error('A passkey is not available for this verification.');
   const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);
@@ -143,7 +145,8 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
   redirect(context.pending.returnTo);
 });
 
-export async function beginLoginWebAuthn() {
+export async function beginLoginWebAuthn(csrfToken: string) {
+  await requireCsrfTokenValue(csrfToken, (await getSession())?.sessionId ?? null);
   const context = await pendingAccount('challenge');
   if (!context || !context.pending.hasWebAuthn) throw new Error('A passkey is not available for this sign-in.');
   const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);

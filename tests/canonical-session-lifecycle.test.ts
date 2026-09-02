@@ -64,7 +64,8 @@ test('the legacy pre-retrofit cookie is never accepted as authentication authori
   assert.doesNotMatch(session, /cookieStore\.get\(LEGACY_SESSION_COOKIE_NAME\)\?\.value/);
   assert.match(session, /cookieStore\.delete\(LEGACY_SESSION_COOKIE_NAME\)/);
 
-  assert.match(actions, /export async function signOut\(\) \{\s*await clearSession\(\);\s*\}/s);
+  assert.match(actions, /export async function signOut\(csrfToken: string\) \{/s);
+  assert.match(actions, /await clearSession\(\);/s);
 });
 
 test('authenticated user resolution uses the canonical freshness validator and authoritative sessionVersion', () => {

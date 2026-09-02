@@ -8,6 +8,12 @@ import { parseMemberProfileFormData } from '@/lib/membership/validation';
 import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
+import { getSession } from '@/lib/auth/session';
+import { requireCsrfToken } from '@/lib/security/csrf';
+
+async function requireCsrf(formData: FormData): Promise<void> {
+  await requireCsrfToken(formData, (await getSession())?.sessionId ?? null);
+}
 
 type FormState = { error?: string; success?: string };
 
@@ -29,6 +35,7 @@ async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
 }
 
 export async function saveMemberProfileByAdminForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The profile could not be updated safely.'); }
   const profileId = Number(formData.get('profileId'));
   const reason = String(formData.get('reason') ?? '');
   try {
@@ -41,6 +48,7 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
 }
 
 export async function suspendMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be suspended.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     const result = await suspendMembership(profileId, formData.get('reason'));
@@ -54,6 +62,7 @@ export async function suspendMembershipForm(_state: FormState, formData: FormDat
 }
 
 export async function reinstateMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be reinstated.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     await reinstateMembership(profileId, { reason: formData.get('reason'), status: formData.get('status') });
@@ -64,6 +73,7 @@ export async function reinstateMembershipForm(_state: FormState, formData: FormD
 }
 
 export async function correctEntitlementForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The entitlement could not be corrected.'); }
   const profileId = Number(formData.get('profileId'));
   const validUntil = formData.get('validUntil');
   const status = formData.get('status');
@@ -80,6 +90,7 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
 }
 
 export async function suspendUserAccountForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The account could not be suspended.'); }
   const userId = Number(formData.get('userId'));
   try {
     await suspendUserAccount(userId, formData.get('reason'));
@@ -90,6 +101,7 @@ export async function suspendUserAccountForm(_state: FormState, formData: FormDa
 }
 
 export async function reinstateUserAccountForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The account could not be reinstated.'); }
   const userId = Number(formData.get('userId'));
   try {
     await reinstateUserAccount(userId, { accountState: formData.get('accountState'), reason: formData.get('reason') });
@@ -100,6 +112,7 @@ export async function reinstateUserAccountForm(_state: FormState, formData: Form
 }
 
 export async function grantRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The role could not be granted.'); }
   const userId = Number(formData.get('userId'));
   const stepUp = await roleMutationNeedsStepUp();
   if (typeof stepUp !== 'boolean') return stepUp;
@@ -113,6 +126,7 @@ export async function grantRoleForm(_state: FormState, formData: FormData): Prom
 }
 
 export async function revokeRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The role could not be revoked.'); }
   const userId = Number(formData.get('userId'));
   const stepUp = await roleMutationNeedsStepUp();
   if (typeof stepUp !== 'boolean') return stepUp;

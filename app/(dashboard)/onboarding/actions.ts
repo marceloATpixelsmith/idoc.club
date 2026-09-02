@@ -2,8 +2,15 @@
 
 import { redirect } from 'next/navigation';
 import { createOwnMemberProfile } from '@/lib/membership/data-access';
+import { getSession } from '@/lib/auth/session';
+import { requireCsrfToken } from '@/lib/security/csrf';
 
 export async function completeOnboarding(_state: { error?: string }, formData: FormData) {
+  try {
+    await requireCsrfToken(formData, (await getSession())?.sessionId ?? null);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
+  }
   const kind = String(formData.get('classification'));
   const shared = {
     feiId: formData.get('feiId'), idocRegion: formData.get('idocRegion'),

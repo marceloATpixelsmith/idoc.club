@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import { beginPasskeyRegistration, finishPasskeyRegistration, removePasskeyCredential } from './actions';
 
 type Passkey = { credentialId: string; deviceName: string | null; createdAt: string; lastUsedAt: string | null };
@@ -26,7 +27,9 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
   async function addPasskey() {
     setBusy(true); setError(undefined); setSuccess(undefined);
     try {
-      const begin = await beginPasskeyRegistration({}, new FormData()) as BeginResult;
+      const beginFormData = new FormData();
+      beginFormData.set('csrf_token', readCsrfTokenFromDocumentCookie());
+      const begin = await beginPasskeyRegistration({}, beginFormData) as BeginResult;
       if (begin.error) { setError(begin.error); return; }
       if (!begin.ceremonyId || !begin.options) { setError(GENERIC_ERROR); return; }
       let response;
@@ -37,6 +40,7 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
         return;
       }
       const formData = new FormData();
+      formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
       formData.set('ceremonyId', String(begin.ceremonyId));
       formData.set('credentialJson', JSON.stringify(response));
       if (deviceName.trim()) formData.set('deviceName', deviceName.trim());
@@ -55,6 +59,7 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
     setBusy(true); setError(undefined); setSuccess(undefined);
     try {
       const formData = new FormData();
+      formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
       formData.set('credentialId', credentialId);
       const result = await removePasskeyCredential({}, formData) as ActionResult;
       if (result.error) { setError(result.error); return; }

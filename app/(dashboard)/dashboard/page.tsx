@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { manageBillingAction } from '@/lib/payments/actions';
 import { getOwnPrivateMember, hasOwnBillingAccount, requireAccountAccess } from '@/lib/membership/data-access';
+import { CsrfField } from '@/components/security/csrf-field';
 import { MEMBERSHIP_STATUS_LABELS, renewalMode } from '@/lib/membership/entitlement';
 
 function renewalMessage(mode: ReturnType<typeof renewalMode>, subscriptionCurrentPeriodEnd: string | undefined, validUntil: string | undefined) {
@@ -43,6 +44,7 @@ export default async function DashboardPage() {
       </Link>
       {entitlement && canManageBilling && (
         <form action={manageBillingAction}>
+          <CsrfField />
           <button type="submit" className="mt-2 block text-sm underline">Manage payment method</button>
         </form>
       )}

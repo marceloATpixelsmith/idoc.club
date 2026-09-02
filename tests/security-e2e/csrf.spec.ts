@@ -86,3 +86,36 @@ test('a forged Origin cannot reach the real sign-out action either: a state-chan
   expect((await identity.json()).email).toBe('member-a@security.example.test');
   await context.close();
 });
+
+// AUTH-CSRF-003: same-origin, correctly authenticated requests above are legitimate load-bearing
+// evidence for AUTH-CSRF-001/002/004, but they do not exercise the double-submit CSRF *token*
+// (lib/security/csrf.ts, lib/security/csrf-tokens.ts) at all -- a same-origin POST with the real
+// session cookie would succeed on Origin checking alone even if the token check were deleted
+// entirely. These two tests isolate the token requirement itself: a real browser, a real
+// authenticated session, and a real Next.js Server Action, with only the CSRF evidence disturbed.
+test('a real profile-update Server Action rejects a same-origin, correctly authenticated submission whose CSRF token field has been tampered with', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  await page.goto('/dashboard/profile');
+  await page.evaluate(() => {
+    const field = document.querySelector<HTMLInputElement>('input[name="csrf_token"]');
+    if (!field) throw new Error('csrf_token field not found');
+    field.value = `${field.value.slice(0, -4)}0000`;
+  });
+  await page.click('button[type="submit"]');
+  await expect(page.locator('text=session security check failed')).toBeVisible();
+  // The session itself is unaffected -- this is a rejected mutation, not a broken session.
+  const identity = await context.request.get('/api/user');
+  expect((await identity.json()).email).toBe('member-a@security.example.test');
+  await context.close();
+});
+
+test('the same real profile-update Server Action rejects the submission when the (deliberately non-httpOnly) CSRF cookie has been removed, even though the form field still carries its last-known value', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  await page.goto('/dashboard/profile');
+  await context.clearCookies({ name: 'idoc-csrf' });
+  await page.click('button[type="submit"]');
+  await expect(page.locator('text=session security check failed')).toBeVisible();
+  await context.close();
+});

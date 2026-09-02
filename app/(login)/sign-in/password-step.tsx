@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { PasswordField } from '@/components/auth/password-field';
+import { CsrfField } from '@/components/security/csrf-field';
 import type { ActionState } from '@/lib/auth/middleware';
 import { signIn } from '../actions';
 import { cancelLogin } from './actions';
@@ -20,11 +21,13 @@ export function PasswordStep({ email }: { email: string }) {
             Signing in as <span className="idoc-auth-login-password__email">{email}</span>
           </div>
           <form action={cancelAction}>
+            <CsrfField />
             <button className="idoc-auth-link border-0 bg-transparent p-0" type="submit">Change</button>
           </form>
         </div>
 
         <form action={formAction} className="idoc-auth-form">
+          <CsrfField />
           <input name="email" type="hidden" value={email} />
           <PasswordField autoComplete="current-password" autoFocus label="Password" />
           {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}

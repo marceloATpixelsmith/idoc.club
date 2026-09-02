@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
-import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
+import { clearSession, comparePasswords, getSession, hashPassword, passwordHashNeedsUpgrade, setSession } from '@/lib/auth/session';
+import { requireCsrfTokenValue } from '@/lib/security/csrf';
 import { redirect } from 'next/navigation';
 import {
   validatedAction,
@@ -176,7 +177,12 @@ export const resendVerification = validatedAction(resendVerificationSchema, asyn
   return { success: 'If an unverified account uses this address, a verification email will be sent.' };
 });
 
-export async function signOut() {
+export async function signOut(csrfToken: string) {
+  // AUTH-CSRF-001 explicitly includes logout among mutations requiring CSRF validation, even
+  // though signing out an already-forged session mainly harms the attacker's own forged state --
+  // it is still cookie-authenticated, state-changing, and invoked directly (not via a <form>), so it
+  // is checked the same way as every other JS-invoked Server Action.
+  await requireCsrfTokenValue(csrfToken, (await getSession())?.sessionId ?? null);
   await clearSession();
 }
 

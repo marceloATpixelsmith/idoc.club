@@ -19,6 +19,8 @@ import { db } from '../lib/db/drizzle.ts';
 import { users } from '../lib/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
+import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
+import { issueTestCsrfToken } from './csrf-test-helper.ts';
 import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
@@ -95,6 +97,10 @@ async function redirected(operation: () => Promise<unknown>) {
   await assert.rejects(operation, (error: unknown) => String(error).includes('NEXT_REDIRECT'));
 }
 
+function csrfTokenFrom(cookies: TestCookies): string {
+  return cookies.get(csrfCookieName())?.value ?? '';
+}
+
 test('AUTH-IDENTITY-002: real signup action ignores hostile authority fields and creates no privileged grant', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -109,11 +115,13 @@ test('AUTH-IDENTITY-002: real signup action ignores hostile authority fields and
     ]) {
       const cookies = new TestCookies();
       const email = `hostile-${authority[0]}-${authority[1]}@example.test`;
+      const csrfToken = await issueTestCsrfToken(cookies, null);
       await withTestRequestCookies(cookies, async () => {
         await startPendingSignup(email);
         await markPendingSignupVerified(email);
         const form = new FormData();
         form.set('password', password);
+        form.set('csrf_token', csrfToken);
         form.set(authority[0], authority[1]);
         await redirected(() => completeSignup({}, form));
       });
@@ -189,17 +197,18 @@ test('AUTH-SESSION-008: password login creates only pending MFA until a valid TO
   // subsequent login proves a fresh TOTP can complete MFA rather than replaying enrollment's code.
   const { secret } = await activeFactor(user, Date.now() - 30_000);
   const cookies = new TestCookies();
+  const csrfToken = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingLogin(user.email);
-    const form = new FormData(); form.set('email', user.email); form.set('password', password);
+    const form = new FormData(); form.set('email', user.email); form.set('password', password); form.set('csrf_token', csrfToken);
     await redirected(() => signIn({}, form));
     assert.equal((await getPendingPrimaryAuth())?.stage, 'challenge');
     assert.equal(cookies.get(sessionCookieName()), undefined);
     assert.equal((await sql`select count(*)::int count from idoc.auth_sessions where user_id=${user.id} and revoked_at is null`)[0].count, 0);
-    const invalid = new FormData(); invalid.set('code', '000000');
+    const invalid = new FormData(); invalid.set('code', '000000'); invalid.set('csrf_token', csrfToken);
     assert.deepEqual(await verifyLoginTotp({}, invalid), { error: 'That authenticator code is incorrect.' });
     assert.equal((await sql`select count(*)::int count from idoc.auth_sessions where user_id=${user.id}`)[0].count, 0);
-    const valid = new FormData(); valid.set('code', generateTotpCode(secret));
+    const valid = new FormData(); valid.set('code', generateTotpCode(secret)); valid.set('csrf_token', csrfToken);
     await redirected(() => verifyLoginTotp({}, valid));
     assert.ok(cookies.get(sessionCookieName()));
     assert.equal((await sql`select count(*)::int count from idoc.auth_sessions where user_id=${user.id} and revoked_at is null`)[0].count, 1);
@@ -214,11 +223,12 @@ test('AUTH-OTP-002: valid email OTP cannot become MFA, step-up, or privileged se
   await sql`insert into idoc.email_otp_codes(user_id,email,purpose,code_hash,expires_at)
     values(${user.id},${user.email},'login_verification',${createHash('sha256').update(code).digest('hex')},now()+interval '10 minutes')`;
   const cookies = new TestCookies();
+  const csrfToken = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await requireLoginOtp(user.email, user.id, user.sessionVersion, false);
     const pendingLoginToken = cookies.get('idoc_pending_login')?.value;
     assert.ok(pendingLoginToken);
-    const form = new FormData(); form.set('code', code);
+    const form = new FormData(); form.set('code', code); form.set('csrf_token', csrfToken);
     await redirected(() => verifyLoginOtp({}, form));
     assert.equal((await getPendingPrimaryAuth())?.stage, 'challenge');
     assert.equal(cookies.get(sessionCookieName()), undefined);
@@ -241,14 +251,17 @@ test('AUTH-API-002: protected account mutation uses the signed server session, n
       form.set('name', 'Actor changed'); form.set('email', actor.email);
       form.set('userId', String(victim.id)); form.set('id', String(victim.id));
       form.set('actorId', String(victim.id)); form.set('subject', JSON.stringify({ id: victim.id }));
+      form.set('csrf_token', csrfTokenFrom(cookies));
       assert.deepEqual(await updateAccount({}, form), { name: 'Actor changed', success: 'Account updated successfully.' });
     });
   });
   assert.equal((await sql`select name from idoc.users where id=${actor.id}`)[0].name, 'Actor changed');
   assert.notEqual((await sql`select name from idoc.users where id=${victim.id}`)[0].name, 'Actor changed');
+  const anonymousCookies = new TestCookies();
+  const anonymousCsrfToken = await issueTestCsrfToken(anonymousCookies, null);
   const anonymous = new FormData(); anonymous.set('name', 'Anonymous'); anonymous.set('email', victim.email);
-  anonymous.set('userId', String(victim.id));
-  await withTestRequestCookies(new TestCookies(), async () => assert.rejects(
+  anonymous.set('userId', String(victim.id)); anonymous.set('csrf_token', anonymousCsrfToken);
+  await withTestRequestCookies(anonymousCookies, async () => assert.rejects(
     () => updateAccount({}, anonymous), /User is not authenticated/));
   assert.notEqual((await sql`select name from idoc.users where id=${victim.id}`)[0].name, 'Anonymous');
 });

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CsrfField } from '@/components/security/csrf-field';
 import { checkoutAction } from '@/lib/payments/actions';
 
 type ActionState = { error?: string };
@@ -12,6 +13,7 @@ export function CheckoutForm({ mode, label }: { label: string; mode: 'payment' |
 
   return (
     <form action={formAction}>
+      <CsrfField />
       <input type="hidden" name="mode" value={mode} />
       <Button type="submit" disabled={isPending} variant="outline" className="w-full rounded-full">
         {isPending ? (
