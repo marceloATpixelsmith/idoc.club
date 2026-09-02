@@ -8,6 +8,7 @@ import {
   beginAuthenticatorRecovery,
   confirmTotpEnrollment,
 } from '../app/(login)/mfa/actions.ts';
+import { signOut } from '../app/(login)/actions.ts';
 import {
   getPendingPrimaryAuth,
   setPendingPrimaryAuth,
@@ -243,4 +244,28 @@ test('AUTH-RECOVERY-005 acknowledgement cannot precede replacement', async () =>
   assert.deepEqual(await withTestRequestCookies(entry.cookies, () => acknowledgeRecoveryCodes({}, form('saved', 'yes', csrfTokenFrom(entry.cookies)))),
     { error: 'Your setup session expired. Sign in again.' });
   assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
+});
+
+test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser out of CSRF-protected sign-out', async () => {
+  // A signed session JWT can remain cryptographically valid for hours after its persisted registry
+  // row is revoked (a password reset from another device, an admin-initiated revoke, a superseded
+  // session version) -- getSession() correctly reports no active session in that case, but the
+  // browser's own CSRF cookie was minted from the raw JWT's session id, not a registry-checked one
+  // (see rawCanonicalSessionId()'s doc comment in lib/auth/session.ts for why). If CSRF validation
+  // used getSession()'s session id as the "expected" reference instead, this mismatch (a real,
+  // non-null stale id against a suddenly-null registry-checked one) could never resolve until the
+  // JWT itself expired, permanently blocking sign-out, sign-in, and recovery from that browser.
+  const user = await createUser();
+  const cookies = new TestCookies();
+  await withTestRequestCookies(cookies, () => setSession(user as never));
+  const token = csrfTokenFrom(cookies);
+  await sql`update idoc.auth_sessions set revoked_at = now(), revoke_reason = 'test-revoked-elsewhere' where user_id = ${user.id}`;
+  // Must not throw CsrfError: the CSRF check accepts this browser's own evidence regardless of the
+  // session's now-revoked registry state.
+  await withTestRequestCookies(cookies, () => signOut(token));
+  const [row] = await sql<{ revokeReason: string | null }[]>`
+    select revoke_reason as "revokeReason" from idoc.auth_sessions where user_id = ${user.id}`;
+  // clearSession()'s own revoke is a safe no-op against the already-revoked row (revoke_reason is
+  // coalesced, not overwritten) -- confirming signOut ran to completion rather than being rejected.
+  assert.equal(row.revokeReason, 'test-revoked-elsewhere');
 });

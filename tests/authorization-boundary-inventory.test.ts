@@ -43,7 +43,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     verifyStepUpWebAuthn: 'authenticated-continuation',
   },
   'app/(dashboard)/account/actions.ts': {
-    saveOwnMemberProfile: 'delegates-to-data-access', saveOwnMemberProfileForm: 'delegates-to-data-access',
+    saveOwnMemberProfileForm: 'delegates-to-data-access',
   },
   'app/(dashboard)/onboarding/actions.ts': { completeOnboarding: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/security/actions.ts': {

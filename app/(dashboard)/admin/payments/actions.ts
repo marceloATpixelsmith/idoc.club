@@ -1,14 +1,14 @@
 'use server';
 
 import { recordManualPayment } from '@/lib/payments/manual-payments';
-import { getSession } from '@/lib/auth/session';
+import { rawCanonicalSessionId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 type ManualPaymentActionState = { error?: string; success?: string };
 
 export async function recordManualPaymentForm(_state: ManualPaymentActionState, formData: FormData): Promise<ManualPaymentActionState> {
   try {
-    await requireCsrfToken(formData, (await getSession())?.sessionId ?? null);
+    await requireCsrfToken(formData, await rawCanonicalSessionId());
     await recordManualPayment({
       paidAt: formData.get('paidAt'),
       profileId: formData.get('profileId'),
