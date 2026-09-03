@@ -35,6 +35,11 @@ export const ALERT_SEVERITY = {
   // check. A drifted app clock could make an expired token look current, or the reverse -- a genuine
   // infrastructure-integrity signal, not itself proof of an active attack.
   'auth.clock_skew_detected': 'high',
+  // A Super Admin used the incident-response tool to force-revoke a member's entire standing
+  // authority (AUTH-OPERATIONS-007). This is a deliberate, already-audited operator action -- not
+  // itself evidence of an attack -- but the operations team should always see it happen, not only
+  // the affected account owner (who gets their own, separate notification).
+  'administrator.authority_force_revoked': 'high',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;

@@ -3,8 +3,8 @@ import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { forceRevokeAllAuthorityForm } from '../app/(dashboard)/admin/members/actions.ts';
 import { forceRevokeAllAuthority } from '../lib/membership/incident-response.ts';
-import { MFA_APPLICATION_ID } from '../lib/auth/mfa/login.ts';
-import { verifyStepUpTotp } from '../app/(login)/mfa/actions.ts';
+import { MFA_APPLICATION_ID, beginPrimaryMfa } from '../lib/auth/mfa/login.ts';
+import { verifyLoginTotp, verifyStepUpTotp } from '../app/(login)/mfa/actions.ts';
 import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
 import { beginTotpEnrollment, completeTotpEnrollment } from '../lib/auth/mfa/totp.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
@@ -12,6 +12,7 @@ import { setSession } from '../lib/auth/session.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
+import { issueTestCsrfToken } from './csrf-test-helper.ts';
 
 // AUTH-OPERATIONS-007: an operator-initiated "force-revoke all authority for user X" incident-response
 // action. Drives the real production forceRevokeAllAuthority function -- not a parallel helper --
@@ -83,8 +84,9 @@ async function dbUser(id: number) {
   } as any;
 }
 
-async function superAdminWithTotp() {
-  const created = await superAdmin();
+async function privilegedUserWithTotp(role: 'administrator' | 'super_admin' = 'super_admin') {
+  const created = await createUser();
+  await grantRole(created.id, role);
   const user = await dbUser(created.id);
   const enrolledAt = Date.now() - 30_000;
   const enrollment = await beginTotpEnrollment({
@@ -100,11 +102,22 @@ async function superAdminWithTotp() {
   return { secret, user };
 }
 
+async function superAdminWithTotp() {
+  return privilegedUserWithTotp('super_admin');
+}
+
 function revokeForm(userId: number, csrfToken: string) {
   const data = new FormData();
   data.set('userId', String(userId));
   data.set('incidentReference', 'INC-2026-STEPUP');
   data.set('reason', 'step-up boundary test');
+  data.set('csrf_token', csrfToken);
+  return data;
+}
+
+function loginTotpForm(code: string, csrfToken: string) {
+  const data = new FormData();
+  data.set('code', code);
   data.set('csrf_token', csrfToken);
   return data;
 }
@@ -157,6 +170,14 @@ test('a Super Admin force-revoking a compromised account cuts every session, tru
     select kind,recipient_email from idoc.auth_security_notification_outbox where user_id=${victim.id}`;
   assert.equal(notification.kind, 'authority_force_revoked');
   assert.equal(notification.recipient_email, victim.email);
+
+  const [opsAlert] = await sql<{ kind: string; subject: string; body_html: string; sent_at: Date | null }[]>`
+    select kind,subject,body_html,sent_at from idoc.operational_alert_outbox where kind='incident_response_action_taken'`;
+  assert.ok(opsAlert, 'the operations team must also be durably alerted, not only the account owner');
+  assert.match(opsAlert.subject, /\[HIGH\]/);
+  assert.match(opsAlert.subject, new RegExp(`#${victim.id}\\b`));
+  assert.match(opsAlert.body_html, /INC-2026-0042/);
+  assert.equal(opsAlert.sent_at, null, 'delivery is the leased worker\'s job, never inline with the request');
 });
 
 test('an ordinary Administrator (not Super Admin) cannot force-revoke authority', async () => {
@@ -189,7 +210,7 @@ test('a Super Admin cannot use this tool against their own account', async () =>
   assert.equal(user.session_version, 0);
 });
 
-test('a second run for an already-revoked account is idempotent rather than erroring', async () => {
+test('a second run with the same incidentReference is truly idempotent: no second session-version bump, no second notification', async () => {
   const admin = await superAdmin();
   const victim = await createUser();
   await seedStandingAuthority(victim.id);
@@ -198,11 +219,62 @@ test('a second run for an already-revoked account is idempotent rather than erro
     { incidentReference: 'INC-2026-0099', reason: 'incident response' }));
   await run();
   await run();
+  await run();
 
   const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
-  assert.equal(user.session_version, 2, 'each explicit invocation still bumps the version, matching suspendUserAccount-style semantics');
-  const [{ count }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_security_notification_outbox where user_id=${victim.id}`;
-  assert.equal(count, 2, 'each distinct revocation timestamp is its own dedupe key, matching account-suspension notification semantics');
+  assert.equal(user.session_version, 1, 'a retried call with the same incidentReference must never re-bump sessionVersion');
+
+  const [{ count: auditCount }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.audit_log
+    where entity_id=${String(victim.id)} and action='admin.account.authority_force_revoked'`;
+  assert.equal(auditCount, 1, 'the idempotency-guaranteeing partial unique index must have prevented a duplicate audit row');
+
+  const [{ count: userNotificationCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_security_notification_outbox where user_id=${victim.id}`;
+  assert.equal(userNotificationCount, 1, 'a retried call must never send the account owner a second notification');
+
+  const [{ count: opsAlertCount }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.operational_alert_outbox where kind='incident_response_action_taken'`;
+  assert.equal(opsAlertCount, 1, 'a retried call must never enqueue a second operations-team alert');
+});
+
+test('a different incidentReference for the same account is a distinct, independently-recorded incident, not suppressed by the first', async () => {
+  const admin = await superAdmin();
+  const victim = await createUser();
+  await seedStandingAuthority(victim.id);
+
+  const run = (incidentReference: string) => withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => forceRevokeAllAuthority(victim.id,
+    { incidentReference, reason: 'incident response' }));
+  await run('INC-2026-A');
+  await run('INC-2026-B');
+
+  const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
+  assert.equal(user.session_version, 2, 'a genuinely distinct incident is a real second state transition, not a duplicate');
+  const [{ count }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.audit_log
+    where entity_id=${String(victim.id)} and action='admin.account.authority_force_revoked'`;
+  assert.equal(count, 2);
+});
+
+test('concurrent calls with the same incidentReference race safely: exactly one state transition, the loser completes idempotently rather than erroring', async () => {
+  const admin = await superAdmin();
+  const victim = await createUser();
+  await seedStandingAuthority(victim.id);
+
+  const run = () => withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => forceRevokeAllAuthority(victim.id,
+    { incidentReference: 'INC-2026-RACE', reason: 'concurrent incident response' }));
+  // Two genuinely concurrent database connections/transactions attempting the identical
+  // (userId, incidentReference) pair -- proving audit_log_force_revoke_incident_unique (not just the
+  // in-process pre-check, which cannot see a concurrent transaction that hasn't committed yet) is
+  // what actually decides the race, exactly like the established users_email_unique pattern.
+  const results = await Promise.allSettled([run(), run()]);
+  for (const result of results) assert.equal(result.status, 'fulfilled', 'the loser of the race must complete idempotently, not throw');
+
+  const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
+  assert.equal(user.session_version, 1, 'only one of the two racing transactions may actually bump sessionVersion');
+  const [{ count }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.audit_log
+    where entity_id=${String(victim.id)} and action='admin.account.authority_force_revoked'`;
+  assert.equal(count, 1);
 });
 
 test('the real Server Action redirects to /mfa and revokes nothing without a fresh step-up', async () => {
@@ -256,6 +328,70 @@ test('the real Server Action proceeds only after a genuine fresh TOTP step-up ro
 
   const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
   assert.equal(user.session_version, 1);
+  const [factor] = await sql<{ status: string }[]>`select status from idoc.mfa_factors where factor_id=${seeded.factorId}`;
+  assert.equal(factor.status, 'revoked');
+});
+
+test('a pending login MFA challenge captured before force-revocation cannot be completed afterward', async () => {
+  const actingAdmin = await superAdmin();
+  const { secret, user: victim } = await privilegedUserWithTotp('administrator');
+  const cookies = new TestCookies();
+  const csrfToken = await issueTestCsrfToken(cookies, null);
+
+  // The victim is genuinely mid-login: password already verified, TOTP challenge pending -- this is
+  // the real production beginPrimaryMfa function (the same one app/(login)/actions.ts calls right
+  // after password verification), not a parallel helper. The pending-primary-auth cookie it issues
+  // captures the victim's sessionVersion at this exact moment (0).
+  await withTestRequestCookies(cookies, async () => {
+    assert.equal(await beginPrimaryMfa(victim, 'password', '/dashboard'), true);
+  });
+  const code = totp(secret);
+
+  // While that challenge is still outstanding -- an attacker holding a stolen password, mid-TOTP
+  // prompt -- a Super Admin notices and force-revokes the victim's authority, which bumps
+  // sessionVersion.
+  await withTestMembershipBoundary({ actor: { id: actingAdmin.id, roles: [] } }, () => forceRevokeAllAuthority(victim.id,
+    { incidentReference: 'INC-2026-MIDLOGIN', reason: 'compromised mid-authentication' }));
+
+  // The attacker, still holding the pending-primary-auth cookie issued before the revocation,
+  // submits the correct TOTP code. pendingAccount() (app/(login)/mfa/actions.ts) re-reads the *live*
+  // sessionVersion on every use -- it no longer matches what the cookie captured, so this real
+  // production verifyLoginTotp Server Action must reject it exactly like any other expired session,
+  // never grant a session.
+  const result = await withTestRequestCookies(cookies, () => verifyLoginTotp({}, loginTotpForm(code, csrfToken)));
+  assert.deepEqual(result, { error: 'Your verification session expired. Sign in again.' },
+    'force-revocation must invalidate every pending MFA challenge issued before it, not only completed sessions');
+
+  const [row] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
+  assert.equal(row.session_version, 1, 'the rejected replay attempt must not itself have mutated anything');
+});
+
+test('forceRevokeAllAuthority retried after simulated partial completion finishes the missed steps without re-mutating already-mutated state', async () => {
+  const admin = await superAdmin();
+  const victim = await createUser();
+  const seeded = await seedStandingAuthority(victim.id);
+
+  await withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => forceRevokeAllAuthority(victim.id,
+    { incidentReference: 'INC-2026-PARTIAL', reason: 'simulated partial failure recovery' }));
+
+  // Simulate a crash between the transaction committing and the post-transaction cleanup steps
+  // completing, by hand-reverting one of those naturally-idempotent side effects the transaction
+  // itself does not control (the operations-team alert had not yet been enqueued in the real crash
+  // scenario this models).
+  await sql`delete from idoc.operational_alert_outbox where kind='incident_response_action_taken'`;
+
+  await withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => forceRevokeAllAuthority(victim.id,
+    { incidentReference: 'INC-2026-PARTIAL', reason: 'simulated partial failure recovery' }));
+
+  const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
+  assert.equal(user.session_version, 1, 'the retry must not re-run the already-completed state transition');
+  const [{ count: auditCount }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.audit_log
+    where entity_id=${String(victim.id)} and action='admin.account.authority_force_revoked'`;
+  assert.equal(auditCount, 1);
+  const [{ count: opsAlertCount }] = await sql<{ count: number }[]>`
+    select count(*)::int count from idoc.operational_alert_outbox where kind='incident_response_action_taken'`;
+  assert.equal(opsAlertCount, 1, 'the retry must complete the missed operations alert the simulated crash dropped');
   const [factor] = await sql<{ status: string }[]>`select status from idoc.mfa_factors where factor_id=${seeded.factorId}`;
   assert.equal(factor.status, 'revoked');
 });
