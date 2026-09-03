@@ -55,6 +55,12 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
       const content = readFileSync(file, 'utf8');
       for (const value of sentinelValues) assert.doesNotMatch(content, new RegExp(value), `Secret value leaked into ${path.relative(root, file)}`);
       for (const name of sensitiveNames) assert.doesNotMatch(content, new RegExp(name), `Privileged environment name leaked into ${path.relative(root, file)}`);
+      // AUTH-PRIVACY-001: reuses this already-real production build's output (rather than a
+      // separate build) to prove no analytics/tracking script reached the actual bundled,
+      // browser-visible artifact -- catching anything a transitive dependency might bundle in even
+      // if no source file references it directly, which tests/privacy-data-minimization.test.ts's
+      // source-tree scan alone cannot.
+      assert.doesNotMatch(content, /google-analytics\.com|googletagmanager\.com|mixpanel|amplitude\.com|posthog|hotjar|fullstory|segment\.io|plausible\.io|hubspot/i, `Analytics/tracking reference leaked into build output: ${path.relative(root, file)}`);
     }
   } finally {
     rmSync(outputDirectory, { force: true, recursive: true });

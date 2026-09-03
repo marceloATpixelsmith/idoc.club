@@ -4,6 +4,7 @@ import { EXPORT_ROW_LIMIT, listAllAuditLogForExport, listAllMembersForExport, li
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { GET as exportAuditLog } from '../app/api/admin/export/audit-log/route.ts';
 import { GET as exportMembers } from '../app/api/admin/export/members/route.ts';
+import { GET as exportNotifications } from '../app/api/admin/export/notifications/route.ts';
 import { GET as exportPayments } from '../app/api/admin/export/payments/route.ts';
 import {
   adminUser, closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql,
@@ -131,6 +132,10 @@ test('the members export route returns CSV with the correct headers for an admin
 test('the payments export route rejects a plain administrator with a 401, and succeeds for a Super Admin', async () => {
   const admin = await adminUser();
   const superAdmin = await superAdminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.payments(profile_id, source, amount_cents, currency, paid_at, administrator_id, reason)
+    values (${profile.id}, 'cash', 8000, 'EUR', now(), ${admin.id}, 'fixture payment')`;
 
   const forbidden = await asAdministration(admin.id, () => exportPayments());
   assert.equal(forbidden.status, 401);
@@ -138,6 +143,9 @@ test('the payments export route rejects a plain administrator with a 401, and su
   const allowed = await asAdministration(superAdmin.id, () => exportPayments());
   assert.equal(allowed.status, 200);
   assert.equal(allowed.headers.get('Content-Type'), 'text/csv; charset=utf-8');
+  const body = await allowed.text();
+  assert.match(body, /firstName,lastName,email,paidAt,amountCents,currency,source/);
+  assert.match(body, new RegExp(member.email));
 });
 
 test('the audit-log export route rejects a plain administrator with a 401, and succeeds for a Super Admin', async () => {
@@ -149,4 +157,35 @@ test('the audit-log export route rejects a plain administrator with a 401, and s
 
   const allowed = await asAdministration(superAdmin.id, () => exportAuditLog());
   assert.equal(allowed.status, 200);
+});
+
+// AUTH-PRIVACY-001: the library-function-level "no export function is reachable by a
+// non-administrator" test above already proves the underlying authorization boundary for all four
+// exports; these route-level tests close the remaining gap -- the members and notifications HTTP
+// routes themselves (unlike payments and audit-log) previously had no test proving a real
+// cross-user (an ordinary, authenticated member with no administrative role at all) request against
+// them actually returns 401, not merely that the library function throws.
+test('the members export route rejects a cross-user (ordinary member) request with a 401', async () => {
+  const member = await createUser();
+  const response = await asAdministration(member.id, () => exportMembers());
+  assert.equal(response.status, 401);
+});
+
+test('the notifications export route returns CSV with the correct headers and content for an administrator, and rejects a cross-user (ordinary member) request with a 401', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.notification_outbox(profile_id, kind, payload) values (${profile.id}, 'membership.renewal_reminder', '{}')`;
+
+  const forbidden = await asAdministration(member.id, () => exportNotifications());
+  assert.equal(forbidden.status, 401);
+
+  const allowed = await asAdministration(admin.id, () => exportNotifications());
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.headers.get('Content-Type'), 'text/csv; charset=utf-8');
+  assert.match(allowed.headers.get('Content-Disposition') ?? '', /attachment; filename="notifications\.csv"/);
+  const body = await allowed.text();
+  assert.match(body, /firstName,lastName,email,kind,createdAt,sentAt/);
+  assert.match(body, new RegExp(member.email));
+  assert.match(body, /membership\.renewal_reminder/);
 });

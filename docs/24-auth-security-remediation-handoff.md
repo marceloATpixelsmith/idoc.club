@@ -20,14 +20,14 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 The remediation program tracks **155 canonical AUTH controls**. As of the corrective-audit continuation below, the repository baseline is:
 
-- **142 verified**
+- **143 verified**
 - **0 implemented-but-unverified**
-- **6 partial**
+- **5 partial**
 - **0 missing**
 - **7 not-applicable**
-- **6 applicable non-verified controls remaining**
+- **5 applicable non-verified controls remaining**
 
-This baseline is stated authoritatively by `docs/23`'s counting-method paragraph and enforced by `node scripts/validate-auth-docs.mjs`; if the two ever disagree, `docs/23`/`docs/22` win and this section is stale. The six remaining `partial` controls are `AUTH-CRYPTO-003`, `AUTH-PRIVACY-001`, `AUTH-OPERATIONS-004` (reopened by the corrective audit below, not yet reclosed), `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (both from Slice 8, repository half complete, gated exclusively on external/operational evidence this repository cannot produce on its own) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression, the canonical reference changed, or a genuine audit finding identifies a real evidence gap.
+This baseline is stated authoritatively by `docs/23`'s counting-method paragraph and enforced by `node scripts/validate-auth-docs.mjs`; if the two ever disagree, `docs/23`/`docs/22` win and this section is stale. The five remaining `partial` controls are `AUTH-CRYPTO-003`, `AUTH-OPERATIONS-004` (reopened by the corrective audit below, not yet reclosed), `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (both from Slice 8, repository half complete, gated exclusively on external/operational evidence this repository cannot produce on its own) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression, the canonical reference changed, or a genuine audit finding identifies a real evidence gap.
 
 ## Definition of VERIFIED
 
@@ -210,7 +210,18 @@ behavioral evidence in place of the prior source-inspection-only proof:
   invalidation (driven through the real `beginPrimaryMfa`/`verifyLoginTotp`), and idempotent recovery from
   a simulated partial-completion crash.
 
-`AUTH-CRYPTO-003`, `AUTH-PRIVACY-001`, and `AUTH-OPERATIONS-004` remain `partial` — not addressed in this
-pass. `docs/22` and `docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 142
-verified, 6 partial). The application is still not production-ready; the same reference-commit-freshness
-and GitHub ruleset/review-gate caveats from the pass above still apply.
+A fourth control from that same corrective audit was also closed in this pass:
+
+- **`AUTH-PRIVACY-001`** — the analytics-absence scan previously covered only `app/layout.tsx`;
+  `tests/privacy-data-minimization.test.ts` now scans every production source file under `app/` and
+  `lib/` (plus `middleware.ts`/`next.config.ts`), and `tests/build-runtime-boundary.build.ts`
+  additionally scans the real production build's browser-visible output for the same patterns.
+  `tests/exports.integration.ts` gained route-level cross-user-rejection tests for the members and
+  notifications export routes (previously only the library-function level was tested for members, and
+  the notifications route had no test at all), plus real CSV-body content assertions for the
+  payments/notifications routes.
+
+`AUTH-CRYPTO-003` and `AUTH-OPERATIONS-004` remain `partial` — not addressed in this pass. `docs/22` and
+`docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 143 verified, 5 partial).
+The application is still not production-ready; the same reference-commit-freshness and GitHub
+ruleset/review-gate caveats from the pass above still apply.
