@@ -20,14 +20,14 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 The remediation program tracks **155 canonical AUTH controls**. As of the corrective-audit continuation below, the repository baseline is:
 
-- **144 verified**
+- **145 verified**
 - **0 implemented-but-unverified**
-- **4 partial**
+- **3 partial**
 - **0 missing**
 - **7 not-applicable**
-- **4 applicable non-verified controls remaining**
+- **3 applicable non-verified controls remaining**
 
-This baseline is stated authoritatively by `docs/23`'s counting-method paragraph and enforced by `node scripts/validate-auth-docs.mjs`; if the two ever disagree, `docs/23`/`docs/22` win and this section is stale. The four remaining `partial` controls are `AUTH-OPERATIONS-004` (narrowed to a specific residual gap by the corrective audit below -- see its docs/23 row), `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (both from Slice 8, repository half complete, gated exclusively on external/operational evidence this repository cannot produce on its own) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression, the canonical reference changed, or a genuine audit finding identifies a real evidence gap.
+This baseline is stated authoritatively by `docs/23`'s counting-method paragraph and enforced by `node scripts/validate-auth-docs.mjs`; if the two ever disagree, `docs/23`/`docs/22` win and this section is stale. The three remaining `partial` controls are `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (both from Slice 8, repository half complete, gated exclusively on external/operational evidence this repository cannot produce on its own) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression, the canonical reference changed, or a genuine audit finding identifies a real evidence gap.
 
 ## Definition of VERIFIED
 
@@ -237,21 +237,13 @@ with real behavioral evidence in place of source-inspection-only proof:
   (new) drives a real registration and a real removal through the real production
   `finishPasskeyRegistration`/`removePasskeyCredential` Server Actions and scans the resulting
   audit/notification evidence for the raw public-key material, finding none.
-- **`AUTH-OPERATIONS-004`** — narrowed rather than fully closed. The same new simulator/test file
-  proves a real WebAuthn login ceremony authenticates and that resubmitting a stale-countered
-  assertion on an independent challenge is rejected without leaking detail or mutating session state
-  -- closing the "no test anywhere in this repository builds that simulation" gap. What remains
-  disclosed as genuinely open: `@simplewebauthn/server`'s own `verifyAuthenticationResponse` rejects a
-  simple non-increasing-counter resubmission itself (against its own stale pre-fetch snapshot) before
-  `webauthn-store.ts`'s `updateSignCount` -- the layer that actually produces the `'replay'` status
-  `verifyLoginWebAuthn` turns into `mfa_replay_detected` -- is ever consulted; that status is reached
-  only via a genuine concurrent-request database race, which this pass's test does not force
-  deterministically (judged not worth the added complexity/flakiness of a timing-dependent CI
-  assertion). Each half is proven separately and directly (`tests/webauthn-store.integration.ts` for
-  the store's own non-increasing-counter rejection; `tests/webauthn-mfa-wiring.test.ts` for the action
-  layer's `'replay'` → `mfa_replay_detected` wiring) -- only their combination through a real forced
-  race is unproven end to end. See the control's docs/23 row for the same disclosure.
+- **`AUTH-OPERATIONS-004`** — fully closed. `tests/webauthn-mfa-adversarial.integration.ts` now uses
+  the real WebAuthn ceremony simulator, real production Server Actions, and real Postgres while a
+  bounded test-only barrier holds two genuine verifier calls after both read the same stale counter.
+  The deterministic race proves exactly one session transition, one generic replay result, one durable
+  `mfa_replay_detected` event, the correct stored sign counter, and no credential, assertion, challenge,
+  session, or public-key material in evidence or client results.
 
-`docs/22` and `docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 144
-verified, 4 partial). The application is still not production-ready; the same reference-commit-freshness
+`docs/22` and `docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 145
+verified, 3 partial). The application is still not production-ready; the same reference-commit-freshness
 and GitHub ruleset/review-gate caveats from the passes above still apply.

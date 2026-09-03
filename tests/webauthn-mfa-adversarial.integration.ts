@@ -267,13 +267,25 @@ test('two concurrent genuine WebAuthn ceremonies deterministically produce one s
 
   let arrived = 0;
   let release!: () => void;
-  const barrier = new Promise<void>((resolve) => { release = resolve; });
+  let barrierTimeout: ReturnType<typeof setTimeout> | undefined;
+  const barrier = new Promise<void>((resolve, reject) => {
+    release = () => {
+      if (barrierTimeout) clearTimeout(barrierTimeout);
+      resolve();
+    };
+    barrierTimeout = setTimeout(() => {
+      reject(new Error(`WebAuthn race barrier timed out after ${arrived} verifier read(s).`));
+    }, 5_000);
+  });
   setWebAuthnCredentialReadHookForTest(async () => {
     arrived += 1;
     if (arrived === 2) release();
     await barrier;
   });
-  t.after(() => setWebAuthnCredentialReadHookForTest(null));
+  t.after(() => {
+    release();
+    setWebAuthnCredentialReadHookForTest(null);
+  });
 
   const beforeSessions = Number((await sql<{ count: number }[]>`
     select count(*)::int as count from idoc.auth_sessions where user_id=${user.id}`)[0].count);
