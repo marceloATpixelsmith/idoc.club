@@ -6,6 +6,20 @@ import type { WebAuthnCeremonyPurpose, WebAuthnCredentialRecord } from './types.
 
 type Sql = ReturnType<typeof postgres>;
 
+type CredentialReadHook = (credential: WebAuthnCredentialRecord) => Promise<void>;
+let testCredentialReadHook: CredentialReadHook | null = null;
+
+/** Test-only synchronization at the production credential-read boundary. This lets the real
+ * authentication path deterministically hold concurrent requests after both have captured the
+ * same counter snapshot. It is unavailable without the integration-test safety gates and is a
+ * no-op in every normal process. */
+export function setWebAuthnCredentialReadHookForTest(hook: CredentialReadHook | null): void {
+  if (process.env.NODE_ENV !== 'test' || !process.env.TEST_DATABASE_URL) {
+    throw new Error('WebAuthn credential-read synchronization is test-only.');
+  }
+  testCredentialReadHook = hook;
+}
+
 function userId(subjectId: string): number | null {
   if (!/^[1-9]\d*$/.test(subjectId)) return null;
   const parsed = Number(subjectId);
@@ -135,7 +149,10 @@ export class PostgresWebAuthnStore {
       join idoc.mfa_factors f on f.factor_id=c.factor_id
       where c.credential_id=${credentialId} and c.user_id=${id} and c.application_id=${applicationId}
         and f.status='active' limit 1`;
-    return row ? credentialRecord(row) : null;
+    if (!row) return null;
+    const credential = credentialRecord(row);
+    if (testCredentialReadHook) await testCredentialReadHook(credential);
+    return credential;
   }
 
   /** Updates the stored signature counter and last-used timestamp after a verified authentication.

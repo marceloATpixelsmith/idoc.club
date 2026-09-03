@@ -6,9 +6,10 @@ import { beginLoginWebAuthn, verifyLoginWebAuthn, verifyStepUpTotp } from '../ap
 import { beginPrimaryMfa, MFA_APPLICATION_ID } from '../lib/auth/mfa/login.ts';
 import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
 import { beginTotpEnrollment, completeTotpEnrollment } from '../lib/auth/mfa/totp.ts';
-import { webauthnStore } from '../lib/auth/mfa/webauthn-store.ts';
+import { setWebAuthnCredentialReadHookForTest, webauthnStore } from '../lib/auth/mfa/webauthn-store.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { setSession } from '../lib/auth/session.ts';
+import { sessionCookieName } from '../lib/auth/session-tokens.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
@@ -195,11 +196,7 @@ test('removing a real passkey through the real production Server Action produces
 // time and reporting 'replay' distinctly when it -- not the library's earlier, coarser check --  is
 // what actually catches a non-increasing counter (the scenario a real two-cloned-authenticator race
 // produces, since both would pass the library's check against the same stale snapshot). That second
-// layer, and the app/(login)/mfa/actions.ts verifyLoginWebAuthn wiring that turns its 'replay' status
-// into a durable mfa_replay_detected event, are proven directly and deterministically -- without
-// relying on winning a real, timing-dependent database race in this test -- in
-// tests/webauthn-store.integration.ts's own updateSignCount tests and tests/webauthn-mfa-wiring.test.ts
-// respectively.
+// layer is forced through the complete production action by the deterministic barrier test below.
 test('a real WebAuthn login ceremony authenticates, and resubmitting a stale-countered assertion on a second independent challenge is rejected without leaking detail', async () => {
   const { secret, user } = await privilegedUserWithTotp();
   const { cookies, csrfToken } = await sessionWithFreshStepUp(secret, user);
@@ -239,4 +236,105 @@ test('a real WebAuthn login ceremony authenticates, and resubmitting a stale-cou
 
   const [user2] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${user.id}`;
   assert.equal(user2.session_version, 0, 'the rejected resubmission must not itself have mutated any session-granting state');
+});
+
+test('two concurrent genuine WebAuthn ceremonies deterministically produce one session and one replay event from the production counter race', async (t) => {
+  const { secret, user } = await privilegedUserWithTotp();
+  const registrationSession = await sessionWithFreshStepUp(secret, user);
+  const authenticator = await TestWebAuthnAuthenticator.create();
+  const registration = requireCeremony(await withTestRequestCookies(registrationSession.cookies,
+    () => beginPasskeyRegistration({}, withCsrf({}, registrationSession.csrfToken))));
+  const registrationResponse = await authenticator.buildRegistrationResponse({
+    challenge: registration.options.challenge, origin: ORIGIN, rpID: RP_ID,
+  });
+  const registered = await withTestRequestCookies(registrationSession.cookies, () => finishPasskeyRegistration({}, withCsrf({
+    ceremonyId: registration.ceremonyId, credentialJson: JSON.stringify(registrationResponse),
+  }, registrationSession.csrfToken)));
+  assert.deepEqual(registered, { success: 'Passkey added.' });
+
+  const attempts = await Promise.all([0, 1].map(async () => {
+    const cookies = new TestCookies();
+    const csrfToken = await issueTestCsrfToken(cookies, null);
+    const ceremony = await withTestRequestCookies(cookies, async () => {
+      assert.equal(await beginPrimaryMfa(user, 'password', '/dashboard'), true);
+      return beginLoginWebAuthn(csrfToken);
+    });
+    const assertion = await authenticator.buildAuthenticationResponse({
+      challenge: ceremony.options.challenge, origin: ORIGIN, rpID: RP_ID, signCount: 1,
+    });
+    return { assertion, ceremony, cookies, csrfToken };
+  }));
+
+  let arrived = 0;
+  let release!: () => void;
+  let barrierTimeout: ReturnType<typeof setTimeout> | undefined;
+  const barrier = new Promise<void>((resolve, reject) => {
+    release = () => {
+      if (barrierTimeout) clearTimeout(barrierTimeout);
+      resolve();
+    };
+    barrierTimeout = setTimeout(() => {
+      reject(new Error(`WebAuthn race barrier timed out after ${arrived} verifier read(s).`));
+    }, 5_000);
+  });
+  setWebAuthnCredentialReadHookForTest(async () => {
+    arrived += 1;
+    if (arrived === 2) release();
+    await barrier;
+  });
+  t.after(() => {
+    release();
+    setWebAuthnCredentialReadHookForTest(null);
+  });
+
+  const beforeSessions = Number((await sql<{ count: number }[]>`
+    select count(*)::int as count from idoc.auth_sessions where user_id=${user.id}`)[0].count);
+  const outcomes = await Promise.all(attempts.map(async (attempt) => {
+    try {
+      const result = await withTestRequestCookies(attempt.cookies, () => verifyLoginWebAuthn({}, withCsrf({
+        ceremonyId: attempt.ceremony.ceremonyId,
+        credentialJson: JSON.stringify(attempt.assertion),
+      }, attempt.csrfToken)));
+      return { result, redirected: false };
+    } catch (error) {
+      assert.match(String(error), /NEXT_REDIRECT/);
+      return { result: null, redirected: true };
+    }
+  }));
+  setWebAuthnCredentialReadHookForTest(null);
+
+  assert.equal(arrived, 2, 'both real verifier calls must read the same stale production-store snapshot');
+  assert.equal(outcomes.filter((outcome) => outcome.redirected).length, 1, 'exactly one ceremony must authenticate');
+  assert.deepEqual(outcomes.find((outcome) => !outcome.redirected)?.result,
+    { error: 'That passkey could not be verified.' }, 'the losing action must return the generic production replay response');
+
+  const winner = attempts[outcomes.findIndex((outcome) => outcome.redirected)];
+  const loser = attempts[outcomes.findIndex((outcome) => !outcome.redirected)];
+  const canonicalSessionCookie = sessionCookieName(process.env);
+  assert.ok(winner.cookies.get(canonicalSessionCookie), 'the winner must receive a canonical session');
+  assert.equal(loser.cookies.get(canonicalSessionCookie), undefined, 'the replay must not receive or mutate a session');
+  const afterSessions = Number((await sql<{ count: number }[]>`
+    select count(*)::int as count from idoc.auth_sessions where user_id=${user.id}`)[0].count);
+  assert.equal(afterSessions, beforeSessions + 1, 'only the winning ceremony may persist a session transition');
+
+  const [credential] = await sql<{ credential_id: string; public_key: string; sign_count: number }[]>`
+    select credential_id,public_key,sign_count::int from idoc.webauthn_credentials where user_id=${user.id}`;
+  assert.equal(credential.sign_count, 1, 'the accepted counter must remain stored after the losing transaction');
+  const notifications = await sql<Record<string, unknown>[]>`
+    select * from idoc.auth_security_notification_outbox
+    where user_id=${user.id} and kind='mfa_replay_detected'`;
+  assert.equal(notifications.length, 1, 'the concurrent loser must enqueue exactly one dedicated replay event');
+
+  const evidence = JSON.stringify({
+    audit: await sql`select * from idoc.audit_log where actor_id=${user.id}`,
+    notifications,
+  });
+  const forbidden = [credential.credential_id, credential.public_key,
+    ...attempts.flatMap((attempt) => [attempt.ceremony.options.challenge, attempt.ceremony.ceremonyId,
+      JSON.stringify(attempt.assertion)]), winner.cookies.get(canonicalSessionCookie)?.value ?? ''];
+  for (const material of forbidden.filter(Boolean)) {
+    assert.equal(evidence.includes(material), false, 'credential, assertion, challenge, and session material must stay out of evidence');
+  }
+  assert.equal(JSON.stringify(outcomes).includes(credential.credential_id), false,
+    'the client-facing result must not disclose credential material');
 });
