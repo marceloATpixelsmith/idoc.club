@@ -5,11 +5,11 @@ import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { listActiveSessions } from '@/lib/auth/session-registry';
-import { getUser } from '@/lib/db/queries';
+import { getSecurityPageUser } from '@/lib/db/queries';
 import { SecurityClient } from './security-client';
 
 export default async function SecurityPage() {
-  const [user, session] = await Promise.all([getUser(), getSession()]);
+  const [user, session] = await Promise.all([getSecurityPageUser(), getSession()]);
   if (!user || !session || session.sessionId.startsWith('legacy-')) redirect('/sign-in');
   const role = await authoritativeMfaRole(user.id);
   const privileged = role === 'admin' || role === 'super-admin';

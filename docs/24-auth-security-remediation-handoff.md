@@ -170,3 +170,16 @@ Do not declare IDOC production ready merely because all planned implementation P
 ## Continuation instruction for Claude
 
 Slice 8 — Deployment readiness and operational validation is repository-complete as of this revision: every gap this ordered remediation-slice list named has been implemented and behaviorally proven in the repository. Three controls remain `partial`, each gated exclusively on external/operational evidence no repository session can produce on its own: `AUTH-SECRET-004` (from Slice 5), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (from Slice 8) — see each control's docs/23 row for the precise remaining gap. When this file is used as a handoff, there is no next numbered slice to start; inspect current `main`, `docs/22`, and `docs/23` first to confirm this baseline still holds (a regression or a canonical-reference change could reopen a control), and if a Codex review or the user identifies further real gaps, treat those as their own scoped follow-up rather than assuming another slice is pending. Obtaining the three controls' external/operational evidence (a real deployed clock-skew alert, a real completed release-readiness checklist, a real recorded OAuth-secret-rotation event) is an operator/deployment action, not further repository code.
+
+## Corrective audit continuation (2026-09-03)
+
+A fresh corrective audit rejected source/regex-only evidence as behavioral verification and reopened
+`AUTH-CRYPTO-003`, `AUTH-PRIVACY-001`, `AUTH-DEPENDENCY-001`, `AUTH-OPERATIONS-004`,
+`AUTH-OPERATIONS-006`, and `AUTH-OPERATIONS-007` as `partial`; their precise missing evidence is restored
+to docs/23. `AUTH-LOG-001` and `AUTH-LOG-003` were remediated with a runtime, event-specific metadata
+allowlist and attribution boundary plus adversarial tests against the production logger. The canonical
+baseline recorded by the attached checkout has contract `2.0.0`, machine schema `14.0.0`, validator
+`11.0.0`, mapping schema `1.0.0`, and portable-config schema `2.0.0`. The checkout does not record the
+canonical Git commit and no reference checkout is attached; outbound GitHub access was unavailable
+during this pass, so the exact reference commit remains unverified and maintainers must confirm freshness
+and GitHub ruleset/review-gate state before merge. The application is not production-ready.

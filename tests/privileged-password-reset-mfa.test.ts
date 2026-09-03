@@ -54,3 +54,9 @@ test('completion revokes persisted sessions and requires fresh sign-in', () => {
   assert.match(actions, /redirect\('\/sign-in\?reset=success'\)/);
   assert.doesNotMatch(actions, /setSession/);
 });
+
+test('password-reset resend preserves the resolved subject for delivery-failure attribution', () => {
+  const resendBranch = actions.slice(actions.indexOf('export const resendPasswordResetOtp'));
+  assert.match(resendBranch,
+    /issueEmailOtp\(pending\.email, 'password_reset', \{ origin, userId: pending\.subjectId \}\)/);
+});

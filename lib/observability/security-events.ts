@@ -36,11 +36,13 @@ export type SecurityEventDefinition = {
    * risk (see the call site's own comment); 'system' means this event has no human actor at all
    * (a cron job, a provider webhook). */
   attribution: 'anonymous' | 'subject' | 'system';
+  /** Closed metadata vocabulary. Values are categorical; free-form text is never accepted. */
+  metadata?: Readonly<Record<string, readonly (string | number | boolean | null)[] | 'positiveInteger'>>;
 };
 
 export const SECURITY_EVENT_TAXONOMY = {
   account_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'account-delivery-outbox', retentionClass: 'operational' },
-  account_link_request_failed: { attribution: 'anonymous', category: 'operational', resource: 'account-recovery', retentionClass: 'security' },
+  account_link_request_failed: { attribution: 'anonymous', category: 'operational', metadata: { purpose: ['migration_activation', 'password_reset'], reason: ['configuration', 'database', 'encryption', 'operational'] }, resource: 'account-recovery', retentionClass: 'security' },
   auth_security_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'account-delivery-outbox', retentionClass: 'operational' },
   bounce_complaint_alert_failed: { attribution: 'system', category: 'delivery', resource: 'bounce-complaint-alert', retentionClass: 'operational' },
   bounce_complaint_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'bounce-complaint-alert', retentionClass: 'operational' },
@@ -49,12 +51,13 @@ export const SECURITY_EVENT_TAXONOMY = {
   clock_skew_check_failed: { attribution: 'system', category: 'operational', resource: 'clock-skew-check', retentionClass: 'operational' },
   client_error: { attribution: 'anonymous', category: 'operational', resource: 'client-error-report', retentionClass: 'operational' },
   data_retention_purge_failed: { attribution: 'system', category: 'operational', resource: 'data-retention-purge', retentionClass: 'operational' },
-  email_otp_delivery_failed: { attribution: 'subject', category: 'delivery', resource: 'email-otp', retentionClass: 'security' },
-  google_oauth_callback_failed: { attribution: 'anonymous', category: 'auth', resource: 'google-oauth', retentionClass: 'security' },
+  email_otp_delivery_failed: { attribution: 'subject', category: 'delivery', metadata: { purpose: ['login_verification', 'password_reset'], reason: ['configuration', 'network', 'operational'], subjectId: 'positiveInteger' }, resource: 'email-otp', retentionClass: 'security' },
+  email_otp_anonymous_delivery_failed: { attribution: 'anonymous', category: 'delivery', metadata: { purpose: ['signup_verification'], reason: ['configuration', 'network', 'operational'] }, resource: 'email-otp', retentionClass: 'security' },
+  google_oauth_callback_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['account_not_eligible', 'binding_cookie_invalid', 'configuration', 'expired_transaction', 'invalid_id_token', 'invalid_request', 'invalid_transaction', 'link_required', 'provider_error', 'token_exchange_failed', 'unexpected_error', 'user_declined_consent'] }, resource: 'google-oauth', retentionClass: 'security' },
   google_oauth_failure_alert_failed: { attribution: 'system', category: 'delivery', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
   google_oauth_failure_alert_rate_limited: { attribution: 'system', category: 'auth', resource: 'google-oauth-failure-alert', retentionClass: 'security' },
   google_oauth_failure_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
-  google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', resource: 'google-oauth', retentionClass: 'security' },
+  google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['configuration', 'invalid_request', 'rate_limited', 'unexpected_error:authorization_request', 'unexpected_error:configuration', 'unexpected_error:transaction', 'unexpected_error:transaction_purge'] }, resource: 'google-oauth', retentionClass: 'security' },
   mailchimp_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
   mailchimp_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'security' },
   mailchimp_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
@@ -62,7 +65,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational' },
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational' },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational' },
-  stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', resource: 'stripe-webhook', retentionClass: 'security' },
+  stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['invalid_signature'] }, resource: 'stripe-webhook', retentionClass: 'security' },
 } as const satisfies Record<string, SecurityEventDefinition>;
 
 export type SecurityEventName = keyof typeof SECURITY_EVENT_TAXONOMY;

@@ -37,7 +37,7 @@ test('a real email-OTP delivery failure attributes the security event to the act
   assert.equal(meta.purpose, 'login_verification');
 });
 
-test('an anonymous email-OTP issuance (no resolved subject, e.g. signup verification) attributes subjectId null rather than omitting it silently', async () => {
+test('anonymous email-OTP issuance uses a distinct anonymous event without identity data', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('provider unreachable'); };
   const calls: unknown[][] = [];
@@ -51,6 +51,8 @@ test('an anonymous email-OTP issuance (no resolved subject, e.g. signup verifica
     console.error = originalError;
   }
 
-  const [, meta] = calls.find(([event]) => event === 'email_otp_delivery_failed') as [string, Record<string, unknown>];
-  assert.equal(meta.subjectId, null);
+  const [, meta] = calls.find(([event]) => event === 'email_otp_anonymous_delivery_failed') as [string, Record<string, unknown>];
+  assert.equal(meta.attribution, 'anonymous');
+  assert.equal(meta.subjectId, undefined);
+  assert.ok(!JSON.stringify(meta).includes('anonymous-signup@example.test'));
 });
