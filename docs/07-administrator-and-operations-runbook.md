@@ -261,7 +261,19 @@ The five-minute account-delivery Cron also drains durable authentication-securit
 
 ## Security event logging (AUTH-LOG-001, AUTH-LOG-003)
 
-`lib/observability/logger.ts`'s `logWarn`/`logError` emit only names registered in `lib/observability/security-events.ts`'s `SECURITY_EVENT_TAXONOMY` -- an unregistered name is a TypeScript compile error, not a runtime possibility. Every emitted line carries a server-generated correlation id (never client-supplied), the taxonomy's `category` and `resource` for that event (auto-attached; a caller cannot override them), and a `retentionClass`: `security` (a real or attempted-attack signal -- an invalid webhook signature, an auth-flow failure) or `operational` (routine ops/delivery noise). This deployment has no separate self-hosted log store; Vercel's platform log retention governs actual duration. Configure the platform's retention window to keep `retentionClass: 'security'` lines available for at least 90 days where the plan allows a longer window than the default, since these are the lines an incident investigation needs; `operational` lines may use the platform default. Metadata is capped to 16 flat primitive entries per line (arrays/objects are dropped, oversized strings truncated at 2000 characters) before it ever reaches the sink -- never rely on a caller to have redacted a request/response body by hand.
+`lib/observability/logger.ts`'s `logWarn`/`logError` emit only names registered in
+`lib/observability/security-events.ts`'s `SECURITY_EVENT_TAXONOMY` -- an unregistered name is a
+TypeScript compile error. Every emitted line carries a server-generated correlation id (never
+client-supplied), the taxonomy's `category`, `resource`, `attribution`, and `retentionClass`; callers
+cannot override those registry-owned fields. Each event accepts only its own closed allowlist of
+categorical metadata keys and values. Unknown, free-form, nested, oversized, secret-bearing, or
+incorrectly attributed metadata is omitted, and a subject-attributed event without a positive internal
+subject ID is suppressed. The anonymous `client_error` event records occurrence and correlation only,
+never client-supplied message, stack, URL, or digest text. This deployment has no separate self-hosted
+log store; Vercel's platform retention governs actual duration. Configure the platform retention window
+to keep `retentionClass: 'security'` lines available for at least 90 days where the plan permits;
+`operational` lines may use the platform default. Never add request/provider bodies, headers, cookies,
+exception text, credentials, or other free-form client/provider content to an event schema.
 
 Security events (`lib/observability/logger.ts`) remain a distinct channel from `idoc.audit_log` (`docs/07` elsewhere, `lib/db/schema.ts`): the audit log is the actor-attributed, append-oriented record of security-sensitive state *changes*; the security-event log is operational/diagnostic and covers failures, not committed mutations.
 

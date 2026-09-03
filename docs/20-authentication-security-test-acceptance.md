@@ -13,7 +13,17 @@ Deterministic synthetic fixtures include two active members, onboarding, expired
 
 Playwright intentionally does not reproduce database concurrency, high-count abuse limits, cryptographic OTP/TOTP/recovery invariants, or provider callback internals when integration tests prove those properties more deterministically. Billing and payment security is excluded except for authorization boundaries.
 
-[Authentication & account-security control inventory](21-authentication-security-control-inventory.md) is the control-by-control map behind this gate: for every implemented authentication/authorization/session/MFA/OAuth/CSRF/rate-limit/account-state/cookie/header/supply-chain control it records the exact code and database location, the exact test file(s), whether each test is behavioral (executes the code) or source-inspection (asserts the code's shape by pattern), and whether the control is proven end-to-end by this repository's own suite, proven only by source inspection, or not yet covered at all. Document 21 §9 is the authoritative, current list of behaviors that remain source-inspection-only or genuinely untested — real Google JWKS/token-exchange trust establishment (inherently external-provider-dependent, not automatable locally; the Google OAuth e2e-coverage pull request's mock IdP proves this repository's own OIDC handling — request construction, state/nonce/PKCE binding, JWT verification against a real-but-fake JWKS — end-to-end, but does not and cannot prove the real Google endpoints themselves are reachable or trustworthy, which is what remains open here), a full production-mode server boot's browser-enforced `__Host-` cookie behavior (the cookie's *values* are proven directly), fail-closed behavior on a corrupted MFA factor record, and — added by the SaaS-baseline gap-remediation pass — the four Server-Action call sites for the new password-breach check and login throttle, which are proven by source inspection plus a behaviorally-proven underlying primitive rather than a full Playwright round-trip (matching how no other password-creation Server Action in this repository is directly e2e-tested either). Document 21 §7.1 and §12 record what remains genuinely not implemented at all: no application-level CSRF token beyond the Next.js Server Action origin-mismatch check (that check itself is behaviorally proven) — this is a gap, not a test-coverage omission, and is not represented as passing anywhere in this repository's test output. (Application-level HSTS, the legacy account-recovery path's dual-bucket rate limiting, the WebAuthn/passkey option for privileged roles, and a lightweight correlation-ID substitute for AUTH-LOG-004, all previously listed here as gaps, are implemented and tested as of this revision — the WebAuthn ceremony verification library itself is trusted rather than independently re-verified, matching this document's existing treatment of `jose`/`bcryptjs`; a full APM/error-tracking vendor integration remains genuinely out of scope, since it requires provisioning a vendor account and credentials this repository cannot do for itself; see document 21 §12.)
+[Canonical auth evidence matrix](22-canonical-auth-evidence-matrix.md) is the authoritative current
+control-by-control status source, and
+[Authentication security remediation backlog](23-auth-security-remediation-backlog.md) is the
+authoritative list of applicable non-verified controls. Document 21
+retains detailed implementation history and local control descriptions, but its status tables and §9
+gap list are historical and must not override documents 22 or 23. In particular, the application now
+has a signed, expiring, session-bound double-submit CSRF token in addition to Origin enforcement; the
+older document-21 text describing that token as absent is superseded. A green security workflow proves
+only the behavior currently exercised by its tests. It does not promote controls whose remaining
+production-path, adversarial, concurrency, provider, or operational evidence is explicitly listed in
+documents 22 and 23.
 
 ## Running locally
 
@@ -25,7 +35,14 @@ Never target a shared developer or production database. Fixture reset is destruc
 
 ## Continuous integration and evidence
 
-The dedicated `auth-security-verification.yml` workflow provisions PostgreSQL 16, runs `pnpm audit --audit-level=critical` (build-blocking) and `pnpm audit --audit-level=high` (report-only — see document 21 §12 for why), `pnpm typecheck` and `pnpm test:ci` (the unit layer, including the exact-boundary session, Turnstile, and password-breach-check tests described above), installs Chromium, then runs `pnpm test:security` (the integration-DB and Playwright layers), and fails on any failed assertion at any layer — a green `security` check on a pull request is a complete auth/security gate on its own, not dependent on any other workflow also being green. Compact output is retained normally; reports, traces, screenshots, and video are uploaded for seven days only after failure.
+The dedicated `auth-security-verification.yml` workflow provisions PostgreSQL 16, runs
+`pnpm audit --audit-level=critical` (build-blocking) and `pnpm audit --audit-level=high` (report-only —
+see document 21 §12 for why), `pnpm typecheck` and `pnpm test:ci`, installs Chromium, then runs
+`pnpm test:security` (the integration-DB and Playwright layers), and fails on any failed assertion at
+any layer. A green `security` check proves this configured test gate passed for that revision; it does
+not prove unimplemented scenarios, external-provider behavior, deployed operations, or any partial
+control listed in documents 22 and 23. Compact output is retained normally; reports, traces,
+screenshots, and video are uploaded for seven days only after failure.
 
 ## Independent assurance still required
 
