@@ -210,7 +210,13 @@ Passwords require 12–128 characters and at least one uppercase letter, one low
 
 ## Client-side error reporting
 
-`POST /api/client-error` accepts a best-effort crash report from the client error boundaries (`app/error.tsx`, `app/global-error.tsx`) and writes it to server runtime logs only — it is never persisted to the database. It requires no authorization, since it must remain reachable from a broken or anonymous session; each field (`digest`, `message`, `stack`, `url`) is capped at 2,000 characters and any non-string value is dropped before logging.
+`POST /api/client-error` accepts a best-effort occurrence report from the client error boundaries
+(`app/error.tsx`, `app/global-error.tsx`) and writes only the registered `client_error` event plus the
+server-generated request correlation fields to runtime logs; it is never persisted to the database.
+It requires no authorization because it must remain reachable from a broken or anonymous session.
+Client-controlled `digest`, `message`, `stack`, `url`, and all other submitted fields are deliberately
+discarded rather than truncated or logged because they can contain credentials, personal data, or
+attacker-controlled content.
 
 ## Member account-security management
 

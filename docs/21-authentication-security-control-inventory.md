@@ -15,12 +15,17 @@ Working project document. Update this document in the same pull request as any c
 
 # 0. Purpose and method
 
-This document is the authoritative control-by-control traceability matrix for every authentication, authorization, account-security, session-security, identity, MFA, password, OAuth, CSRF, rate-limit, account-state, cookie, and security-header behavior currently implemented in this repository. It exists so that:
+This document is the historical implementation inventory and detailed design narrative for
+authentication, authorization, account security, sessions, identity, MFA, passwords, OAuth, CSRF,
+rate limits, account states, cookies, and security headers. `docs/22-canonical-auth-evidence-matrix.md`
+is the authoritative current canonical-control status source, and
+`docs/23-auth-security-remediation-backlog.md` is the authoritative current gap list. This document
+exists so that:
 
 1. every implemented control is documented somewhere, and this matrix says where;
 2. every documented control is traceable to real code, and this matrix says where, or says plainly that it is not yet implemented;
 3. every control is described precisely enough (mechanism, not adjective) that it can be mapped one-to-one to an automated test, existing or still-needed;
-4. stale, contradictory, or aspirational claims found in other documents during this review are corrected at the source and cross-referenced here.
+4. implementation history remains available without overriding the newer evidence audit.
 
 **Method.** Each control below was verified by reading the actual call chain (route/action → validation → session/auth lookup → authorization decision → database interaction → response/cookie mutation), not by trusting a function name or an existing document's claim. Where this review found the code and an existing document disagreed, the code's actual behavior is what is recorded as "Behavior," and the document is corrected elsewhere in this pull request; the disagreement itself is recorded in [§8](#8-documentation-corrections-made-by-this-review).
 
