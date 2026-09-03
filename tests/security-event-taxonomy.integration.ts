@@ -116,3 +116,18 @@ test('invalid subject attribution suppresses the event while registry attributio
   assert.equal(meta.subjectId, 42);
   assert.equal(meta.actorId, undefined);
 });
+
+test('the Google OAuth start taxonomy accepts every coarse unexpected-error phase emitted by the production route', async () => {
+  const calls: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { calls.push(args); };
+  try {
+    await logError('google_oauth_start_failed', { reason: 'unexpected_error:transaction_purge' });
+    await logError('google_oauth_start_failed', { reason: 'unexpected_error:authorization_request' });
+  } finally { console.error = originalError; }
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(([, meta]) => (meta as Record<string, unknown>).reason), [
+    'unexpected_error:transaction_purge',
+    'unexpected_error:authorization_request',
+  ]);
+});

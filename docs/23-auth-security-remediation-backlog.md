@@ -110,7 +110,8 @@ store. “Existing evidence” is deliberately candid when it is only source ins
    against that account's real Postgres secret values, and in doing so found and fixed a real production
    defect: the root layout's SWR fallback embedded the entire unminimized `getUser()` row -- including
    `passwordHash` -- into every authenticated page's initial HTML response; both it and `/api/user` now go
-   through the new minimized `getPublicUser()` (AUTH-API-003). `lib/observability/security-events.ts`
+   through the new minimized `getPublicUser()` and the security page's separate render-time user
+   query through `getSecurityPageUser()` (AUTH-API-003). `lib/observability/security-events.ts`
    introduces a closed, compile-time-enforced security-event taxonomy (`logWarn`/`logError`'s `event`
    parameter is typed from the registry's own keys) with auto-attached category/resource/retention-class,
    proven in `tests/security-event-taxonomy.integration.ts` and `tests/security-event-log-attribution

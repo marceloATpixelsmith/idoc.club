@@ -134,7 +134,7 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async () => 
   const origin = await requestOrigin();
   if (pending.stage === 'email-otp' && pending.subjectId &&
     (await authoritativeMfaRole(pending.subjectId)) === 'member') {
-    await issueEmailOtp(pending.email, 'password_reset', { origin });
+    await issueEmailOtp(pending.email, 'password_reset', { origin, userId: pending.subjectId });
   } else {
     await checkRateLimit('password_reset_resend_neutral', pending.email, origin);
   }

@@ -57,7 +57,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   google_oauth_failure_alert_failed: { attribution: 'system', category: 'delivery', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
   google_oauth_failure_alert_rate_limited: { attribution: 'system', category: 'auth', resource: 'google-oauth-failure-alert', retentionClass: 'security' },
   google_oauth_failure_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
-  google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['configuration', 'invalid_request', 'rate_limited', 'unexpected_error:authorization_request', 'unexpected_error:configuration', 'unexpected_error:transaction'] }, resource: 'google-oauth', retentionClass: 'security' },
+  google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['configuration', 'invalid_request', 'rate_limited', 'unexpected_error:authorization_request', 'unexpected_error:configuration', 'unexpected_error:transaction', 'unexpected_error:transaction_purge'] }, resource: 'google-oauth', retentionClass: 'security' },
   mailchimp_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
   mailchimp_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'security' },
   mailchimp_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
