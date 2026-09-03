@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 // AUTH-PRIVACY-001: "Authentication data MUST be minimized, purpose-limited, access-controlled,
@@ -9,14 +10,36 @@ import test from 'node:test';
 // proven behaviorally in tests/exports.integration.ts. "Excluded from unrestricted analytics" has
 // no dedicated mechanism to test because there is no analytics integration in this codebase at all
 // -- satisfied by absence, not by a designed control. That absence is what this file actually
-// proves, against the real dependency manifest and the one file (the root layout, which wraps every
-// page) where a site-wide tracker would have to be wired in to reach authentication pages at all.
+// proves, against the real dependency manifest and every production source file under app/ and
+// lib/ (not merely the root layout) -- a site-wide tracker could equally be wired into a nested
+// layout, a specific page, a shared client component, or middleware.ts, so the scan was broadened
+// from a single file to the complete production source tree following a Codex audit finding. The
+// real production *build output* is additionally scanned in tests/build-runtime-boundary.build.ts,
+// which catches anything a transitive dependency might bundle in even if no source file references
+// it directly.
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-const rootLayout = readFileSync('app/layout.tsx', 'utf8');
+const root = process.cwd();
+const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
 
 const ANALYTICS_PACKAGE_PATTERN = /analytics|gtag|ga4|mixpanel|amplitude|posthog|hotjar|fullstory|segment|plausible|hubspot|mixpanel/i;
 const ANALYTICS_MARKUP_PATTERN = /google-analytics\.com|googletagmanager\.com|analytics\.js|gtag\(|mixpanel|amplitude|posthog|hotjar|fullstory|segment\.io|plausible\.io|hubspot/i;
+
+function sourceFilesBelow(directory: string): string[] {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.')) return [];
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFilesBelow(file);
+    return /\.(?:ts|tsx|js|jsx)$/.test(entry.name) ? [file] : [];
+  });
+}
+
+const productionSourceFiles = [
+  ...sourceFilesBelow(path.join(root, 'app')),
+  ...sourceFilesBelow(path.join(root, 'lib')),
+  path.join(root, 'middleware.ts'),
+  path.join(root, 'next.config.ts'),
+].filter((file) => existsSync(file));
 
 test('no analytics/tracking SDK is declared as a project dependency', () => {
   const declared = { ...packageJson.dependencies, ...packageJson.devDependencies };
@@ -25,6 +48,10 @@ test('no analytics/tracking SDK is declared as a project dependency', () => {
   }
 });
 
-test('the root layout -- which every page, including every authentication page, renders through -- embeds no analytics/tracking script or call', () => {
-  assert.doesNotMatch(rootLayout, ANALYTICS_MARKUP_PATTERN);
+test('no production source file under app/ or lib/ (nor middleware.ts/next.config.ts) embeds an analytics/tracking script or call', () => {
+  assert.ok(productionSourceFiles.length > 50, 'expected a substantial production source tree to scan');
+  for (const file of productionSourceFiles) {
+    const content = readFileSync(file, 'utf8');
+    assert.doesNotMatch(content, ANALYTICS_MARKUP_PATTERN, `${path.relative(root, file)} appears to embed an analytics/tracking reference`);
+  }
 });
