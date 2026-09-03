@@ -279,6 +279,37 @@ test('payment_intent.succeeded is acknowledged but takes no action, since checko
   assert.equal((await sql`select processed_at is not null as processed from idoc.stripe_events where event_type='payment_intent.succeeded'`)[0].processed, true);
 });
 
+// AUTH-DEPENDENCY-001: the register (lib/security/dependency-risk-register.ts) declares Stripe as
+// fail-closed -- a failed API call must never be treated as, or allowed to write, a successful
+// payment. Every other test in this file exercises the *handler logic* through a working fake
+// client; this one forces the one real outbound Stripe API call this module makes
+// (checkout.sessions.listLineItems) to genuinely fail, driving the real production processStripeEvent
+// function (not a parallel helper) to prove the whole event rolls back atomically -- not just "no
+// payment row", but not even the stripeEvents dedup-flag row survives, which matters because that row
+// is the only thing standing between a real Stripe retry (on the 500 this failure produces) and being
+// silently treated as an already-processed duplicate.
+test('a forced Stripe API failure mid-processing rolls back the entire event atomically, including its own dedup-flag row', async () => {
+  const profile = await billedProfile('cus_forced_api_failure');
+  const membership = await createMembership(profile.id);
+  const [before] = await sql`select status, valid_until from idoc.memberships where id=${membership.id}`;
+  const event = fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'eur', customer: 'cus_forced_api_failure', id: 'cs_forced_api_failure_fixture',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_forced_api_failure_fixture', payment_status: 'paid',
+  }, 'evt_forced_api_failure_fixture');
+  const failingStripeClient = { checkout: { sessions: {
+    listLineItems: async () => { throw new Error('simulated Stripe API network failure'); },
+  } } };
+
+  await assert.rejects(processStripeEvent(event as any, failingStripeClient),
+    'a genuine Stripe API failure mid-processing must propagate, never be swallowed into a fabricated success');
+
+  assert.equal((await sql`select count(*)::int as count from idoc.stripe_events where external_event_id='evt_forced_api_failure_fixture'`)[0].count, 0,
+    'the dedup-flag row must not survive a failed handler -- otherwise a real Stripe retry of this same event would be silently treated as an already-processed duplicate rather than reprocessed');
+  assert.equal((await sql`select count(*)::int as count from idoc.payments where external_payment_id='pi_forced_api_failure_fixture'`)[0].count, 0);
+  const [after] = await sql`select status, valid_until from idoc.memberships where id=${membership.id}`;
+  assert.deepEqual(after, before, 'no entitlement change may occur when the dependency the handler needed to verify the payment failed');
+});
+
 test('a replayed event id is a no-op the second time, never double-crediting a payment', async () => {
   const profile = await billedProfile('cus_replay_fixture');
   const membership = await createMembership(profile.id);

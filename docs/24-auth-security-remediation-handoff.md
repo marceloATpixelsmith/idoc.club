@@ -18,16 +18,16 @@ Do not treat this document as a replacement for the evidence matrix or backlog. 
 
 ## Current baseline
 
-The remediation program tracks **155 canonical AUTH controls**. After completion of Slices 1 through 8, the repository baseline is:
+The remediation program tracks **155 canonical AUTH controls**. As of the corrective-audit continuation below, the repository baseline is:
 
-- **145 verified**
+- **142 verified**
 - **0 implemented-but-unverified**
-- **3 partial**
+- **6 partial**
 - **0 missing**
 - **7 not-applicable**
-- **3 applicable non-verified controls remaining**
+- **6 applicable non-verified controls remaining**
 
-Slices 1 through 8 are complete -- every repository-addressable gap in the ordered remediation-slice list has been implemented and behaviorally proven. Three controls remain `partial`, each gated exclusively on external/operational evidence this repository cannot produce on its own: `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), `AUTH-OPERATIONS-008`, and `AUTH-OPERATIONS-011` (both from Slice 8, repository half complete) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression or the canonical reference changed.
+This baseline is stated authoritatively by `docs/23`'s counting-method paragraph and enforced by `node scripts/validate-auth-docs.mjs`; if the two ever disagree, `docs/23`/`docs/22` win and this section is stale. The six remaining `partial` controls are `AUTH-CRYPTO-003`, `AUTH-PRIVACY-001`, `AUTH-OPERATIONS-004` (reopened by the corrective audit below, not yet reclosed), `AUTH-SECRET-004` (from Slice 5, narrowed but not closed), and `AUTH-OPERATIONS-008`/`AUTH-OPERATIONS-011` (both from Slice 8, repository half complete, gated exclusively on external/operational evidence this repository cannot produce on its own) — see each control's docs/23 row for the precise remaining gap. Do not reopen completed controls merely to refactor them. Reopen only if current `main` contains a real regression, the canonical reference changed, or a genuine audit finding identifies a real evidence gap.
 
 ## Definition of VERIFIED
 
@@ -183,3 +183,34 @@ baseline recorded by the attached checkout has contract `2.0.0`, machine schema 
 canonical Git commit and no reference checkout is attached; outbound GitHub access was unavailable
 during this pass, so the exact reference commit remains unverified and maintainers must confirm freshness
 and GitHub ruleset/review-gate state before merge. The application is not production-ready.
+
+## Corrective audit continuation (2026-09-03, second pass)
+
+A further pull request closed three of the six controls the corrective audit above reopened, with real
+behavioral evidence in place of the prior source-inspection-only proof:
+
+- **`AUTH-DEPENDENCY-001`** — `tests/dependency-risk-register-forced-failure.integration.ts` (new, real
+  Postgres) makes the real production database connection genuinely unreachable before driving the real
+  production `checkRateLimit`/`requireAccountAccess` through it, proving each rejects rather than falling
+  back to "allowed"/"granted". `tests/stripe-webhook.integration.ts` gained a test that forces the one
+  real outbound Stripe API call `processStripeEvent` makes to genuinely fail and proves the whole event
+  — including its own dedup-flag row — rolls back atomically.
+- **`AUTH-OPERATIONS-006`** — the rate-limit correlation alert's email send, previously awaited directly
+  inside `checkRateLimit` (the authentication-adjacent hot path every sign-in/sign-up/password-reset
+  request runs through) with no durable retry, now enqueues into a new `idoc.operational_alert_outbox`
+  table and is delivered by a leased, retrying worker (`lib/notifications/operational-alert-outbox.ts`/
+  `operational-alert-delivery.ts`, migration `0033`) mirroring the already-proven
+  `auth_security_notification_outbox` pattern — proven in `tests/rate-limit-correlation.integration.ts`.
+- **`AUTH-OPERATIONS-007`** — `forceRevokeAllAuthority` gained a DB-enforced idempotency guarantee
+  (`audit_log_force_revoke_incident_unique`, migration `0034` — a retry with the same `incidentReference`
+  now never re-bumps `session_version`, re-revokes, or re-notifies), a durable operations-team alert (via
+  the outbox built for AUTH-OPERATIONS-006), and new adversarial tests in
+  `tests/incident-response.integration.ts` proving true idempotency, safe concurrent-race behavior, that a
+  pending MFA login challenge captured before revocation fails afterward via `session_version`
+  invalidation (driven through the real `beginPrimaryMfa`/`verifyLoginTotp`), and idempotent recovery from
+  a simulated partial-completion crash.
+
+`AUTH-CRYPTO-003`, `AUTH-PRIVACY-001`, and `AUTH-OPERATIONS-004` remain `partial` — not addressed in this
+pass. `docs/22` and `docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 142
+verified, 6 partial). The application is still not production-ready; the same reference-commit-freshness
+and GitHub ruleset/review-gate caveats from the pass above still apply.
