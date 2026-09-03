@@ -398,3 +398,11 @@ Record account IDs/timestamps and safe audit/outbox identifiers, never credentia
 - [ ] Password reset and authenticator recovery/replacement are verified: __________
 - [ ] Fresh step-up, session management, and role-change invalidation are verified: __________
 - [ ] Production smoke test passed; operator/date/deployment SHA: __________
+
+### Security-log ingestion boundary
+
+Security-event metadata is a closed, event-specific categorical schema. Unknown keys and values are
+omitted at runtime; subject-attributed events without a positive internal subject ID are suppressed,
+anonymous events cannot accept identity metadata, and system events cannot accept human attribution.
+Never add request/provider bodies, headers, cookies, exception text, credentials, or client-controlled
+error text to the registry. The operational event channel remains separate from durable audit records.

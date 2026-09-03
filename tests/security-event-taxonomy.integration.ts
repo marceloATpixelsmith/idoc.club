@@ -62,24 +62,29 @@ test('category, resource, and retentionClass are auto-attached from the registry
   assert.ok(typeof meta.requestId === 'string' && meta.requestId.length > 0);
 });
 
-test('metadata minimization actually strips non-primitive values and truncates oversized strings, not merely by convention', async () => {
+test('event schemas drop unknown, nested, oversized, and secret-bearing metadata at runtime', async () => {
   const calls: unknown[][] = [];
   const originalError = console.error;
   console.error = (...args: unknown[]) => { calls.push(args); };
   try {
     await logError('client_error', {
-      digest: 'abc123',
-      nested: { secret: 'should never reach a log line whole' },
-      oversized: 'x'.repeat(3000),
-    });
+      authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.secret.signature',
+      cookie: 'session=raw-session-secret', csrf: 'raw-csrf-secret',
+      nested: { password: 'plaintext-password' }, otp: '123456',
+      oversized: 'x'.repeat(3000), password: 'plaintext-password',
+      providerSecret: 'provider-secret', recoveryCode: 'recover-me',
+      token: 'oauth-code-or-token', unknown: 'unknown-value',
+    } as Record<string, unknown>);
   } finally {
     console.error = originalError;
   }
   assert.equal(calls.length, 1);
   const [, meta] = calls[0] as [string, Record<string, unknown>];
-  assert.equal(meta.digest, 'abc123');
-  assert.equal(meta.nested, '(non-primitive value omitted)');
-  assert.ok(typeof meta.oversized === 'string' && (meta.oversized as string).length < 2050 && (meta.oversized as string).includes('(truncated)'));
+  assert.deepEqual(Object.keys(meta).sort(), ['attribution', 'category', 'requestId', 'resource', 'retentionClass'].sort());
+  const serialized = JSON.stringify(calls);
+  for (const secret of ['plaintext-password', '123456', 'recover-me', 'raw-session-secret', 'oauth-code-or-token', 'raw-csrf-secret', 'provider-secret', 'unknown-value']) {
+    assert.ok(!serialized.includes(secret), `log output retained forbidden value: ${secret}`);
+  }
 });
 
 test('an oversized number of metadata entries is capped, not forwarded unbounded', async () => {
@@ -94,6 +99,20 @@ test('an oversized number of metadata entries is capped, not forwarded unbounded
     console.error = originalError;
   }
   const [, meta] = calls[0] as [string, Record<string, unknown>];
-  // requestId + category + resource + retentionClass + up to MAX_META_ENTRIES caller fields.
-  assert.ok(Object.keys(meta).length <= 4 + 16, `expected metadata entries to be capped, got ${Object.keys(meta).length}`);
+  assert.ok(Object.keys(meta).length <= 5, `expected unknown metadata to be dropped, got ${Object.keys(meta).length}`);
+});
+
+test('invalid subject attribution suppresses the event while registry attribution is non-overridable', async () => {
+  const calls: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { calls.push(args); };
+  try {
+    await logError('email_otp_delivery_failed', { actorId: 42, subjectId: null, purpose: 'login_verification', reason: 'operational' } as Record<string, unknown>);
+    await logError('email_otp_delivery_failed', { attribution: 'system', subjectId: 42, purpose: 'login_verification', reason: 'operational' } as Record<string, unknown>);
+  } finally { console.error = originalError; }
+  assert.equal(calls.length, 1);
+  const [, meta] = calls[0] as [string, Record<string, unknown>];
+  assert.equal(meta.attribution, 'subject');
+  assert.equal(meta.subjectId, 42);
+  assert.equal(meta.actorId, undefined);
 });

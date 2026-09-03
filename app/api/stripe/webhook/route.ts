@@ -14,11 +14,9 @@ export async function POST(request: Request) {
 
   try {
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-  } catch (err) {
-    // The raw error object previously logged here is a signature-mismatch error, not request-body
-    // or secret content, but only its message is logged now -- categorical, not the raw object.
+  } catch {
     await logError('stripe_webhook_signature_verification_failed', {
-      reason: err instanceof Error ? err.message : 'unknown',
+      reason: 'invalid_signature',
     });
     return Response.json(
       { error: 'Webhook signature verification failed.' },
