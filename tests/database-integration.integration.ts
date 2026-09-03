@@ -23,7 +23,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 33);
+  assert.equal(count, 35);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -76,7 +76,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 33);
+    assert.equal(count, 35);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -85,7 +85,7 @@ test('forward migration preserves databases that already applied released migrat
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -138,6 +138,10 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[31].when > journal.entries[30].when, 'the MFA replay notification kind must follow migration 0030');
   assert.equal(journal.entries[32].tag, '0032_authority_force_revoked_notification');
   assert.ok(journal.entries[32].when > journal.entries[31].when, 'the authority force-revoked notification kind must follow migration 0031');
+  assert.equal(journal.entries[33].tag, '0033_operational_alert_outbox');
+  assert.ok(journal.entries[33].when > journal.entries[32].when, 'the operational alert outbox migration must follow migration 0032');
+  assert.equal(journal.entries[34].tag, '0034_incident_response_idempotency');
+  assert.ok(journal.entries[34].when > journal.entries[33].when, 'the incident-response idempotency migration must follow migration 0033');
   const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0030_snapshot.json'), 'utf8'));
   for (const tableName of Object.keys(snapshot.tables)) {
     const [schemaName, name] = tableName.split('.');
@@ -165,8 +169,16 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
     order by table_name`;
-  const expectedTables = [...Object.keys(snapshot.tables), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions'].sort();
+  const expectedTables = [...Object.keys(snapshot.tables), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
+
+  // A handful of post-0030 migrations added an index to a table this snapshot already tracks
+  // (rather than to one of the wholly-new tables listed above), so the per-table index-set check
+  // below needs this one, explicit, reasoned exception per such migration.
+  const extraIndexNamesByTable: Record<string, string[]> = {
+    // AUTH-OPERATIONS-007's forceRevokeAllAuthority idempotency guarantee (migration 0034).
+    audit_log: ['audit_log_force_revoke_incident_unique'],
+  };
 
   const consentColumns = await sql<{ column_name: string }[]>`
     select column_name from information_schema.columns
@@ -246,6 +258,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     const expectedIndexNames = new Set([
       ...Object.keys(expectedTable.indexes), ...Object.keys(expectedTable.uniqueConstraints),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => `${tableName}_pkey`),
+      ...(extraIndexNamesByTable[tableName] ?? []),
     ]);
     assert.deepEqual(indexes.map(({ name }) => name), [...expectedIndexNames].sort(), `${qualifiedName} complete index set`);
     for (const expected of Object.values<any>(expectedTable.indexes)) {
@@ -255,6 +268,15 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       assert.deepEqual(actual.expressions.map(normalizeSql), expected.columns.map(({ expression }: any) => normalizeSql(expression)), `${qualifiedName}.${expected.name} keys/expressions`);
     }
   }
+
+  const [forceRevokeIncidentIndex] = await sql<{ unique: boolean; predicate: string; expressions: string[] }[]>`
+    select x.indisunique as unique, pg_get_expr(x.indpred,x.indrelid) as predicate,
+      array(select pg_get_indexdef(x.indexrelid,k,true) from generate_series(1,x.indnkeyatts) k) as expressions
+    from pg_index x join pg_class t on t.oid=x.indrelid join pg_namespace n on n.oid=t.relnamespace join pg_class i on i.oid=x.indexrelid
+    where n.nspname='idoc' and t.relname='audit_log' and i.relname='audit_log_force_revoke_incident_unique'`;
+  assert.equal(forceRevokeIncidentIndex.unique, true, 'audit_log_force_revoke_incident_unique must be unique to actually enforce idempotency');
+  assert.equal(normalizeSql(forceRevokeIncidentIndex.predicate), normalizeSql("entity_type = 'user' and action = 'admin.account.authority_force_revoked'"));
+  assert.deepEqual(forceRevokeIncidentIndex.expressions.map(normalizeSql), ['entity_id', normalizeSql("after_json ->> 'incidentreference'")]);
 
   const triggers = await sql<any[]>`
     select c.relname as table_name,t.tgname as name,p.proname as function_name,
@@ -281,7 +303,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 33);
+  assert.equal(count, 35);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

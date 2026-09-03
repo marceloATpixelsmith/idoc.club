@@ -232,6 +232,20 @@
       "when": 1788271200000,
       "tag": "0032_authority_force_revoked_notification",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788278400000,
+      "tag": "0033_operational_alert_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788285600000,
+      "tag": "0034_incident_response_idempotency",
+      "breakpoints": true
     }
   ]
 }
