@@ -242,7 +242,7 @@ test('an earlier delivered token stays usable while a replacement retries indepe
 test('real Cron route authenticates before PostgreSQL access and returns only bounded aggregate evidence', async () => {
   const originalFetch = globalThis.fetch;
   const providerBodies: string[] = [];
-  globalThis.fetch = async (_input, init) => { providerBodies.push(String(init?.body)); return new Response('[]', { status: 200 }); };
+  globalThis.fetch = async (_input, init) => { providerBodies.push(String(init?.body)); return new Response('[{"status":"sent"}]', { status: 200 }); };
   try {
     const unauthorized = [
       new Request(`https://idoc.club/api/cron/account-delivery?authorization=${RAW_SECRET}`),
@@ -283,7 +283,7 @@ test('the Cron route shared-secret check rejects wrong case and mismatched lengt
 
 test('a batch bounded by the processing limit counts ineligible rows toward that limit and leaves the remainder for the next invocation', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
   try {
     for (let index = 0; index < 10; index += 1) {
       const { row } = await queue();
@@ -313,7 +313,7 @@ test('administrator notifications use distinct leases and stable identities conc
   await sql`insert into idoc.notification_outbox(profile_id,kind,payload) values(${firstProfile.id},'administrator.profile_changed','{}'),(${secondProfile.id},'administrator.profile_changed','{}')`;
   const originalFetch = globalThis.fetch;
   const ids: string[] = [];
-  globalThis.fetch = async (_input, init) => { ids.push(JSON.parse(String(init?.body)).message.headers['X-IDOC-Message-ID']); return new Response('[]', { status: 200 }); };
+  globalThis.fetch = async (_input, init) => { ids.push(JSON.parse(String(init?.body)).message.headers['X-IDOC-Message-ID']); return new Response('[{"status":"sent"}]', { status: 200 }); };
   try {
     const results = await Promise.all([deliverProfileChangeNotification(undefined, 'admin-a'), deliverProfileChangeNotification(undefined, 'admin-b')]);
     assert.deepEqual(results.map(({ status }) => status).sort(), ['delivered', 'delivered']);

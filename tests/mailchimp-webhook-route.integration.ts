@@ -29,7 +29,7 @@ beforeEach(() => {
   globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)).message;
     sentMessages.push({ subject: body.subject, to: body.to[0].email });
-    return new Response('[]', { status: 200 });
+    return new Response('[{"status":"sent"}]', { status: 200 });
   }) as typeof fetch;
 });
 
