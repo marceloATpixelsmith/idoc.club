@@ -16,7 +16,7 @@ import { logWarn } from '@/lib/observability/logger';
 // does not attempt general anomaly detection -- only this one, narrow, real correlation over data
 // this codebase already records in idoc.account_request_limits.
 //
-// A Codex review caught that the original version both (a) awaited the actual Mailchimp send
+// A Codex review caught that the original version both (a) awaited the actual Brevo send
 // directly inside this function, which checkRateLimit calls on the authentication-adjacent hot path
 // every sign-in/sign-up/password-reset request runs through, and (b) had no durable retry: a
 // transient send failure was only ever logged, never retried. This version enqueues into

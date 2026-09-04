@@ -25,7 +25,8 @@ beforeEach(async () => {
   process.env.BASE_URL = 'https://account.test';
   process.env.CRON_SECRET = RAW_SECRET;
   process.env.IDOC_ADMIN_NOTIFICATION_EMAIL = 'operations@example.test';
-  process.env.MAILCHIMP_TRANSACTIONAL_API_KEY = 'provider-test-double-key-at-least-32-chars';
+  process.env.BREVO_API_KEY = 'provider-test-double-key';
+  process.env.BREVO_FROM_EMAIL = 'accounts@idoc.club';
   process.env.RATE_LIMIT_HASH_KEY = 'integration-only-rate-limit-secret';
   await resetIdoc();
 });
@@ -242,7 +243,7 @@ test('an earlier delivered token stays usable while a replacement retries indepe
 test('real Cron route authenticates before PostgreSQL access and returns only bounded aggregate evidence', async () => {
   const originalFetch = globalThis.fetch;
   const providerBodies: string[] = [];
-  globalThis.fetch = async (_input, init) => { providerBodies.push(String(init?.body)); return new Response('[{"status":"sent"}]', { status: 200 }); };
+  globalThis.fetch = async (_input, init) => { providerBodies.push(String(init?.body)); return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 }); };
   try {
     const unauthorized = [
       new Request(`https://idoc.club/api/cron/account-delivery?authorization=${RAW_SECRET}`),
@@ -283,7 +284,7 @@ test('the Cron route shared-secret check rejects wrong case and mismatched lengt
 
 test('a batch bounded by the processing limit counts ineligible rows toward that limit and leaves the remainder for the next invocation', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
+  globalThis.fetch = async () => new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
   try {
     for (let index = 0; index < 10; index += 1) {
       const { row } = await queue();
@@ -313,7 +314,7 @@ test('administrator notifications use distinct leases and stable identities conc
   await sql`insert into idoc.notification_outbox(profile_id,kind,payload) values(${firstProfile.id},'administrator.profile_changed','{}'),(${secondProfile.id},'administrator.profile_changed','{}')`;
   const originalFetch = globalThis.fetch;
   const ids: string[] = [];
-  globalThis.fetch = async (_input, init) => { ids.push(JSON.parse(String(init?.body)).message.headers['X-IDOC-Message-ID']); return new Response('[{"status":"sent"}]', { status: 200 }); };
+  globalThis.fetch = async (_input, init) => { ids.push(JSON.parse(String(init?.body)).headers['X-Idoc-Message-Id']); return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 }); };
   try {
     const results = await Promise.all([deliverProfileChangeNotification(undefined, 'admin-a'), deliverProfileChangeNotification(undefined, 'admin-b')]);
     assert.deepEqual(results.map(({ status }) => status).sort(), ['delivered', 'delivered']);

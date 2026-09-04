@@ -5,7 +5,7 @@ import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountTokens, auditLog } from '@/lib/db/schema';
 import { decryptDeliveryPayload } from '@/lib/security/encrypted-payload';
-import { sendTransactionalEmail } from './mailchimp-transactional';
+import { sendTransactionalEmail } from './brevo-transactional';
 import { emailButton, renderTransactionalEmail } from './email-template';
 import { ACCOUNT_DELIVERY_BATCH_LIMIT, ACCOUNT_DELIVERY_LEASE_MS, processDeliveryBatch } from './account-delivery-worker-core';
 import { baseUrlForServer } from '@/lib/runtime/configuration';

@@ -13,12 +13,13 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 // "recovery codes regenerated", "new sign-in", etc. notification -- had no equivalent: the only test
 // referencing it checked an unrelated Date-serialization bug via source inspection, never a real
 // forced failure. This file closes that gap the same way the other two do: mocking only the real
-// outbound Mandrill HTTP call (never a parallel helper), driving the real production
+// outbound Brevo HTTP call (never a parallel helper), driving the real production
 // deliverNextAuthSecurityNotification function against real Postgres.
 
 Object.assign(process.env, {
   AUTH_SECRET: 'auth-security-notification-delivery-test-secret-32-chars',
-  MAILCHIMP_TRANSACTIONAL_API_KEY: 'integration-only-provider-key-32-chars-plus',
+  BREVO_API_KEY: 'integration-only-provider-key',
+  BREVO_FROM_EMAIL: 'accounts@idoc.club',
 });
 
 const originalFetch = globalThis.fetch;
@@ -30,11 +31,11 @@ beforeEach(async () => {
   failNextDeliveries = 0;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (url === 'https://mandrillapp.com/api/1.0/messages/send.json') {
+    if (url === 'https://api.brevo.com/v3/smtp/email') {
       if (failNextDeliveries > 0) { failNextDeliveries -= 1; return new Response('provider unavailable', { status: 502 }); }
       const body = JSON.parse(String(init?.body));
-      sentMessages.push({ subject: body.message.subject, to: body.message.to[0].email });
-      return new Response('[{"status":"sent"}]', { status: 200 });
+      sentMessages.push({ subject: body.subject, to: body.to[0].email });
+      return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
     }
     return originalFetch(input, init);
   };

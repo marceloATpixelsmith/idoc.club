@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(path, 'utf8');
 const startRoute = read('app/api/auth/google/start/route.ts');
 const callbackRoute = read('app/api/auth/google/callback/route.ts');
 const alertModule = read('lib/notifications/google-oauth-failure-alert.ts');
-const mailchimpModule = read('lib/notifications/mailchimp-transactional.ts');
+const brevoModule = read('lib/notifications/brevo-transactional.ts');
 
 const deliverAlertBody = alertModule.slice(
   alertModule.indexOf('async function deliverAlert'),
@@ -83,7 +83,7 @@ test('deliverAlert rate-limits by origin before sending, and skips the email (bu
     'the rate-limit check must gate the send, not run after it');
 });
 
-test('withDeadline bounds the *entire* preflight-and-delivery operation (a Promise.race against a timer), not only whichever step happens to accept an AbortSignal -- so a slow rate-limit database query cannot hold the caller open any longer than a slow Mailchimp could', () => {
+test('withDeadline bounds the *entire* preflight-and-delivery operation (a Promise.race against a timer), not only whichever step happens to accept an AbortSignal -- so a slow rate-limit database query cannot hold the caller open any longer than a slow Brevo could', () => {
   assert.match(withDeadlineBody, /Promise\.race\(\[/);
   assert.match(withDeadlineBody, /setTimeout\(\(\) => reject/);
   assert.match(withDeadlineBody, /clearTimeout\(timer\)/);
@@ -96,7 +96,7 @@ test('sendTransactionalEmail is additionally bounded by its own AbortSignal time
   assert.match(deliverAlertBody, /signal:\s*AbortSignal\.timeout\(ALERT_DELIVERY_TIMEOUT_MS\)/);
   // sendTransactionalEmail itself must actually forward that signal into the underlying fetch,
   // otherwise passing it from the caller would be a no-op.
-  assert.match(mailchimpModule, /signal:\s*options\.signal/);
+  assert.match(brevoModule, /signal:\s*options\.signal/);
 });
 
 test('the alert body only ever interpolates the caller-supplied reason/step and the request correlation ID -- never a raw OAuth code, state, cookie, or token value', () => {
@@ -123,5 +123,5 @@ test('the alert is routed through the existing documented operations-recipient v
 });
 
 test('the optional delivery-timeout signal on sendTransactionalEmail defaults to unbounded, so no existing caller (e.g. the breached-password alert) changes behavior', () => {
-  assert.match(mailchimpModule, /export async function sendTransactionalEmail\(message: TransactionalEmail, options: \{ signal\?: AbortSignal \} = \{\}\)/);
+  assert.match(brevoModule, /export async function sendTransactionalEmail\(message: TransactionalEmail, options: \{ signal\?: AbortSignal \} = \{\}\)/);
 });

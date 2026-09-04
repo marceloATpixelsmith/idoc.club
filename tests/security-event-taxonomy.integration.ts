@@ -49,16 +49,16 @@ test('category, resource, and retentionClass are auto-attached from the registry
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => { calls.push(args); };
   try {
-    await logWarn('mailchimp_webhook_malformed_payload', { category: 'not-a-real-category', resource: 'attacker-controlled', retentionClass: 'security' });
+    await logWarn('brevo_webhook_malformed_payload', { category: 'not-a-real-category', resource: 'attacker-controlled', retentionClass: 'security' });
   } finally {
     console.warn = originalWarn;
   }
   assert.equal(calls.length, 1);
   const [event, meta] = calls[0] as [string, Record<string, unknown>];
-  assert.equal(event, 'mailchimp_webhook_malformed_payload');
-  assert.equal(meta.category, SECURITY_EVENT_TAXONOMY.mailchimp_webhook_malformed_payload.category);
-  assert.equal(meta.resource, SECURITY_EVENT_TAXONOMY.mailchimp_webhook_malformed_payload.resource);
-  assert.equal(meta.retentionClass, SECURITY_EVENT_TAXONOMY.mailchimp_webhook_malformed_payload.retentionClass);
+  assert.equal(event, 'brevo_webhook_malformed_payload');
+  assert.equal(meta.category, SECURITY_EVENT_TAXONOMY.brevo_webhook_malformed_payload.category);
+  assert.equal(meta.resource, SECURITY_EVENT_TAXONOMY.brevo_webhook_malformed_payload.resource);
+  assert.equal(meta.retentionClass, SECURITY_EVENT_TAXONOMY.brevo_webhook_malformed_payload.retentionClass);
   assert.ok(typeof meta.requestId === 'string' && meta.requestId.length > 0);
 });
 
