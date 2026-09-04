@@ -55,10 +55,12 @@ test('live recovery remains constrained through replacement and acknowledgement'
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.locator('.idoc-auth-error')).toContainText('incorrect');
 
-  const uri = await page.getByLabel('Authenticator setup key').inputValue();
-  const replacementSecret = new URL(uri).searchParams.get('secret');
+  // The "Authenticator setup key" field is the bare base32 secret meant for an authenticator app's
+  // manual-entry field, not the full otpauth:// provisioning URI (which is what a QR code encodes).
+  const replacementSecret = await page.getByLabel('Authenticator setup key').inputValue();
   expect(replacementSecret).toBeTruthy();
-  await page.getByLabel('Authenticator code').fill(totp(replacementSecret!));
+  expect(replacementSecret).toMatch(/^[A-Z2-7]+$/);
+  await page.getByLabel('Authenticator code').fill(totp(replacementSecret));
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Store these recovery codes somewhere safe.')).toBeVisible();
   const beforeAck = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
