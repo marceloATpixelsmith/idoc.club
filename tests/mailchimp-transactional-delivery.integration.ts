@@ -43,7 +43,7 @@ test('a rejected recipient throws even though the HTTP call itself returned 200'
   mandrillResponseBody = '[{"email":"user@example.test","status":"rejected","reject_reason":"hard-bounce"}]';
   await assert.rejects(
     sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
-    /rejected the message \(hard-bounce\)/,
+    /did not confirm delivery \(hard-bounce\)/,
   );
 });
 
@@ -51,7 +51,44 @@ test('an invalid recipient throws even though the HTTP call itself returned 200'
   mandrillResponseBody = '[{"email":"user@example.test","status":"invalid"}]';
   await assert.rejects(
     sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
-    /rejected the message \(invalid\)/,
+    /did not confirm delivery \(invalid\)/,
+  );
+});
+
+// A Codex review on this pull request caught that the original implementation only searched for
+// the two known-bad statuses ("rejected"/"invalid") and treated everything else -- including a
+// malformed entry -- as an implicit success, reopening the exact silent-success gap this file
+// exists to close. These four cases are the shapes that check must reject even though none of them
+// is literally "rejected" or "invalid".
+test('a null entry in the results array throws rather than being silently treated as success', async () => {
+  mandrillResponseBody = '[null]';
+  await assert.rejects(
+    sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
+    /did not confirm delivery \(an unrecognized response entry\)/,
+  );
+});
+
+test('a scalar entry in the results array throws rather than being silently treated as success', async () => {
+  mandrillResponseBody = '["oops"]';
+  await assert.rejects(
+    sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
+    /did not confirm delivery \(an unrecognized response entry\)/,
+  );
+});
+
+test('an entry with no status field throws rather than being silently treated as success', async () => {
+  mandrillResponseBody = '[{"email":"user@example.test"}]';
+  await assert.rejects(
+    sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
+    /did not confirm delivery \(an unrecognized response entry\)/,
+  );
+});
+
+test('an unrecognized status value throws rather than being silently treated as success', async () => {
+  mandrillResponseBody = '[{"email":"user@example.test","status":"some-future-status"}]';
+  await assert.rejects(
+    sendTransactionalEmail({ html: '<p>hi</p>', subject: 'Test', to: 'user@example.test' }),
+    /did not confirm delivery \(some-future-status\)/,
   );
 });
 

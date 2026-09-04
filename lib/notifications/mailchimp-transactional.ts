@@ -29,7 +29,16 @@ export async function sendTransactionalEmail(message: TransactionalEmail, option
   let results: unknown;
   try { results = await response.json(); } catch { throw new Error('Mailchimp Transactional returned a response that could not be parsed.'); }
   if (!Array.isArray(results) || results.length === 0) throw new Error('Mailchimp Transactional returned an unexpected response.');
-  const rejected = results.find((result): result is { reject_reason?: string; status?: string } =>
-    Boolean(result) && typeof result === 'object' && (result.status === 'rejected' || result.status === 'invalid'));
-  if (rejected) throw new Error(`Mailchimp Transactional rejected the message (${rejected.reject_reason ?? rejected.status}).`);
+  // Every entry must positively match a known-accepted status -- not merely fail to match
+  // "rejected"/"invalid" -- so a malformed entry (null, a scalar, an object with no `status`, or an
+  // unrecognized status a future Mandrill API version might introduce) is treated as a failure
+  // rather than silently passing through as delivered, which would reopen the exact silent-success
+  // gap this function exists to close.
+  for (const result of results) {
+    const status = result && typeof result === 'object' ? (result as { status?: unknown }).status : undefined;
+    if (status === 'sent' || status === 'queued' || status === 'scheduled') continue;
+    const rejectReason = result && typeof result === 'object' ? (result as { reject_reason?: unknown }).reject_reason : undefined;
+    const reason = typeof rejectReason === 'string' ? rejectReason : typeof status === 'string' ? status : 'an unrecognized response entry';
+    throw new Error(`Mailchimp Transactional did not confirm delivery (${reason}).`);
+  }
 }
