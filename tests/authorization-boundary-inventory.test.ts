@@ -55,6 +55,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
   'lib/payments/actions.ts': { checkoutAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/security/actions.ts': { recordGoogleOauthRotationEvidenceForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
@@ -166,6 +167,9 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
       { from: './checkout', functionName: 'createMembershipCheckoutSession' }, { from: './stripe', functionName: 'createMembershipPortalSession' },
     ],
     'app/(dashboard)/admin/payments/actions.ts': [{ from: '@/lib/payments/manual-payments', functionName: 'recordManualPayment' }],
+    'app/(dashboard)/admin/security/actions.ts': [{
+      from: '@/lib/auth/google-oidc-secret-audit', functionName: 'recordActiveGoogleOauthSecretRotation',
+    }],
     'app/(dashboard)/admin/members/actions.ts': [
       { from: '@/lib/membership/data-access', functionName: 'updateMemberProfile' },
       { from: '@/lib/membership/status-actions', functionName: 'suspendMembership' },
@@ -194,6 +198,15 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
   assert.match(accountSuspension, /requireAccountAccess\('administration'\)/); assert.match(accountSuspension, /requireAdministrator\(/);
   const incidentResponse = readFileSync(path.join(root, 'lib/membership/incident-response.ts'), 'utf8');
   assert.match(incidentResponse, /requireAccountAccess\('administration'\)/); assert.match(incidentResponse, /requireSuperAdmin\(/);
+  const securityOperations = readFileSync(path.join(root, 'app/(dashboard)/admin/security/actions.ts'), 'utf8');
+  assert.match(securityOperations, /requireCsrfToken\(/);
+  assert.match(securityOperations, /requireAccountAccess\('administration'\)/);
+  assert.match(securityOperations, /requireSuperAdmin\(/);
+  assert.match(securityOperations, /requireFreshStepUp\(actor, 'change-security-settings'/);
+  assert.doesNotMatch(securityOperations, /formData\.get\(['"](?:version|secret)/);
+  const securityPage = readFileSync(path.join(root, 'app/(dashboard)/admin/security/page.tsx'), 'utf8');
+  assert.match(securityPage, /requireAccountAccess\('administration'\)/);
+  assert.match(securityPage, /requireSuperAdmin\(/);
 });
 
 test('the Google OIDC Route Handlers are bound to canonical transaction, authentication, and link boundaries', () => {

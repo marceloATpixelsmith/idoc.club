@@ -53,6 +53,8 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 - Server-side administrative operations use trusted authorization and narrowly scoped database operations.
 
+- Deployment-security evidence operations are restricted to Super Admin, require a fresh purpose-bound MFA step-up and CSRF validation, and derive configuration labels on the server. The browser must never submit or receive provider-secret values. Repeated or concurrent evidence submissions must converge without duplicate audit entries.
+
 - Audit records are append-only to ordinary application roles.
 
 # 4. Administrator security

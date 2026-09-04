@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
-import { latestGoogleOauthSecretRotation, recordGoogleOauthSecretRotation } from '../lib/auth/google-oidc-secret-audit.ts';
+import {
+  latestGoogleOauthSecretRotation,
+  recordActiveGoogleOauthSecretRotation,
+  recordGoogleOauthSecretRotation,
+} from '../lib/auth/google-oidc-secret-audit.ts';
 import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 // AUTH-SECRET-004: real-Postgres evidence for the "audit" half of "OAuth client secrets MUST
@@ -52,4 +56,50 @@ test('latestGoogleOauthSecretRotation returns the most recent rotation, not the 
   assert.equal(latest?.toVersion, 'v1');
   assert.equal(latest?.reason, 'rollback');
   assert.ok(latest && latest.createdAtMs > 0);
+});
+
+test('the production operation records the server-configured active version without persisting its secret', async () => {
+  const operator = await createUser();
+  const secret = 'opaque-google-client-secret-value-never-persisted';
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS = JSON.stringify({ '2026-09-03': secret });
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION = '2026-09-03';
+  try {
+    const result = await recordActiveGoogleOauthSecretRotation(operator.id);
+    assert.equal(result.status, 'recorded');
+    assert.equal(result.activeVersion, '2026-09-03');
+    const [row] = await sql`select actor_id,before_json,after_json,reason from idoc.audit_log
+      where action='auth.oauth.google.client_secret.rotated'`;
+    assert.equal(row.actor_id, operator.id);
+    assert.equal(row.before_json, null);
+    assert.deepEqual(row.after_json, { version: '2026-09-03' });
+    assert.equal(row.reason, 'scheduled_rotation');
+    assert.doesNotMatch(JSON.stringify(row), new RegExp(secret));
+  } finally {
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS;
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION;
+  }
+});
+
+test('concurrent and repeated production-operation calls create exactly one row per active version', async () => {
+  const firstOperator = await createUser();
+  const secondOperator = await createUser();
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS = JSON.stringify({ current: 'not-persisted-current-secret' });
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION = 'current';
+  try {
+    const results = await Promise.all([
+      recordActiveGoogleOauthSecretRotation(firstOperator.id),
+      recordActiveGoogleOauthSecretRotation(secondOperator.id),
+    ]);
+    assert.deepEqual(results.map(({ status }) => status).sort(), ['already-recorded', 'recorded']);
+    const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.audit_log
+      where action='auth.oauth.google.client_secret.rotated'`;
+    assert.equal(count, 1);
+    assert.equal((await recordActiveGoogleOauthSecretRotation(firstOperator.id)).status, 'already-recorded');
+    const [{ count: afterRetry }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.audit_log
+      where action='auth.oauth.google.client_secret.rotated'`;
+    assert.equal(afterRetry, 1);
+  } finally {
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS;
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION;
+  }
 });

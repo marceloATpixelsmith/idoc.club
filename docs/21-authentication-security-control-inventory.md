@@ -612,6 +612,25 @@ No database migration. No route or UI change.
 
 ---
 
+## 8aa. Super Admin Google OAuth rotation-evidence operation (this revision)
+
+The Google OAuth secret rotation mechanism no longer requires local Node tooling. `/admin/security`
+is a permanent Super Admin area whose first operation records completion of a provider-side secret
+rotation. The page and Server Action independently load the actor from the database and require
+`super_admin`; the mutation also requires the normal signed, session-bound CSRF field and consumes
+fresh MFA authority purpose-bound to `change-security-settings`. The browser supplies neither a
+version label nor secret material. `recordActiveGoogleOauthSecretRotation` reads the active version
+from the server-only deployed ring and writes only that label and the actor ID. A transaction-scoped
+PostgreSQL advisory lock makes concurrent clicks and retries converge on one immutable audit row.
+
+`tests/google-oauth-secret-audit.integration.ts` drives that exact production data operation against
+real PostgreSQL, including server-configured selection, secret exclusion, actor attribution, retry,
+and concurrent submissions. `tests/authorization-boundary-inventory.test.ts` keeps the live Server
+Action in the exhaustive action inventory and asserts its CSRF, Super Admin, fresh-MFA, and
+no-browser-version boundaries. `AUTH-SECRET-004` remains `partial` until the already-completed real
+production rotation is recorded through this deployed action and its production audit result is
+confirmed; repository automation is not presented as a substitute for that external evidence.
+
 # 9. Test-coverage gaps (behaviorally unverified or unverified end-to-end)
 
 These are controls that are implemented in code (per the tables above) but whose proof rests on source-inspection tests (regex/string assertions against production files) rather than a test that actually executes the behavior, or that have no test at all. None of these are claims that the control does not work — they are claims that the *repository's own test suite* does not yet prove it end-to-end, per `docs/20`'s own distinction between what Playwright/integration tests prove and what they don't.
