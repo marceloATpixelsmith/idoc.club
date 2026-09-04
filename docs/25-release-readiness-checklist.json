@@ -27,7 +27,11 @@
       "verifiedAt": "2026-09-04T19:07:32Z",
       "notes": "Real production delivery confirmed by querying idoc.auth_security_notification_outbox: 4 real historical rows, all sent_at populated, including two authenticator_enrolled events from this session's own real TOTP re-enrollment tests. Retry behavior for account_delivery_outbox and operational_alert_outbox was already proven by real forced-failure integration tests; auth_security_notification_outbox had no equivalent (only a source-inspection-only test for an unrelated bug), so tests/auth-security-notification-delivery.integration.ts was added, forcing a real transient failure and a real dead-letter through the actual production deliverNextAuthSecurityNotification function against real Postgres (4/4 passing)."
     } },
-    { "id": "privileged-totp-enrollment-login-verified", "description": "Privileged TOTP enrollment and password/Google login are verified", "status": "unchecked", "evidence": null },
+    { "id": "privileged-totp-enrollment-login-verified", "description": "Privileged TOTP enrollment and password/Google login are verified", "status": "verified", "evidence": {
+      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
+      "verifiedAt": "2026-09-04T19:23:19Z",
+      "notes": "Operator confirmed two real production sign-ins: (1) granted the Administrator role to webmaster@idoc.club via the real /admin/members role-grant flow (fresh MFA step-up enforced), then signed in as webmaster@idoc.club with its email+password (not Google) and was correctly forced into TOTP enrollment, which was completed; (2) signed out of the zangfuqi@gmail.com super admin account and back in via Sign in with Google, and was still prompted for and completed the TOTP challenge afterward, confirming Google sign-in does not bypass MFA for a privileged account."
+    } },
     { "id": "ordinary-password-otp-remembered-device-verified", "description": "Ordinary password+OTP and remembered-device behavior are verified", "status": "unchecked", "evidence": null },
     { "id": "password-reset-recovery-replacement-verified", "description": "Password reset and authenticator recovery/replacement are verified", "status": "unchecked", "evidence": null },
     { "id": "step-up-session-role-invalidation-verified", "description": "Fresh step-up, session management, and role-change invalidation are verified", "status": "unchecked", "evidence": null },
