@@ -152,6 +152,43 @@
   box-shadow: 0 0 0 3px #e5e7eb;
 }
 
+.idoc-auth-totp-enrollment {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.idoc-auth-totp-enrollment__qr {
+  width: 200px;
+  height: 200px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.idoc-auth-totp-enrollment__manual {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  color: var(--auth-instruction-color);
+}
+
+.idoc-auth-totp-enrollment__manual code {
+  padding: 8px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  color: var(--auth-input-color);
+  user-select: all;
+}
+
 .idoc-auth-error {
   margin: 0;
   padding: 8px 12px;
