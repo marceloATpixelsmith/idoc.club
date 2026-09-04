@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { finalizeInitialAuthenticatorEnrollment } from '../lib/auth/mfa/enrollment-finalization.ts';
 import { finalizeAuthenticatorReplacement } from '../lib/auth/mfa/replacement-finalization.ts';
-import { consumeRecoveryCodeWithEvidence } from '../lib/auth/mfa/recovery-security.ts';
+import { consumeRecoveryCodeAndBeginReplacement } from '../lib/auth/mfa/recovery-security.ts';
 import { regenerateRecoveryCodesWithEvidence } from '../lib/auth/mfa/recovery-regeneration.ts';
+import { prepareTotpEnrollment } from '../lib/auth/mfa/totp.ts';
 import type { RecoveryCodeRecord } from '../lib/auth/mfa/types.ts';
 import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
@@ -71,9 +72,11 @@ test('production recovery consumption has exactly one winner and secret-free evi
   await sql`insert into idoc.mfa_recovery_codes(recovery_code_id,user_id,application_id,generation_id,digest)
     values(${recovery.records[0].recoveryCodeId},${owner.id},${applicationId},${recovery.generationId},${recovery.records[0].digest})`;
   const base = { applicationId, dedupeKey: `consume:${randomUUID()}`, digests: [recovery.records[0].digest],
+    ...prepareTotpEnrollment({ accountLabel: owner.email, applicationId, encryptionKey: randomBytes(32),
+      issuer: 'IDOC', keyId: 'v1', nowMs, purpose: 'authenticator-replacement', subjectId: String(owner.id) }),
     nowMs, recipientEmail: owner.email, userId: owner.id };
-  assert.equal(await consumeRecoveryCodeWithEvidence({ ...base, userId: stranger.id }), 'invalid');
-  const outcomes = await Promise.all([consumeRecoveryCodeWithEvidence(base), consumeRecoveryCodeWithEvidence(base)]);
+  assert.equal(await consumeRecoveryCodeAndBeginReplacement({ ...base, userId: stranger.id }), 'invalid');
+  const outcomes = await Promise.all([consumeRecoveryCodeAndBeginReplacement(base), consumeRecoveryCodeAndBeginReplacement(base)]);
   assert.deepEqual(outcomes.sort(), ['consumed', 'invalid']);
   const evidence = JSON.stringify(await sql`select action,reason from idoc.audit_log where actor_id=${owner.id}
     union all select kind,dedupe_key from idoc.auth_security_notification_outbox where user_id=${owner.id}`);
@@ -81,6 +84,25 @@ test('production recovery consumption has exactly one winner and secret-free evi
   const [notification] = await sql<{ kind: string; recipient_email: string }[]>`select kind,recipient_email
     from idoc.auth_security_notification_outbox where user_id=${owner.id}`;
   assert.deepEqual(notification, { kind: 'recovery_code_used', recipient_email: owner.email });
+});
+
+test('production recovery keeps the code usable when replacement setup cannot commit', async () => {
+  const owner = await createUser();
+  const recovery = codes(owner.id, randomUUID(), 'rollback-code');
+  await sql`insert into idoc.mfa_recovery_codes(recovery_code_id,user_id,application_id,generation_id,digest)
+    values(${recovery.records[0].recoveryCodeId},${owner.id},${applicationId},${recovery.generationId},${recovery.records[0].digest})`;
+  const prepared = prepareTotpEnrollment({ accountLabel: owner.email, applicationId, encryptionKey: randomBytes(32),
+    issuer: 'IDOC', keyId: 'v1', nowMs, purpose: 'authenticator-replacement', subjectId: String(owner.id) });
+
+  await assert.rejects(consumeRecoveryCodeAndBeginReplacement({ applicationId, dedupeKey: `rollback:${randomUUID()}`,
+    digests: [recovery.records[0].digest], enrollment: prepared.enrollment, factor: prepared.factor,
+    nowMs, recipientEmail: `${'x'.repeat(300)}@example.test`, userId: owner.id }));
+
+  const [state] = await sql<{ consumed: boolean; enrollments: number; factors: number }[]>`select
+    (select consumed_at is not null from idoc.mfa_recovery_codes where recovery_code_id=${recovery.records[0].recoveryCodeId}) consumed,
+    (select count(*)::int from idoc.mfa_enrollment_transactions where transaction_id=${prepared.transactionId}) enrollments,
+    (select count(*)::int from idoc.mfa_factors where factor_id=${prepared.factorId}) factors`;
+  assert.deepEqual(state, { consumed: false, enrollments: 0, factors: 0 });
 });
 
 test('production replacement serializes competing confirmations and rotates all dependent authority', async () => {

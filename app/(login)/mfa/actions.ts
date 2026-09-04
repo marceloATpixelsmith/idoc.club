@@ -14,11 +14,11 @@ import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { clearPendingPrimaryAuth, getPendingPrimaryAuth, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
 import { digestRecoveryCode, prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
-import { consumeRecoveryCodeWithEvidence } from '@/lib/auth/mfa/recovery-security';
+import { consumeRecoveryCodeAndBeginReplacement } from '@/lib/auth/mfa/recovery-security';
 import { finalizeAuthenticatorReplacement } from '@/lib/auth/mfa/replacement-finalization';
 import { finalizeInitialAuthenticatorEnrollment } from '@/lib/auth/mfa/enrollment-finalization';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, resolveMfaEncryptionKey, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
+import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, prepareTotpEnrollment, resolveMfaEncryptionKey, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
@@ -26,6 +26,7 @@ import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { issueRememberedDevice } from '@/lib/auth/mfa/remembered-device';
+import { logError } from '@/lib/observability/logger';
 import { setRememberedTotpDeviceCookie } from '@/lib/auth/mfa/remembered-device-cookie';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
@@ -203,17 +204,25 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
   if (!context) return failAndRestart('Your recovery session expired. Sign in again.');
   if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) return failAndRestart('Too many attempts. Sign in again later.');
   const config = mfaConfiguration();
-  const recovery = await consumeRecoveryCodeWithEvidence({
-    applicationId: MFA_APPLICATION_ID,
-    dedupeKey: `recovery-code:${context.pending.transactionId}`,
-    digests: [digestRecoveryCode(recoveryCode, config.recoveryDigestKey)],
-    recipientEmail: context.user.email,
-    userId: context.user.id,
-  });
-  if (recovery !== 'consumed') return { error: 'That recovery code could not be used.' };
-  const enrollment = await beginTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
+  const enrollment = prepareTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
-    purpose: 'authenticator-replacement', store: mfaStore, subjectId: String(context.user.id) });
+    purpose: 'authenticator-replacement', subjectId: String(context.user.id) });
+  let recovery: 'consumed' | 'invalid';
+  try {
+    recovery = await consumeRecoveryCodeAndBeginReplacement({
+      applicationId: MFA_APPLICATION_ID,
+      dedupeKey: `recovery-code:${context.pending.transactionId}`,
+      digests: [digestRecoveryCode(recoveryCode, config.recoveryDigestKey)],
+      enrollment: enrollment.enrollment,
+      factor: enrollment.factor,
+      recipientEmail: context.user.email,
+      userId: context.user.id,
+    });
+  } catch {
+    await logError('mfa_recovery_transition_failed', { subjectId: context.user.id });
+    return { error: 'Authenticator recovery could not be completed. Restart recovery and try again.' };
+  }
+  if (recovery !== 'consumed') return { error: 'That recovery code could not be used.' };
   await setPendingPrimaryAuth({ ...context.pending, factorId: enrollment.factorId, stage: 'replacement',
     transactionId: enrollment.transactionId });
   redirect('/mfa');
