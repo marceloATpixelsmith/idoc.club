@@ -172,6 +172,18 @@ export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process
   return { activeVersion: version, versions };
 }
 
+/** Requires the explicit rotation-ready ring. The legacy single-secret form deliberately receives
+ * an implicit `v1` only for runtime compatibility; it is not auditable rotation evidence. */
+export function explicitGoogleOauthClientSecretVersions(
+  env: NodeJS.ProcessEnv = process.env,
+): { activeVersion: string; versions: ReadonlyMap<string, string> } {
+  if (
+    !env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim()
+    || !env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()
+  ) throw new GoogleOidcError('configuration');
+  return googleOauthClientSecretVersions(env);
+}
+
 function googleOauthClientSecret(env: NodeJS.ProcessEnv): { secret: string; version: string; versions: ReadonlyMap<string, string> } {
   const versionsRaw = env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim();
   if (!versionsRaw) {

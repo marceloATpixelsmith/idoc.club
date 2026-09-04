@@ -1,5 +1,5 @@
 import { GoogleOauthRotationForm } from '@/app/(dashboard)/admin/security/google-oauth-rotation-form';
-import { googleOauthClientSecretVersions } from '@/lib/auth/google-oidc-reference';
+import { explicitGoogleOauthClientSecretVersions } from '@/lib/auth/google-oidc-reference';
 import { latestGoogleOauthSecretRotation } from '@/lib/auth/google-oidc-secret-audit';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
@@ -7,7 +7,7 @@ import { requireSuperAdmin } from '@/lib/membership/authorization';
 export default async function AdminSecurityPage() {
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  const { activeVersion } = googleOauthClientSecretVersions();
+  const { activeVersion } = explicitGoogleOauthClientSecretVersions();
   const latest = await latestGoogleOauthSecretRotation();
   return (
     <main className="flex-1 p-8">

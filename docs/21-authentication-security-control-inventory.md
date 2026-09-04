@@ -619,8 +619,9 @@ is a permanent Super Admin area whose first operation records completion of a pr
 rotation. The page and Server Action independently load the actor from the database and require
 `super_admin`; the mutation also requires the normal signed, session-bound CSRF field and consumes
 fresh MFA authority purpose-bound to `change-security-settings`. The browser supplies neither a
-version label nor secret material. `recordActiveGoogleOauthSecretRotation` reads the active version
-from the server-only deployed ring and writes only that label and the actor ID. A transaction-scoped
+version label nor secret material. `recordActiveGoogleOauthSecretRotation` requires the explicit
+rotation-ready ring (the legacy implicit `v1` form cannot create misleading evidence), reads its
+active version from server-only configuration, and writes only that label and the actor ID. A transaction-scoped
 PostgreSQL advisory lock makes concurrent clicks and retries converge on one immutable audit row.
 
 `tests/google-oauth-secret-audit.integration.ts` drives that exact production data operation against
