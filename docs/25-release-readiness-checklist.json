@@ -7,7 +7,11 @@
       "verifiedAt": "2026-09-04T18:21:26Z",
       "notes": "Production (Vercel deployment dpl_ANkSN7nywoz7VMMPE44XG6q9LnJ1) is running commit 406596b5, and the Release 1 Verification GitHub Actions workflow run for that exact commit (run 33896757225, https://github.com/marceloATpixelsmith/idoc.club/actions/runs/33896757225) completed with conclusion success."
     } },
-    { "id": "production-migrations-applied", "description": "Production database migrations are applied", "status": "unchecked", "evidence": null },
+    { "id": "production-migrations-applied", "description": "Production database migrations are applied", "status": "verified", "evidence": {
+      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
+      "verifiedAt": "2026-09-04T18:28:52Z",
+      "notes": "34 of 35 migrations recorded in idoc.__drizzle_migrations; the one gap (0007_account_delivery_token_eligibility) is a self-healed bookkeeping quirk, not a real schema gap: 0007's out-of-order timestamp caused the migrator to silently skip it, but 0008_reconcile_account_delivery_eligibility (which did run) adds the same terminal_at/terminal_reason columns via ADD COLUMN IF NOT EXISTS. Confirmed both columns exist on idoc.account_delivery_outbox in production via information_schema.columns, and zero runtime errors on /api/cron/account-delivery in the last 7 days."
+    } },
     { "id": "production-auth-variables-configured", "description": "Required Production auth variables are configured in Vercel", "status": "unchecked", "evidence": null },
     { "id": "google-production-origin-callback-configured", "description": "Google production origin/callback are configured", "status": "unchecked", "evidence": null },
     { "id": "security-email-delivery-retry-verified", "description": "Security-email delivery and retry operation are verified", "status": "unchecked", "evidence": null },
