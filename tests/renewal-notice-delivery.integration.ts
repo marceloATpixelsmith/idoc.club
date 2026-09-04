@@ -34,7 +34,7 @@ test('each renewal-notice kind delivers once with the right recipient and a stab
     globalThis.fetch = async (_input, init) => {
       const body = JSON.parse(String(init?.body));
       messages.push({ subject: body.message.subject, to: body.message.to[0].email });
-      return new Response('[]', { status: 200 });
+      return new Response('[{"status":"sent"}]', { status: 200 });
     };
     try {
       const result = await deliverNextRenewalNotice('delivery-worker');
@@ -86,7 +86,7 @@ test('a delivery failure before the sixth attempt is retryable, not dead-lettere
 test('an empty outbox returns status empty without any provider call', async () => {
   const originalFetch = globalThis.fetch;
   let called = false;
-  globalThis.fetch = async () => { called = true; return new Response('[]', { status: 200 }); };
+  globalThis.fetch = async () => { called = true; return new Response('[{"status":"sent"}]', { status: 200 }); };
   try {
     assert.equal((await deliverNextRenewalNotice('empty-worker')).status, 'empty');
     assert.equal(called, false);
@@ -99,7 +99,7 @@ test('processRenewalNoticeBatch aggregates delivered counts across multiple rows
   await queueNotice('membership.renewal_reminder', { renewalDate: '2026-09-01' });
   await queueNotice('membership.expiration_reminder', { expirationDate: '2026-09-01' });
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
   try {
     const summary = await processRenewalNoticeBatch();
     assert.equal(summary.delivered, 2);
@@ -138,7 +138,7 @@ test('the delivery Cron route delivers a bounded batch, leaving the remainder fo
     await queueNotice('membership.renewal_reminder', { renewalDate: '2026-09-01' });
   }
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
   try {
     const response = await deliveryRoute(new Request('https://idoc.club/api/cron/renewal-notice-delivery', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
     assert.equal(response.status, 200);

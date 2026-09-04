@@ -301,7 +301,7 @@ test('a breached password alert is skipped, not thrown, when no operations recip
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (url.startsWith('https://api.pwnedpasswords.com/')) return new Response(`${suffix}:1`, { status: 200 });
-    if (url.startsWith('https://mandrillapp.com/')) { mandrillCalled = true; return new Response('[]', { status: 200 }); }
+    if (url.startsWith('https://mandrillapp.com/')) { mandrillCalled = true; return new Response('[{"status":"sent"}]', { status: 200 }); }
     return originalFetch(input, init);
   }) as typeof fetch;
   try {

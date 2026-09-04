@@ -21,4 +21,15 @@ export async function sendTransactionalEmail(message: TransactionalEmail, option
     headers: { 'content-type': 'application/json' }, method: 'POST', signal: options.signal,
   });
   if (!response.ok) throw new Error('Mailchimp Transactional rejected the message.');
+  // Mandrill's send API returns HTTP 200 even when a specific recipient is rejected, invalid, or
+  // bounced -- that outcome only shows up in the response body's per-recipient `status`, which was
+  // previously never read. A caller had no way to tell "the provider accepted the API call" apart
+  // from "the message actually reached the recipient", so a rejected send looked identical to a
+  // delivered one: no thrown error, no logged failure, and (for outbox-based sends) no retry.
+  let results: unknown;
+  try { results = await response.json(); } catch { throw new Error('Mailchimp Transactional returned a response that could not be parsed.'); }
+  if (!Array.isArray(results) || results.length === 0) throw new Error('Mailchimp Transactional returned an unexpected response.');
+  const rejected = results.find((result): result is { reject_reason?: string; status?: string } =>
+    Boolean(result) && typeof result === 'object' && (result.status === 'rejected' || result.status === 'invalid'));
+  if (rejected) throw new Error(`Mailchimp Transactional rejected the message (${rejected.reject_reason ?? rejected.status}).`);
 }

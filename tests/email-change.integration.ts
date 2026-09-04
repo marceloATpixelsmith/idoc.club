@@ -27,7 +27,7 @@ test('issuing an email change for an active member does not mutate the email unt
     const message = JSON.parse(String(init?.body)).message;
     assert.deepEqual(message.to, [{ email: 'changed@example.test', type: 'to' }]);
     raw = capturedToken(message.html);
-    return new Response('[]', { status: 200 });
+    return new Response('[{"status":"sent"}]', { status: 200 });
   };
   try {
     const { user } = await createCompleteGraph();
@@ -65,7 +65,7 @@ test('issuing an email change for an active member does not mutate the email unt
 
 test('a superseding email-change request invalidates the prior pending token for that member only', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
   try {
     const member = await createUser();
     const other = await createUser();
@@ -108,7 +108,7 @@ test('two members racing to claim the same new email atomically resolve to exact
   const rawTokens: string[] = [];
   globalThis.fetch = async (_input, init) => {
     rawTokens.push(capturedToken(JSON.parse(String(init?.body)).message.html));
-    return new Response('[]', { status: 200 });
+    return new Response('[{"status":"sent"}]', { status: 200 });
   };
   try {
     const first = await createUser();
@@ -143,7 +143,7 @@ test('two members racing to claim the same new email atomically resolve to exact
 // `users_email_unique`, and must resolve to the same graceful 'invalid' outcome, not an uncaught error.
 test('claiming an address that collides only case-insensitively with an existing member resolves to invalid, not a server error', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('[]', { status: 200 });
+  globalThis.fetch = async () => new Response('[{"status":"sent"}]', { status: 200 });
   try {
     const [mixedCaseOwner] = await sql<{ id: number }[]>`
       insert into idoc.users (email,password_hash,email_verified_at,account_state)
@@ -153,7 +153,7 @@ test('claiming an address that collides only case-insensitively with an existing
     let raw = '';
     globalThis.fetch = async (_input, init) => {
       raw = capturedToken(JSON.parse(String(init?.body)).message.html);
-      return new Response('[]', { status: 200 });
+      return new Response('[{"status":"sent"}]', { status: 200 });
     };
     await issueEmailVerification(claimant.id, 'mixed.case@example.test');
     assert.ok(raw);
