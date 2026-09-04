@@ -29,7 +29,8 @@ function totp(secret: string) {
 test('live recovery remains constrained through replacement and acknowledgement', async ({ browser }) => {
   test.setTimeout(60_000);
   const sql = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
-  const context = await browser.newContext({ storageState: '.security-e2e/recovery-administrator.json' });
+  const context = await browser.newContext({ storageState: '.security-e2e/recovery-administrator.json',
+    permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage();
   const [fixture] = await sql<{ id: number }[]>`select id from idoc.users where email='recovery-administrator@security.example.test'`;
   const before = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
@@ -67,6 +68,16 @@ test('live recovery remains constrained through replacement and acknowledgement'
   await page.getByLabel('Authenticator code').fill(totp(replacementSecret));
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Store these recovery codes somewhere safe.')).toBeVisible();
+
+  // The copy-to-clipboard control renders the real recovery codes into the clipboard, not a
+  // placeholder -- proven against the actual code text shown on the page, not a fixed sample value.
+  await page.getByRole('button', { name: 'Copy recovery codes' }).click();
+  await expect(page.getByText('Recovery codes copied')).toBeVisible();
+  const shownRecoveryCodes = await page.locator('.idoc-auth-recovery-codes__item code').allInnerTexts();
+  expect(shownRecoveryCodes.length).toBeGreaterThan(0);
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  for (const shownCode of shownRecoveryCodes) expect(clipboardText).toContain(shownCode);
+
   const beforeAck = await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.id} and revoked_at is null`;
   expect(beforeAck[0].count).toBe(0);
   expect((await context.cookies()).some(({ name }) => name === 'idoc_pending_primary_mfa')).toBe(true);

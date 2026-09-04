@@ -163,8 +163,7 @@
 .idoc-auth-totp-enrollment__qr {
   width: 200px;
   height: 200px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 10px;
+  object-fit: contain;
 }
 
 .idoc-auth-totp-enrollment__manual {
@@ -172,21 +171,134 @@
   width: 100%;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-family: 'Manrope', Arial, Helvetica, sans-serif;
   font-size: 14px;
   color: var(--auth-instruction-color);
+  text-align: center;
 }
 
 .idoc-auth-totp-enrollment__manual code {
+  max-width: 100%;
   padding: 8px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.idoc-auth-recovery-codes {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.idoc-auth-recovery-codes__copy-row {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.idoc-auth-recovery-codes__copy-button {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--auth-primary-color);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.idoc-auth-recovery-codes__copy-button:hover {
+  border-color: var(--auth-primary-color);
+  background: #f8fafc;
+}
+
+.idoc-auth-recovery-codes__copy-button:focus-visible {
+  outline: none;
+  border-color: var(--auth-primary-color);
+  box-shadow: 0 0 0 3px #e5e7eb;
+}
+
+.idoc-auth-recovery-codes__copy-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.idoc-auth-recovery-codes__copy-status {
+  margin: 0;
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--auth-primary-color);
+  text-align: center;
+}
+
+.idoc-auth-recovery-codes__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
   border: 1.5px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  list-style: none;
+}
+
+.idoc-auth-recovery-codes__item {
+  min-width: 0;
+  text-align: center;
+}
+
+.idoc-auth-recovery-codes__item code {
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
   font-size: 14px;
-  color: var(--auth-input-color);
-  user-select: all;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.idoc-auth-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.idoc-auth-checkbox__input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--auth-primary-color);
+}
+
+.idoc-auth-checkbox__label {
+  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--auth-instruction-color);
+}
+
+@media (max-width: 480px) {
+  .idoc-auth-recovery-codes__list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .idoc-auth-error {
