@@ -58,7 +58,7 @@ All core membership-policy decisions in this section are approved. No production
 | Membership calendar       | Rolling 12 months; early renewal extends from current expiry; late renewal starts on actual payment date; preserve imported dates. | Approved |
 | Renewal choice            | Auto-renewal or one-time payment; auto selected by default.                                            | Approved |
 | Notices and grace         | Auto notice 15 days before; non-auto notice 30 days before; five-day active grace after automatic-payment failure. | Approved |
-| Administrator permissions | Administrator has full application access; Super Admin additionally holds restricted settings/functions. | Approved |
+| Administrator permissions | Administrator has full application access; Super Admin additionally holds restricted settings/functions, including the fresh-MFA-gated security-operations area. | Approved |
 | Manual exceptions         | EUR only; no discount, partial or waived payments; any admin may grant an audited complimentary membership. | Approved |
 
 # 4. Release 1 - membership foundation

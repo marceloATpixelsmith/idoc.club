@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GoogleOidcError, googleOauthClientSecretVersions, loadGoogleOidcConfig } from '../lib/auth/google-oidc-reference.ts';
+import {
+  explicitGoogleOauthClientSecretVersions,
+  GoogleOidcError,
+  googleOauthClientSecretVersions,
+  loadGoogleOidcConfig,
+} from '../lib/auth/google-oidc-reference.ts';
 
 // AUTH-SECRET-004: "OAuth client secrets MUST support verified bounded-overlap replacement,
 // rollback, retirement and audit without client exposure." These tests drive the real production
@@ -19,6 +24,13 @@ test('a plain GOOGLE_OAUTH_CLIENT_SECRET (no rotation config) resolves as an imp
   assert.equal(config.clientSecret, 'plain-secret-value');
   assert.equal(config.clientSecretVersion, 'v1');
   assert.deepEqual([...googleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' }).versions], [['v1', 'plain-secret-value']]);
+});
+
+test('rotation evidence rejects the legacy implicit v1 form because it is not an explicit versioned cutover', () => {
+  assert.throws(
+    () => explicitGoogleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'legacy-secret' }),
+    (error: unknown) => error instanceof GoogleOidcError,
+  );
 });
 
 test('the versioned rotation ring resolves the configured active version, with the prior version still present for rollback', () => {

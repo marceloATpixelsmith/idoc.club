@@ -164,12 +164,24 @@ function validRedirectUri(value: string): string {
 // never rotates needs nothing new: GOOGLE_OAUTH_CLIENT_SECRET alone is returned as an implicit
 // single-version ring, unchanged from before this row existed.
 // GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS + _ACTIVE_VERSION is the opt-in rotation-ready form.
-// google-oidc-secret-audit.ts provides the (secret-free) audit record of when the active version
-// last changed -- "audit" for a pure operator-driven config value has no runtime code path to hook
-// automatically, so it is a small function an operator's rotation runbook step calls explicitly.
+// google-oidc-secret-audit.ts provides the secret-free audit record of when the active version last
+// changed. The Super Admin security operation calls it after a real cutover/sign-in; a CLI remains
+// available as a non-browser operational fallback.
 export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process.env): { activeVersion: string; versions: ReadonlyMap<string, string> } {
   const { version, versions } = googleOauthClientSecret(env);
   return { activeVersion: version, versions };
+}
+
+/** Requires the explicit rotation-ready ring. The legacy single-secret form deliberately receives
+ * an implicit `v1` only for runtime compatibility; it is not auditable rotation evidence. */
+export function explicitGoogleOauthClientSecretVersions(
+  env: NodeJS.ProcessEnv = process.env,
+): { activeVersion: string; versions: ReadonlyMap<string, string> } {
+  if (
+    !env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim()
+    || !env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()
+  ) throw new GoogleOidcError('configuration');
+  return googleOauthClientSecretVersions(env);
 }
 
 function googleOauthClientSecret(env: NodeJS.ProcessEnv): { secret: string; version: string; versions: ReadonlyMap<string, string> } {
