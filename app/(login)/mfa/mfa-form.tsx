@@ -76,12 +76,37 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
   const [, acknowledge, acknowledging] = useActionState<State, FormData>(acknowledgeRecoveryCodes, {});
   const [, recover, recovering] = useActionState<State, FormData>(beginAuthenticatorRecovery, {});
   const [, cancel] = useActionState<State, FormData>(cancelMfa, {});
+  const [copied, setCopied] = useState(false);
+
+  async function copyRecoveryCodes(codes: string[]) {
+    await navigator.clipboard.writeText(codes.join('\n'));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
   if (state.recoveryCodes) return (
     <form action={acknowledge} className="idoc-auth-form">
       <CsrfField />
-      <p>Store these recovery codes somewhere safe. They will not be shown again.</p>
-      <ul aria-label="Recovery codes">{state.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
-      <label><input name="saved" required type="checkbox" value="yes" /> I saved my recovery codes.</label>
+      <p>Store these recovery codes somewhere safe. Each code can only be used once.</p>
+      <div className="idoc-auth-recovery-codes">
+        <div className="idoc-auth-recovery-codes__copy-row">
+          <button aria-label="Copy recovery codes" className="idoc-auth-recovery-codes__copy-button"
+            onClick={() => copyRecoveryCodes(state.recoveryCodes!)} title="Copy recovery codes" type="button">
+            <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <rect height="13" rx="2" ry="2" width="13" x="9" y="9" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
+        </div>
+        {copied ? <p className="idoc-auth-recovery-codes__copy-status" role="status">Recovery codes copied</p> : null}
+        <ul aria-label="Recovery codes" className="idoc-auth-recovery-codes__list">
+          {state.recoveryCodes.map((code) => <li className="idoc-auth-recovery-codes__item" key={code}><code>{code}</code></li>)}
+        </ul>
+      </div>
+      <label className="idoc-auth-checkbox" htmlFor="saved">
+        <input className="idoc-auth-checkbox__input" id="saved" name="saved" required type="checkbox" value="yes" />
+        <span className="idoc-auth-checkbox__label">I saved my recovery codes.</span>
+      </label>
       <button className="idoc-auth-button" disabled={acknowledging} type="submit">Finish sign in</button>
     </form>
   );
