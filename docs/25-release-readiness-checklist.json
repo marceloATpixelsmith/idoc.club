@@ -17,7 +17,11 @@
       "verifiedAt": "2026-09-04T18:33:44Z",
       "notes": "Operator visually confirmed every variable lib/runtime/configuration.ts fail-closed-requires is present in the Vercel Production environment: POSTGRES_URL, AUTH_SECRET, BASE_URL, CRON_SECRET, MAILCHIMP_TRANSACTIONAL_API_KEY, RATE_LIMIT_HASH_KEY, TURNSTILE_SECRET_KEY, LOGIN_DEVICE_TRUST_DIGEST_KEY, MFA_TOTP_ACTIVE_KEY_ID, MFA_TOTP_ENCRYPTION_KEYS, MFA_PENDING_AUTH_SIGNING_KEY, MFA_RECOVERY_CODE_DIGEST_KEY, ACCOUNT_DELIVERY_KEY_VERSION, ACCOUNT_DELIVERY_ENCRYPTION_KEYS, IDOC_ADMIN_NOTIFICATION_EMAIL, STRIPE_SECRET_KEY/WEBHOOK_SECRET/RECURRING_PRODUCT_ID/ONE_TIME_PRODUCT_ID, GOOGLE_OAUTH_CLIENT_ID/REDIRECT_URI. Google's client secret is configured via the rotation-ready GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS+_ACTIVE_VERSION pair (also present); confirmed in lib/auth/google-oidc-reference.ts that when VERSIONS is set it takes exclusive priority, so the also-present legacy GOOGLE_OAUTH_CLIENT_SECRET is inert, not a conflict."
     } },
-    { "id": "google-production-origin-callback-configured", "description": "Google production origin/callback are configured", "status": "unchecked", "evidence": null },
+    { "id": "google-production-origin-callback-configured", "description": "Google production origin/callback are configured", "status": "verified", "evidence": {
+      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
+      "verifiedAt": "2026-09-04T18:39:41Z",
+      "notes": "Confirmed in Google Cloud Console's OAuth 2.0 Client credentials page: Authorized JavaScript origins list both https://idoc.club and https://redesign.idoc.club (the in-progress redesign's staging domain); Authorized redirect URIs list the matching https://idoc.club/api/auth/google/callback and https://redesign.idoc.club/api/auth/google/callback, exactly matching the app's real callback route and the GOOGLE_OAUTH_REDIRECT_URI convention."
+    } },
     { "id": "security-email-delivery-retry-verified", "description": "Security-email delivery and retry operation are verified", "status": "unchecked", "evidence": null },
     { "id": "privileged-totp-enrollment-login-verified", "description": "Privileged TOTP enrollment and password/Google login are verified", "status": "unchecked", "evidence": null },
     { "id": "ordinary-password-otp-remembered-device-verified", "description": "Ordinary password+OTP and remembered-device behavior are verified", "status": "unchecked", "evidence": null },
