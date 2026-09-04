@@ -55,11 +55,15 @@ test('live recovery remains constrained through replacement and acknowledgement'
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.locator('.idoc-auth-error')).toContainText('incorrect');
 
-  // The "Authenticator setup key" field is the bare base32 secret meant for an authenticator app's
-  // manual-entry field, not the full otpauth:// provisioning URI (which is what a QR code encodes).
-  const replacementSecret = await page.getByLabel('Authenticator setup key').inputValue();
+  // The manual setup key is the bare base32 secret meant for an authenticator app's manual-entry
+  // field, not the full otpauth:// provisioning URI (which is what the QR code encodes).
+  const replacementSecret = await page.locator('.idoc-auth-totp-enrollment__manual code').innerText();
   expect(replacementSecret).toBeTruthy();
   expect(replacementSecret).toMatch(/^[A-Z2-7]+$/);
+  // The authenticator code field is a controlled multi-slot OTP input (`input-otp`); a second
+  // `.fill()` on top of an already-filled value only replaces the last differing character rather
+  // than the whole value, so the field is cleared first to force a clean fill.
+  await page.getByLabel('Authenticator code').fill('');
   await page.getByLabel('Authenticator code').fill(totp(replacementSecret));
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Store these recovery codes somewhere safe.')).toBeVisible();

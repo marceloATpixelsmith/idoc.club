@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import QRCode from 'qrcode';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
@@ -19,6 +20,7 @@ export default async function MfaPage() {
       title="Verify it's you"><MfaForm hasWebAuthn={stepUp.hasWebAuthn} mode="step-up" /></AuthShell>;
   }
   let provisioningUri: string | undefined;
+  let qrCodeDataUrl: string | undefined;
   if (pending.stage === 'enrollment' || pending.stage === 'replacement') {
     const enrollment = await mfaStore.getPendingTotpEnrollment({ applicationId: pending.applicationId,
       factorId: pending.factorId, nowMs: Date.now(), subjectId: String(pending.subjectId), transactionId: pending.transactionId });
@@ -29,16 +31,17 @@ export default async function MfaPage() {
       secret: decryptTotpSecret(enrollment.factor.encryptedSecret, (keyId) => {
         const key = config.encryptionKeys.get(keyId); if (!key) throw new Error('MFA key unavailable.'); return key;
       }) });
+    qrCodeDataUrl = await QRCode.toDataURL(provisioningUri);
   }
   const setup = pending.stage === 'enrollment' || pending.stage === 'replacement';
   const recoveryAck = pending.stage === 'recovery-ack';
   const rememberedDevice = pending.stage === 'challenge' ? mfaConfiguration().rememberedDevice : undefined;
   return <AuthShell description={pending.stage === 'recovery-entry' ? 'Use a saved recovery code to replace your authenticator.'
     : recoveryAck ? 'Save the new recovery codes before finishing sign in.'
-    : setup ? 'Add the new account to your authenticator app.' : 'Enter the current code from your authenticator app.'}
+    : setup ? 'Set up your authenticator app to continue.' : 'Enter the current code from your authenticator app.'}
     title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : recoveryAck ? 'Finish authenticator recovery'
       : setup ? 'Set up authenticator' : 'Two-step verification'}>
     <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri}
-      rememberDeviceDays={rememberedDevice?.days} rememberDeviceEnabled={rememberedDevice?.enabled} />
+      qrCodeDataUrl={qrCodeDataUrl} rememberDeviceDays={rememberedDevice?.days} rememberDeviceEnabled={rememberedDevice?.enabled} />
   </AuthShell>;
 }

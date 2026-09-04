@@ -1,9 +1,11 @@
 'use client';
 
+import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useActionState, useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfField } from '@/components/security/csrf-field';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import {
   acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, beginLoginWebAuthn,
@@ -65,11 +67,12 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   );
 }
 
-export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays, rememberDeviceEnabled }: {
-  hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
+export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
+  hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
 }) {
   const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
+  const [code, setCode] = useState('');
   const [, acknowledge, acknowledging] = useActionState<State, FormData>(acknowledgeRecoveryCodes, {});
   const [, recover, recovering] = useActionState<State, FormData>(beginAuthenticatorRecovery, {});
   const [, cancel] = useActionState<State, FormData>(cancelMfa, {});
@@ -94,7 +97,10 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
     <>
       <form action={formAction} className="idoc-auth-form">
         <CsrfField />
-        <label>Recovery code<input autoComplete="off" autoFocus maxLength={64} name="recoveryCode" required /></label>
+        <div className="idoc-auth-field">
+          <label className="idoc-auth-label" htmlFor="recoveryCode">Recovery code</label>
+          <input autoComplete="off" autoFocus className="idoc-auth-input" id="recoveryCode" maxLength={64} name="recoveryCode" required />
+        </div>
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
         <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Checking" /> : 'Continue'}</button>
       </form>
@@ -106,10 +112,24 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
     <form action={formAction} className="idoc-auth-form">
       <CsrfField />
       {(mode === 'enrollment' || mode === 'replacement') && provisioningUri ? <>
-        <p>Add this account in your authenticator app, then enter its current code.</p>
-        <label>Authenticator setup key<input readOnly value={totpSecretFromProvisioningUri(provisioningUri)} /></label>
+        <p>Scan the QR code with your authenticator app, then enter the 6-digit code it generates.</p>
+        <div className="idoc-auth-totp-enrollment">
+          {qrCodeDataUrl ? <img alt="Authenticator QR code" className="idoc-auth-totp-enrollment__qr" height={200} src={qrCodeDataUrl} width={200} /> : null}
+          <div className="idoc-auth-totp-enrollment__manual">
+            <span>Manual setup key</span>
+            <code>{totpSecretFromProvisioningUri(provisioningUri)}</code>
+          </div>
+        </div>
       </> : null}
-      <label>Authenticator code<input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} name="code" pattern="[0-9]{6}" required /></label>
+      <div className="idoc-auth-otp">
+        <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" autoFocus disabled={pending} maxLength={6} name="code" onChange={setCode} pattern={REGEXP_ONLY_DIGITS} required value={code}>
+          <InputOTPGroup className="grid w-full grid-cols-6 gap-2">
+            {[0, 1, 2, 3, 4, 5].map((index) => (
+              <InputOTPSlot className="h-[52px] w-full rounded-[10px] border-[1.5px] border-slate-200 bg-white text-xl font-semibold text-slate-900" index={index} key={index} />
+            ))}
+          </InputOTPGroup>
+        </InputOTP>
+      </div>
       {mode === 'challenge' && rememberDeviceEnabled ? (
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input name="remember" type="checkbox" />
