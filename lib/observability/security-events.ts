@@ -61,6 +61,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   mailchimp_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
   mailchimp_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'security' },
   mailchimp_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
+  mfa_recovery_transition_failed: { attribution: 'subject', category: 'auth', metadata: { subjectId: 'positiveInteger' }, resource: 'mfa-recovery', retentionClass: 'security' },
   operational_alert_dead_lettered: { attribution: 'system', category: 'delivery', metadata: { kind: ['incident_response_action_taken', 'rate_limit_correlation_alert'] }, resource: 'operational-alert-outbox', retentionClass: 'operational' },
   operational_alert_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'operational-alert-outbox', retentionClass: 'operational' },
   rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security' },

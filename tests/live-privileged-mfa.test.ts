@@ -48,7 +48,7 @@ test('recovery authorizes only purpose-bound replacement and acknowledgement pre
   const actions = source('app/(login)/mfa/actions.ts');
   const recoverySecurity = source('lib/auth/mfa/recovery-security.ts');
   const finalization = source('lib/auth/mfa/replacement-finalization.ts');
-  assert.match(actions, /consumeRecoveryCodeWithEvidence\(/);
+  assert.match(actions, /consumeRecoveryCodeAndBeginReplacement\(/);
   assert.match(recoverySecurity, /client\.begin\(/);
   assert.match(recoverySecurity, /update idoc\.mfa_recovery_codes set consumed_at=/);
   assert.match(recoverySecurity, /auth\.mfa\.recovery_code\.used/);

@@ -216,9 +216,15 @@ test('AUTH-RECOVERY-005 old action cookies cannot replay entry, replacement, or 
   await t.test('old recovery-entry cannot consume twice or create duplicate enrollment/evidence', async () => {
     const entry = await recoveryEntry(); const old = entry.cookies.clone();
     await withTestRequestCookies(entry.cookies, () => redirected(() => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(entry.cookies)))));
+    const firstPending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
+    assert.equal(firstPending?.stage, 'replacement');
     const after = await state(entry.user.id);
-    assert.deepEqual(await withTestRequestCookies(old, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(old)))),
-      { error: 'That recovery code could not be used.' });
+    await withTestRequestCookies(old, () => redirected(() =>
+      authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, csrfTokenFrom(old)))));
+    const resumedPending = await withTestRequestCookies(old, getPendingPrimaryAuth);
+    assert.equal(resumedPending?.stage, 'replacement');
+    assert.equal(resumedPending?.factorId, firstPending?.factorId);
+    assert.equal(resumedPending?.transactionId, firstPending?.transactionId);
     assert.deepEqual(await state(entry.user.id), after); await assertNoSession(old, entry.user.id);
   });
   await t.test('old replacement cannot activate or rotate twice', async () => {

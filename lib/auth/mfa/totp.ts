@@ -167,7 +167,7 @@ export function decryptTotpSecret(serialized: string, resolveKey: (keyId: string
   ]).toString('utf8');
 }
 
-export async function beginTotpEnrollment(input: {
+export function prepareTotpEnrollment(input: {
   subjectId: string;
   applicationId: string;
   issuer: string;
@@ -175,12 +175,12 @@ export async function beginTotpEnrollment(input: {
   keyId: string;
   encryptionKey: Buffer;
   purpose?: TotpEnrollmentRecord['purpose'];
-  store: MfaStore;
+  transactionId?: string;
   nowMs?: number;
 }) {
   const nowMs = input.nowMs ?? Date.now();
   const factorId = randomUUID();
-  const transactionId = randomUUID();
+  const transactionId = input.transactionId ?? randomUUID();
   const secret = generateTotpSecret();
   const factor: TotpFactorRecord = {
     factorId,
@@ -207,8 +207,9 @@ export async function beginTotpEnrollment(input: {
     expiresAtMs: nowMs + TOTP_ENROLLMENT_TTL_MS,
     consumedAtMs: null,
   };
-  await input.store.createPendingTotp({ factor, enrollment });
   return {
+    enrollment,
+    factor,
     factorId,
     transactionId,
     provisioningUri: totpProvisioningUri({
@@ -216,6 +217,26 @@ export async function beginTotpEnrollment(input: {
       issuer: input.issuer,
       accountLabel: input.accountLabel,
     }),
+  };
+}
+
+export async function beginTotpEnrollment(input: {
+  subjectId: string;
+  applicationId: string;
+  issuer: string;
+  accountLabel: string;
+  keyId: string;
+  encryptionKey: Buffer;
+  purpose?: TotpEnrollmentRecord['purpose'];
+  store: MfaStore;
+  nowMs?: number;
+}) {
+  const prepared = prepareTotpEnrollment(input);
+  await input.store.createPendingTotp({ factor: prepared.factor, enrollment: prepared.enrollment });
+  return {
+    factorId: prepared.factorId,
+    transactionId: prepared.transactionId,
+    provisioningUri: prepared.provisioningUri,
   };
 }
 

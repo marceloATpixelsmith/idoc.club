@@ -31,7 +31,7 @@ test('one-time MFA and session security evidence share atomic persistence bounda
   assert.match(recovery, /mfa_recovery_codes[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
   assert.match(enrollment, /mfa_enrollment_transactions[\s\S]*mfa_recovery_codes[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
   assert.match(sessions, /auth_sessions[\s\S]*audit_log[\s\S]*auth_security_notification_outbox/);
-  assert.match(actions, /consumeRecoveryCodeWithEvidence/);
+  assert.match(actions, /consumeRecoveryCodeAndBeginReplacement/);
   assert.match(actions, /finalizeInitialAuthenticatorEnrollment/);
 });
 
