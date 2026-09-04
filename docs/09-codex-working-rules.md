@@ -21,7 +21,7 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 ## 2. Scope, architecture, and documentation
 
 1. Read the relevant documents in `docs/` before changing code. Start with [Product Roadmap and Functional Requirements](08-product-roadmap-and-functional-requirements.md), then read the documents governing the affected behavior.
-2. Preserve the approved IDOC architecture unless the task explicitly changes it: Next.js on Vercel, Render PostgreSQL in the dedicated `idoc` schema, Stripe for billing, Mailchimp Transactional for notifications, and application-controlled membership entitlement.
+2. Preserve the approved IDOC architecture unless the task explicitly changes it: Next.js on Vercel, Render PostgreSQL in the dedicated `idoc` schema, Stripe for billing, Brevo Transactional for notifications, and application-controlled membership entitlement.
 3. Do not invent a new architecture, replace approved services, or treat Stripe status as the authorization system.
 4. Keep changes focused on the requested task. Do not make unrelated cleanup changes or add unrequested features.
 5. Keep code and the governing Markdown documentation aligned in the same pull request whenever behavior changes.
@@ -31,7 +31,7 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 ## 3. Security and data integrity
 
 1. Never expose or log secret values, and never store resolved secret values in the database.
-2. Keep database, Stripe, Mailchimp Transactional, authentication, and other privileged credentials server-only.
+2. Keep database, Stripe, Brevo Transactional, authentication, and other privileged credentials server-only.
 3. Do not weaken raw-secret rejection or alter existing `secure` calls unless the task explicitly requires it.
 4. Enforce authorization server-side at every data-access and mutation boundary. UI visibility alone is never authorization.
 5. Do not trust browser-supplied membership, payment, role, professional-level, administrator, or entitlement state.

@@ -58,11 +58,11 @@ export const DEPENDENCY_RISK_REGISTER: readonly DependencyRiskEntry[] = [
     evidence: 'lib/auth/turnstile.ts verifyTurnstile: every failure branch returns false, never throws past its own boundary. Proven directly in tests/dependency-risk-register.test.ts and tests/turnstile-contract.test.ts.',
   },
   {
-    name: 'mailchimp-transactional',
+    name: 'brevo-transactional',
     posture: 'retry-queue',
     authorityRisk: 'best-effort',
     rationale: "Email delivery is how a member learns about evidence (a reset link, an OTP code, a security notice) that already exists and is already authoritative on its own -- a delivery failure must never itself grant, deny, or fabricate authority, only affect whether/when the member is told about it. Blocking the underlying action on delivery succeeding would make the mail provider a single point of failure for actions it isn't authoritative for.",
-    evidence: 'lib/notifications/account-delivery.ts / mailchimp-transactional.ts: a send failure is caught and the item is left for the outbox retry/dead-letter worker (deliverNextAccountLink), never silently dropped and never blocks the caller. Proven behaviorally in tests/account-delivery-worker.integration.ts and tests/evidence-safety-scan.integration.ts (the provider-failure sweep).',
+    evidence: 'lib/notifications/account-delivery.ts / brevo-transactional.ts: a send failure is caught and the item is left for the outbox retry/dead-letter worker (deliverNextAccountLink), never silently dropped and never blocks the caller. Proven behaviorally in tests/account-delivery-worker.integration.ts and tests/evidence-safety-scan.integration.ts (the provider-failure sweep).',
   },
   {
     name: 'have-i-been-pwned',

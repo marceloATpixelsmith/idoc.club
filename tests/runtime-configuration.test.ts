@@ -5,9 +5,10 @@ import {
   authSecretForServer,
   authSecretRingForServer,
   baseUrlForServer,
+  brevoApiKeyForServer,
+  brevoFromEmailForServer,
   databaseUrlForServer,
   loginDeviceTrustDigestKeyForServer,
-  mailchimpApiKeyForServer,
   mfaConfiguration,
   privilegedProductionConfiguration,
   stripeKeyForServer,
@@ -22,7 +23,7 @@ const valid = {
   BASE_URL: 'https://idoc.club', CRON_SECRET: 'c'.repeat(32),
   IDOC_ADMIN_NOTIFICATION_EMAIL: 'operations@idoc.club',
   LOGIN_DEVICE_TRUST_DIGEST_KEY: Buffer.alloc(32, 4).toString('base64url'),
-  MAILCHIMP_TRANSACTIONAL_API_KEY: 'd'.repeat(22),
+  BREVO_API_KEY: 'd'.repeat(32), BREVO_FROM_EMAIL: 'accounts@idoc.club',
   POSTGRES_URL: 'postgres://user:password@database.internal:5432/idoc',
   RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_ONE_TIME_PRODUCT_ID: 'prod_one_time_live',
   STRIPE_RECURRING_PRODUCT_ID: 'prod_recurring_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
@@ -110,14 +111,17 @@ test('AUTH-CRYPTO-005: a malformed or undersized AUTH_SECRET_RETIRED_KEYS fails 
   }
 });
 
-test('the Mailchimp Transactional API key is accepted at its real, shorter length and only rejected when actually blank or missing', () => {
-  // Regression test: this key is a third-party-issued Mandrill credential in a fixed, ~22-character
-  // format, not a self-generated secret like AUTH_SECRET/CRON_SECRET/RATE_LIMIT_HASH_KEY that should
-  // be long and random. A blanket 32-character minimum previously rejected genuinely valid,
-  // correctly configured production keys as "not configured."
-  assert.equal(mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: 'md-1234567890abcdefghij' }), 'md-1234567890abcdefghij');
+test('the Brevo API key is accepted whenever present and only rejected when actually blank or missing', () => {
+  assert.equal(brevoApiKeyForServer({ BREVO_API_KEY: 'xkeysib-1234567890abcdefghij' }), 'xkeysib-1234567890abcdefghij');
   for (const value of [undefined, '', '   ']) {
-    assert.throws(() => mailchimpApiKeyForServer({ MAILCHIMP_TRANSACTIONAL_API_KEY: value }), /MAILCHIMP_TRANSACTIONAL_API_KEY/);
+    assert.throws(() => brevoApiKeyForServer({ BREVO_API_KEY: value }), /BREVO_API_KEY/);
+  }
+});
+
+test('the Brevo from-email address must be a plausible email address, not just any non-blank value', () => {
+  assert.equal(brevoFromEmailForServer({ BREVO_FROM_EMAIL: 'accounts@idoc.club' }), 'accounts@idoc.club');
+  for (const value of [undefined, '', '   ', 'not-an-email', '@idoc.club', 'accounts@']) {
+    assert.throws(() => brevoFromEmailForServer({ BREVO_FROM_EMAIL: value }), /BREVO_FROM_EMAIL/);
   }
 });
 

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox } from '@/lib/db/schema';
-import { sendTransactionalEmail } from './mailchimp-transactional';
+import { sendTransactionalEmail } from './brevo-transactional';
 import { emailButton, renderTransactionalEmail } from './email-template';
 import { taggedSubject } from './alert-severity';
 import { baseUrlForServer } from '@/lib/runtime/configuration';

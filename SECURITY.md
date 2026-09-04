@@ -25,7 +25,7 @@ demonstrate the issue).
 ## Scope
 
 This covers the IDOC web application and its first-party infrastructure. Third-party providers we
-integrate with (Google, Cloudflare Turnstile, Stripe, Mailchimp) have their own security reporting
+integrate with (Google, Cloudflare Turnstile, Stripe, Brevo) have their own security reporting
 channels and are out of scope here.
 
 ## Current posture

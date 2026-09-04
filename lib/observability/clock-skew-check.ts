@@ -3,7 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { taggedSubject } from '@/lib/notifications/alert-severity';
 import { logError } from './logger';
 

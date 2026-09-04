@@ -83,7 +83,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
-  'app/api/mailchimp/webhook/route.ts': 'mandrill-signature',
+  'app/api/brevo/webhook/route.ts': 'shared-secret-query-param',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
@@ -249,9 +249,9 @@ test('the Stripe webhook Route Handler verifies the signature before dispatching
   const source = readFileSync(path.join(root, 'app/api/stripe/webhook/route.ts'), 'utf8'); const verify = source.indexOf('constructEvent'); const dispatch = source.indexOf('processStripeEvent(event, stripe)'); assert.ok(verify >= 0 && dispatch > verify);
 });
 
-test('the Mailchimp webhook Route Handler verifies the Mandrill signature before parsing or acting on any event', () => {
-  const source = readFileSync(path.join(root, 'app/api/mailchimp/webhook/route.ts'), 'utf8');
-  const verify = source.indexOf('verifyMandrillSignature('); const parse = source.indexOf('parseMandrillEvents(');
+test('the Brevo webhook Route Handler verifies the shared webhook key before parsing or acting on any event', () => {
+  const source = readFileSync(path.join(root, 'app/api/brevo/webhook/route.ts'), 'utf8');
+  const verify = source.indexOf('verifyBrevoWebhookKey('); const parse = source.indexOf('parseBrevoEvent(');
   assert.ok(verify >= 0 && parse > verify);
 });
 

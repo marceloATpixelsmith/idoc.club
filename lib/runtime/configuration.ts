@@ -88,11 +88,21 @@ export function cronSecretForServer(environment: Environment = process.env) { re
 export function supportEmailForServer(environment: Environment = process.env) {
   return environment.SUPPORT_EMAIL?.trim() || 'support@idoc.club';
 }
-// Not routed through secret()'s 32-character minimum: unlike the self-generated secrets below
-// (CRON_SECRET, RATE_LIMIT_HASH_KEY, TURNSTILE_SECRET_KEY), this is a third-party-issued Mandrill
-// API key in a fixed, shorter format we don't control -- real keys are commonly ~22 characters, so
-// that generic minimum rejected a genuinely valid, correctly configured key as "not configured."
-export function mailchimpApiKeyForServer(environment: Environment = process.env) { return required(environment, 'MAILCHIMP_TRANSACTIONAL_API_KEY'); }
+export function brevoApiKeyForServer(environment: Environment = process.env) { return required(environment, 'BREVO_API_KEY'); }
+
+// The address every transactional email is sent from. Validated as a plausible email address (the
+// same shape check as IDOC_ADMIN_NOTIFICATION_EMAIL below) rather than left as a bare non-empty
+// string, since a malformed value here would otherwise only surface as a provider-side send failure.
+export function brevoFromEmailForServer(environment: Environment = process.env) {
+  const value = required(environment, 'BREVO_FROM_EMAIL');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error('Invalid production configuration: BREVO_FROM_EMAIL.');
+  return value;
+}
+
+// Brevo does not sign webhook deliveries (no HMAC/JWT header): the shared secret in this value is
+// instead required as a query parameter on the webhook URL configured in Brevo's dashboard, so an
+// attacker who doesn't know it cannot forge delivery/bounce events toward this endpoint.
+export function brevoWebhookKeyForServer(environment: Environment = process.env) { return secret(environment, 'BREVO_WEBHOOK_KEY'); }
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 
@@ -242,7 +252,7 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     authSecret: authSecretForServer(environment), baseUrl: baseUrlForServer(environment),
     cronSecret: secret(environment, 'CRON_SECRET'), databaseUrl: databaseUrlForServer(environment),
     loginDeviceTrustDigestKey: loginDeviceTrustDigestKeyForServer(environment),
-    mailchimpApiKey: mailchimpApiKeyForServer(environment),
+    brevoApiKey: brevoApiKeyForServer(environment), brevoFromEmail: brevoFromEmailForServer(environment),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
     stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),
     stripeRecurringProductId: stripeRecurringProductIdForServer(environment),

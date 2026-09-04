@@ -17,7 +17,8 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 Object.assign(process.env, {
   AUTH_SECRET: 'integration-auth-secret-that-is-long-enough',
   BASE_URL: 'http://localhost:3000',
-  MAILCHIMP_TRANSACTIONAL_API_KEY: 'integration-only-provider-key-32-chars-plus',
+  BREVO_API_KEY: 'integration-only-provider-key',
+  BREVO_FROM_EMAIL: 'accounts@idoc.club',
   RATE_LIMIT_HASH_KEY: 'integration-rate-limit-secret-is-long-enough',
 });
 
@@ -35,13 +36,13 @@ beforeEach(async () => {
   capturedCode = '';
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (url === 'https://mandrillapp.com/api/1.0/messages/send.json') {
+    if (url === 'https://api.brevo.com/v3/smtp/email') {
       const body = JSON.parse(String(init?.body));
       // Matches only rendered text content between tags (the emailCode() div's `>123456</div>`),
       // never a CSS hex color value like `#111827` inside a style attribute.
-      const match = String(body.message.html).match(/>(\d{6})</);
+      const match = String(body.htmlContent).match(/>(\d{6})</);
       capturedCode = match ? match[1] : '';
-      return new Response('[{"status":"sent"}]', { status: 200 });
+      return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
     }
     return originalFetch(input, init);
   };

@@ -217,7 +217,7 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 # 7. Member account and profile changes
 
-The Release 1 persistence workflow closes the current professional-role rows and inserts newly validated rows instead of overwriting role history. The profile update, role history, profile-change history, audit entry, and administrator-notification outbox entry are committed in one database transaction. Notification delivery through Mailchimp Transactional remains Release 2 scope.
+The Release 1 persistence workflow closes the current professional-role rows and inserts newly validated rows instead of overwriting role history. The profile update, role history, profile-change history, audit entry, and administrator-notification outbox entry are committed in one database transaction. Notification delivery through Brevo Transactional remains Release 2 scope.
 
 - A currently paid or grace-period member may update every signup/profile field, including professional classification, National Federation, IDOC Region, FEI ID, official status and Technical Delegate answer. A never-paid or post-grace expired account cannot reach these member-profile capabilities until payment restores entitlement.
 
@@ -263,7 +263,7 @@ Existing migrated users should encounter an account-access/activation flow, not 
 
 # 11. Communications
 
-- Use Mailchimp Transactional for application notifications, from accounts@idoc.club.
+- Use Brevo Transactional for application notifications, from accounts@idoc.club.
 
 - Members may opt out of event notifications and marketing email. They may not opt out of account-standing, payment, security, renewal, expiration, or other messages necessary to operate their account.
 

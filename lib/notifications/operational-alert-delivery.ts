@@ -2,7 +2,7 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
-import { sendTransactionalEmail } from './mailchimp-transactional';
+import { sendTransactionalEmail } from './brevo-transactional';
 import { logError } from '@/lib/observability/logger';
 
 // AUTH-OPERATIONS-006: the leased, retrying delivery worker for idoc.operational_alert_outbox,

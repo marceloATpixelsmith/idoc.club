@@ -5,7 +5,7 @@ import { db } from '@/lib/db/drizzle';
 
 // AUTH-OPERATIONS-006: a Codex review caught that the rate-limit correlation alert's email send was
 // awaited directly inside checkRateLimit -- the authentication-adjacent hot path every sign-in,
-// sign-up, and password-reset request runs through -- so an unbounded or slow Mailchimp call could
+// sign-up, and password-reset request runs through -- so an unbounded or slow Brevo call could
 // hold every one of those requests open. This module is the durable, leased, concurrency-safe queue
 // that decouples "detect the sustained pattern and durably record that an alert is owed" (fast: one
 // indexed insert, still on the hot path but bounded and already-paid-for by the same database this

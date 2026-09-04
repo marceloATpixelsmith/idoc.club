@@ -246,7 +246,8 @@ test('rotating the origin alone cannot bypass the legacy recovery path\'s per-em
 
 test('a breached password is rejected without consuming the token, and alerts the configured operations recipient', async () => {
   process.env.IDOC_ADMIN_NOTIFICATION_EMAIL = 'webmaster@idoc.club';
-  process.env.MAILCHIMP_TRANSACTIONAL_API_KEY = 'integration-only-mailchimp-key';
+  process.env.BREVO_API_KEY = 'integration-only-brevo-key';
+  process.env.BREVO_FROM_EMAIL = 'accounts@idoc.club';
   const breachedPassword = 'Breached9Password';
   const suffix = createHash('sha1').update(breachedPassword, 'utf8').digest('hex').toUpperCase().slice(5);
   const originalFetch = globalThis.fetch;
@@ -256,9 +257,9 @@ test('a breached password is rejected without consuming the token, and alerts th
     if (url.startsWith('https://api.pwnedpasswords.com/')) {
       return new Response(`${suffix}:37`, { headers: { 'content-type': 'text/plain' }, status: 200 });
     }
-    if (url.startsWith('https://mandrillapp.com/')) {
+    if (url === 'https://api.brevo.com/v3/smtp/email') {
       sentMessages.push(JSON.parse(String(init?.body)));
-      return new Response('[{"status":"sent"}]', { headers: { 'content-type': 'application/json' }, status: 200 });
+      return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { headers: { 'content-type': 'application/json' }, status: 201 });
     }
     return originalFetch(input, init);
   }) as typeof fetch;
@@ -273,10 +274,10 @@ test('a breached password is rejected without consuming the token, and alerts th
     const [after] = await sql`select password_hash from idoc.users where id=${user.id}`;
     assert.equal(after.password_hash, before.password_hash);
     assert.equal(sentMessages.length, 1);
-    const [{ message }] = sentMessages as [{ message: { html: string; to: { email: string }[] } }];
+    const [message] = sentMessages as [{ htmlContent: string; to: { email: string }[] }];
     assert.equal(message.to[0].email, 'webmaster@idoc.club');
-    assert.equal(message.html.includes(breachedPassword), false);
-    assert.equal(message.html.includes(user.email), true);
+    assert.equal(message.htmlContent.includes(breachedPassword), false);
+    assert.equal(message.htmlContent.includes(user.email), true);
     // The same good password, using the same still-unconsumed token, still succeeds afterward --
     // rejecting a breached password must not burn the user's one-time recovery token.
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -288,7 +289,8 @@ test('a breached password is rejected without consuming the token, and alerts th
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
-    delete process.env.MAILCHIMP_TRANSACTIONAL_API_KEY;
+    delete process.env.BREVO_API_KEY;
+    delete process.env.BREVO_FROM_EMAIL;
   }
 });
 
@@ -297,11 +299,11 @@ test('a breached password alert is skipped, not thrown, when no operations recip
   const breachedPassword = 'AnotherBreached9Password';
   const suffix = createHash('sha1').update(breachedPassword, 'utf8').digest('hex').toUpperCase().slice(5);
   const originalFetch = globalThis.fetch;
-  let mandrillCalled = false;
+  let brevoCalled = false;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (url.startsWith('https://api.pwnedpasswords.com/')) return new Response(`${suffix}:1`, { status: 200 });
-    if (url.startsWith('https://mandrillapp.com/')) { mandrillCalled = true; return new Response('[{"status":"sent"}]', { status: 200 }); }
+    if (url === 'https://api.brevo.com/v3/smtp/email') { brevoCalled = true; return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 }); }
     return originalFetch(input, init);
   }) as typeof fetch;
   try {
@@ -309,7 +311,7 @@ test('a breached password alert is skipped, not thrown, when no operations recip
     await requestAccountLink(user.email, 'password_reset', 'origin', { now: () => 0, random: () => 0, sleep: async () => undefined });
     const raw = await rawRequestedToken(user.id, 'password_reset');
     assert.deepEqual(await consumeAccountToken(raw, 'password_reset', breachedPassword), { status: 'breached_password' });
-    assert.equal(mandrillCalled, false);
+    assert.equal(brevoCalled, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

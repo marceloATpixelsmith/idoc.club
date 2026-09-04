@@ -1,20 +1,20 @@
 import 'server-only';
 
 import { escapeHtml, renderTransactionalEmail } from './email-template';
-import { sendTransactionalEmail } from './mailchimp-transactional';
+import { sendTransactionalEmail } from './brevo-transactional';
 import { taggedSubject } from './alert-severity';
 import { logWarn } from '@/lib/observability/logger';
 
 const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 
 /** Best-effort operational alert only, mirroring google-oauth-failure-alert.ts's pattern: bounded to
- * ALERT_DELIVERY_TIMEOUT_MS so a slow/unresponsive Mailchimp can never hold the webhook response
- * open, and skips (rather than throws) when IDOC_ADMIN_NOTIFICATION_EMAIL is unconfigured. Never
- * includes the bounced/complaining address's raw provider diagnostic text (`msg.diag`) -- only the
- * event type and, for a bounce, Mandrill's own fixed short `bounce_description` code. Deliberately
- * does not suppress or otherwise act on future sends to this address: that is a policy decision this
- * pull request leaves to a human reviewing the alert, not something to decide unilaterally here (see
- * docs/22 AUTH-EMAIL-007 for the reasoning). */
+ * ALERT_DELIVERY_TIMEOUT_MS so a slow/unresponsive Brevo can never hold the webhook response open,
+ * and skips (rather than throws) when IDOC_ADMIN_NOTIFICATION_EMAIL is unconfigured. The bounce
+ * `reasonCode` is Brevo's own length-capped `reason` text (see brevo-transactional-webhook.ts) --
+ * already bounded before it reaches here, since unlike Mandrill's fixed short codes it is free text
+ * from the receiving mail server. Deliberately does not suppress or otherwise act on future sends to
+ * this address: that is a policy decision this pull request leaves to a human reviewing the alert,
+ * not something to decide unilaterally here (see docs/22 AUTH-EMAIL-007 for the reasoning). */
 export async function notifyWebmasterOfEmailEvent(input: { email: string; kind: 'email.hard_bounce' | 'email.spam_complaint'; reasonCode?: string }): Promise<void> {
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) {

@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { escapeHtml, renderTransactionalEmail } from './email-template';
-import { sendTransactionalEmail } from './mailchimp-transactional';
+import { sendTransactionalEmail } from './brevo-transactional';
 import { taggedSubject } from './alert-severity';
 import { logWarn } from '@/lib/observability/logger';
 

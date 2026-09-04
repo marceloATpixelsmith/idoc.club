@@ -10,7 +10,8 @@ import { closeHarness, resetIdoc } from './postgres-harness.ts';
 
 process.env.RATE_LIMIT_HASH_KEY ??= 'clock-skew-test-rate-limit-secret';
 process.env.IDOC_ADMIN_NOTIFICATION_EMAIL = 'ops@example.test';
-process.env.MAILCHIMP_TRANSACTIONAL_API_KEY ??= 'integration-only-provider-key-32-chars-plus';
+process.env.BREVO_API_KEY ??= 'integration-only-provider-key';
+process.env.BREVO_FROM_EMAIL ??= 'accounts@idoc.club';
 
 const originalDateNow = Date.now;
 const originalFetch = globalThis.fetch;
@@ -19,10 +20,10 @@ let sentAlerts: { subject: string }[] = [];
 before(() => {
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (url === 'https://mandrillapp.com/api/1.0/messages/send.json') {
+    if (url === 'https://api.brevo.com/v3/smtp/email') {
       const body = JSON.parse(String(init?.body));
-      sentAlerts.push({ subject: body.message.subject });
-      return new Response('[{"status":"sent"}]', { status: 200 });
+      sentAlerts.push({ subject: body.subject });
+      return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
     }
     return originalFetch(input, init);
   };

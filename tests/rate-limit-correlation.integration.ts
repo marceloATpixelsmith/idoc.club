@@ -18,7 +18,8 @@ const WINDOW_MS = 15 * 60 * 1000;
 Object.assign(process.env, {
   AUTH_SECRET: 'rate-limit-correlation-test-secret-long-enough',
   IDOC_ADMIN_NOTIFICATION_EMAIL: 'ops@example.test',
-  MAILCHIMP_TRANSACTIONAL_API_KEY: 'integration-only-provider-key-32-chars-plus',
+  BREVO_API_KEY: 'integration-only-provider-key',
+  BREVO_FROM_EMAIL: 'accounts@idoc.club',
   RATE_LIMIT_HASH_KEY: 'rate-limit-correlation-test-secret-long-enough',
 });
 
@@ -33,12 +34,12 @@ beforeEach(async () => {
   fetchCallCount = 0;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (url === 'https://mandrillapp.com/api/1.0/messages/send.json') {
+    if (url === 'https://api.brevo.com/v3/smtp/email') {
       fetchCallCount += 1;
       if (failNextDeliveries > 0) { failNextDeliveries -= 1; return new Response('provider unavailable', { status: 502 }); }
       const body = JSON.parse(String(init?.body));
-      sentAlerts.push({ subject: body.message.subject, to: body.message.to[0].email });
-      return new Response('[{"status":"sent"}]', { status: 200 });
+      sentAlerts.push({ subject: body.subject, to: body.to[0].email });
+      return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
     }
     return originalFetch(input, init);
   };

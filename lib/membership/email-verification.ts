@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox, profiles, users } from '@/lib/db/schema';
-import { sendTransactionalEmail } from '@/lib/notifications/mailchimp-transactional';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { emailButton, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { updateStripeCustomerEmail } from '@/lib/payments/customer-email';
 import { emailDisplayForm, normalizeEmail } from './validation';

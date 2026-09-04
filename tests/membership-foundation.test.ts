@@ -65,12 +65,15 @@ test('registration does not create starter teams or return password values', () 
 
 test('verification uses digests, one-time claims, and the approved sender boundary', () => {
   const verification = readFileSync(new URL('../lib/membership/email-verification.ts', import.meta.url), 'utf8');
-  const mail = readFileSync(new URL('../lib/notifications/mailchimp-transactional.ts', import.meta.url), 'utf8');
+  const mail = readFileSync(new URL('../lib/notifications/brevo-transactional.ts', import.meta.url), 'utf8');
   assert.match(verification, /createHash\('sha256'\)/);
   assert.match(verification, /isNull\(emailVerificationTokens\.consumedAt\)/);
   assert.match(verification, /gt\(emailVerificationTokens\.expiresAt/);
   assert.doesNotMatch(verification, /return token/);
-  assert.match(mail, /accounts@idoc\.club/);
+  // The sender address is a fixed, operator-controlled, fail-closed configuration value
+  // (brevoFromEmailForServer) -- never a caller-supplied or message-derived address.
+  assert.match(mail, /sender: \{ email: fromEmail \}/);
+  assert.match(mail, /brevoFromEmailForServer\(\)/);
 });
 
 test('verification delivery is recoverable and Stripe synchronization remains retryable', () => {
