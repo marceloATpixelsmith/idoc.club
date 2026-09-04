@@ -14,6 +14,18 @@ import {
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
 type Mode = 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack' | 'step-up';
 
+/** `provisioningUri` (`lib/auth/mfa/totp.ts`'s `totpProvisioningUri`) is the full
+ * `otpauth://totp/...?secret=...&issuer=...&algorithm=...&digits=...&period=...` URI meant for a QR
+ * code -- an authenticator app's *manual entry* field only ever accepts the bare base32 `secret`
+ * value, never the whole URI with its other query parameters appended. */
+function totpSecretFromProvisioningUri(provisioningUri: string): string {
+  try {
+    return new URL(provisioningUri).searchParams.get('secret') ?? '';
+  } catch {
+    return '';
+  }
+}
+
 function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -95,7 +107,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, rememberDeviceDays
       <CsrfField />
       {(mode === 'enrollment' || mode === 'replacement') && provisioningUri ? <>
         <p>Add this account in your authenticator app, then enter its current code.</p>
-        <label>Authenticator setup key<textarea readOnly rows={4} value={provisioningUri} /></label>
+        <label>Authenticator setup key<input readOnly value={totpSecretFromProvisioningUri(provisioningUri)} /></label>
       </> : null}
       <label>Authenticator code<input autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} name="code" pattern="[0-9]{6}" required /></label>
       {mode === 'challenge' && rememberDeviceEnabled ? (
