@@ -22,7 +22,11 @@
       "verifiedAt": "2026-09-04T18:39:41Z",
       "notes": "Confirmed in Google Cloud Console's OAuth 2.0 Client credentials page: Authorized JavaScript origins list both https://idoc.club and https://redesign.idoc.club (the in-progress redesign's staging domain); Authorized redirect URIs list the matching https://idoc.club/api/auth/google/callback and https://redesign.idoc.club/api/auth/google/callback, exactly matching the app's real callback route and the GOOGLE_OAUTH_REDIRECT_URI convention."
     } },
-    { "id": "security-email-delivery-retry-verified", "description": "Security-email delivery and retry operation are verified", "status": "unchecked", "evidence": null },
+    { "id": "security-email-delivery-retry-verified", "description": "Security-email delivery and retry operation are verified", "status": "verified", "evidence": {
+      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
+      "verifiedAt": "2026-09-04T19:07:32Z",
+      "notes": "Real production delivery confirmed by querying idoc.auth_security_notification_outbox: 4 real historical rows, all sent_at populated, including two authenticator_enrolled events from this session's own real TOTP re-enrollment tests. Retry behavior for account_delivery_outbox and operational_alert_outbox was already proven by real forced-failure integration tests; auth_security_notification_outbox had no equivalent (only a source-inspection-only test for an unrelated bug), so tests/auth-security-notification-delivery.integration.ts was added, forcing a real transient failure and a real dead-letter through the actual production deliverNextAuthSecurityNotification function against real Postgres (4/4 passing)."
+    } },
     { "id": "privileged-totp-enrollment-login-verified", "description": "Privileged TOTP enrollment and password/Google login are verified", "status": "unchecked", "evidence": null },
     { "id": "ordinary-password-otp-remembered-device-verified", "description": "Ordinary password+OTP and remembered-device behavior are verified", "status": "unchecked", "evidence": null },
     { "id": "password-reset-recovery-replacement-verified", "description": "Password reset and authenticator recovery/replacement are verified", "status": "unchecked", "evidence": null },
