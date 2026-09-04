@@ -175,11 +175,12 @@ export function prepareTotpEnrollment(input: {
   keyId: string;
   encryptionKey: Buffer;
   purpose?: TotpEnrollmentRecord['purpose'];
+  transactionId?: string;
   nowMs?: number;
 }) {
   const nowMs = input.nowMs ?? Date.now();
   const factorId = randomUUID();
-  const transactionId = randomUUID();
+  const transactionId = input.transactionId ?? randomUUID();
   const secret = generateTotpSecret();
   const factor: TotpFactorRecord = {
     factorId,

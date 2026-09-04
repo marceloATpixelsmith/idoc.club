@@ -75,15 +75,39 @@ test('production recovery consumption has exactly one winner and secret-free evi
     ...prepareTotpEnrollment({ accountLabel: owner.email, applicationId, encryptionKey: randomBytes(32),
       issuer: 'IDOC', keyId: 'v1', nowMs, purpose: 'authenticator-replacement', subjectId: String(owner.id) }),
     nowMs, recipientEmail: owner.email, userId: owner.id };
-  assert.equal(await consumeRecoveryCodeAndBeginReplacement({ ...base, userId: stranger.id }), 'invalid');
+  assert.deepEqual(await consumeRecoveryCodeAndBeginReplacement({ ...base, userId: stranger.id }), { status: 'invalid' });
   const outcomes = await Promise.all([consumeRecoveryCodeAndBeginReplacement(base), consumeRecoveryCodeAndBeginReplacement(base)]);
-  assert.deepEqual(outcomes.sort(), ['consumed', 'invalid']);
+  assert.equal(outcomes.filter((outcome) => outcome.status === 'ready').length, 1);
+  assert.equal(outcomes.filter((outcome) => outcome.status === 'invalid').length, 1);
   const evidence = JSON.stringify(await sql`select action,reason from idoc.audit_log where actor_id=${owner.id}
     union all select kind,dedupe_key from idoc.auth_security_notification_outbox where user_id=${owner.id}`);
   assert.doesNotMatch(evidence, /raw-code-must-not-appear/);
   const [notification] = await sql<{ kind: string; recipient_email: string }[]>`select kind,recipient_email
     from idoc.auth_security_notification_outbox where user_id=${owner.id}`;
   assert.deepEqual(notification, { kind: 'recovery_code_used', recipient_email: owner.email });
+});
+
+test('production recovery resumes the committed replacement when the continuation response is lost', async () => {
+  const owner = await createUser();
+  const recovery = codes(owner.id, randomUUID(), 'resume-code');
+  await sql`insert into idoc.mfa_recovery_codes(recovery_code_id,user_id,application_id,generation_id,digest)
+    values(${recovery.records[0].recoveryCodeId},${owner.id},${applicationId},${recovery.generationId},${recovery.records[0].digest})`;
+  const prepared = prepareTotpEnrollment({ accountLabel: owner.email, applicationId, encryptionKey: randomBytes(32),
+    issuer: 'IDOC', keyId: 'v1', nowMs, purpose: 'authenticator-replacement', subjectId: String(owner.id) });
+  const input = { applicationId, dedupeKey: `resume:${prepared.transactionId}`,
+    digests: [recovery.records[0].digest], enrollment: prepared.enrollment, factor: prepared.factor,
+    nowMs, recipientEmail: owner.email, userId: owner.id };
+
+  const first = await consumeRecoveryCodeAndBeginReplacement(input);
+  const replay = await consumeRecoveryCodeAndBeginReplacement({ ...input,
+    digests: ['the-code-is-already-consumed-and-is-not-needed-to-resume'] });
+  assert.deepEqual(replay, first);
+  assert.equal(first.status, 'ready');
+  const [state] = await sql<{ codes: number; enrollments: number; factors: number }[]>`select
+    (select count(*)::int from idoc.mfa_recovery_codes where user_id=${owner.id} and consumed_at is not null) codes,
+    (select count(*)::int from idoc.mfa_enrollment_transactions where transaction_id=${prepared.transactionId}) enrollments,
+    (select count(*)::int from idoc.mfa_factors where factor_id=${prepared.factorId}) factors`;
+  assert.deepEqual(state, { codes: 1, enrollments: 1, factors: 1 });
 });
 
 test('production recovery keeps the code usable when replacement setup cannot commit', async () => {

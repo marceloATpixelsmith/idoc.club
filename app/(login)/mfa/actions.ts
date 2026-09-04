@@ -206,8 +206,9 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
   const config = mfaConfiguration();
   const enrollment = prepareTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
-    purpose: 'authenticator-replacement', subjectId: String(context.user.id) });
-  let recovery: 'consumed' | 'invalid';
+    purpose: 'authenticator-replacement', subjectId: String(context.user.id),
+    transactionId: context.pending.transactionId });
+  let recovery: { factorId?: string; status: 'invalid' | 'ready'; transactionId?: string };
   try {
     recovery = await consumeRecoveryCodeAndBeginReplacement({
       applicationId: MFA_APPLICATION_ID,
@@ -222,9 +223,11 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
     await logError('mfa_recovery_transition_failed', { subjectId: context.user.id });
     return { error: 'Authenticator recovery could not be completed. Restart recovery and try again.' };
   }
-  if (recovery !== 'consumed') return { error: 'That recovery code could not be used.' };
-  await setPendingPrimaryAuth({ ...context.pending, factorId: enrollment.factorId, stage: 'replacement',
-    transactionId: enrollment.transactionId });
+  if (recovery.status !== 'ready' || !recovery.factorId || !recovery.transactionId) {
+    return { error: 'That recovery code could not be used.' };
+  }
+  await setPendingPrimaryAuth({ ...context.pending, factorId: recovery.factorId, stage: 'replacement',
+    transactionId: recovery.transactionId });
   redirect('/mfa');
 });
 
