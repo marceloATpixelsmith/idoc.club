@@ -93,7 +93,11 @@ async function withPwnedPasswordsClean<T>(operation: () => Promise<T>): Promise<
 test('AUTH-CSRF-003 login: the pending-flow-bound csrfNonce is accepted as an alternative to a drifted general CSRF cookie', async (t) => {
   await t.test('signIn and verifyLoginOtp both succeed on the pending nonce even when the general cookie token is wrong', async () => {
     const user = await createUser();
-    await sql`update idoc.users set password_hash=${await hashPassword(password)} where id=${user.id}`;
+    // An unverified email routes signIn through its own email_verification OTP branch, reaching
+    // requireLoginOtp without ever calling hasValidLoginDeviceTrust() -- that function reads the
+    // real Next.js cookies() directly (a separate, pre-existing gap unrelated to this fix) rather
+    // than this test harness's requestCookies() shim, so it cannot run under withTestRequestCookies.
+    await sql`update idoc.users set password_hash=${await hashPassword(password)}, email_verified_at=null where id=${user.id}`;
     const cookies = new TestCookies();
     await issueTestCsrfToken(cookies, null);
 
