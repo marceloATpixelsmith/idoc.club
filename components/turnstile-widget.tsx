@@ -27,12 +27,15 @@ export function TurnstileWidget({
   const widgetIdRef = useRef<string | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  // Bumped by retry(): forces the <Script> element below to remount with a new key, which makes
-  // next/script re-attempt fetching/executing the Cloudflare script from scratch. A plain state
-  // reset alone would not re-trigger a <script> tag that's already sitting in the DOM having
-  // never fired onLoad or onError (the exact "silently dropped by a network filter" case this
-  // widget already has to handle below). Also included in both effects' dependency arrays so a
-  // retry re-renders an already-loaded widget in place and restarts the load-timeout window.
+  // Bumped by retry(). next/script caches a loaded/loading/errored script by its exact `src` (or
+  // `id`) and only ever fires onLoad/onError once per that key -- a React `key` change alone does
+  // NOT defeat this: remounting the element with the same `src` silently no-ops, permanently
+  // stuck in whatever state the first attempt left it in (confirmed against a real, persistent
+  // production failure: every retry showed the identical error). Folding `attempt` into the
+  // script's query string gives each retry a genuinely different `src`, which is what actually
+  // forces next/script to treat it as new and fire onLoad/onError again. Also included in both
+  // effects' dependency arrays so a retry re-renders an already-loaded widget in place and
+  // restarts the load-timeout window.
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -88,7 +91,7 @@ export function TurnstileWidget({
         key={attempt}
         onError={() => setFailed(true)}
         onLoad={() => setScriptLoaded(true)}
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        src={`https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&retry=${attempt}`}
         strategy="afterInteractive"
       />
       <div ref={containerRef} />
