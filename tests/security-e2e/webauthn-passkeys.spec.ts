@@ -79,14 +79,15 @@ test('a privileged account can register and remove a passkey from the dashboard,
   await expect(page.getByText('Passkey', { exact: true })).toBeVisible();
 
   // Removal is its own sensitive action: the fresh step-up evidence registration just consumed
-  // does not carry over, so this click needs its own authenticator challenge round too.
+  // does not carry over, so this click needs its own authenticator challenge round too. Unlike
+  // registration (a fresh WebAuthn ceremony must still follow, so a second click is unavoidable),
+  // removal has nothing left to prove once the code is accepted -- it applies automatically, with
+  // no second "Remove" click required.
   await page.getByRole('button', { name: 'Remove' }).click();
   await expect(page).toHaveURL(/\/mfa$/);
   await page.getByLabel('Authenticator code').fill(await freshTotpCode(E2E_TOTP_SECRET));
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect(page).toHaveURL(/\/dashboard\/security$/);
-  await page.getByRole('button', { name: 'Remove' }).click();
-  await expect(page.getByText('Passkey removed.')).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/dashboard\/security\?stepUpApplied=1$/);
   await expect(page.getByRole('button', { name: 'Remove' })).toHaveCount(0);
 
   await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
