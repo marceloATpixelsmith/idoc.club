@@ -10,10 +10,37 @@ import { resolveRequestOrigin } from './request-origin';
 import { testRequestOrigin } from '@/lib/auth/request-cookies';
 
 const WINDOW_MS = 15 * 60 * 1000;
-const EMAIL_MAX_REQUESTS = 3;
+const DEFAULT_EMAIL_MAX_REQUESTS = 3;
 const IP_MAX_REQUESTS = 10;
 const PROVIDER_USER_MAX_REQUESTS = 60;
 const PROVIDER_ORIGIN_MAX_REQUESTS = 180;
+
+/** Per-purpose overrides to the identifier-scoped (email/account) bucket's allowance, reflecting
+ * each purpose's actual risk shape (NIST 800-63B / OWASP Authentication Cheat Sheet guidance)
+ * instead of one blunt number for every kind of attempt. A step that identifies an account but
+ * guesses nothing (login_email) gets a generous, anti-automation-only budget; genuine credential
+ * guessing (login_password) gets a moderate one wide enough to tolerate a real typo without
+ * locking a legitimate member out; short-lived/random code verification (email OTP, TOTP,
+ * recovery code) gets a small increase over the original blunt default for the same reason.
+ * Anything not listed here -- password-reset email-issue steps, neutral anonymous filler
+ * branches, OTP issue/send steps -- keeps DEFAULT_EMAIL_MAX_REQUESTS: those guard a real
+ * email-send/abuse-cost risk, not a guessing risk, and are out of scope for this change. */
+const IDENTIFIER_MAX_REQUESTS: Readonly<Record<string, number>> = {
+  login_email: 20,
+  login_password: 8,
+  mfa_enrollment_confirm: 5,
+  mfa_login_verify: 5,
+  mfa_password_reset_verify: 5,
+  mfa_recovery_code_verify: 5,
+  mfa_step_up_verify: 5,
+  otp_verify_login: 5,
+  otp_verify_reset: 5,
+  otp_verify_signup: 5,
+};
+
+function identifierMaxRequestsFor(purpose: string): number {
+  return IDENTIFIER_MAX_REQUESTS[purpose] ?? DEFAULT_EMAIL_MAX_REQUESTS;
+}
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -44,8 +71,9 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
   const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
   const allOriginsMarker = digest(`${secret}:all-origins`);
   const allEmailsMarker = digest(`${secret}:all-emails`);
+  const emailMax = identifierMaxRequestsFor(purpose);
   const [emailAllowed, ipAllowed] = await Promise.all([
-    takeBucket(purpose, emailHash, allOriginsMarker, windowStartedAt, EMAIL_MAX_REQUESTS),
+    takeBucket(purpose, emailHash, allOriginsMarker, windowStartedAt, emailMax),
     takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, IP_MAX_REQUESTS),
   ]);
   // AUTH-OPERATIONS-006: a single blocked request is routine and already fully handled by the
@@ -53,7 +81,7 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
   // correlated into an operator alert -- see rate-limit-correlation.ts. Best-effort: never affects
   // the boolean this function returns.
   if (!emailAllowed) {
-    await correlateRepeatedRateLimitExceedance({ identifierHash: emailHash, max: EMAIL_MAX_REQUESTS, now, originHash: allOriginsMarker, purpose });
+    await correlateRepeatedRateLimitExceedance({ identifierHash: emailHash, max: emailMax, now, originHash: allOriginsMarker, purpose });
   }
   if (!ipAllowed) {
     await correlateRepeatedRateLimitExceedance({ identifierHash: allEmailsMarker, max: IP_MAX_REQUESTS, now, originHash, purpose });

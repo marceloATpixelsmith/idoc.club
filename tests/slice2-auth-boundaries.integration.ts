@@ -183,12 +183,12 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await issueTestCsrfToken(cookies, null);
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(fixture.user, 'password', '/dashboard'), true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => verifyLoginTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
+      const results = await Promise.all(Array.from({ length: 7 }, () => verifyLoginTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'login-rate.example.test');
     const rows = await rateRows('mfa_login_verify');
     assert.equal(rows.length, 2);
-    assert.deepEqual(rows.map((row) => row.request_count), [5, 5]);
+    assert.deepEqual(rows.map((row) => row.request_count), [7, 7]);
     assert.equal((await rateRows('mfa_recovery_code_verify')).length, 0);
   });
 
@@ -200,12 +200,12 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(fixture.user, 'password', '/dashboard'), true);
       assert.deepEqual(await beginAuthenticatorRecovery({}, form('recover', 'yes', csrfTokenFrom(cookies))), { success: 'Enter one of your recovery codes.' });
-      const results = await Promise.all(Array.from({ length: 5 }, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', `invalid-${randomUUID()}`, csrfTokenFrom(cookies)))));
+      const results = await Promise.all(Array.from({ length: 7 }, () => authorizeAuthenticatorRecovery({}, form('recoveryCode', `invalid-${randomUUID()}`, csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'recovery-rate.example.test');
     const rows = await rateRows('mfa_recovery_code_verify');
     assert.equal(rows.length, 2);
-    assert.deepEqual(rows.map((row) => row.request_count), [5, 5]);
+    assert.deepEqual(rows.map((row) => row.request_count), [7, 7]);
     assert.equal((await rateRows('mfa_login_verify')).length, 0);
   });
 
@@ -218,12 +218,12 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await issueTestCsrfToken(cookies, null);
     await withTestRequestCookies(cookies, async () => {
       assert.equal(await beginPrimaryMfa(account, 'password', '/dashboard'), true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => confirmTotpEnrollment({}, form('code', '000000', csrfTokenFrom(cookies)))));
+      const results = await Promise.all(Array.from({ length: 7 }, () => confirmTotpEnrollment({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'enrollment-rate.example.test');
     const rows = await rateRows('mfa_enrollment_confirm');
     assert.equal(rows.length, 2);
-    assert.deepEqual(rows.map((row) => row.request_count), [5, 5]);
+    assert.deepEqual(rows.map((row) => row.request_count), [7, 7]);
     assert.equal((await rateRows('mfa_step_up_verify')).length, 0);
   });
 
@@ -234,12 +234,12 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await withTestRequestCookies(cookies, async () => {
       await setSession(fixture.user);
       assert.equal((await requireFreshStepUp(fixture.user, 'generate-recovery-codes', '/dashboard/security')).required, true);
-      const results = await Promise.all(Array.from({ length: 5 }, () => verifyStepUpTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
+      const results = await Promise.all(Array.from({ length: 7 }, () => verifyStepUpTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
       assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
     }, 'step-up-rate.example.test');
     const rows = await rateRows('mfa_step_up_verify');
     assert.equal(rows.length, 2);
-    assert.deepEqual(rows.map((row) => row.request_count), [5, 5]);
+    assert.deepEqual(rows.map((row) => row.request_count), [7, 7]);
     for (const purpose of ['mfa_login_verify', 'mfa_recovery_code_verify', 'mfa_enrollment_confirm']) {
       assert.equal((await rateRows(purpose)).length, 0);
     }

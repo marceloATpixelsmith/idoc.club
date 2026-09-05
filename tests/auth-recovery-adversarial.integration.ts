@@ -253,6 +253,57 @@ test('AUTH-RECOVERY-005 acknowledgement cannot precede replacement', async () =>
   assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
 });
 
+async function rateRows(purpose: string) {
+  return sql<{ request_count: number }[]>`select request_count::int from idoc.account_request_limits where purpose=${purpose} order by request_count`;
+}
+
+// A rejected recovery-code attempt previously left no durable, DB-queryable trace anywhere -- only
+// a thrown exception was ever recorded (mfa_recovery_transition_failed, console only). An operator
+// troubleshooting a real production report of "my recovery code doesn't work" had nothing to query.
+// Proves the rejection path now writes a real idoc.audit_log row, attributed to the account, while
+// never recording the submitted code itself.
+test('a wrong recovery code against a valid recovery session writes a durable, queryable audit_log row, never the code itself', async () => {
+  const entry = await recoveryEntry();
+  const wrongCode = `WRONG-${randomUUID()}`;
+  assert.deepEqual(await withTestRequestCookies(entry.cookies, () =>
+    authorizeAuthenticatorRecovery({}, form('recoveryCode', wrongCode, csrfTokenFrom(entry.cookies)))),
+    { error: 'That recovery code could not be used.' });
+  const rows = await sql`select action,reason from idoc.audit_log where actor_id=${entry.user.id}`;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].action, 'auth.mfa.recovery_code.rejected');
+  assert.equal(rows[0].reason, 'invalid_or_already_consumed_code');
+  const evidence = JSON.stringify(rows);
+  assert.equal(evidence.includes(wrongCode), false, 'the submitted code must never be recorded');
+  assert.equal(evidence.includes(recoveryCode), false, 'the real recovery code must never be recorded');
+});
+
+// A Codex review finding on the first version of this fix: a caller holding a still-valid signed
+// recovery-entry cookie can keep submitting after being rate-limited (the cookie itself isn't
+// revoked by the response), so an unconditional audit_log write on every rate-limited rejection is
+// an unbounded storage-amplification path. Proves the rate-limited branch writes no audit_log row
+// at all -- idoc.account_request_limits (already durable, one row per purpose/identifier/window
+// regardless of how many requests hit it) is the evidence for that outcome instead.
+test('exhausting the recovery-code rate limit writes no audit_log row, only the already-bounded account_request_limits evidence', async () => {
+  const entry = await recoveryEntry();
+  // mfa_recovery_code_verify allows 5 per 15-minute window (raised from the original blunt 3 to
+  // match industry-typical code-verification tolerance); 7 concurrent requests exercises both the
+  // 5 that proceed to an ordinary rejection and the 2 that get rate-limited instead.
+  await Promise.all(Array.from({ length: 7 }, () =>
+    withTestRequestCookies(entry.cookies, () =>
+      authorizeAuthenticatorRecovery({}, form('recoveryCode', `wrong-${randomUUID()}`, csrfTokenFrom(entry.cookies))))));
+  const rows = await sql`select reason, count(*)::int count from idoc.audit_log
+    where actor_id=${entry.user.id} and action='auth.mfa.recovery_code.rejected' group by reason`;
+  const byReason = Object.fromEntries(rows.map((row) => [row.reason, row.count]));
+  assert.equal(byReason.rate_limited, undefined);
+  assert.equal(byReason.invalid_or_already_consumed_code, 5);
+  // checkRateLimit always writes two independent rows per purpose (a per-account bucket and a
+  // per-origin bucket, AUTH-RATE-005) -- both incremented here since all 7 requests share the same
+  // account and the same default test origin.
+  const limitRows = await rateRows('mfa_recovery_code_verify');
+  assert.equal(limitRows.length, 2);
+  assert.deepEqual(limitRows.map((row) => row.request_count), [7, 7]);
+});
+
 test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser out of CSRF-protected sign-out', async () => {
   // A signed session JWT can remain cryptographically valid for hours after its persisted registry
   // row is revoked (a password reset from another device, an admin-initiated revoke, a superseded

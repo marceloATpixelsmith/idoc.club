@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
@@ -192,6 +192,26 @@ export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async
   redirect(context.pending.returnTo);
 });
 
+// A rejected recovery-code attempt previously left no durable trace anywhere -- only a thrown
+// exception (mfa_recovery_transition_failed) was ever recorded, so an operator looking at a real
+// "my recovery code doesn't work" report had nothing queryable to diagnose against. Never records
+// the submitted code itself, only that an attempt for this account was rejected.
+//
+// Deliberately NOT called for the rate-limited branch below (a Codex review finding on the first
+// version of this fix): once a caller holds a valid signed recovery-entry cookie, the rate limiter
+// blocks the code-consumption logic but does not stop the request from being sent again -- clearing
+// the cookie in the response doesn't revoke the still-valid, replayable stateless cookie itself, so
+// an attacker (or a replayed/concurrent burst of requests) could keep hitting this branch
+// indefinitely, each call appending a new immutable row with no cap. idoc.account_request_limits
+// (lib/security/rate-limit.ts) already durably records this outcome, bounded to one row per
+// purpose/identifier/15-minute window no matter how many requests hit it -- an operator can query
+// `select * from idoc.account_request_limits where purpose='mfa_recovery_code_verify'` for exactly
+// this evidence without this function needing to duplicate it unboundedly.
+async function auditRecoveryCodeRejected(userId: number) {
+  await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+    values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, 'invalid_or_already_consumed_code')`);
+}
+
 export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.literal('yes') }), async () => {
   const context = await pendingAccount('challenge');
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
@@ -224,6 +244,7 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
     return { error: 'Authenticator recovery could not be completed. Restart recovery and try again.' };
   }
   if (recovery.status !== 'ready' || !recovery.factorId || !recovery.transactionId) {
+    await auditRecoveryCodeRejected(context.user.id);
     return { error: 'That recovery code could not be used.' };
   }
   await setPendingPrimaryAuth({ ...context.pending, factorId: recovery.factorId, stage: 'replacement',

@@ -118,7 +118,9 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
     return row?.request_count ?? 0;
   };
 
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  // mfa_step_up_verify allows 5 per 15-minute window (raised from the original blunt 3 to match
+  // industry-typical code-verification tolerance).
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
     await page.getByLabel('Authenticator code').fill('000000');
     await page.getByRole('button', { name: 'Verify' }).click();
     await expect.poll(maxPersistedCount).toBe(attempt);
@@ -126,14 +128,14 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   }
   await page.getByLabel('Authenticator code').fill('000000');
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect.poll(maxPersistedCount).toBe(4);
+  await expect.poll(maxPersistedCount).toBe(6);
   await expect(page.locator('.idoc-auth-error')).toContainText('Too many attempts');
 
   const rows = await sql<{ purpose: string; request_count: number }[]>`select purpose,request_count from idoc.account_request_limits
     where purpose like 'mfa_%' order by purpose,request_count desc`;
   expect(rows.filter(({ purpose }) => purpose === 'mfa_step_up_verify')).toHaveLength(2);
   expect(rows.every(({ purpose }) => purpose === 'mfa_step_up_verify')).toBe(true);
-  expect(rows.every(({ request_count }) => request_count === 4)).toBe(true);
+  expect(rows.every(({ request_count }) => request_count === 6)).toBe(true);
   expect(JSON.stringify(rows)).not.toContain('000000');
   await sql.end();
   await context.close();
