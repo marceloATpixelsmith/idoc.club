@@ -192,14 +192,24 @@ export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async
   redirect(context.pending.returnTo);
 });
 
-// A rejected or rate-limited recovery-code attempt previously left no durable trace anywhere --
-// only a thrown exception (mfa_recovery_transition_failed) was ever recorded, so an operator
-// looking at real production failures (a rejected code, a rate-limited attempt) had nothing
-// queryable to diagnose against. Never records the submitted code itself, only that an attempt for
-// this account was rejected and why.
-async function auditRecoveryCodeFailure(userId: number, reason: 'invalid_or_already_consumed_code' | 'rate_limited') {
+// A rejected recovery-code attempt previously left no durable trace anywhere -- only a thrown
+// exception (mfa_recovery_transition_failed) was ever recorded, so an operator looking at a real
+// "my recovery code doesn't work" report had nothing queryable to diagnose against. Never records
+// the submitted code itself, only that an attempt for this account was rejected.
+//
+// Deliberately NOT called for the rate-limited branch below (a Codex review finding on the first
+// version of this fix): once a caller holds a valid signed recovery-entry cookie, the rate limiter
+// blocks the code-consumption logic but does not stop the request from being sent again -- clearing
+// the cookie in the response doesn't revoke the still-valid, replayable stateless cookie itself, so
+// an attacker (or a replayed/concurrent burst of requests) could keep hitting this branch
+// indefinitely, each call appending a new immutable row with no cap. idoc.account_request_limits
+// (lib/security/rate-limit.ts) already durably records this outcome, bounded to one row per
+// purpose/identifier/15-minute window no matter how many requests hit it -- an operator can query
+// `select * from idoc.account_request_limits where purpose='mfa_recovery_code_verify'` for exactly
+// this evidence without this function needing to duplicate it unboundedly.
+async function auditRecoveryCodeRejected(userId: number) {
   await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
-    values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, ${reason})`);
+    values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, 'invalid_or_already_consumed_code')`);
 }
 
 export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.literal('yes') }), async () => {
@@ -212,10 +222,7 @@ export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.
 export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recoveryCode: z.string().trim().min(1).max(64) }), async ({ recoveryCode }) => {
   const context = await pendingAccount('recovery-entry');
   if (!context) return failAndRestart('Your recovery session expired. Sign in again.');
-  if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) {
-    await auditRecoveryCodeFailure(context.user.id, 'rate_limited');
-    return failAndRestart('Too many attempts. Sign in again later.');
-  }
+  if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) return failAndRestart('Too many attempts. Sign in again later.');
   const config = mfaConfiguration();
   const enrollment = prepareTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
@@ -237,7 +244,7 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
     return { error: 'Authenticator recovery could not be completed. Restart recovery and try again.' };
   }
   if (recovery.status !== 'ready' || !recovery.factorId || !recovery.transactionId) {
-    await auditRecoveryCodeFailure(context.user.id, 'invalid_or_already_consumed_code');
+    await auditRecoveryCodeRejected(context.user.id);
     return { error: 'That recovery code could not be used.' };
   }
   await setPendingPrimaryAuth({ ...context.pending, factorId: recovery.factorId, stage: 'replacement',
