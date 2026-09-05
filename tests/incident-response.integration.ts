@@ -297,7 +297,12 @@ test('the real Server Action redirects to /mfa and revokes nothing without a fre
   assert.equal(factor.status, 'active');
 });
 
-test('the real Server Action proceeds only after a genuine fresh TOTP step-up round', async () => {
+test('a genuine fresh TOTP step-up round applies the original request itself -- no second submission required', async () => {
+  // Real production report: every one of these step-up-gated actions previously only redirected
+  // back to the originating page once a fresh code was accepted, leaving the actual request
+  // (revoke this user's authority, grant this role, ...) unapplied until the member submitted the
+  // exact same form a second time. requireFreshStepUp's resume payload now lets the step-up
+  // verification handler replay that original request itself the instant the code is accepted.
   const { secret, user: admin } = await superAdminWithTotp();
   const victim = await createUser();
   const seeded = await seedStandingAuthority(victim.id);
@@ -307,27 +312,27 @@ test('the real Server Action proceeds only after a genuine fresh TOTP step-up ro
   const csrfToken = cookies.get(csrfCookieName())?.value ?? '';
 
   // First call has no fresh step-up: it both redirects to /mfa and -- as the real production flow
-  // does -- creates the pending step-up challenge this same request just triggered.
+  // does -- creates the pending step-up challenge this same request just triggered, carrying this
+  // exact request's own userId/incidentReference/reason forward as its resume payload.
   await withTestRequestCookies(cookies, () => forceRevokeAllAuthorityForm({}, revokeForm(victim.id, csrfToken)))
     .then(() => assert.fail('expected a redirect to /mfa'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
 
-  // Complete that real step-up challenge with a genuine TOTP code, exactly as the /mfa page would.
+  const [user0] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
+  assert.equal(user0.session_version, 0, 'no step-up authority yet -- nothing about the target may change');
+
+  // Complete that real step-up challenge with a genuine TOTP code, exactly as the /mfa page would --
+  // no second call to forceRevokeAllAuthorityForm anywhere in this test.
   await withTestRequestCookies(cookies, async () => {
     const code = totp(secret);
     const form = new FormData(); form.set('code', code); form.set('csrf_token', csrfToken);
     await verifyStepUpTotp({}, form).then(
       () => assert.fail('successful step-up verification should redirect'),
-      (error) => assert.match(String(error), /NEXT_REDIRECT/),
+      (error) => assert.match(String((error as { digest?: string }).digest), /NEXT_REDIRECT;replace;\/admin\/members\?stepUpApplied=1;/),
     );
   });
-  assert.ok(cookies.get('idoc_fresh_step_up'), 'fresh step-up authority must now be present');
-
-  // Retried with fresh authority in hand, the same action now actually performs the revocation.
-  const result = await withTestRequestCookies(cookies, () => forceRevokeAllAuthorityForm({}, revokeForm(victim.id, csrfToken)));
-  assert.deepEqual(result, { success: 'Every session, remembered device, and MFA factor for this user has been revoked.' });
 
   const [user] = await sql<{ session_version: number }[]>`select session_version::int from idoc.users where id=${victim.id}`;
-  assert.equal(user.session_version, 1);
+  assert.equal(user.session_version, 1, 'the revocation must already be applied, purely from accepting the code');
   const [factor] = await sql<{ status: string }[]>`select status from idoc.mfa_factors where factor_id=${seeded.factorId}`;
   assert.equal(factor.status, 'revoked');
 });

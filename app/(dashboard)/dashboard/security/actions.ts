@@ -172,7 +172,8 @@ const removePasskeySchema = z.object({ credentialId: z.string().min(1).max(255) 
 
 export const removePasskeyCredential = validatedActionWithUser(removePasskeySchema, async ({ credentialId }, _, user): Promise<{ error?: string; success?: string }> => {
   await privilegedUser(user);
-  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security')).required) redirect('/mfa');
+  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security',
+    { kind: 'remove-passkey', payload: { credentialId } })).required) redirect('/mfa');
   const revoked = await webauthnStore.revokeCredential({ credentialId, subjectId: String(user.id),
     applicationId: MFA_APPLICATION_ID, reason: 'user_removed', nowMs: Date.now() });
   await consumeFreshStepUp();
