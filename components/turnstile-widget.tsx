@@ -2,6 +2,7 @@
 
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
+import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
 
 declare global {
   interface Window {
@@ -14,6 +15,7 @@ declare global {
 }
 
 const SCRIPT_LOAD_TIMEOUT_MS = 10_000;
+const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 export function TurnstileWidget({
   action,
@@ -27,24 +29,17 @@ export function TurnstileWidget({
   const widgetIdRef = useRef<string | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  // Bumped by retry(). next/script caches a loaded/loading/errored script by its exact `src` (or
-  // `id`) and only ever fires onLoad/onError once per that key -- a React `key` change alone does
-  // NOT defeat this: remounting the element with the same `src` silently no-ops, permanently
-  // stuck in whatever state the first attempt left it in (confirmed against a real, persistent
-  // production failure: every retry showed the identical error). Folding `attempt` into the
-  // script's query string gives each retry a genuinely different `src`, which is what actually
-  // forces next/script to treat it as new and fire onLoad/onError again. Also included in both
-  // effects' dependency arrays so a retry re-renders an already-loaded widget in place and
-  // restarts the load-timeout window.
-  const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => {
-    if (!scriptLoaded || !siteKey || !containerRef.current) return undefined;
-    if (!window.turnstile) {
-      setFailed(true);
-      return undefined;
+  // Removes any existing widget from the container before rendering a fresh one, so retry() can
+  // always call this safely regardless of whether a widget already occupies the container --
+  // calling turnstile.render() a second time into the same container without first removing the
+  // prior widget would leave two instances stacked in the same node.
+  function renderWidget() {
+    if (!containerRef.current || !window.turnstile) return;
+    if (widgetIdRef.current) {
+      window.turnstile.remove(widgetIdRef.current);
+      widgetIdRef.current = null;
     }
-    setFailed(false);
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         action,
@@ -55,15 +50,25 @@ export function TurnstileWidget({
         size: 'flexible',
         theme: 'light',
       });
+      setFailed(false);
     } catch {
       setFailed(true);
     }
+  }
+
+  useEffect(() => {
+    if (!scriptLoaded || !siteKey) return undefined;
+    if (!window.turnstile) {
+      setFailed(true);
+      return undefined;
+    }
+    renderWidget();
     return () => {
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changing callback identity must not reset a solved challenge.
-  }, [action, scriptLoaded, siteKey, attempt]);
+  }, [action, scriptLoaded, siteKey]);
 
   // The Cloudflare script sometimes never fires onLoad/onError at all (blocked by a
   // network filter or extension rather than a request that fails outright), which would
@@ -73,25 +78,37 @@ export function TurnstileWidget({
     if (scriptLoaded) return undefined;
     const timer = window.setTimeout(() => setFailed(true), SCRIPT_LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [scriptLoaded, attempt]);
+  }, [scriptLoaded]);
 
-  // A prior version reloaded the whole page here, which silently discarded whatever the member
-  // had already typed into the surrounding form -- confirmed as a real, frequent complaint, not
-  // just a theoretical one. Retrying in place costs nothing and preserves it: bumping `attempt`
-  // alone is enough to cover both failure shapes above (see the effects it's threaded into).
+  // Two prior attempts at "retry" here tried to force api.js to load a second time -- first by
+  // remounting the <Script> element with a new React key, then by giving it a cache-busted src.
+  // Both are unsafe: Cloudflare's own script explicitly refuses to be initialized a second time
+  // ("Turnstile already has been loaded. Was Turnstile imported multiple times?"), and confirmed
+  // against a real, persistent production failure -- if the original, seemingly-dead load
+  // eventually succeeds late (just slow, not actually blocked), a forced second load collides with
+  // it and corrupts Turnstile's internal state rather than fixing anything. The correct model,
+  // matching Cloudflare's own reference integrations: load the script exactly once, ever, and let
+  // Turnstile's own built-in widget-level retry (`retry: 'auto'`, the default we never override)
+  // handle transient failures by calling render() again -- never touching the script tag at all.
+  // If the script genuinely never loaded even once, there is no safe in-place fix; a real page
+  // reload is the only way to get a genuinely clean environment, so retry saves the member's
+  // typed email first (the only field this widget's form ever has) so the reload doesn't cost it.
   function retry() {
-    setFailed(false);
-    setAttempt((value) => value + 1);
+    if (window.turnstile) {
+      renderWidget();
+      return;
+    }
+    saveFormValuesForRetryReload(containerRef.current?.closest('form') ?? null);
+    window.location.reload();
   }
 
   if (!siteKey) return null;
   return (
     <div className="idoc-auth-turnstile">
       <Script
-        key={attempt}
         onError={() => setFailed(true)}
         onLoad={() => setScriptLoaded(true)}
-        src={`https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&retry=${attempt}`}
+        src={SCRIPT_SRC}
         strategy="afterInteractive"
       />
       <div ref={containerRef} />

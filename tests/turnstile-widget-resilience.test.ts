@@ -27,21 +27,27 @@ test('the fallback message is actionable: it explains likely causes and offers a
   assert.match(widget, /onClick=\{retry\}/);
 });
 
-test('retrying never reloads the page: a member who already typed into the surrounding form must not lose it', () => {
-  assert.doesNotMatch(widget, /window\.location\.reload/);
+test('the script tag has a fixed, unchanging src -- never a cache-busted or React-keyed one -- so it is only ever inserted once, matching Cloudflare\'s own reference integrations which explicitly guard against loading the script twice', () => {
+  assert.match(widget, /const SCRIPT_SRC = 'https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit';/);
+  assert.match(widget, /src=\{SCRIPT_SRC\}/);
+  assert.doesNotMatch(widget, /key=\{/);
+  assert.doesNotMatch(widget, /useState\(0\)/);
 });
 
-test('retry gives the <Script> a genuinely different src, not just a new React key -- next/script caches load state by src and never re-fires onLoad/onError for a repeated one', () => {
-  assert.match(widget, /const \[attempt, setAttempt\] = useState\(0\)/);
-  assert.match(widget, /key=\{attempt\}/);
-  assert.match(widget, /src=\{`https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit&retry=\$\{attempt\}`\}/);
+test('retry only reloads the script tag as a last resort: if Turnstile already loaded once (window.turnstile exists), retry calls render() again in place and never touches the <Script> element at all', () => {
   const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
-  assert.match(retryBody, /setAttempt\(\(value\) => value \+ 1\)/);
+  assert.match(retryBody, /if \(window\.turnstile\) \{\s*renderWidget\(\);\s*return;\s*\}/);
 });
 
-test('the widget-render effect and the load-timeout effect both re-run on retry (attempt is a dependency of each)', () => {
-  assert.match(widget, /\}, \[action, scriptLoaded, siteKey, attempt\]\);/);
-  assert.match(widget, /\}, \[scriptLoaded, attempt\]\);/);
+test('retry only forces a page reload when the script genuinely never loaded at all, and saves the member\'s typed email first so the reload does not cost it', () => {
+  const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
+  assert.match(retryBody, /saveFormValuesForRetryReload\(containerRef\.current\?\.closest\('form'\) \?\? null\)/);
+  assert.match(retryBody, /window\.location\.reload\(\)/);
+});
+
+test('renderWidget always removes any existing widget from the container before rendering a fresh one, so calling it again (from retry, or a normal script-load effect re-run) can never stack two widgets in the same container', () => {
+  const renderWidgetBody = widget.slice(widget.indexOf('function renderWidget()'), widget.indexOf('useEffect(() => {\n    if (!scriptLoaded'));
+  assert.match(renderWidgetBody, /if \(widgetIdRef\.current\) \{\s*window\.turnstile\.remove\(widgetIdRef\.current\);\s*widgetIdRef\.current = null;\s*\}/);
 });
 
 test('a visible, explicit loading state is shown while the widget has not yet rendered or failed, so the disabled submit button is not unexplained', () => {
