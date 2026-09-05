@@ -54,7 +54,7 @@ test('passkey registration and removal are privileged, require an active TOTP fa
   const security = source('app/(dashboard)/dashboard/security/actions.ts');
   const registration = security.slice(security.indexOf('export const beginPasskeyRegistration'), security.indexOf('const finishPasskeySchema'));
   assert.match(registration, /await privilegedUser\(user\)/);
-  assert.match(registration, /requireFreshStepUp\(user, 'change-mfa', '\/dashboard\/security'\)/);
+  assert.match(registration, /requireFreshStepUp\(user, 'change-mfa', '\/dashboard\/security',/);
   assert.match(registration, /const factor = await mfaStore\.getActiveTotp\(String\(user\.id\), MFA_APPLICATION_ID\);/);
   assert.match(registration, /if \(!factor\) return \{ error: 'Set up an authenticator app before adding a passkey\.' \};/);
   const removal = security.slice(security.indexOf('export const removePasskeyCredential'), security.length);

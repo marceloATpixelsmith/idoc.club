@@ -63,7 +63,9 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline">Replace authenticator</Button></form>
           <form action={recoveryAction}><CsrfField /><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
-      <PasskeysCard passkeys={passkeys} />
+      <Suspense fallback={null}>
+        <PasskeysCard passkeys={passkeys} />
+      </Suspense>
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-gray-500">This browser is {currentDeviceRemembered ? 'remembered for password sign-in verification' : 'not currently remembered'}.</p>
         {(forgetCurrentState.error || forgetAllState.error) ? <p className="text-sm text-red-500">{forgetCurrentState.error || forgetAllState.error}</p> : null}
