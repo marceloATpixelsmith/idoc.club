@@ -30,7 +30,7 @@ const countryCode = z.string().trim().toUpperCase().refine(
 );
 const requiredText = (label: string, max: number) => z.string().trim().min(1, `${label} is required`).max(max);
 const officialBase = z.object({
-  feiId: requiredText('FEI ID', 40),
+  feiId: z.string().trim().max(40).optional().transform((value) => value || null),
   idocRegion: z.enum(IDOC_REGIONS),
   nationalFederationCountryCode: countryCode,
 });
