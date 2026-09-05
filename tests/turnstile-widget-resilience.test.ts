@@ -24,7 +24,29 @@ test('a script that never fires onLoad or onError at all (silently dropped by a 
 test('the fallback message is actionable: it explains likely causes and offers a retry', () => {
   assert.match(widget, /idoc-auth-turnstile__error/);
   assert.match(widget, /idoc-auth-turnstile__retry/);
-  assert.match(widget, /window\.location\.reload\(\)/);
+  assert.match(widget, /onClick=\{retry\}/);
+});
+
+test('retrying never reloads the page: a member who already typed into the surrounding form must not lose it', () => {
+  assert.doesNotMatch(widget, /window\.location\.reload/);
+});
+
+test('retry forces a fresh script load attempt by remounting the <Script> element with a new key, not just resetting local state', () => {
+  assert.match(widget, /const \[attempt, setAttempt\] = useState\(0\)/);
+  assert.match(widget, /key=\{attempt\}/);
+  const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
+  assert.match(retryBody, /setAttempt\(\(value\) => value \+ 1\)/);
+});
+
+test('the widget-render effect and the load-timeout effect both re-run on retry (attempt is a dependency of each)', () => {
+  assert.match(widget, /\}, \[action, scriptLoaded, siteKey, attempt\]\);/);
+  assert.match(widget, /\}, \[scriptLoaded, attempt\]\);/);
+});
+
+test('a visible, explicit loading state is shown while the widget has not yet rendered or failed, so the disabled submit button is not unexplained', () => {
+  assert.match(widget, /idoc-auth-turnstile__loading/);
+  assert.match(widget, /!scriptLoaded && !failed/);
+  assert.match(widget, /Loading security check/);
 });
 
 test('the real Turnstile widget configuration itself is untouched by the resilience changes', () => {

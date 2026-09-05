@@ -623,12 +623,21 @@
 .idoc-auth-turnstile {
   width: 100%;
   min-width: 0;
+  min-height: 65px;
   overflow: hidden;
 }
 
 .idoc-auth-turnstile > div,
 .idoc-auth-turnstile iframe {
   max-width: 100% !important;
+}
+
+.idoc-auth-turnstile__loading {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #64748b;
 }
 
 .idoc-auth-turnstile__error {
