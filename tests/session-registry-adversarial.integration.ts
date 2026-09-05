@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import {
+  listActiveSessions,
   readActiveSession,
   registerSession,
   revokeSession,
   touchSession,
 } from '../lib/auth/session-registry.ts';
+import { SESSION_IDLE_SECONDS } from '../lib/auth/session-tokens.ts';
 import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 function absoluteExpiryFrom(now: Date) {
@@ -147,6 +149,38 @@ test('registerSession is idempotent on a duplicate session id (on conflict do no
     authenticatedAt: now, lastActivityAt: now, absoluteExpiresAt: absoluteExpiryFrom(now),
   });
   assert.equal(await readActiveSession(sessionId, user.id), null);
+});
+
+test('the security page session list excludes a session that has gone idle-stale, even hours before its absolute expiry', async () => {
+  // A real production report: an account that had signed in and out repeatedly on one browser in a
+  // single day saw far more "active sessions" than it had ever actually had live at once. Each of
+  // those earlier logins is still within its 12-hour absolute window, but none of them are usable
+  // any more once idle past SESSION_IDLE_SECONDS -- the list must reflect that, not just the fixed
+  // absolute deadline.
+  await resetIdoc();
+  const user = await createUser();
+  const now = new Date();
+
+  const stillIdleWithinWindow = randomUUID();
+  await registerSession({ sessionId: stillIdleWithinWindow, userId: user.id, sessionVersion: 0,
+    authenticatedAt: new Date(now.getTime() - SESSION_IDLE_SECONDS * 500), lastActivityAt: now,
+    absoluteExpiresAt: absoluteExpiryFrom(now) });
+
+  const idleStale = randomUUID();
+  const staleLastActivity = new Date(now.getTime() - (SESSION_IDLE_SECONDS + 60) * 1000);
+  await registerSession({ sessionId: idleStale, userId: user.id, sessionVersion: 0,
+    authenticatedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), lastActivityAt: staleLastActivity,
+    // Still hours away from its own absolute deadline -- only idle staleness should exclude it.
+    absoluteExpiresAt: absoluteExpiryFrom(staleLastActivity) });
+
+  const active = await listActiveSessions(user.id, 0);
+  const ids = active.map((session) => session.sessionId);
+  assert.ok(ids.includes(stillIdleWithinWindow), 'a recently-touched session must still be listed');
+  assert.ok(!ids.includes(idleStale), 'a session idle past SESSION_IDLE_SECONDS must not be listed, regardless of its absolute expiry');
+
+  const [staleRow] = await sql<{ revoked_at: Date | null }[]>`
+    select revoked_at from idoc.auth_sessions where session_id = ${idleStale}`;
+  assert.equal(staleRow.revoked_at, null, 'idle exclusion from the list is a query-time filter, not an explicit revocation');
 });
 
 test.after(closeHarness);
