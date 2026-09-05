@@ -2,7 +2,7 @@
 
 import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
-import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 // Deliberately NOT exported: a 'use server' file turns every *exported* top-level function into
@@ -24,7 +24,7 @@ async function saveOwnMemberProfile(input: unknown) {
 
 export async function saveOwnMemberProfileForm(_state: { error?: string; success?: string }, formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
-    await requireCsrfToken(formData, await rawCanonicalSessionId());
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
   }

@@ -99,6 +99,23 @@ export async function rawCanonicalSessionId(): Promise<string | null> {
   }
 }
 
+/** The user id claimed by the same JWT rawCanonicalSessionId() reads, for the same
+ * registry-independent reason: cheaply available (no DB call) wherever a CSRF check already needs
+ * the raw session id, so a rejected check can attribute itself to the actual browser it came from
+ * (AUTH-LOG-001's subject attribution) without adding a database round trip to what must stay a
+ * fast, fail-closed boundary check. Not sufficient authentication authority on its own -- same
+ * caveat as rawCanonicalSessionId(). */
+export async function rawCanonicalUserId(): Promise<number | null> {
+  const cookieStore = await requestCookies();
+  const canonicalValue = cookieStore.get(sessionCookieName(requestEnvironment()))?.value;
+  if (!canonicalValue) return null;
+  try {
+    return (await verifyToken(canonicalValue)).user.id;
+  } catch {
+    return null;
+  }
+}
+
 export async function setSession(user: NewUser) {
   const now = new Date();
   const session: SessionData = {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { User } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 export type ActionState = {
@@ -21,7 +21,7 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
   action: ValidatedActionFunction<S, T>
 ) {
   return async (prevState: ActionState, formData: FormData) => {
-    await requireCsrfToken(formData, await rawCanonicalSessionId());
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {
@@ -47,7 +47,7 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
     if (!user) {
       throw new Error('User is not authenticated');
     }
-    await requireCsrfToken(formData, await rawCanonicalSessionId());
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), user.id);
     await requireAccountAccess('account');
 
     const result = schema.safeParse(Object.fromEntries(formData));
