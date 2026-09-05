@@ -27,7 +27,18 @@ export function TurnstileWidget({
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  // Lazily checks window.turnstile at mount time as a fast path, but the real fix below is using
+  // next/script's onReady callback rather than onLoad. onLoad fires exactly once per script src,
+  // globally across the whole app -- so on a client-side (soft) navigation to a second page whose
+  // widget mounts fresh (e.g. clicking "Forgot password?" from the login page), a first-mount-time
+  // check for window.turnstile can still race a script that is still loading at that exact instant
+  // (a Codex review finding on the initial version of this fix): if it finishes a moment after this
+  // component's initial render but before onReady is wired up, onLoad would never fire again for
+  // this new instance and the widget would wait out the full timeout regardless of the lazy check.
+  // onReady exists precisely for this: per Next.js's own docs it fires after the script loads AND
+  // on every subsequent mount of a <Script> with the same src, so it always tells a later page's
+  // widget the script is ready, whether that happens at mount or shortly after.
+  const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== 'undefined' && !!window.turnstile);
   const [failed, setFailed] = useState(false);
 
   // Removes any existing widget from the container before rendering a fresh one, so retry() can
@@ -107,7 +118,7 @@ export function TurnstileWidget({
     <div className="idoc-auth-turnstile">
       <Script
         onError={() => setFailed(true)}
-        onLoad={() => setScriptLoaded(true)}
+        onReady={() => setScriptLoaded(true)}
         src={SCRIPT_SRC}
         strategy="afterInteractive"
       />

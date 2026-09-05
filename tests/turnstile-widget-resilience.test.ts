@@ -21,6 +21,15 @@ test('a script that never fires onLoad or onError at all (silently dropped by a 
   assert.match(widget, /window\.setTimeout\(\(\) => setFailed\(true\), SCRIPT_LOAD_TIMEOUT_MS\)/);
 });
 
+test('scriptLoaded is initialized from whether window.turnstile already exists at mount time, as a fast path for a second widget instance mounted after a client-side navigation where the script is already resident', () => {
+  assert.match(widget, /useState\(\(\) => typeof window !== 'undefined' && !!window\.turnstile\)/);
+});
+
+test('the Script tag uses onReady, not onLoad, to set scriptLoaded -- onLoad fires exactly once per src globally, which would race a script that is still loading at exact mount time (a second page whose widget mounts just before an earlier page-triggered load finishes); onReady fires after load AND on every subsequent mount, so it can never miss a script that becomes ready shortly after this component mounts', () => {
+  assert.match(widget, /onReady=\{?\(\) => setScriptLoaded\(true\)/);
+  assert.doesNotMatch(widget, /onLoad=\{?\(\) => setScriptLoaded\(true\)/);
+});
+
 test('the fallback message is actionable: it explains likely causes and offers a retry', () => {
   assert.match(widget, /idoc-auth-turnstile__error/);
   assert.match(widget, /idoc-auth-turnstile__retry/);
