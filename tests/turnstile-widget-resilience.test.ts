@@ -31,9 +31,10 @@ test('retrying never reloads the page: a member who already typed into the surro
   assert.doesNotMatch(widget, /window\.location\.reload/);
 });
 
-test('retry forces a fresh script load attempt by remounting the <Script> element with a new key, not just resetting local state', () => {
+test('retry gives the <Script> a genuinely different src, not just a new React key -- next/script caches load state by src and never re-fires onLoad/onError for a repeated one', () => {
   assert.match(widget, /const \[attempt, setAttempt\] = useState\(0\)/);
   assert.match(widget, /key=\{attempt\}/);
+  assert.match(widget, /src=\{`https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit&retry=\$\{attempt\}`\}/);
   const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
   assert.match(retryBody, /setAttempt\(\(value\) => value \+ 1\)/);
 });
