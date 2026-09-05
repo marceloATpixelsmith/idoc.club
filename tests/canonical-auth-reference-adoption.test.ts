@@ -46,7 +46,7 @@ test('successful login email verification persists authoritative state before se
 });
 
 test('sign-in routing remains password-first and has no migrated activation branch', () => {
-  assert.match(loginPage, /return <PasswordStep email=\{pending\.email\} \/>/);
+  assert.match(loginPage, /return <PasswordStep email=\{pending\.email\} pendingCsrfNonce=\{pending\.csrfNonce\} \/>/);
   assert.doesNotMatch(loginPage, /ActivatePasswordStep|accountState|migrated_pending/);
 });
 

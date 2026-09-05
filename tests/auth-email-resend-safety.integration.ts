@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { resendSignupOtp, verifySignupOtp } from '../app/(login)/sign-up/actions.ts';
-import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
+import { getPendingSignup, markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { issueEmailOtp } from '../lib/auth/email-otp.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
@@ -54,7 +54,7 @@ async function pendingSignupSession(email: string) {
   const csrfToken = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingSignup(email, email);
-    await markPendingSignupVerified(email, email);
+    await markPendingSignupVerified((await getPendingSignup())!);
   });
   return { cookies, csrfToken };
 }

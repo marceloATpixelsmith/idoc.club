@@ -36,7 +36,7 @@ test('migrated members use the same password-first surface and validated activat
   const actions = read('app/(login)/actions.ts');
   const verification = read('app/(login)/sign-in/actions.ts');
   assert.doesNotMatch(page, /ActivatePasswordStep|accountState|migrated_pending/);
-  assert.match(actions, /foundUser\.accountState === 'migrated_pending'[\s\S]*requireLoginOtp\(email, foundUser\.id, foundUser\.sessionVersion, false\)/);
+  assert.match(actions, /foundUser\.accountState === 'migrated_pending'[\s\S]*requireLoginOtp\(email, foundUser\.id, foundUser\.sessionVersion, false, pending\.csrfNonce\)/);
   assert.match(verification, /finalizeMigratedAccountAfterVerifiedPassword\(user\.id\)/);
   // AUTH-ERROR-003: the failure branch must use the policy-configured support contact, not a
   // hardcoded string with no way for an operator to point it at a real, monitored address.

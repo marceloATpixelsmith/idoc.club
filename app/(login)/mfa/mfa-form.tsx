@@ -4,7 +4,7 @@ import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useActionState, useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
-import { CsrfField } from '@/components/security/csrf-field';
+import { CsrfEvidence } from '@/components/security/csrf-evidence';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import {
@@ -15,18 +15,6 @@ import {
 
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
 type Mode = 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack' | 'step-up';
-
-/** Every stage of this page except step-up (a separate cookie/action family, untouched here) is
- * driven by lib/auth/mfa/pending-primary-auth.ts's signed continuation cookie, which now carries
- * its own per-flow csrfNonce specifically to avoid the general CSRF cookie's real, confirmed
- * failure mode across this page's stage-to-stage client-side navigations (see that file's
- * PendingPrimaryAuth.csrfNonce doc comment). Rendering it directly as a plain hidden field -- a
- * server-rendered prop, not a client Context value -- has no equivalent staleness risk: it is
- * always exactly what the page currently on screen was actually given. Falls back to the general
- * <CsrfField/> only when no such flow is active (pendingCsrfNonce undefined -- step-up mode). */
-function CsrfEvidence({ pendingCsrfNonce }: { pendingCsrfNonce?: string }) {
-  return pendingCsrfNonce ? <input name="csrf_token" type="hidden" value={pendingCsrfNonce} /> : <CsrfField />;
-}
 
 /** `provisioningUri` (`lib/auth/mfa/totp.ts`'s `totpProvisioningUri`) is the full
  * `otpauth://totp/...?secret=...&issuer=...&algorithm=...&digits=...&period=...` URI meant for a QR

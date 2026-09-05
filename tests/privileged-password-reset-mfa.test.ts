@@ -25,7 +25,7 @@ test('pending reset is a signed state machine without role or MFA material', () 
 
 test('anonymous recovery keeps one neutral verification surface for every unresolved state', () => {
   assert.match(page, /if \(pending\.stage === 'authorized'\) return <PasswordStep/);
-  assert.match(page, /return <OtpStep \/>/);
+  assert.match(page, /return <OtpStep pendingCsrfNonce=\{pending\.csrfNonce\} \/>/);
   assert.doesNotMatch(page, /TotpStep|missing-factor|Additional recovery required|authenticator/);
   assert.match(otpStep, /Enter the 6-digit verification code for this recovery request/);
   assert.match(otpStep, /authenticator app/);

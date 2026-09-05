@@ -6,7 +6,8 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { authSessions, users } from '@/lib/db/schema';
-import { hashPassword } from '@/lib/auth/session';
+import { hashPassword, rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
+import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
 import { validatedAction } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { passwordSchema } from '@/lib/auth/password-policy';
@@ -67,9 +68,10 @@ export const startPasswordReset = validatedAction(startResetSchema, async ({ ema
 const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 const neutralVerificationError = { error: 'That verification code is incorrect or expired.' };
 
-export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
+export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ code }, formData) => {
   const pending = await getPendingPasswordReset();
   if (!pending || pending.stage === 'authorized') return { error: 'Your session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
 
   if (pending.stage === 'email-otp') {
@@ -126,11 +128,12 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
   }
   await authorizePendingPasswordReset(pending, 'totp');
   redirect('/recover-password');
-});
+}, { skipCsrf: true });
 
-export const resendPasswordResetOtp = validatedAction(z.object({}), async () => {
+export const resendPasswordResetOtp = validatedAction(z.object({}), async (_data, formData) => {
   const pending = await getPendingPasswordReset();
   if (!pending || pending.stage === 'authorized') return { error: 'Your session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
   if (pending.stage === 'email-otp' && pending.subjectId &&
     (await authoritativeMfaRole(pending.subjectId)) === 'member') {
@@ -139,18 +142,21 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async () => 
     await checkRateLimit('password_reset_resend_neutral', pending.email, origin);
   }
   return { success: 'If email verification is available for this account, a new code was sent.' };
-});
+}, { skipCsrf: true });
 
-export const cancelPasswordReset = validatedAction(z.object({}), async () => {
+export const cancelPasswordReset = validatedAction(z.object({}), async (_data, formData) => {
+  const pending = await getPendingPasswordReset();
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending?.csrfNonce ?? null);
   await clearPendingPasswordReset();
   redirect('/recover-password');
-});
+}, { skipCsrf: true });
 
 const completeResetSchema = z.object({ password: passwordSchema });
 
-export const completePasswordReset = validatedAction(completeResetSchema, async ({ password }) => {
+export const completePasswordReset = validatedAction(completeResetSchema, async ({ password }, formData) => {
   const pending = await getPendingPasswordReset();
   if (!pending || pending.stage !== 'authorized') return { error: 'Your session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const [user] = await db.select({ accountState: users.accountState, deletedAt: users.deletedAt, email: users.email, id: users.id })
     .from(users).where(and(eq(users.id, pending.subjectId), eq(users.email, pending.email))).limit(1);
   if (!user || !['active', 'onboarding'].includes(user.accountState) || user.deletedAt) {
@@ -183,4 +189,4 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
   });
   await clearPendingPasswordReset();
   redirect('/sign-in?reset=success');
-});
+}, { skipCsrf: true });

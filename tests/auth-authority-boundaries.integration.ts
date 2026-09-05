@@ -6,8 +6,9 @@ import { verifyLoginOtp } from '../app/(login)/sign-in/actions.ts';
 import { signIn, updateAccount } from '../app/(login)/actions.ts';
 import { verifyLoginTotp } from '../app/(login)/mfa/actions.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
-import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
+import { getPendingSignup, markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { requireLoginOtp, startPendingLogin } from '../lib/auth/pending-login.ts';
+import { generatePendingCsrfNonce } from '../lib/security/csrf.ts';
 import { getPendingPrimaryAuth } from '../lib/auth/mfa/pending-primary-auth.ts';
 import { beginPrimaryMfa, MFA_APPLICATION_ID } from '../lib/auth/mfa/login.ts';
 import { digestRememberedDeviceToken, issueRememberedDevice } from '../lib/auth/mfa/remembered-device.ts';
@@ -118,7 +119,7 @@ test('AUTH-IDENTITY-002: real signup action ignores hostile authority fields and
       const csrfToken = await issueTestCsrfToken(cookies, null);
       await withTestRequestCookies(cookies, async () => {
         await startPendingSignup(email, email);
-        await markPendingSignupVerified(email, email);
+        await markPendingSignupVerified((await getPendingSignup())!);
         const form = new FormData();
         form.set('password', password);
         form.set('csrf_token', csrfToken);
@@ -225,7 +226,7 @@ test('AUTH-OTP-002: valid email OTP cannot become MFA, step-up, or privileged se
   const cookies = new TestCookies();
   const csrfToken = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
-    await requireLoginOtp(user.email, user.id, user.sessionVersion, false);
+    await requireLoginOtp(user.email, user.id, user.sessionVersion, false, generatePendingCsrfNonce());
     const pendingLoginToken = cookies.get('idoc_pending_login')?.value;
     assert.ok(pendingLoginToken);
     const form = new FormData(); form.set('code', code); form.set('csrf_token', csrfToken);

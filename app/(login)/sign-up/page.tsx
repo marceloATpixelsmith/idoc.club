@@ -20,6 +20,6 @@ export default async function SignUpPage({
     const params = await searchParams;
     return <EmailStep initialError={googleErrorMessage(params.google)} />;
   }
-  if (!pending.verified) return <OtpStep email={pending.email} />;
-  return <PasswordStep />;
+  if (!pending.verified) return <OtpStep email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
+  return <PasswordStep pendingCsrfNonce={pending.csrfNonce} />;
 }

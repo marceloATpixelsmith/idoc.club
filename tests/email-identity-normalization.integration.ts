@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { updateAccount } from '../app/(login)/actions.ts';
 import { completeSignup } from '../app/(login)/sign-up/actions.ts';
 import { setSession } from '../lib/auth/session.ts';
-import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
+import { getPendingSignup, markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { db } from '../lib/db/drizzle.ts';
 import { users } from '../lib/db/schema.ts';
@@ -58,7 +58,7 @@ async function completeRealSignup(cookies: TestCookies, csrfToken: string, rawEm
   const email = normalizeEmail(rawEmail);
   const emailDisplay = emailDisplayForm(rawEmail);
   await startPendingSignup(email, emailDisplay);
-  await markPendingSignupVerified(email, emailDisplay);
+  await markPendingSignupVerified((await getPendingSignup())!);
   const form = new FormData();
   form.set('password', password);
   form.set('csrf_token', csrfToken);

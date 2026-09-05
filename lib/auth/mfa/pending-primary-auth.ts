@@ -1,20 +1,14 @@
 import 'server-only';
 
-import { randomBytes } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { requestCookies } from '@/lib/auth/request-cookies';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
+import { generatePendingCsrfNonce } from '@/lib/security/csrf';
+
+export { generatePendingCsrfNonce };
 
 const COOKIE_NAME = 'idoc_pending_primary_mfa';
 const TTL_SECONDS = 10 * 60;
-
-/** Mints a fresh csrfNonce for a NEW pending-primary-auth flow (beginPrimaryMfa,
- * beginAuthenticatorReplacement). Every later stage transition within the same flow must instead
- * carry the existing value forward (spread the prior pending value) -- never call this again for
- * the same flow, or the nonce a member is currently looking at on their screen stops matching. */
-export function generatePendingCsrfNonce(): string {
-  return randomBytes(24).toString('base64url');
-}
 
 export type PendingPrimaryAuth = {
   applicationId: 'idoc.club';

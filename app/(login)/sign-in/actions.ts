@@ -5,12 +5,13 @@ import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
-import { setSession } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
 import { validatedAction } from '@/lib/auth/middleware';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingLogin, getPendingLogin, requireLoginOtp, startPendingLogin } from '@/lib/auth/pending-login';
+import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
 import { finalizeMigratedAccountAfterVerifiedPassword } from '@/lib/membership/account-recovery';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
@@ -49,9 +50,10 @@ const verifyOtpSchema = z.object({
  * authoritative email state is still unverified. Successful verification persists that state before
  * normal session establishment. Migrated accounts additionally pass the established imported-data
  * foundation validator and atomic activation boundary before any session is created. */
-export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, remember }) => {
+export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, remember }, formData) => {
   const pending = await getPendingLogin();
   if (!pending || pending.stage !== 'login-otp') return { error: 'Your sign-in session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
 
   const origin = await requestOrigin();
   const result = await verifyEmailOtp(pending.email, 'login_verification', code, origin, pending.userId);
@@ -112,11 +114,12 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   }
   await setSession(verifiedUser);
   redirect(destination);
-});
+}, { skipCsrf: true });
 
-export const resendLoginOtp = validatedAction(z.object({}), async () => {
+export const resendLoginOtp = validatedAction(z.object({}), async (_data, formData) => {
   const pending = await getPendingLogin();
   if (!pending || pending.stage !== 'login-otp') return { error: 'Your sign-in session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
   const [account] = await db.select({ id: users.id })
     .from(users).where(and(eq(users.id, pending.userId), eq(users.email, pending.email))).limit(1);
@@ -124,9 +127,11 @@ export const resendLoginOtp = validatedAction(z.object({}), async () => {
     await issueEmailOtp(pending.email, 'login_verification', { origin, userId: account.id });
   }
   return { success: 'If this address still requires verification, a new code was sent.' };
-});
+}, { skipCsrf: true });
 
-export const cancelLogin = validatedAction(z.object({}), async () => {
+export const cancelLogin = validatedAction(z.object({}), async (_data, formData) => {
+  const pending = await getPendingLogin();
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending?.csrfNonce ?? null);
   await clearPendingLogin();
   redirect('/sign-in');
-});
+}, { skipCsrf: true });

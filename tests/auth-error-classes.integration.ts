@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { verifyLoginOtp } from '../app/(login)/sign-in/actions.ts';
 import { requireLoginOtp } from '../lib/auth/pending-login.ts';
+import { generatePendingCsrfNonce } from '../lib/security/csrf.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { supportEmailForServer } from '../lib/runtime/configuration.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
@@ -46,7 +47,7 @@ test('a persistent system failure (a migrated account with no imported foundatio
   const csrfToken = await issueTestCsrfToken(cookies, null);
 
   await withTestRequestCookies(cookies, async () => {
-    await requireLoginOtp(user.email, user.id, 0, false);
+    await requireLoginOtp(user.email, user.id, 0, false, generatePendingCsrfNonce());
     await insertLoginOtp(user.id, user.email, code);
     const form = new FormData();
     form.set('code', code);
@@ -67,7 +68,7 @@ test('a user-correctable mistake (a wrong OTP code) keeps its specific, actionab
   const csrfToken = await issueTestCsrfToken(cookies, null);
 
   await withTestRequestCookies(cookies, async () => {
-    await requireLoginOtp(user.email, user.id, 0, false);
+    await requireLoginOtp(user.email, user.id, 0, false, generatePendingCsrfNonce());
     await insertLoginOtp(user.id, user.email, code);
     const form = new FormData();
     form.set('code', '000000');

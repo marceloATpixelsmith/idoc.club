@@ -3,11 +3,12 @@
 import { OtpEntryStep } from '@/components/auth/otp-entry-step';
 import { cancelLogin, resendLoginOtp, verifyLoginOtp } from './actions';
 
-export function OtpStep({ allowRemember, email }: { allowRemember: boolean; email: string }) {
+export function OtpStep({ allowRemember, email, pendingCsrfNonce }: { allowRemember: boolean; email: string; pendingCsrfNonce: string }) {
   return (
     <OtpEntryStep
       cancelAction={cancelLogin}
       description={<>We sent a 6-digit code to <strong>{email}</strong>.</>}
+      pendingCsrfNonce={pendingCsrfNonce}
       resendAction={resendLoginOtp}
       verifyFields={allowRemember ? (
         <label className="flex items-center gap-2 text-sm text-slate-700">
