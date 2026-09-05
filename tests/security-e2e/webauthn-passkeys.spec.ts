@@ -66,17 +66,27 @@ test('a privileged account can register and remove a passkey from the dashboard,
   await page.goto('/dashboard/security');
   await expect(page.getByText('Passkeys', { exact: true })).toBeVisible();
 
+  // A real production report: calling beginPasskeyRegistration directly (not through a <form>)
+  // meant its internal redirect() to /mfa -- entirely expected, not a failure -- was caught by the
+  // surrounding try/catch and flashed the generic "could not be completed" error for an instant
+  // before the navigation landed. Typing a label first also proves the second, separate bug: this
+  // component remounts across that redirect round trip, so without restoring the typed label from
+  // sessionStorage it would come back empty and have to be retyped.
+  await page.getByLabel('Label (optional)').fill('MacBook Touch ID');
+
   // First click has no fresh step-up evidence yet, so it redirects to the authenticator challenge.
   await page.getByRole('button', { name: 'Add a passkey' }).click();
   await expect(page).toHaveURL(/\/mfa$/);
+  await expect(page.getByText('That could not be completed. Try again.')).toHaveCount(0);
   await page.getByLabel('Authenticator code').fill(await freshTotpCode(E2E_TOTP_SECRET));
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page).toHaveURL(/\/dashboard\/security$/);
+  await expect(page.getByLabel('Label (optional)')).toHaveValue('MacBook Touch ID');
 
   // Second click now runs with fresh evidence and completes a real browser WebAuthn ceremony.
   await page.getByRole('button', { name: 'Add a passkey' }).click();
   await expect(page.getByText('Passkey added.')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Passkey', { exact: true })).toBeVisible();
+  await expect(page.getByText('MacBook Touch ID')).toBeVisible();
 
   // Removal is its own sensitive action: the fresh step-up evidence registration just consumed
   // does not carry over, so this click needs its own authenticator challenge round too. Unlike

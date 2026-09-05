@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { startRegistration, type PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,12 +17,43 @@ type BeginResult = { error?: string; ceremonyId?: string; options?: PublicKeyCre
 type ActionResult = { error?: string; success?: string };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 const GENERIC_ERROR = 'That could not be completed. Try again.';
+const PENDING_DEVICE_NAME_KEY = 'idoc-pending-passkey-device-name';
+
+/** A Server Action's redirect() (used here by beginPasskeyRegistration when fresh step-up is
+ * required) works by throwing a special digest-tagged error -- Next.js's own action-call plumbing
+ * still performs the real navigation regardless of what the calling code does with that throw, but
+ * a surrounding try/catch that doesn't recognize it will treat it as a genuine failure. Without this
+ * check, every step-up redirect flashed the generic "That could not be completed" error for an
+ * instant before the browser actually navigated to /mfa -- a real production report, not a
+ * hypothetical. */
+function isNextRedirectError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'digest' in error &&
+    typeof (error as { digest?: unknown }).digest === 'string' && (error as { digest: string }).digest.startsWith('NEXT_REDIRECT');
+}
 
 export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
   const [error, setError] = useState<string>();
   const [success, setSuccess] = useState<string>();
   const [busy, setBusy] = useState(false);
+  // Registration is the one step-up-gated action that can never auto-apply after verification (a
+  // browser only allows a biometric/security-key ceremony to start from a live click), so a
+  // required step-up round trips through a full page navigation to /mfa and back, remounting this
+  // component and clearing its local state. Restoring the label the member already typed from
+  // sessionStorage means that round trip only costs a second click, not also retyping the label --
+  // never anything beyond this non-secret display label, and read exactly once (removed the instant
+  // it's read, whether or not it turns out to be present) so a value written for one redirect can
+  // never resurface on an unrelated later visit, and never survives into a different account's
+  // session in the same tab after a sign-out. Read in an effect, not a lazy useState initializer, so
+  // the very first client render still matches the server-rendered (always-empty) markup --
+  // sessionStorage doesn't exist during SSR at all.
   const [deviceName, setDeviceName] = useState('');
+  useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem(PENDING_DEVICE_NAME_KEY);
+      sessionStorage.removeItem(PENDING_DEVICE_NAME_KEY);
+      if (pending) setDeviceName(pending);
+    } catch { /* best-effort only */ }
+  }, []);
 
   async function addPasskey() {
     setBusy(true); setError(undefined); setSuccess(undefined);
@@ -48,7 +79,15 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
       if (finish.error) { setError(finish.error); return; }
       setSuccess(finish.success ?? 'Passkey added.');
       setDeviceName('');
-    } catch {
+    } catch (thrown) {
+      if (isNextRedirectError(thrown)) {
+        // About to navigate away to /mfa for step-up verification -- this component remounts once
+        // the member returns, so persist only what's already in the field, only for this one
+        // redirect (the effect above reads and immediately clears it, whether or not this path
+        // actually runs again on this device).
+        try { sessionStorage.setItem(PENDING_DEVICE_NAME_KEY, deviceName); } catch { /* best-effort only */ }
+        throw thrown;
+      }
       setError(GENERIC_ERROR);
     } finally {
       setBusy(false);
@@ -64,7 +103,8 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
       const result = await removePasskeyCredential({}, formData) as ActionResult;
       if (result.error) { setError(result.error); return; }
       setSuccess(result.success ?? 'Passkey removed.');
-    } catch {
+    } catch (thrown) {
+      if (isNextRedirectError(thrown)) throw thrown;
       setError(GENERIC_ERROR);
     } finally {
       setBusy(false);
