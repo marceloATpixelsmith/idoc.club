@@ -33,6 +33,13 @@ const RESUMERS: Record<string, (formData: FormData) => Promise<ResumeResult>> = 
   'update-account-email': (formData) => updateAccount({}, formData),
 };
 
+// A handful of resumable actions can't be replayed here at all -- registering a passkey needs a real
+// browser WebAuthn ceremony, which only exists client-side, never inside this server-only module.
+// For those, this hands back a marker query parameter instead of a result, and the client component
+// itself performs the actual resume the instant it remounts on `returnTo` -- still no second manual
+// submission, just carried out on the client rather than the server.
+const CLIENT_RESUME_MARKERS: Record<string, string> = { 'add-passkey': 'resumeWebAuthn' };
+
 /** Applies `pending`'s original request now that its fresh step-up code has just been accepted, and
  * returns the URL to send the member to -- `pending.returnTo` with the outcome appended as a query
  * parameter (never the result payload itself: nothing resumable here returns secret data -- see
@@ -41,6 +48,11 @@ const RESUMERS: Record<string, (formData: FormData) => Promise<ResumeResult>> = 
 export async function resumeStepUpAction(pending: PendingStepUp): Promise<string> {
   const resume = pending.resume;
   if (!resume) return pending.returnTo;
+  const clientMarker = CLIENT_RESUME_MARKERS[resume.kind];
+  if (clientMarker) {
+    const separator = pending.returnTo.includes('?') ? '&' : '?';
+    return `${pending.returnTo}${separator}${clientMarker}=1`;
+  }
   const resumer = RESUMERS[resume.kind];
   if (!resumer) return pending.returnTo;
   const separator = pending.returnTo.includes('?') ? '&' : '?';

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { startRegistration, type PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,30 +33,47 @@ function isNextRedirectError(error: unknown): boolean {
 }
 
 export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string>();
   const [success, setSuccess] = useState<string>();
   const [busy, setBusy] = useState(false);
-  // Registration is the one step-up-gated action that can never auto-apply after verification (a
-  // browser only allows a biometric/security-key ceremony to start from a live click), so a
-  // required step-up round trips through a full page navigation to /mfa and back, remounting this
+  // A required step-up round trips through a full page navigation to /mfa and back, remounting this
   // component and clearing its local state. Restoring the label the member already typed from
-  // sessionStorage means that round trip only costs a second click, not also retyping the label --
-  // never anything beyond this non-secret display label, and read exactly once (removed the instant
-  // it's read, whether or not it turns out to be present) so a value written for one redirect can
-  // never resurface on an unrelated later visit, and never survives into a different account's
-  // session in the same tab after a sign-out. Read in an effect, not a lazy useState initializer, so
-  // the very first client render still matches the server-rendered (always-empty) markup --
-  // sessionStorage doesn't exist during SSR at all.
+  // sessionStorage means that round trip doesn't also cost retyping the label -- never anything
+  // beyond this non-secret display label, and read exactly once (removed the instant it's read,
+  // whether or not it turns out to be present) so a value written for one redirect can never
+  // resurface on an unrelated later visit, and never survives into a different account's session in
+  // the same tab after a sign-out. Read in an effect, not a lazy useState initializer, so the very
+  // first client render still matches the server-rendered (always-empty) markup -- sessionStorage
+  // doesn't exist during SSR at all.
   const [deviceName, setDeviceName] = useState('');
+  const autoResumed = useRef(false);
   useEffect(() => {
+    let restored = '';
     try {
       const pending = sessionStorage.getItem(PENDING_DEVICE_NAME_KEY);
       sessionStorage.removeItem(PENDING_DEVICE_NAME_KEY);
-      if (pending) setDeviceName(pending);
+      if (pending) { restored = pending; setDeviceName(pending); }
     } catch { /* best-effort only */ }
+    // Real production report: after verifying the TOTP code, the member landed back here having to
+    // click "Add a passkey" a second time before the biometric/security-key ceremony actually ran.
+    // Next.js's client-side navigation for a Server Action redirect() stays in the same Document (no
+    // full page reload), so the transient user activation from the "Verify" click that triggered it
+    // is still live when this component remounts here -- calling startRegistration() immediately,
+    // still within that activation, lets the ceremony fire without a further click. A stale or
+    // reloaded activation makes the browser refuse the ceremony instead of prompting for it; that
+    // failure is handled below by asking for exactly one ordinary click, same as before this existed.
+    if (!autoResumed.current && searchParams.get('resumeWebAuthn') === '1') {
+      autoResumed.current = true;
+      router.replace('/dashboard/security', { scroll: false });
+      void addPasskey({ auto: true, nameOverride: restored });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function addPasskey() {
+  async function addPasskey(options?: { auto?: boolean; nameOverride?: string }) {
+    const effectiveName = options?.nameOverride ?? deviceName;
     setBusy(true); setError(undefined); setSuccess(undefined);
     try {
       const beginFormData = new FormData();
@@ -67,14 +85,20 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
       try {
         response = await startRegistration({ optionsJSON: begin.options });
       } catch {
-        setError('Passkey setup was cancelled or not completed.');
+        // An automatic resume attempt that the browser refused (activation didn't carry over) needs
+        // a different message than an ordinary click the member actually cancelled themselves -- the
+        // fresh step-up evidence beginPasskeyRegistration just consumed is already gone either way,
+        // so pointing at the button is what actually gets them unblocked, not "try again" framing
+        // that implies retrying without a click would work.
+        setError(options?.auto ? 'Click "Add a passkey" to finish setting it up.'
+          : 'Passkey setup was cancelled or not completed.');
         return;
       }
       const formData = new FormData();
       formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
       formData.set('ceremonyId', String(begin.ceremonyId));
       formData.set('credentialJson', JSON.stringify(response));
-      if (deviceName.trim()) formData.set('deviceName', deviceName.trim());
+      if (effectiveName.trim()) formData.set('deviceName', effectiveName.trim());
       const finish = await finishPasskeyRegistration({}, formData) as ActionResult;
       if (finish.error) { setError(finish.error); return; }
       setSuccess(finish.success ?? 'Passkey added.');
@@ -85,7 +109,7 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
         // the member returns, so persist only what's already in the field, only for this one
         // redirect (the effect above reads and immediately clears it, whether or not this path
         // actually runs again on this device).
-        try { sessionStorage.setItem(PENDING_DEVICE_NAME_KEY, deviceName); } catch { /* best-effort only */ }
+        try { sessionStorage.setItem(PENDING_DEVICE_NAME_KEY, effectiveName); } catch { /* best-effort only */ }
         throw thrown;
       }
       setError(GENERIC_ERROR);
@@ -136,7 +160,7 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
             <Input id="passkey-device-name" maxLength={100} onChange={(event) => setDeviceName(event.target.value)}
               placeholder="e.g. MacBook Touch ID" value={deviceName} />
           </div>
-          <Button disabled={busy} onClick={addPasskey} type="button">Add a passkey</Button>
+          <Button disabled={busy} onClick={() => addPasskey()} type="button">Add a passkey</Button>
         </div>
       </CardContent>
     </Card>

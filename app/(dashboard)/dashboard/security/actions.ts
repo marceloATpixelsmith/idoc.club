@@ -133,7 +133,8 @@ export const beginPasskeyRegistration = validatedActionWithUser(emptySchema, asy
   error?: string; ceremonyId?: string; options?: PasskeyRegistrationOptions;
 }> => {
   await privilegedUser(user);
-  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security')).required) redirect('/mfa');
+  if ((await requireFreshStepUp(user, 'change-mfa', '/dashboard/security',
+    { kind: 'add-passkey', payload: {} })).required) redirect('/mfa');
   const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
   if (!factor) return { error: 'Set up an authenticator app before adding a passkey.' };
   const existing = await webauthnStore.getActiveCredentials(String(user.id), MFA_APPLICATION_ID);

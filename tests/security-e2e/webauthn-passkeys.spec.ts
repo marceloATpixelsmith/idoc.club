@@ -80,11 +80,14 @@ test('a privileged account can register and remove a passkey from the dashboard,
   await expect(page.getByText('That could not be completed. Try again.')).toHaveCount(0);
   await page.getByLabel('Authenticator code').fill(await freshTotpCode(E2E_TOTP_SECRET));
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect(page).toHaveURL(/\/dashboard\/security$/);
-  await expect(page.getByLabel('Label (optional)')).toHaveValue('MacBook Touch ID');
 
-  // Second click now runs with fresh evidence and completes a real browser WebAuthn ceremony.
-  await page.getByRole('button', { name: 'Add a passkey' }).click();
+  // A real production report: after entering the code, the member had to click "Add a passkey" a
+  // second time before the browser's biometric/security-key ceremony actually ran. Next.js's
+  // client-side navigation for a Server Action redirect() stays in the same Document -- no full page
+  // reload -- so the transient user activation from this "Verify" click is still live when this
+  // component remounts on /dashboard/security, and the ceremony fires automatically with no further
+  // click needed.
+  await expect(page).toHaveURL(/\/dashboard\/security$/);
   await expect(page.getByText('Passkey added.')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('MacBook Touch ID')).toBeVisible();
 
