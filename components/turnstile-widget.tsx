@@ -27,7 +27,16 @@ export function TurnstileWidget({
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  // Lazily checks window.turnstile at mount time, not just the <Script onLoad> callback below --
+  // next/script fires onLoad exactly once per script src, globally across the whole app. On a
+  // client-side (soft) navigation to a second page whose widget mounts fresh -- e.g. clicking
+  // "Forgot password?" from the login page -- the script itself is already resident from the
+  // first page (confirmed in production: api.js loads from memory cache on the second page), but
+  // onLoad never fires again for this new component instance, since next/script already delivered
+  // it once to the first page's instance. Without this check, this widget would wait the full
+  // SCRIPT_LOAD_TIMEOUT_MS and show a false "didn't load" error every time, even though a working
+  // script is sitting right there in window.
+  const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== 'undefined' && !!window.turnstile);
   const [failed, setFailed] = useState(false);
 
   // Removes any existing widget from the container before rendering a fresh one, so retry() can

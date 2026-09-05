@@ -21,6 +21,10 @@ test('a script that never fires onLoad or onError at all (silently dropped by a 
   assert.match(widget, /window\.setTimeout\(\(\) => setFailed\(true\), SCRIPT_LOAD_TIMEOUT_MS\)/);
 });
 
+test('scriptLoaded is initialized from whether window.turnstile already exists at mount time, not only from the <Script onLoad> callback -- next/script fires onLoad exactly once per src, globally, so a second widget instance mounted after a client-side navigation (the script already resident from an earlier page) would otherwise never be told it is ready and would time out into a false failure', () => {
+  assert.match(widget, /useState\(\(\) => typeof window !== 'undefined' && !!window\.turnstile\)/);
+});
+
 test('the fallback message is actionable: it explains likely causes and offers a retry', () => {
   assert.match(widget, /idoc-auth-turnstile__error/);
   assert.match(widget, /idoc-auth-turnstile__retry/);
