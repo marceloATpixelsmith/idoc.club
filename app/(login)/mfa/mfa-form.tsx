@@ -16,6 +16,18 @@ import {
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
 type Mode = 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack' | 'step-up';
 
+/** Every stage of this page except step-up (a separate cookie/action family, untouched here) is
+ * driven by lib/auth/mfa/pending-primary-auth.ts's signed continuation cookie, which now carries
+ * its own per-flow csrfNonce specifically to avoid the general CSRF cookie's real, confirmed
+ * failure mode across this page's stage-to-stage client-side navigations (see that file's
+ * PendingPrimaryAuth.csrfNonce doc comment). Rendering it directly as a plain hidden field -- a
+ * server-rendered prop, not a client Context value -- has no equivalent staleness risk: it is
+ * always exactly what the page currently on screen was actually given. Falls back to the general
+ * <CsrfField/> only when no such flow is active (pendingCsrfNonce undefined -- step-up mode). */
+function CsrfEvidence({ pendingCsrfNonce }: { pendingCsrfNonce?: string }) {
+  return pendingCsrfNonce ? <input name="csrf_token" type="hidden" value={pendingCsrfNonce} /> : <CsrfField />;
+}
+
 /** `provisioningUri` (`lib/auth/mfa/totp.ts`'s `totpProvisioningUri`) is the full
  * `otpauth://totp/...?secret=...&issuer=...&algorithm=...&digits=...&period=...` URI meant for a QR
  * code -- an authenticator app's *manual entry* field only ever accepts the bare base32 `secret`
@@ -67,8 +79,8 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   );
 }
 
-export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
-  hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
+export function MfaForm({ hasWebAuthn, mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
+  hasWebAuthn?: boolean; mode: Mode; pendingCsrfNonce?: string; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
 }) {
   const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
@@ -86,7 +98,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
 
   if (state.recoveryCodes) return (
     <form action={acknowledge} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       <p>Store these recovery codes somewhere safe. Each code can only be used once.</p>
       <div className="idoc-auth-recovery-codes">
         <div className="idoc-auth-recovery-codes__copy-row">
@@ -112,7 +124,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
   );
   if (mode === 'recovery-ack') return (
     <form action={cancel} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       <p className="idoc-auth-error" role="alert">The one-time recovery-code display is no longer available. Sign in again with your new authenticator, then generate a fresh recovery-code set from account security.</p>
       <input name="cancel" type="hidden" value="yes" />
       <button className="idoc-auth-button" type="submit">Sign in again</button>
@@ -121,7 +133,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
   if (mode === 'recovery-entry') return (
     <>
       <form action={formAction} className="idoc-auth-form">
-        <CsrfField />
+        <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
         <div className="idoc-auth-field">
           <label className="idoc-auth-label" htmlFor="recoveryCode">Recovery code</label>
           <input autoComplete="off" autoFocus className="idoc-auth-input" id="recoveryCode" maxLength={64} name="recoveryCode" required />
@@ -129,13 +141,13 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
         <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Checking" /> : 'Continue'}</button>
       </form>
-      <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
+      <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
     </>
   );
   return (
     <>
     <form action={formAction} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       {(mode === 'enrollment' || mode === 'replacement') && provisioningUri ? <>
         <p>Scan the QR code with your authenticator app, then enter the 6-digit code it generates.</p>
         <div className="idoc-auth-totp-enrollment">
@@ -165,9 +177,9 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
     {(mode === 'challenge' || mode === 'step-up') && hasWebAuthn ? <PasskeyButton mode={mode} /> : null}
-    {mode === 'challenge' ? <form action={recover}><CsrfField /><input name="recover" type="hidden" value="yes" />
+    {mode === 'challenge' ? <form action={recover}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="recover" type="hidden" value="yes" />
       <button disabled={recovering} type="submit">Use a recovery code</button></form> : null}
-    {mode === 'replacement' ? <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" />
+    {mode === 'replacement' ? <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" />
       <button type="submit">Cancel and sign in again</button></form> : null}
     </>
   );

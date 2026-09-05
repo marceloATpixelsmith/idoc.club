@@ -18,10 +18,17 @@ type ValidatedActionFunction<S extends z.ZodType<any, any>, T> = (
 
 export function validatedAction<S extends z.ZodType<any, any>, T>(
   schema: S,
-  action: ValidatedActionFunction<S, T>
+  action: ValidatedActionFunction<S, T>,
+  // Set only by the small family of pending-primary-auth-driven MFA actions
+  // (app/(login)/mfa/actions.ts), which perform their own CSRF check once they've resolved the
+  // pending flow (accepting either the general cookie or the flow's own per-flow nonce -- see
+  // lib/security/csrf.ts's requireCsrfTokenOrPendingNonce) instead of the unconditional check below.
+  options?: { skipCsrf?: boolean },
 ) {
   return async (prevState: ActionState, formData: FormData) => {
-    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    if (!options?.skipCsrf) {
+      await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    }
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {

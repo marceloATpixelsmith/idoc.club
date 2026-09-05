@@ -21,7 +21,7 @@ import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/login-device-trust';
 import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
 import { mfaStore } from '@/lib/auth/mfa/store';
-import { setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
+import { generatePendingCsrfNonce, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
 import { beginWebAuthnRegistration, finishWebAuthnRegistration } from '@/lib/auth/mfa/webauthn';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
@@ -94,7 +94,7 @@ export const beginAuthenticatorReplacement = validatedActionWithUser(emptySchema
   const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
   if (!factor) return { error: 'No configured authenticator was found.' };
   const transactionId = randomUUID();
-  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, hasWebAuthn: false,
+  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce(), factorId: factor.factorId, hasWebAuthn: false,
     method: 'password', returnTo: '/dashboard/security', sessionVersion: user.sessionVersion,
     stage: 'recovery-entry', subjectId: user.id, transactionId });
   // Recovery is intentionally a constrained primary-auth continuation, never an authenticated
