@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after, before } from 'node:test';
@@ -78,6 +79,55 @@ test('forward migration preserves databases that already applied released migrat
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
     assert.equal(count, 36);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
+  } finally {
+    await rm(temporary, { force: true, recursive: true });
+  }
+});
+
+test('migration 0035 removes passkey/WebAuthn support without a foreign-key violation against a real historical satisfied_factor_id reference', async () => {
+  // A Codex review finding on the passkey-removal PR: mfa_challenge_transactions.satisfied_factor_id
+  // references mfa_factors with no ON DELETE action, so on any database where a passkey had ever
+  // actually completed a login or step-up challenge, migration 0035's DELETE of the webauthn factor
+  // row would otherwise fail the whole migration with a foreign-key violation. This proves the fix
+  // (nulling that reference first) against exactly that real historical shape, not just by reading
+  // the SQL.
+  await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
+  const temporary = await mkdtemp(join(tmpdir(), 'idoc-migration-0035-'));
+  try {
+    await mkdir(join(temporary, 'meta'));
+    const preRemovalNames = (await readdir(migrationsFolder))
+      .filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= 34);
+    for (const name of preRemovalNames) await cp(join(migrationsFolder, name), join(temporary, name));
+    const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+    journal.entries = journal.entries.slice(0, 35);
+    await writeFile(join(temporary, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+    await migrate(database, { migrationsFolder: temporary, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+
+    const [user] = await sql<{ id: number }[]>`
+      insert into idoc.users(email,password_hash,email_verified_at,account_state)
+      values('migration-0035-fixture@security.example.test','not-a-real-hash',now(),'active') returning id`;
+    const totpFactorId = randomUUID();
+    await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id,activated_at)
+      values(${totpFactorId},${user.id},'idoc.club','totp','active','encrypted','key-1',now())`;
+    const webauthnFactorId = randomUUID();
+    await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status)
+      values(${webauthnFactorId},${user.id},'idoc.club','webauthn','active')`;
+    const transactionId = randomUUID();
+    await sql`insert into idoc.mfa_challenge_transactions
+      (transaction_id,user_id,application_id,purpose,expires_at,max_attempts,satisfied_factor_id,consumed_at)
+      values(${transactionId},${user.id},'idoc.club','login',now() + interval '10 minutes',5,${webauthnFactorId},now())`;
+
+    // The real assertion: this must not throw a foreign-key violation.
+    await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+
+    assert.equal((await sql`select 1 from idoc.mfa_factors where factor_id = ${webauthnFactorId}`).length, 0,
+      'the webauthn factor row must be deleted');
+    assert.equal((await sql`select 1 from idoc.mfa_factors where factor_id = ${totpFactorId}`).length, 1,
+      'the unrelated totp factor row must be left untouched');
+    const [transaction] = await sql<{ satisfied_factor_id: string | null }[]>`
+      select satisfied_factor_id from idoc.mfa_challenge_transactions where transaction_id = ${transactionId}`;
+    assert.equal(transaction.satisfied_factor_id, null,
+      'the historical challenge transaction row must survive with its dangling factor reference cleared, not be deleted itself');
   } finally {
     await rm(temporary, { force: true, recursive: true });
   }
