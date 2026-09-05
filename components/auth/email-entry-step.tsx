@@ -6,6 +6,7 @@ import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { TurnstileWidget } from '@/components/turnstile-widget';
 import { CsrfField } from '@/components/security/csrf-field';
+import { consumeRestoredFormValues } from '@/lib/auth/turnstile-retry-restore';
 import type { ActionState } from '@/lib/auth/middleware';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -36,7 +37,10 @@ export function EmailEntryStep({
   turnstileAction: string;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, { error: initialError });
-  const [email, setEmail] = useState(state.email ?? '');
+  // If this page just reloaded because the Turnstile widget's script never loaded and the member
+  // clicked "try again" (see components/turnstile-widget.tsx), restore the email they had already
+  // typed rather than showing them a blank field again.
+  const [email, setEmail] = useState(() => consumeRestoredFormValues().email ?? state.email ?? '');
   const [turnstileToken, setTurnstileToken] = useState('');
   const canSubmit = EMAIL_PATTERN.test(email) && turnstileToken.length > 0 && !pending;
 
