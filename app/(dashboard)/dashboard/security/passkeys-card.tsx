@@ -39,14 +39,18 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
   // browser only allows a biometric/security-key ceremony to start from a live click), so a
   // required step-up round trips through a full page navigation to /mfa and back, remounting this
   // component and clearing its local state. Restoring the label the member already typed from
-  // sessionStorage (cleared once actually used) means that round trip only costs a second click, not
-  // also retyping the label. Read in an effect, not a lazy useState initializer, so the very first
-  // client render still matches the server-rendered (always-empty) markup -- sessionStorage doesn't
-  // exist during SSR at all.
+  // sessionStorage means that round trip only costs a second click, not also retyping the label --
+  // never anything beyond this non-secret display label, and read exactly once (removed the instant
+  // it's read, whether or not it turns out to be present) so a value written for one redirect can
+  // never resurface on an unrelated later visit, and never survives into a different account's
+  // session in the same tab after a sign-out. Read in an effect, not a lazy useState initializer, so
+  // the very first client render still matches the server-rendered (always-empty) markup --
+  // sessionStorage doesn't exist during SSR at all.
   const [deviceName, setDeviceName] = useState('');
   useEffect(() => {
     try {
       const pending = sessionStorage.getItem(PENDING_DEVICE_NAME_KEY);
+      sessionStorage.removeItem(PENDING_DEVICE_NAME_KEY);
       if (pending) setDeviceName(pending);
     } catch { /* best-effort only */ }
   }, []);
@@ -54,7 +58,6 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
   async function addPasskey() {
     setBusy(true); setError(undefined); setSuccess(undefined);
     try {
-      try { sessionStorage.setItem(PENDING_DEVICE_NAME_KEY, deviceName); } catch { /* best-effort only */ }
       const beginFormData = new FormData();
       beginFormData.set('csrf_token', readCsrfTokenFromDocumentCookie());
       const begin = await beginPasskeyRegistration({}, beginFormData) as BeginResult;
@@ -76,9 +79,15 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
       if (finish.error) { setError(finish.error); return; }
       setSuccess(finish.success ?? 'Passkey added.');
       setDeviceName('');
-      try { sessionStorage.removeItem(PENDING_DEVICE_NAME_KEY); } catch { /* best-effort only */ }
     } catch (thrown) {
-      if (isNextRedirectError(thrown)) throw thrown;
+      if (isNextRedirectError(thrown)) {
+        // About to navigate away to /mfa for step-up verification -- this component remounts once
+        // the member returns, so persist only what's already in the field, only for this one
+        // redirect (the effect above reads and immediately clears it, whether or not this path
+        // actually runs again on this device).
+        try { sessionStorage.setItem(PENDING_DEVICE_NAME_KEY, deviceName); } catch { /* best-effort only */ }
+        throw thrown;
+      }
       setError(GENERIC_ERROR);
     } finally {
       setBusy(false);
