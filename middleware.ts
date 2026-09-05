@@ -9,6 +9,7 @@ import {
   signToken,
   verifyToken,
 } from '@/lib/auth/session';
+import { touchSession } from '@/lib/auth/session-registry';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 
@@ -102,12 +103,27 @@ export async function middleware(request: NextRequest) {
     const res = next();
 
     if (request.method === 'GET') {
-      const refreshed = refreshSessionActivity(parsed);
+      const now = new Date();
+      const refreshed = refreshSessionActivity(parsed, now);
       res.cookies.set({
         name: canonicalName,
         value: await signToken(refreshed),
         ...sessionCookieOptions(refreshed.absoluteExpiresAt),
       });
+      // Keep the persisted registry row's last_activity_at in step with the cookie's own idle
+      // timer -- a real Codex review finding: without this, a session whose traffic never happens
+      // to hit a getSession()-calling route (e.g. a public GET route, /api/health) still has its
+      // cookie kept perpetually fresh by this same refresh, but its registry row goes idle-stale
+      // and drops off listActiveSessions' idle-window filter (AUTH-SESSION-010) even though the
+      // cookie remains fully valid and usable -- hiding a genuinely live session from its own
+      // owner's "Active sessions" list and leaving it with no individual-revocation control. A
+      // no-op (matches zero rows) for an already-revoked/expired/version-stale session, exactly
+      // like every other touchSession call. Deliberately isolated in its own try/catch: this is a
+      // best-effort display freshness update, not an authorization check -- registeredSessionIsValid
+      // (getSession(), called by every actual protected render/action) remains the sole source of
+      // truth for whether the session is allowed to do anything, so a transient DB error here must
+      // never fall through to the catch below and sign a perfectly valid session out.
+      try { await touchSession(parsed.sessionId, parsed.user.id, now); } catch { /* best-effort only */ }
     }
 
     return finish(res);

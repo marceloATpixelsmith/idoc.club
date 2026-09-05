@@ -2,6 +2,7 @@ import 'server-only';
 
 import { sql } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
+import { SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
 
 export type PersistedSession = {
   sessionId: string;
@@ -114,6 +115,17 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
 }
 
 export async function listActiveSessions(userId: number, currentSessionVersion: number) {
+  // A session's own cookie stops being honored once it's been idle past SESSION_IDLE_SECONDS (see
+  // assertSessionFresh/registeredSessionIsValid) -- well before its absolute_expires_at, which is
+  // fixed at authentication time and stays up to SESSION_ABSOLUTE_SECONDS (12h) in the future
+  // regardless of activity. Filtering only on absolute_expires_at (as this used to) meant every
+  // earlier sign-in from the same real session lingered on this list, looking "active," for up to
+  // 12 hours after it had already gone idle-stale and stopped being usable by anyone -- a real
+  // production report from an account that had signed in and out repeatedly on one browser in a
+  // single day. last_activity_at is only ever advanced by touchSession, called from a request that
+  // actually presented that exact session's still-valid cookie, so this bound reflects genuine
+  // recent use, not merely "not yet past its fixed absolute deadline."
+  const idleCutoff = new Date(Date.now() - SESSION_IDLE_SECONDS * 1000);
   return db.execute<PersistedSession>(sql`
     select
       session_id as "sessionId",
@@ -129,6 +141,7 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
       and session_version = ${currentSessionVersion}
       and revoked_at is null
       and absolute_expires_at > now()
+      and last_activity_at > ${idleCutoff.toISOString()}
     order by last_activity_at desc
   `);
 }
