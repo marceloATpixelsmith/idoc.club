@@ -33,7 +33,16 @@ type BoundEvidence = {
   subjectId: number;
 };
 
-export type PendingStepUp = BoundEvidence & { returnTo: string; transactionId: string };
+// `resume` lets the step-up verification handler apply the member's original request itself the
+// moment a fresh code is accepted, instead of only redirecting back to `returnTo` and leaving the
+// member to resubmit the exact same request a second time (a real production report: every one of
+// these actions previously required a code, then a second, separate submission of the same form to
+// actually take effect). Only set for actions whose replay payload holds no secret (a role, a user
+// id, a free-text reason, a display name/new email address -- never a password or other credential,
+// which this cookie deliberately never carries even short-lived); the handful of actions that
+// genuinely need a password (change-password, delete-account, Google link/unlink) keep the original
+// one-more-submission behavior rather than caching a plaintext credential server-side to avoid it.
+export type PendingStepUp = BoundEvidence & { resume?: { kind: string; payload: Record<string, string> }; returnTo: string; transactionId: string };
 type FreshStepUp = BoundEvidence & { method: 'totp' | 'webauthn'; transactionId: string };
 
 function cookieOptions(maxAge: number) {
@@ -58,6 +67,13 @@ async function read<T extends BoundEvidence>(name: string): Promise<T | null> {
       !Number.isSafeInteger(payload.subjectId) || !Number.isSafeInteger(payload.sessionVersion) ||
       typeof payload.factorId !== 'string' || typeof payload.sessionId !== 'string' ||
       !['member', 'admin', 'super-admin'].includes(String(payload.role))) return null;
+    if (payload.resume !== undefined) {
+      const resume = payload.resume as { kind?: unknown; payload?: unknown };
+      if (typeof resume.kind !== 'string' || !resume.payload || typeof resume.payload !== 'object' ||
+        Array.isArray(resume.payload) || Object.values(resume.payload).some((value) => typeof value !== 'string')) {
+        return null;
+      }
+    }
     return payload as unknown as T;
   } catch {
     return null;
@@ -78,8 +94,16 @@ function matches(evidence: BoundEvidence, user: StepUpUser, session: SessionData
     evidence.sessionVersion === user.sessionVersion && evidence.role === role;
 }
 
-/** Applies canonical policy and starts a persisted, purpose-bound challenge when freshness is absent. */
-export async function requireFreshStepUp(actor: Pick<User, 'id'>, action: SensitiveAction, returnTo: string) {
+/** Applies canonical policy and starts a persisted, purpose-bound challenge when freshness is absent.
+ * `resume`, when given, is replayed automatically by the step-up verification handler the instant a
+ * fresh code is accepted -- see `PendingStepUp`'s doc comment for why only non-secret payloads may
+ * ever be passed here. */
+export async function requireFreshStepUp(
+  actor: Pick<User, 'id'>,
+  action: SensitiveAction,
+  returnTo: string,
+  resume?: { kind: string; payload: Record<string, string> },
+) {
   const [user] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
   if (!user || user.deletedAt || !['active', 'onboarding'].includes(user.accountState)) {
     throw new Error('Your session is no longer valid. Sign in again.');
@@ -118,7 +142,7 @@ export async function requireFreshStepUp(actor: Pick<User, 'id'>, action: Sensit
   await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, expiresAtMs: nowMs + TTL_SECONDS * 1000,
     maxAttempts: 5, nowMs, purpose: 'step-up', subjectId: String(user.id), transactionId });
   const pending: PendingStepUp = { action, applicationId: MFA_APPLICATION_ID, factorId: factor.factorId,
-    returnTo: safeReturnTo(returnTo), role: binding.role, sessionId: binding.session.sessionId,
+    resume, returnTo: safeReturnTo(returnTo), role: binding.role, sessionId: binding.session.sessionId,
     sessionVersion: user.sessionVersion, subjectId: user.id, transactionId };
   (await requestCookies()).set(PENDING_COOKIE, await sign(pending), cookieOptions(TTL_SECONDS));
   return { required: true as const };

@@ -26,7 +26,8 @@ async function rotationEvidenceNeedsStepUp(): Promise<RotationEvidenceFormState 
   try {
     const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-    const { required } = await requireFreshStepUp(actor, 'change-security-settings', '/admin/security');
+    const { required } = await requireFreshStepUp(actor, 'change-security-settings', '/admin/security',
+      { kind: 'record-google-rotation-evidence', payload: {} });
     return { actorId: actor.id, required };
   } catch (error) {
     return friendlyError(error);

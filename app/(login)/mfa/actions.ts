@@ -21,6 +21,7 @@ import { mfaStore } from '@/lib/auth/mfa/store';
 import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, prepareTotpEnrollment, resolveMfaEncryptionKey, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { resumeStepUpAction } from '@/lib/auth/mfa/step-up-resume';
 import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
 import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
@@ -61,7 +62,7 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
   await grantFreshStepUp(context.pending, { factorId: context.pending.factorId, method: 'totp' });
-  redirect(context.pending.returnTo);
+  redirect(await resumeStepUpAction(context.pending));
 });
 
 export async function beginStepUpWebAuthn(csrfToken: string) {
@@ -88,7 +89,7 @@ export const verifyStepUpWebAuthn = validatedAction(webAuthnResponseSchema, asyn
     transactionId: context.pending.transactionId });
   if (accepted !== 'accepted') return { error: 'Your verification session expired. Try the action again.' };
   await grantFreshStepUp(context.pending, { factorId: verification.factorId, method: 'webauthn' });
-  redirect(context.pending.returnTo);
+  redirect(await resumeStepUpAction(context.pending));
 });
 
 async function pendingAccount(expected: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack') {

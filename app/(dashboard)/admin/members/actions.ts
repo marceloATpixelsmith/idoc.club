@@ -25,21 +25,22 @@ function friendlyError(error: unknown, fallback: string): FormState {
   return { error: fallback };
 }
 
-async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
+async function roleMutationNeedsStepUp(kind: 'grant-role' | 'revoke-role', payload: Record<string, string>): Promise<FormState | boolean> {
   try {
     const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-    return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required;
+    return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members', { kind, payload })).required;
   } catch (error) {
     return friendlyError(error, 'The role change could not be authorized safely.');
   }
 }
 
-async function forceRevokeAllAuthorityNeedsStepUp(): Promise<FormState | boolean> {
+async function forceRevokeAllAuthorityNeedsStepUp(payload: Record<string, string>): Promise<FormState | boolean> {
   try {
     const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members')).required;
+    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members',
+      { kind: 'force-revoke-authority', payload })).required;
   } catch (error) {
     return friendlyError(error, 'Authority could not be revoked safely.');
   }
@@ -125,11 +126,13 @@ export async function reinstateUserAccountForm(_state: FormState, formData: Form
 export async function forceRevokeAllAuthorityForm(_state: FormState, formData: FormData): Promise<FormState> {
   try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'Authority could not be revoked.'); }
   const userId = Number(formData.get('userId'));
-  const stepUp = await forceRevokeAllAuthorityNeedsStepUp();
+  const incidentReference = String(formData.get('incidentReference') ?? '');
+  const reason = String(formData.get('reason') ?? '');
+  const stepUp = await forceRevokeAllAuthorityNeedsStepUp({ incidentReference, reason, userId: String(userId) });
   if (typeof stepUp !== 'boolean') return stepUp;
   if (stepUp) redirect('/mfa');
   try {
-    await forceRevokeAllAuthority(userId, { incidentReference: formData.get('incidentReference'), reason: formData.get('reason') });
+    await forceRevokeAllAuthority(userId, { incidentReference, reason });
     return { success: 'Every session, remembered device, and MFA factor for this user has been revoked.' };
   } catch (error) {
     return friendlyError(error, 'Authority could not be revoked.');
@@ -139,11 +142,13 @@ export async function forceRevokeAllAuthorityForm(_state: FormState, formData: F
 export async function grantRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
   try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The role could not be granted.'); }
   const userId = Number(formData.get('userId'));
-  const stepUp = await roleMutationNeedsStepUp();
+  const role = String(formData.get('role') ?? '');
+  const reason = String(formData.get('reason') ?? '');
+  const stepUp = await roleMutationNeedsStepUp('grant-role', { reason, role, userId: String(userId) });
   if (typeof stepUp !== 'boolean') return stepUp;
   if (stepUp) redirect('/mfa');
   try {
-    await grantApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
+    await grantApplicationRole(userId, { reason, role });
     return { success: 'Role granted.' };
   } catch (error) {
     return friendlyError(error, 'The role could not be granted.');
@@ -153,11 +158,13 @@ export async function grantRoleForm(_state: FormState, formData: FormData): Prom
 export async function revokeRoleForm(_state: FormState, formData: FormData): Promise<FormState> {
   try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The role could not be revoked.'); }
   const userId = Number(formData.get('userId'));
-  const stepUp = await roleMutationNeedsStepUp();
+  const role = String(formData.get('role') ?? '');
+  const reason = String(formData.get('reason') ?? '');
+  const stepUp = await roleMutationNeedsStepUp('revoke-role', { reason, role, userId: String(userId) });
   if (typeof stepUp !== 'boolean') return stepUp;
   if (stepUp) redirect('/mfa');
   try {
-    await revokeApplicationRole(userId, { reason: formData.get('reason'), role: formData.get('role') });
+    await revokeApplicationRole(userId, { reason, role });
     return { success: 'Role revoked.' };
   } catch (error) {
     return friendlyError(error, 'The role could not be revoked.');

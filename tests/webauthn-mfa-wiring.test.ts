@@ -59,7 +59,7 @@ test('passkey registration and removal are privileged, require an active TOTP fa
   assert.match(registration, /if \(!factor\) return \{ error: 'Set up an authenticator app before adding a passkey\.' \};/);
   const removal = security.slice(security.indexOf('export const removePasskeyCredential'), security.length);
   assert.match(removal, /await privilegedUser\(user\)/);
-  assert.match(removal, /requireFreshStepUp\(user, 'change-mfa', '\/dashboard\/security'\)/);
+  assert.match(removal, /requireFreshStepUp\(user, 'change-mfa', '\/dashboard\/security',/);
 });
 
 test('a completed passkey registration and a removal each write an audit entry and enqueue a distinct notification kind', () => {

@@ -259,7 +259,8 @@ export const updateAccount = validatedActionWithUser(
     const name = data.name;
     const email = normalizeEmail(data.email);
     if (email !== user.email) {
-      if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account')).required) redirect('/mfa');
+      if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account',
+        { kind: 'update-account-email', payload: { email: data.email, name } })).required) redirect('/mfa');
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (duplicate) return { error: 'That email address is unavailable.', name };
       await db.update(users).set({ name }).where(eq(users.id, user.id));
