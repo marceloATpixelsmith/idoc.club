@@ -124,3 +124,33 @@ test('an anonymously-minted token presented while a session was expected also lo
   assert.equal((meta as { expectedSessionPresent: boolean }).expectedSessionPresent, true);
   assert.equal((meta as { tokenSessionPresent: boolean }).tokenSessionPresent, false);
 });
+
+// A Codex review finding on the first version of this logging: unconditionally attributing every
+// rejection as 'anonymous' is misleading for an authenticated action (admin/profile/MFA actions all
+// resolve a real account before or alongside the CSRF check) and breaks the taxonomy's own
+// subject-attribution invariant (SECURITY_EVENT_TAXONOMY documents 'anonymous' as pre-authentication
+// only). A rejection on an authenticated action must log a distinct, subject-attributed event
+// instead, carrying the real account id rather than none at all.
+test('a rejection with an already-resolved subject id logs the distinct authenticated event, attributed to that account, not the anonymous one', async () => {
+  const cookies = new TestCookies();
+  await assert.rejects(
+    withTestRequestCookies(cookies, () => requireCsrfToken(form('csrf_token', 'anything'), 'real-session-id', 42)),
+    CsrfError,
+  );
+  assert.equal(warnCalls.length, 1);
+  const [event, meta] = warnCalls[0];
+  assert.equal(event, 'csrf_validation_failed_authenticated');
+  assert.equal((meta as { reason: string }).reason, 'missing_cookie');
+  assert.equal((meta as { subjectId: number }).subjectId, 42);
+  assert.equal('expectedSessionPresent' in (meta as object), false, 'the anonymous-only field must not appear on the authenticated event');
+});
+
+test('a null subject id (no session resolved) still logs the anonymous event, matching every pre-authentication call site', async () => {
+  const cookies = new TestCookies();
+  await assert.rejects(
+    withTestRequestCookies(cookies, () => requireCsrfToken(form('csrf_token', 'anything'), null, null)),
+    CsrfError,
+  );
+  assert.equal(warnCalls.length, 1);
+  assert.equal(warnCalls[0][0], 'csrf_validation_failed');
+});

@@ -80,31 +80,44 @@ async function evaluateCsrfFailure(
  * cookie itself must verify as a real, unexpired, correctly-purposed signed token, and its bound
  * session reference must match `expectedSessionRef` (the caller's actual current session id, or
  * `null` while anonymous) -- a token minted anonymously, or under a different session, is not valid
- * evidence for this one. */
-async function csrfEvidenceIsValid(candidate: string | null | undefined, expectedSessionRef: string | null): Promise<boolean> {
+ * evidence for this one.
+ *
+ * `subjectId` is an optional, already-resolved user id (a Codex review finding on the first
+ * version of this logging: unconditionally attributing every failure as 'anonymous' is misleading
+ * for an authenticated action, and breaks the taxonomy's own subject-attribution invariant) --
+ * callers that already have a resolved identity at the point CSRF is checked (validatedActionWithUser's
+ * DB-fetched user, or any bare call site's cheap JWT-only rawCanonicalUserId()) pass it through so a
+ * rejected check on an authenticated action is logged against that account instead of anonymously. */
+async function csrfEvidenceIsValid(
+  candidate: string | null | undefined,
+  expectedSessionRef: string | null,
+  subjectId?: number | null,
+): Promise<boolean> {
   const failure = await evaluateCsrfFailure(candidate, expectedSessionRef);
   if (!failure) return true;
-  await logWarn('csrf_validation_failed', {
-    expectedSessionPresent: expectedSessionRef !== null,
-    reason: failure.reason,
-    ...(failure.tokenSessionPresent !== undefined ? { tokenSessionPresent: failure.tokenSessionPresent } : {}),
-  });
+  const tokenSessionMeta = failure.tokenSessionPresent !== undefined ? { tokenSessionPresent: failure.tokenSessionPresent } : {};
+  if (subjectId != null) {
+    await logWarn('csrf_validation_failed_authenticated', { reason: failure.reason, subjectId, ...tokenSessionMeta });
+  } else {
+    await logWarn('csrf_validation_failed', { expectedSessionPresent: expectedSessionRef !== null, reason: failure.reason, ...tokenSessionMeta });
+  }
   return false;
 }
 
 /** Throws CsrfError unless `formData` carries a valid csrf_token field matching the current,
  * session-bound cookie. The standard entry point for form-submitted Server Actions. Pass the
- * caller's current session id (from getSession()), or null while anonymous. */
-export async function requireCsrfToken(formData: FormData, expectedSessionRef: string | null): Promise<void> {
+ * caller's current session id (from getSession()), or null while anonymous; pass an already-resolved
+ * user id too when one is cheaply available, so a rejection attributes to the real account. */
+export async function requireCsrfToken(formData: FormData, expectedSessionRef: string | null, subjectId?: number | null): Promise<void> {
   const value = formData.get(FIELD_NAME);
-  if (!(await csrfEvidenceIsValid(typeof value === 'string' ? value : null, expectedSessionRef))) throw new CsrfError();
+  if (!(await csrfEvidenceIsValid(typeof value === 'string' ? value : null, expectedSessionRef, subjectId))) throw new CsrfError();
 }
 
 /** Same validation as requireCsrfToken, for a JS-invoked Server Action that has no FormData at all
  * (e.g. signOut()) and instead receives the token as an explicit argument read client-side from the
  * (deliberately non-httpOnly) CSRF cookie. */
-export async function requireCsrfTokenValue(token: string | null | undefined, expectedSessionRef: string | null): Promise<void> {
-  if (!(await csrfEvidenceIsValid(token, expectedSessionRef))) throw new CsrfError();
+export async function requireCsrfTokenValue(token: string | null | undefined, expectedSessionRef: string | null, subjectId?: number | null): Promise<void> {
+  if (!(await csrfEvidenceIsValid(token, expectedSessionRef, subjectId))) throw new CsrfError();
 }
 
 export const CSRF_FIELD_NAME = FIELD_NAME;

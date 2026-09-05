@@ -9,11 +9,11 @@ import { correctEntitlement, reinstateMembership, suspendMembership } from '@/li
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
 import { forceRevokeAllAuthority } from '@/lib/membership/incident-response';
-import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 async function requireCsrf(formData: FormData): Promise<void> {
-  await requireCsrfToken(formData, await rawCanonicalSessionId());
+  await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
 }
 
 type FormState = { error?: string; success?: string };

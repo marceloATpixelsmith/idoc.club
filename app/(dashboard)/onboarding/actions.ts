@@ -2,12 +2,12 @@
 
 import { redirect } from 'next/navigation';
 import { createOwnMemberProfile } from '@/lib/membership/data-access';
-import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 export async function completeOnboarding(_state: { error?: string }, formData: FormData) {
   try {
-    await requireCsrfToken(formData, await rawCanonicalSessionId());
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
   }

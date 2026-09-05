@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { recordActiveGoogleOauthSecretRotation } from '@/lib/auth/google-oidc-secret-audit';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
-import { rawCanonicalSessionId } from '@/lib/auth/session';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -38,7 +38,7 @@ export async function recordGoogleOauthRotationEvidenceForm(
   formData: FormData,
 ): Promise<RotationEvidenceFormState> {
   try {
-    await requireCsrfToken(formData, await rawCanonicalSessionId());
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   } catch (error) {
     return friendlyError(error);
   }

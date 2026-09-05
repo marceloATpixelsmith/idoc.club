@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
-import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, rawCanonicalSessionId, setSession } from '@/lib/auth/session';
+import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
 import { requireCsrfTokenValue } from '@/lib/security/csrf';
 import { redirect } from 'next/navigation';
 import {
@@ -182,7 +182,7 @@ export async function signOut(csrfToken: string) {
   // though signing out an already-forged session mainly harms the attacker's own forged state --
   // it is still cookie-authenticated, state-changing, and invoked directly (not via a <form>), so it
   // is checked the same way as every other JS-invoked Server Action.
-  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId());
+  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), await rawCanonicalUserId());
   await clearSession();
 }
 
