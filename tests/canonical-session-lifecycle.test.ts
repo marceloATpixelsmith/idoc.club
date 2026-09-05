@@ -36,11 +36,27 @@ test('canonical session clearing preserves __Host cookie attributes', () => {
 });
 
 test('middleware refreshes idle activity without extending the absolute authentication lifetime', () => {
-  assert.match(middleware, /refreshSessionActivity\(parsed\)/);
+  assert.match(middleware, /refreshSessionActivity\(parsed, now\)/);
   assert.match(middleware, /sessionCookieOptions\(refreshed\.absoluteExpiresAt\)/);
   assert.doesNotMatch(middleware, /24 \* 60 \* 60|expiresInOneDay/);
   assert.match(tokens, /return \{ \.\.\.session, lastActivityAt: now\.toISOString\(\) \}/);
   assert.doesNotMatch(tokens, /absoluteExpiresAt: new Date\(now\.getTime\(\) \+ SESSION_ABSOLUTE_SECONDS \* 1000\).*refreshSessionActivity/s);
+});
+
+test('a real Codex review finding: every cookie-refreshing GET also touches the persisted registry row, isolated from the auth-rejection catch', () => {
+  // Without this, a session whose traffic never happens to hit a getSession()-calling route (a
+  // public GET route, /api/health) still has its cookie kept perpetually fresh by the same GET
+  // refresh above, but its registry row goes idle-stale and silently drops off
+  // listActiveSessions' idle-window filter (AUTH-SESSION-010) even though the cookie remains
+  // fully valid and usable -- hiding a genuinely live session from its own owner's "Active
+  // sessions" list with no individual-revocation control offered for it.
+  const getBlock = middleware.slice(middleware.indexOf("if (request.method === 'GET')"), middleware.indexOf('return finish(res);'));
+  assert.match(getBlock, /touchSession\(parsed\.sessionId, parsed\.user\.id, now\)/);
+  // This is a best-effort display-freshness update, never an authorization check -- it must be
+  // caught locally so a transient database error here can never fall through to the outer catch
+  // and sign out an otherwise perfectly valid session.
+  assert.match(getBlock, /try \{ await touchSession\(parsed\.sessionId, parsed\.user\.id, now\); \} catch \{/);
+  assert.match(middleware, /import \{ touchSession \} from '@\/lib\/auth\/session-registry';/);
 });
 
 test('new authentication rotates to a distinct session identifier and fixed absolute deadline', () => {
