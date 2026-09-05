@@ -27,6 +27,8 @@ const store = new PostgresMfaStore(sql);
 Object.assign(process.env, {
   AUTH_SECRET: 'password-reset-adversarial-secret-long-enough',
   BASE_URL: 'http://localhost:3000',
+  MFA_PENDING_AUTH_SIGNING_KEY: randomBytes(32).toString('base64url'),
+  MFA_RECOVERY_CODE_DIGEST_KEY: randomBytes(32).toString('base64url'),
   MFA_TOTP_ACTIVE_KEY_ID: 'password-reset-test',
   MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ 'password-reset-test': encryptionKey.toString('base64url') }),
   RATE_LIMIT_HASH_KEY: 'password-reset-adversarial-rate-limit-secret-long-enough',
