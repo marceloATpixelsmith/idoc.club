@@ -131,7 +131,7 @@ test('AUTH-REMEMBER-001: beginPrimaryMfa only reads MFA config/the remembered-de
 
 test('AUTH-REMEMBER-001: a remembered device is only ever issued after the TOTP code is actually accepted, and only when the policy is enabled', () => {
   const actions = source('app/(login)/mfa/actions.ts');
-  const verify = actions.slice(actions.indexOf('export const verifyLoginTotp'), actions.indexOf('export async function beginLoginWebAuthn'));
+  const verify = actions.slice(actions.indexOf('export const verifyLoginTotp'), actions.indexOf('export const beginAuthenticatorRecovery'));
   assert.ok(verify.indexOf("result.status !== 'accepted'") < verify.indexOf('issueRememberedDevice('));
   assert.match(verify, /remember === 'on' && config\.rememberedDevice\.enabled && config\.rememberedDevice\.digestSecret/);
   assert.ok(verify.indexOf('issueRememberedDevice(') < verify.indexOf('setRememberedTotpDeviceCookie('));

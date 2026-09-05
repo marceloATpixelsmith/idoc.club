@@ -1707,13 +1707,13 @@
           "name": "encrypted_secret",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "encryption_key_id": {
           "name": "encryption_key_id",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "last_accepted_counter": {
           "name": "last_accepted_counter",
@@ -1833,15 +1833,11 @@
       "checkConstraints": {
         "mfa_factors_type_check": {
           "name": "mfa_factors_type_check",
-          "value": "\"idoc\".\"mfa_factors\".\"factor_type\" in ('totp', 'webauthn')"
+          "value": "\"idoc\".\"mfa_factors\".\"factor_type\" in ('totp')"
         },
         "mfa_factors_status_check": {
           "name": "mfa_factors_status_check",
           "value": "\"idoc\".\"mfa_factors\".\"status\" in ('pending', 'active', 'disabled', 'revoked', 'replaced')"
-        },
-        "mfa_factors_totp_secret_check": {
-          "name": "mfa_factors_totp_secret_check",
-          "value": "(\"idoc\".\"mfa_factors\".\"factor_type\" = 'totp' and \"idoc\".\"mfa_factors\".\"encrypted_secret\" is not null and \"idoc\".\"mfa_factors\".\"encryption_key_id\" is not null) or\n        (\"idoc\".\"mfa_factors\".\"factor_type\" = 'webauthn' and \"idoc\".\"mfa_factors\".\"encrypted_secret\" is null and \"idoc\".\"mfa_factors\".\"encryption_key_id\" is null)"
         }
       },
       "isRLSEnabled": false
@@ -3397,274 +3393,6 @@
         "users_account_state_check": {
           "name": "users_account_state_check",
           "value": "\"idoc\".\"users\".\"account_state\" in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "idoc.webauthn_ceremony_challenges": {
-      "name": "webauthn_ceremony_challenges",
-      "schema": "idoc",
-      "columns": {
-        "ceremony_id": {
-          "name": "ceremony_id",
-          "type": "varchar(36)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "application_id": {
-          "name": "application_id",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "challenge": {
-          "name": "challenge",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "webauthn_ceremony_owner_idx": {
-          "name": "webauthn_ceremony_owner_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "application_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "webauthn_ceremony_challenges_user_id_users_id_fk": {
-          "name": "webauthn_ceremony_challenges_user_id_users_id_fk",
-          "tableFrom": "webauthn_ceremony_challenges",
-          "tableTo": "users",
-          "schemaTo": "idoc",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "webauthn_ceremony_purpose_check": {
-          "name": "webauthn_ceremony_purpose_check",
-          "value": "\"idoc\".\"webauthn_ceremony_challenges\".\"purpose\" in ('registration', 'authentication')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "idoc.webauthn_credentials": {
-      "name": "webauthn_credentials",
-      "schema": "idoc",
-      "columns": {
-        "credential_id": {
-          "name": "credential_id",
-          "type": "varchar(255)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "factor_id": {
-          "name": "factor_id",
-          "type": "varchar(36)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "application_id": {
-          "name": "application_id",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "public_key": {
-          "name": "public_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sign_count": {
-          "name": "sign_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "transports": {
-          "name": "transports",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "device_type": {
-          "name": "device_type",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "backed_up": {
-          "name": "backed_up",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_name": {
-          "name": "device_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "webauthn_credentials_factor_unique": {
-          "name": "webauthn_credentials_factor_unique",
-          "columns": [
-            {
-              "expression": "factor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "webauthn_credentials_owner_idx": {
-          "name": "webauthn_credentials_owner_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "application_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "webauthn_credentials_factor_id_mfa_factors_factor_id_fk": {
-          "name": "webauthn_credentials_factor_id_mfa_factors_factor_id_fk",
-          "tableFrom": "webauthn_credentials",
-          "tableTo": "mfa_factors",
-          "schemaTo": "idoc",
-          "columnsFrom": [
-            "factor_id"
-          ],
-          "columnsTo": [
-            "factor_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "webauthn_credentials_user_id_users_id_fk": {
-          "name": "webauthn_credentials_user_id_users_id_fk",
-          "tableFrom": "webauthn_credentials",
-          "tableTo": "users",
-          "schemaTo": "idoc",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "webauthn_credentials_device_type_check": {
-          "name": "webauthn_credentials_device_type_check",
-          "value": "\"idoc\".\"webauthn_credentials\".\"device_type\" in ('singleDevice', 'multiDevice')"
         }
       },
       "isRLSEnabled": false

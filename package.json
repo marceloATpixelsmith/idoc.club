@@ -24,8 +24,6 @@
     "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts"
   },
   "dependencies": {
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.3",
     "@tailwindcss/postcss": "4.1.7",
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",

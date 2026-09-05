@@ -56,9 +56,9 @@ export default async function globalSetup() {
     }
     if (name === 'administrator' || name === 'recovery-administrator' || name === 'super-administrator') {
       await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'super-administrator' ? 'super_admin' : 'administrator'},${user.id})`;
-      // Mandatory MFA requires an active TOTP factor before any privileged flow (including WebAuthn
-      // registration, which requires this as its fallback) can be exercised; the raw secret is fixed
-      // and exported so specs can compute a valid current code without re-deriving it from the DB.
+      // Mandatory MFA requires an active TOTP factor before any privileged flow can be exercised; the
+      // raw secret is fixed and exported so specs can compute a valid current code without
+      // re-deriving it from the DB.
       const encryptedSecret = encryptE2eTotpSecret(E2E_TOTP_SECRET, 'e2e-v1', Buffer.from('uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw', 'base64url'));
       await sql`insert into idoc.mfa_factors(factor_id,user_id,application_id,factor_type,status,encrypted_secret,encryption_key_id,activated_at)
         values(${randomUUID()},${user.id},'idoc.club','totp','active',${encryptedSecret},'e2e-v1',now())`;
@@ -115,11 +115,6 @@ export default async function globalSetup() {
       origins: [],
     });
     await writeFile(`.security-e2e/${name}.json`, storageState('127.0.0.1'));
-    // A WebAuthn relying-party ID must be a valid domain, and Chromium rejects a bare IP address
-    // (127.0.0.1) for that purpose even though it's an otherwise-trustworthy local origin. This
-    // localhost-scoped variant exists only for specs that exercise a real WebAuthn ceremony; every
-    // other spec keeps using the 127.0.0.1 fixtures above, unaffected.
-    await writeFile(`.security-e2e/${name}-localhost.json`, storageState('localhost'));
   }
   await sql.end();
 

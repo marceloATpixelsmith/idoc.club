@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
 import { clearPendingLogin } from '@/lib/auth/pending-login';
 import { clearSession, getSession, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
-import { requireCsrfTokenOrPendingNonce, requireCsrfTokenValue } from '@/lib/security/csrf';
+import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
@@ -22,26 +22,13 @@ import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, prepare
 import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { resumeStepUpAction } from '@/lib/auth/mfa/step-up-resume';
-import { beginWebAuthnAuthentication, finishWebAuthnAuthentication } from '@/lib/auth/mfa/webauthn';
-import { webauthnStore } from '@/lib/auth/mfa/webauthn-store';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
-import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { issueRememberedDevice } from '@/lib/auth/mfa/remembered-device';
 import { logError } from '@/lib/observability/logger';
 import { setRememberedTotpDeviceCookie } from '@/lib/auth/mfa/remembered-device-cookie';
-import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 const loginCodeSchema = codeSchema.extend({ remember: z.string().optional() });
-const webAuthnResponseSchema = z.object({ ceremonyId: z.string().uuid(), credentialJson: z.string().min(1).max(8192) });
-
-function parseWebAuthnResponse(credentialJson: string): AuthenticationResponseJSON | null {
-  try {
-    const parsed: unknown = JSON.parse(credentialJson);
-    if (!parsed || typeof parsed !== 'object' || typeof (parsed as { id?: unknown }).id !== 'string') return null;
-    return parsed as AuthenticationResponseJSON;
-  } catch { return null; }
-}
 
 export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
   const context = await getPendingStepUp();
@@ -62,33 +49,6 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
   await grantFreshStepUp(context.pending, { factorId: context.pending.factorId, method: 'totp' });
-  redirect(await resumeStepUpAction(context.pending));
-});
-
-export async function beginStepUpWebAuthn(csrfToken: string) {
-  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), await rawCanonicalUserId());
-  const context = await getPendingStepUp();
-  if (!context || !context.hasWebAuthn) throw new Error('A passkey is not available for this verification.');
-  const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);
-  const { ceremonyId, options } = await beginWebAuthnAuthentication({ subjectId: String(context.user.id),
-    applicationId: MFA_APPLICATION_ID, baseUrl: baseUrlForServer(), allowCredentials: credentials, store: webauthnStore });
-  return { ceremonyId, options };
-}
-
-export const verifyStepUpWebAuthn = validatedAction(webAuthnResponseSchema, async ({ ceremonyId, credentialJson }) => {
-  const context = await getPendingStepUp();
-  if (!context || !context.hasWebAuthn) return { error: 'Your verification session expired. Try the action again.' };
-  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many attempts. Try again later.' };
-  const response = parseWebAuthnResponse(credentialJson);
-  if (!response) return { error: 'That passkey response was not understood.' };
-  const verification = await finishWebAuthnAuthentication({ subjectId: String(context.user.id),
-    applicationId: MFA_APPLICATION_ID, ceremonyId, response, baseUrl: baseUrlForServer(), store: webauthnStore });
-  if (verification.status !== 'verified') return { error: 'That passkey could not be verified.' };
-  const accepted = await mfaStore.acceptChallengeWithVerifiedFactor({ applicationId: MFA_APPLICATION_ID,
-    factorId: verification.factorId, nowMs: Date.now(), purpose: 'step-up', subjectId: String(context.user.id),
-    transactionId: context.pending.transactionId });
-  if (accepted !== 'accepted') return { error: 'Your verification session expired. Try the action again.' };
-  await grantFreshStepUp(context.pending, { factorId: verification.factorId, method: 'webauthn' });
   redirect(await resumeStepUpAction(context.pending));
 });
 
@@ -156,43 +116,6 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
   await setSession(context.user);
   redirect(context.pending.returnTo);
 }, { skipCsrf: true });
-
-export async function beginLoginWebAuthn(csrfToken: string) {
-  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), await rawCanonicalUserId());
-  const context = await pendingAccount('challenge');
-  if (!context || !context.pending.hasWebAuthn) throw new Error('A passkey is not available for this sign-in.');
-  const credentials = await webauthnStore.getActiveCredentials(String(context.user.id), MFA_APPLICATION_ID);
-  const { ceremonyId, options } = await beginWebAuthnAuthentication({ subjectId: String(context.user.id),
-    applicationId: MFA_APPLICATION_ID, baseUrl: baseUrlForServer(), allowCredentials: credentials, store: webauthnStore });
-  return { ceremonyId, options };
-}
-
-export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async ({ ceremonyId, credentialJson }) => {
-  const context = await pendingAccount('challenge');
-  if (!context || !context.pending.hasWebAuthn) return failAndRestart('Your verification session expired. Sign in again.');
-  if (!(await allowed(context.user.id, 'mfa_login_verify'))) return { error: 'Too many attempts. Sign in again later.' };
-  const response = parseWebAuthnResponse(credentialJson);
-  if (!response) return { error: 'That passkey response was not understood.' };
-  const verification = await finishWebAuthnAuthentication({ subjectId: String(context.user.id),
-    applicationId: MFA_APPLICATION_ID, ceremonyId, response, baseUrl: baseUrlForServer(), store: webauthnStore });
-  if (verification.status === 'replay') {
-    // A non-increasing signature counter -- the signature of a cloned authenticator or a replayed
-    // response, not an ordinary failed verification. Notify the account owner via a dedicated
-    // security event; the caller-facing response stays the same generic message either way.
-    await enqueueAuthSecurityNotification({ dedupeKey: `mfa-replay:webauthn:${context.pending.transactionId}`,
-      kind: 'mfa_replay_detected', userId: context.user.id });
-    return { error: 'That passkey could not be verified.' };
-  }
-  if (verification.status !== 'verified') return { error: 'That passkey could not be verified.' };
-  const accepted = await mfaStore.acceptChallengeWithVerifiedFactor({ applicationId: MFA_APPLICATION_ID,
-    factorId: verification.factorId, nowMs: Date.now(), purpose: 'login', subjectId: String(context.user.id),
-    transactionId: context.pending.transactionId });
-  if (accepted !== 'accepted') return failAndRestart('Your verification session expired. Sign in again.');
-  await clearPendingPrimaryAuth();
-  await clearPendingLogin();
-  await setSession(context.user);
-  redirect(context.pending.returnTo);
-});
 
 // A rejected recovery-code attempt previously left no durable trace anywhere -- only a thrown
 // exception (mfa_recovery_transition_failed) was ever recorded, so an operator looking at a real

@@ -95,7 +95,7 @@ export async function startGoogleMockIdp(): Promise<{ close: () => Promise<void>
 
       // A real page requiring a navigation, not an auto-redirect: mirrors Google's actual consent
       // screen closely enough that the browser does real cross-origin navigation and cookie handling,
-      // consistent with this suite's WebAuthn spec also driving a genuine ceremony rather than a stub.
+      // rather than a stub.
       if (req.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') {
         const clientId = url.searchParams.get('client_id') ?? '';
         const redirectUri = url.searchParams.get('redirect_uri') ?? '';

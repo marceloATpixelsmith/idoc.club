@@ -451,16 +451,18 @@ export const migrationMap = idocSchema.table('migration_map', {
   reviewedBy: integer('reviewed_by').references(() => users.id),
 }, (table) => [uniqueIndex('migration_map_source_unique').on(table.legacyType, table.legacyId)]);
 
-/** Encrypted TOTP factors, plus WebAuthn factor rows (secret columns unused; see webauthnCredentials).
- * Secret material is always application-encrypted before persistence. */
+/** Encrypted TOTP factors. Secret material is always application-encrypted before persistence.
+ * Previously also held WebAuthn factor rows (factor_type='webauthn', secret columns left null,
+ * proof material in a since-removed webauthn_credentials table) -- passkey/WebAuthn support was
+ * removed in favor of Google sign-in + TOTP only; see the migration that dropped those tables. */
 export const mfaFactors = idocSchema.table('mfa_factors', {
   factorId: varchar('factor_id', { length: 36 }).primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   applicationId: varchar('application_id', { length: 100 }).notNull(),
   factorType: varchar('factor_type', { length: 20 }).notNull().default('totp'),
   status: varchar('status', { length: 20 }).notNull(),
-  encryptedSecret: text('encrypted_secret'),
-  encryptionKeyId: varchar('encryption_key_id', { length: 100 }),
+  encryptedSecret: text('encrypted_secret').notNull(),
+  encryptionKeyId: varchar('encryption_key_id', { length: 100 }).notNull(),
   lastAcceptedCounter: integer('last_accepted_counter'),
   activatedAt: timestamp('activated_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -469,16 +471,8 @@ export const mfaFactors = idocSchema.table('mfa_factors', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('mfa_factors_type_check', sql`${table.factorType} in ('totp', 'webauthn')`),
+  check('mfa_factors_type_check', sql`${table.factorType} in ('totp')`),
   check('mfa_factors_status_check', sql`${table.status} in ('pending', 'active', 'disabled', 'revoked', 'replaced')`),
-  // WebAuthn never reuses TOTP secret storage or verification mechanics (its proof material lives in
-  // webauthnCredentials instead): the TOTP-shaped columns above are required for a totp factor and
-  // must stay empty for a webauthn one.
-  check('mfa_factors_totp_secret_check',
-    sql`(${table.factorType} = 'totp' and ${table.encryptedSecret} is not null and ${table.encryptionKeyId} is not null) or
-        (${table.factorType} = 'webauthn' and ${table.encryptedSecret} is null and ${table.encryptionKeyId} is null)`),
-  // Exactly one active TOTP factor at a time, but a user may hold several active WebAuthn credentials
-  // (passkeys/security keys) simultaneously -- so this uniqueness only constrains the totp type.
   uniqueIndex('mfa_factors_one_active_totp').on(table.userId, table.applicationId, table.factorType)
     .where(sql`${table.status} = 'active' and ${table.factorType} = 'totp'`),
   index('mfa_factors_owner_idx').on(table.userId, table.applicationId),
@@ -543,46 +537,6 @@ export const mfaRememberedDevices = idocSchema.table('mfa_remembered_devices', {
 }, (table) => [
   uniqueIndex('mfa_remembered_devices_digest_unique').on(table.tokenDigest),
   index('mfa_remembered_devices_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
-]);
-
-/** WebAuthn proof material for an active mfa_factors row of type 'webauthn'. One row per registered
- * authenticator (passkey or security key); a user may have several. Sign-count/device-type/backup-state
- * are tracked per the canonical WebAuthn readiness contract to detect cloned authenticators and to
- * distinguish device-bound from synced credentials. */
-export const webauthnCredentials = idocSchema.table('webauthn_credentials', {
-  credentialId: varchar('credential_id', { length: 255 }).primaryKey(),
-  factorId: varchar('factor_id', { length: 36 }).notNull().references(() => mfaFactors.factorId, { onDelete: 'cascade' }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  applicationId: varchar('application_id', { length: 100 }).notNull(),
-  publicKey: text('public_key').notNull(),
-  signCount: integer('sign_count').notNull().default(0),
-  transports: varchar('transports', { length: 200 }),
-  deviceType: varchar('device_type', { length: 20 }).notNull(),
-  backedUp: boolean('backed_up').notNull(),
-  deviceName: varchar('device_name', { length: 100 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-}, (table) => [
-  check('webauthn_credentials_device_type_check', sql`${table.deviceType} in ('singleDevice', 'multiDevice')`),
-  uniqueIndex('webauthn_credentials_factor_unique').on(table.factorId),
-  index('webauthn_credentials_owner_idx').on(table.userId, table.applicationId),
-]);
-
-/** Short-lived, purpose-bound WebAuthn protocol challenges (registration or authentication), separate
- * from the app-level mfa_challenge_transactions "MFA is required" tracking row: this is the actual
- * per-ceremony challenge bytes sent to the browser and verified by the WebAuthn library. */
-export const webauthnCeremonyChallenges = idocSchema.table('webauthn_ceremony_challenges', {
-  ceremonyId: varchar('ceremony_id', { length: 36 }).primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  applicationId: varchar('application_id', { length: 100 }).notNull(),
-  purpose: varchar('purpose', { length: 20 }).notNull(),
-  challenge: varchar('challenge', { length: 255 }).notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  consumedAt: timestamp('consumed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  check('webauthn_ceremony_purpose_check', sql`${table.purpose} in ('registration', 'authentication')`),
-  index('webauthn_ceremony_owner_idx').on(table.userId, table.applicationId, table.expiresAt),
 ]);
 
 /** Ordinary-member login verification trust. This is deliberately independent from TOTP factors. */

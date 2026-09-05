@@ -246,6 +246,13 @@
       "when": 1788285600000,
       "tag": "0034_incident_response_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788292800000,
+      "tag": "0035_remove_webauthn_passkeys",
+      "breakpoints": true
     }
   ]
 }

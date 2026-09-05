@@ -94,7 +94,6 @@ test('sensitive TOTP actions still require fresh TOTP evidence', () => {
       configuredFactor: 'totp',
       hasFreshPolicyFactor: true,
       hasFreshTotp: false,
-      hasFreshWebAuthn: false,
     }),
     true,
   );
