@@ -48,6 +48,15 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
   // first client render still matches the server-rendered (always-empty) markup -- sessionStorage
   // doesn't exist during SSR at all.
   const [deviceName, setDeviceName] = useState('');
+  // Set only when an automatic resume attempt got a real ceremony from the server but the browser
+  // then refused to run it (no carried-over user activation) -- beginPasskeyRegistration's fresh
+  // step-up evidence is already spent at that point, so a plain retry of "Add a passkey" would only
+  // send the member back through /mfa to land on the exact same unsupported automatic attempt, an
+  // infinite loop with no way out (a real Codex finding on the first version of this fix). Holding
+  // onto the still-valid ceremony lets one ordinary click supply the gesture the browser withheld,
+  // without spending step-up evidence a second time.
+  const [pendingCeremony, setPendingCeremony] = useState<{ ceremonyId: string; deviceName: string;
+    options: PublicKeyCredentialCreationOptionsJSON } | null>(null);
   const autoResumed = useRef(false);
   useEffect(() => {
     let restored = '';
@@ -67,12 +76,45 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
     if (!autoResumed.current && searchParams.get('resumeWebAuthn') === '1') {
       autoResumed.current = true;
       router.replace('/dashboard/security', { scroll: false });
-      void addPasskey({ auto: true, nameOverride: restored });
+      void beginAndRegister({ auto: true, nameOverride: restored });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function addPasskey(options?: { auto?: boolean; nameOverride?: string }) {
+  // Runs the actual browser ceremony for an already-issued challenge and, on success, submits it.
+  // Kept separate from beginAndRegister below so a fallback click can retry just this part against a
+  // still-valid ceremony without asking the server for a new one (which would require fresh step-up
+  // evidence that's already been spent).
+  async function runCeremony(ceremony: { ceremonyId: string; deviceName: string; options: PublicKeyCredentialCreationOptionsJSON }, auto: boolean) {
+    let response;
+    try {
+      response = await startRegistration({ optionsJSON: ceremony.options });
+    } catch {
+      if (auto) {
+        // Keep this still-valid ceremony so the fallback "Add a passkey" click below can finish it
+        // with a real gesture, instead of calling beginPasskeyRegistration again -- its fresh step-up
+        // evidence is already consumed, so that would only redirect back to /mfa and, once verified,
+        // land right back on this same unsupported automatic attempt: an infinite loop with no exit.
+        setPendingCeremony(ceremony);
+        setError('Click "Add a passkey" to finish setting it up.');
+      } else {
+        setError('Passkey setup was cancelled or not completed.');
+      }
+      return;
+    }
+    setPendingCeremony(null);
+    const formData = new FormData();
+    formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
+    formData.set('ceremonyId', ceremony.ceremonyId);
+    formData.set('credentialJson', JSON.stringify(response));
+    if (ceremony.deviceName.trim()) formData.set('deviceName', ceremony.deviceName.trim());
+    const finish = await finishPasskeyRegistration({}, formData) as ActionResult;
+    if (finish.error) { setError(finish.error); return; }
+    setSuccess(finish.success ?? 'Passkey added.');
+    setDeviceName('');
+  }
+
+  async function beginAndRegister(options?: { auto?: boolean; nameOverride?: string }) {
     const effectiveName = options?.nameOverride ?? deviceName;
     setBusy(true); setError(undefined); setSuccess(undefined);
     try {
@@ -81,28 +123,7 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
       const begin = await beginPasskeyRegistration({}, beginFormData) as BeginResult;
       if (begin.error) { setError(begin.error); return; }
       if (!begin.ceremonyId || !begin.options) { setError(GENERIC_ERROR); return; }
-      let response;
-      try {
-        response = await startRegistration({ optionsJSON: begin.options });
-      } catch {
-        // An automatic resume attempt that the browser refused (activation didn't carry over) needs
-        // a different message than an ordinary click the member actually cancelled themselves -- the
-        // fresh step-up evidence beginPasskeyRegistration just consumed is already gone either way,
-        // so pointing at the button is what actually gets them unblocked, not "try again" framing
-        // that implies retrying without a click would work.
-        setError(options?.auto ? 'Click "Add a passkey" to finish setting it up.'
-          : 'Passkey setup was cancelled or not completed.');
-        return;
-      }
-      const formData = new FormData();
-      formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
-      formData.set('ceremonyId', String(begin.ceremonyId));
-      formData.set('credentialJson', JSON.stringify(response));
-      if (effectiveName.trim()) formData.set('deviceName', effectiveName.trim());
-      const finish = await finishPasskeyRegistration({}, formData) as ActionResult;
-      if (finish.error) { setError(finish.error); return; }
-      setSuccess(finish.success ?? 'Passkey added.');
-      setDeviceName('');
+      await runCeremony({ ceremonyId: begin.ceremonyId, deviceName: effectiveName, options: begin.options }, Boolean(options?.auto));
     } catch (thrown) {
       if (isNextRedirectError(thrown)) {
         // About to navigate away to /mfa for step-up verification -- this component remounts once
@@ -116,6 +137,21 @@ export function PasskeysCard({ passkeys }: { passkeys: Passkey[] }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addPasskey() {
+    if (pendingCeremony) {
+      setBusy(true); setError(undefined); setSuccess(undefined);
+      try {
+        // Use whatever label is currently in the field, not the one captured when the automatic
+        // attempt ran -- the member may have edited it while looking at the fallback message.
+        await runCeremony({ ...pendingCeremony, deviceName }, false);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    await beginAndRegister();
   }
 
   async function removePasskey(credentialId: string) {
