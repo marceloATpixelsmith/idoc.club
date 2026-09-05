@@ -102,11 +102,14 @@ test('the persisted bucket rows never contain a raw email address or raw origin/
 test('the login password-guessing purpose is throttled by the same dual-independent-bucket design as every other purpose (AUTH-RATE-005)', async () => {
   const now = new Date();
   const email = normalizeEmail('guess-target@example.test');
-  // The email-keyed bucket allows exactly 3 guesses per 15-minute window against one account...
-  for (let i = 0; i < 3; i += 1) {
+  // The email-keyed bucket allows exactly 8 guesses per 15-minute window against one account
+  // (raised from the original blunt 3 to match industry-typical password-guessing tolerance --
+  // NIST 800-63B / OWASP guidance -- wide enough that a real member's own typos don't lock them
+  // out, while still meaningfully bounding brute force)...
+  for (let i = 0; i < 8; i += 1) {
     assert.equal(await checkRateLimit('login_password', email, `guess-origin-${i}`, now), true);
   }
-  // ...and a 4th, even from a brand-new origin, is throttled: an attacker who has passed the
+  // ...and a 9th, even from a brand-new origin, is throttled: an attacker who has passed the
   // Turnstile+rate-limited email step once cannot then guess the password field unboundedly.
   assert.equal(await checkRateLimit('login_password', email, 'yet-another-guess-origin', now), false);
 
@@ -118,4 +121,36 @@ test('the login password-guessing purpose is throttled by the same dual-independ
     perOriginResults.push(await checkRateLimit('login_password', normalizeEmail(`guess-victim-${i}@example.test`), fixedOrigin, now));
   }
   assert.equal(perOriginResults.at(-1), false);
+});
+
+test('the login email-identification step (no secret guessed) is given a generous, industry-typical allowance distinct from the guessing purposes', async () => {
+  const now = new Date();
+  const email = normalizeEmail('identify-only@example.test');
+  // login_email guards no secret -- it is an anti-automation-only gate on "who are you", not a
+  // brute-force surface -- so its allowance (20) is deliberately far looser than login_password's
+  // (8) or any code-verification purpose's (5), matching how mature SaaS products separate these.
+  for (let i = 0; i < 20; i += 1) {
+    assert.equal(await checkRateLimit('login_email', email, `identify-origin-${i}`, now), true);
+  }
+  assert.equal(await checkRateLimit('login_email', email, 'yet-another-identify-origin', now), false);
+});
+
+test('every code-verification purpose (email OTP and TOTP alike) shares the same raised, industry-typical allowance', async () => {
+  const now = new Date();
+  for (const purpose of ['otp_verify_login', 'otp_verify_reset', 'otp_verify_signup', 'mfa_login_verify', 'mfa_recovery_code_verify', 'mfa_enrollment_confirm', 'mfa_step_up_verify', 'mfa_password_reset_verify']) {
+    const email = normalizeEmail(`code-verify-${purpose}@example.test`);
+    for (let i = 0; i < 5; i += 1) {
+      assert.equal(await checkRateLimit(purpose, email, `code-verify-origin-${purpose}-${i}`, now), true, `${purpose} attempt ${i + 1} should be allowed`);
+    }
+    assert.equal(await checkRateLimit(purpose, email, `code-verify-origin-${purpose}-overflow`, now), false, `${purpose}'s 6th attempt should be blocked`);
+  }
+});
+
+test('a purpose not explicitly listed keeps the original, tighter default allowance -- this change is scoped, not a blanket loosening', async () => {
+  const now = new Date();
+  const email = normalizeEmail('unlisted-purpose@example.test');
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await checkRateLimit('password_reset_email', email, `unlisted-origin-${i}`, now), true);
+  }
+  assert.equal(await checkRateLimit('password_reset_email', email, 'yet-another-unlisted-origin', now), false);
 });

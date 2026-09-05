@@ -285,20 +285,23 @@ test('a wrong recovery code against a valid recovery session writes a durable, q
 // regardless of how many requests hit it) is the evidence for that outcome instead.
 test('exhausting the recovery-code rate limit writes no audit_log row, only the already-bounded account_request_limits evidence', async () => {
   const entry = await recoveryEntry();
-  await Promise.all(Array.from({ length: 5 }, () =>
+  // mfa_recovery_code_verify allows 5 per 15-minute window (raised from the original blunt 3 to
+  // match industry-typical code-verification tolerance); 7 concurrent requests exercises both the
+  // 5 that proceed to an ordinary rejection and the 2 that get rate-limited instead.
+  await Promise.all(Array.from({ length: 7 }, () =>
     withTestRequestCookies(entry.cookies, () =>
       authorizeAuthenticatorRecovery({}, form('recoveryCode', `wrong-${randomUUID()}`, csrfTokenFrom(entry.cookies))))));
   const rows = await sql`select reason, count(*)::int count from idoc.audit_log
     where actor_id=${entry.user.id} and action='auth.mfa.recovery_code.rejected' group by reason`;
   const byReason = Object.fromEntries(rows.map((row) => [row.reason, row.count]));
   assert.equal(byReason.rate_limited, undefined);
-  assert.equal(byReason.invalid_or_already_consumed_code, 3);
+  assert.equal(byReason.invalid_or_already_consumed_code, 5);
   // checkRateLimit always writes two independent rows per purpose (a per-account bucket and a
-  // per-origin bucket, AUTH-RATE-005) -- both incremented here since all 5 requests share the same
+  // per-origin bucket, AUTH-RATE-005) -- both incremented here since all 7 requests share the same
   // account and the same default test origin.
   const limitRows = await rateRows('mfa_recovery_code_verify');
   assert.equal(limitRows.length, 2);
-  assert.deepEqual(limitRows.map((row) => row.request_count), [5, 5]);
+  assert.deepEqual(limitRows.map((row) => row.request_count), [7, 7]);
 });
 
 test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser out of CSRF-protected sign-out', async () => {
