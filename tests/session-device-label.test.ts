@@ -30,6 +30,12 @@ test('describeUserAgent identifies common real browser/OS combinations', () => {
   assert.equal(describeUserAgent(
     'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117.0'),
     'Firefox on Linux');
+  assert.equal(describeUserAgent(
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Mobile Safari/537.36 EdgA/117.0.2045.47'),
+    'Edge on Android');
+  assert.equal(describeUserAgent(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 EdgiOS/117.0.2045.47 Mobile/15E148 Safari/604.1'),
+    'Edge on iPhone');
 });
 
 test('describeUserAgent falls back to whichever half it can identify, or null for neither', () => {

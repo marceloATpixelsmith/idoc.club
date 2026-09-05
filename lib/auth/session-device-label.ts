@@ -20,8 +20,10 @@ function detectOs(userAgent: string): string | null {
 
 function detectBrowser(userAgent: string): string | null {
   // Order matters: several browsers' UA strings also contain "Safari/..." or "Chrome/..." tokens
-  // for compatibility, so the more specific/identifying token must be checked first.
-  if (/Edg\//.test(userAgent)) return 'Edge';
+  // for compatibility, so the more specific/identifying token must be checked first. Edge's mobile
+  // builds use their own tokens (EdgA/ on Android, EdgiOS/ on iOS) rather than plain Edg/, but would
+  // otherwise fall through to the Chrome/Safari checks below and be mislabeled.
+  if (/Edg(?:A|iOS)?\//.test(userAgent)) return 'Edge';
   if (/OPR\//.test(userAgent)) return 'Opera';
   if (/SamsungBrowser\//.test(userAgent)) return 'Samsung Internet';
   if (/Firefox\//.test(userAgent) || /FxiOS\//.test(userAgent)) return 'Firefox';
