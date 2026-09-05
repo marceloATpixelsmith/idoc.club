@@ -293,9 +293,12 @@ test('exhausting the recovery-code rate limit writes no audit_log row, only the 
   const byReason = Object.fromEntries(rows.map((row) => [row.reason, row.count]));
   assert.equal(byReason.rate_limited, undefined);
   assert.equal(byReason.invalid_or_already_consumed_code, 3);
+  // checkRateLimit always writes two independent rows per purpose (a per-account bucket and a
+  // per-origin bucket, AUTH-RATE-005) -- both incremented here since all 5 requests share the same
+  // account and the same default test origin.
   const limitRows = await rateRows('mfa_recovery_code_verify');
-  assert.equal(limitRows.length, 1);
-  assert.equal(limitRows[0].request_count, 5);
+  assert.equal(limitRows.length, 2);
+  assert.deepEqual(limitRows.map((row) => row.request_count), [5, 5]);
 });
 
 test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser out of CSRF-protected sign-out', async () => {
