@@ -253,6 +253,41 @@ test('AUTH-RECOVERY-005 acknowledgement cannot precede replacement', async () =>
   assert.deepEqual(await state(entry.user.id), before); await assertNoSession(entry.cookies, entry.user.id);
 });
 
+// A rejected or rate-limited recovery-code attempt previously left no durable, DB-queryable trace
+// anywhere -- only a thrown exception was ever recorded (mfa_recovery_transition_failed, console
+// only). An operator troubleshooting a real production report of "my recovery code doesn't work"
+// had nothing to query. Proves both failure paths now write a real idoc.audit_log row, attributed
+// to the account and distinguishing why, while never recording the submitted code itself.
+test('a wrong or already-exhausted recovery code writes a durable, queryable audit_log row naming why, never the code itself', async (t) => {
+  await t.test('a wrong code against a valid recovery session is recorded as rejected', async () => {
+    const entry = await recoveryEntry();
+    const wrongCode = `WRONG-${randomUUID()}`;
+    assert.deepEqual(await withTestRequestCookies(entry.cookies, () =>
+      authorizeAuthenticatorRecovery({}, form('recoveryCode', wrongCode, csrfTokenFrom(entry.cookies)))),
+      { error: 'That recovery code could not be used.' });
+    const rows = await sql`select action,reason from idoc.audit_log where actor_id=${entry.user.id}`;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].action, 'auth.mfa.recovery_code.rejected');
+    assert.equal(rows[0].reason, 'invalid_or_already_consumed_code');
+    const evidence = JSON.stringify(rows);
+    assert.equal(evidence.includes(wrongCode), false, 'the submitted code must never be recorded');
+    assert.equal(evidence.includes(recoveryCode), false, 'the real recovery code must never be recorded');
+  });
+
+  await t.test('exhausting the rate limit is recorded as rate_limited, distinct from an ordinary rejection', async () => {
+    await resetIdoc();
+    const entry = await recoveryEntry();
+    await Promise.all(Array.from({ length: 5 }, () =>
+      withTestRequestCookies(entry.cookies, () =>
+        authorizeAuthenticatorRecovery({}, form('recoveryCode', `wrong-${randomUUID()}`, csrfTokenFrom(entry.cookies))))));
+    const rows = await sql`select reason, count(*)::int count from idoc.audit_log
+      where actor_id=${entry.user.id} and action='auth.mfa.recovery_code.rejected' group by reason`;
+    const byReason = Object.fromEntries(rows.map((row) => [row.reason, row.count]));
+    assert.equal(byReason.rate_limited, 2);
+    assert.equal(byReason.invalid_or_already_consumed_code, 3);
+  });
+});
+
 test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser out of CSRF-protected sign-out', async () => {
   // A signed session JWT can remain cryptographically valid for hours after its persisted registry
   // row is revoked (a password reset from another device, an admin-initiated revoke, a superseded

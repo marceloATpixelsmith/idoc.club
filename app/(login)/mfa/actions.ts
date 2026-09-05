@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
@@ -192,6 +192,16 @@ export const verifyLoginWebAuthn = validatedAction(webAuthnResponseSchema, async
   redirect(context.pending.returnTo);
 });
 
+// A rejected or rate-limited recovery-code attempt previously left no durable trace anywhere --
+// only a thrown exception (mfa_recovery_transition_failed) was ever recorded, so an operator
+// looking at real production failures (a rejected code, a rate-limited attempt) had nothing
+// queryable to diagnose against. Never records the submitted code itself, only that an attempt for
+// this account was rejected and why.
+async function auditRecoveryCodeFailure(userId: number, reason: 'invalid_or_already_consumed_code' | 'rate_limited') {
+  await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+    values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, ${reason})`);
+}
+
 export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.literal('yes') }), async () => {
   const context = await pendingAccount('challenge');
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
@@ -202,7 +212,10 @@ export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.
 export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recoveryCode: z.string().trim().min(1).max(64) }), async ({ recoveryCode }) => {
   const context = await pendingAccount('recovery-entry');
   if (!context) return failAndRestart('Your recovery session expired. Sign in again.');
-  if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) return failAndRestart('Too many attempts. Sign in again later.');
+  if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) {
+    await auditRecoveryCodeFailure(context.user.id, 'rate_limited');
+    return failAndRestart('Too many attempts. Sign in again later.');
+  }
   const config = mfaConfiguration();
   const enrollment = prepareTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
@@ -224,6 +237,7 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
     return { error: 'Authenticator recovery could not be completed. Restart recovery and try again.' };
   }
   if (recovery.status !== 'ready' || !recovery.factorId || !recovery.transactionId) {
+    await auditRecoveryCodeFailure(context.user.id, 'invalid_or_already_consumed_code');
     return { error: 'That recovery code could not be used.' };
   }
   await setPendingPrimaryAuth({ ...context.pending, factorId: recovery.factorId, stage: 'replacement',
