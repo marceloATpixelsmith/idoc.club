@@ -18,6 +18,6 @@ export default async function SecurityPage() {
     privileged ? mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID) : Promise.resolve(null),
   ]);
   return <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
-    privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, lastActivityAt, sessionId }) =>
-      ({ absoluteExpiresAt, authenticatedAt, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />;
+    privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }) =>
+      ({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />;
 }

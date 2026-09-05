@@ -13,6 +13,7 @@ export type PersistedSession = {
   absoluteExpiresAt: string;
   revokedAt: string | null;
   revokeReason: string | null;
+  deviceLabel: string | null;
 };
 
 type NewPersistedSession = {
@@ -22,15 +23,16 @@ type NewPersistedSession = {
   authenticatedAt: Date;
   lastActivityAt: Date;
   absoluteExpiresAt: Date;
+  deviceLabel?: string | null;
 };
 
 export async function registerSession(input: NewPersistedSession) {
   await db.execute(sql`
     insert into idoc.auth_sessions (
-      session_id, user_id, session_version, authenticated_at, last_activity_at, absolute_expires_at
+      session_id, user_id, session_version, authenticated_at, last_activity_at, absolute_expires_at, device_label
     ) values (
       ${input.sessionId}, ${input.userId}, ${input.sessionVersion}, ${input.authenticatedAt.toISOString()},
-      ${input.lastActivityAt.toISOString()}, ${input.absoluteExpiresAt.toISOString()}
+      ${input.lastActivityAt.toISOString()}, ${input.absoluteExpiresAt.toISOString()}, ${input.deviceLabel ?? null}
     )
     on conflict (session_id) do nothing
   `);
@@ -46,7 +48,8 @@ export async function readActiveSession(sessionId: string, userId: number) {
       last_activity_at as "lastActivityAt",
       absolute_expires_at as "absoluteExpiresAt",
       revoked_at as "revokedAt",
-      revoke_reason as "revokeReason"
+      revoke_reason as "revokeReason",
+      device_label as "deviceLabel"
     from idoc.auth_sessions
     where session_id = ${sessionId}
       and user_id = ${userId}
@@ -135,7 +138,8 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
       last_activity_at as "lastActivityAt",
       absolute_expires_at as "absoluteExpiresAt",
       revoked_at as "revokedAt",
-      revoke_reason as "revokeReason"
+      revoke_reason as "revokeReason",
+      device_label as "deviceLabel"
     from idoc.auth_sessions
     where user_id = ${userId}
       and session_version = ${currentSessionVersion}

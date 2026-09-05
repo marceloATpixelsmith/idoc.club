@@ -11,7 +11,7 @@ export type MutableCookieStore = {
   set(name: string, value: string, options?: Record<string, unknown>): void;
 };
 
-type TestRequest = { cookies: MutableCookieStore; environment?: NodeJS.ProcessEnv; origin: string };
+type TestRequest = { cookies: MutableCookieStore; environment?: NodeJS.ProcessEnv; origin: string; userAgent?: string };
 const testStore = new AsyncLocalStorage<TestRequest>();
 
 function assertIsolatedTestProcess() {
@@ -31,13 +31,21 @@ export function withTestRequestCookies<T>(
   operation: () => Promise<T>,
   origin = '127.0.0.1',
   environment?: NodeJS.ProcessEnv,
+  userAgent?: string,
 ): Promise<T> {
   assertIsolatedTestProcess();
-  return testStore.run({ cookies: store, environment, origin }, operation);
+  return testStore.run({ cookies: store, environment, origin, userAgent }, operation);
 }
 
 export function testRequestOrigin(): string | undefined {
   return testStore.getStore()?.origin;
+}
+
+/** Isolated User-Agent override for integration tests, mirroring testRequestOrigin -- undefined
+ * (rather than a sentinel like null) means "no isolated test context is running," letting
+ * requestUserAgent() fall through to the real request headers outside a test. */
+export function testRequestUserAgent(): string | undefined {
+  return testStore.getStore()?.userAgent;
 }
 
 /** Isolated runtime-environment override used to exercise production cookie semantics without

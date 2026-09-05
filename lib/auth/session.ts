@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { requestCookies, testRequestEnvironment } from '@/lib/auth/request-cookies';
+import { headers } from 'next/headers';
+import { requestCookies, testRequestEnvironment, testRequestUserAgent } from '@/lib/auth/request-cookies';
+import { describeUserAgent } from '@/lib/auth/session-device-label';
 import { NewUser } from '@/lib/db/schema';
 import {
   readActiveSession,
@@ -40,6 +42,22 @@ import {
 
 function requestEnvironment() {
   return testRequestEnvironment() ?? process.env;
+}
+
+/** A short, human-readable device/browser label derived from the request's own User-Agent header
+ * (e.g. "Chrome on macOS"), captured once at the moment a session is created -- see
+ * session-device-label.ts for why only this derived label, never the raw header value itself, is
+ * ever persisted. Never throws: an absent/unparseable header just means no label, not a failed
+ * login -- notably including next/headers' headers() itself throwing when called outside a real
+ * request scope (e.g. a test harness that didn't isolate a User-Agent via withTestRequestCookies). */
+async function requestDeviceLabel(): Promise<string | null> {
+  const isolated = testRequestUserAgent();
+  if (isolated !== undefined) return describeUserAgent(isolated);
+  try {
+    return describeUserAgent((await headers()).get('user-agent'));
+  } catch {
+    return null;
+  }
 }
 
 async function registeredSessionIsValid(session: SessionData, now = new Date()) {
@@ -134,6 +152,7 @@ export async function setSession(user: NewUser) {
     authenticatedAt: new Date(session.authenticatedAt),
     lastActivityAt: new Date(session.lastActivityAt),
     absoluteExpiresAt: new Date(session.absoluteExpiresAt),
+    deviceLabel: await requestDeviceLabel(),
   });
 
   const environment = requestEnvironment();

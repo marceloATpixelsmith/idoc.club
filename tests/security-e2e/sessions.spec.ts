@@ -52,7 +52,7 @@ test('account security renders and revokes only the signed-in member active sess
   expect(body).not.toContain(fixture.revokedSessionId);
   expect(body).not.toContain(fixture.expiredSessionId);
   expect(body).not.toMatch(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
-  await expect(page.getByText('Device and location details are not collected.')).toBeVisible();
+  await expect(page.getByText('Each shows the browser and device it was created from, so you can confirm every entry is one of yours.')).toBeVisible();
 
   await page.locator('form', { has: page.getByRole('button', { name: 'Log out this session' }) })
     .evaluate((form, forgedUserId) => {

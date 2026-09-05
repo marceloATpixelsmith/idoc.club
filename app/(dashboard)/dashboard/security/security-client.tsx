@@ -14,7 +14,7 @@ import { GoogleIdentityCard } from './google-identity-card';
 type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
 type DeleteState = { error?: string; success?: string };
-type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
+type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; deviceLabel: string | null; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 export function SecurityClient({ currentDeviceRemembered, currentSessionId, privileged, sessions, totpConfigured }: SecurityClientProps) {
@@ -70,11 +70,11 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, priv
       </CardContent></Card>}
 
       <Card className="mb-8"><CardHeader><CardTitle>Active sessions</CardTitle></CardHeader><CardContent className="space-y-5">
-        <p className="text-sm text-gray-500">These are the signed-in sessions for your account. Device and location details are not collected.</p>
+        <p className="text-sm text-gray-500">These are the signed-in sessions for your account. Each shows the browser and device it was created from, so you can confirm every entry is one of yours.</p>
         {(logoutOneState.error || logoutOthersState.error) ? <p className="text-sm text-red-500">{logoutOneState.error || logoutOthersState.error}</p> : null}
         {(logoutOneState.success || logoutOthersState.success) ? <p className="text-sm text-green-500">{logoutOneState.success || logoutOthersState.success}</p> : null}
         {sessions.map((session) => <div className="rounded-md border p-4" key={session.sessionId}>
-          <p className="font-medium">{session.sessionId === currentSessionId ? 'Current session' : 'Another session'}</p>
+          <p className="font-medium">{session.sessionId === currentSessionId ? 'Current session' : 'Another session'}{session.deviceLabel ? ` — ${session.deviceLabel}` : ''}</p>
           <dl className="mt-2 grid gap-1 text-sm text-gray-600"><div>Authenticated: {formatDate(session.authenticatedAt)}</div><div>Last activity: {formatDate(session.lastActivityAt)}</div><div>Expires: {formatDate(session.absoluteExpiresAt)}</div></dl>
           {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><CsrfField /><input name="sessionId" type="hidden" value={session.sessionId} /><Button type="submit" variant="outline">Log out this session</Button></form> : null}
         </div>)}

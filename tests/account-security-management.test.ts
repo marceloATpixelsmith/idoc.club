@@ -30,7 +30,7 @@ test('security page lists only registry sessions matching the current server-own
 
 test('security page returns only safe session presentation fields and server-owned current binding', () => {
   assert.match(page, /currentSessionId=\{session\.sessionId\}/);
-  assert.match(page, /absoluteExpiresAt, authenticatedAt, lastActivityAt, sessionId/);
+  assert.match(page, /absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId/);
   assert.doesNotMatch(client, FORBIDDEN_RENDERED_SECRETS);
   assert.doesNotMatch(client, /bearer|JWT|token digest|factorId|challenge transaction/i);
 });
