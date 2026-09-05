@@ -5,7 +5,7 @@ import { signIn, updatePassword } from '../app/(login)/actions.ts';
 import { completeSignup } from '../app/(login)/sign-up/actions.ts';
 import { verifyStepUpTotp } from '../app/(login)/mfa/actions.ts';
 import { logOutSession } from '../app/(dashboard)/dashboard/security/actions.ts';
-import { markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
+import { getPendingSignup, markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { startPendingLogin } from '../lib/auth/pending-login.ts';
 import { getPendingStepUp, requireFreshStepUp } from '../lib/auth/mfa/step-up.ts';
 import { getPendingPrimaryAuth } from '../lib/auth/mfa/pending-primary-auth.ts';
@@ -166,7 +166,7 @@ test('AUTH-LIFECYCLE-002: completeSignup rejects duplicate registration for an e
   const csrf_token = await issueTestCsrfToken(cookies, null);
   await withTestRequestCookies(cookies, async () => {
     await startPendingSignup(suspended.email, suspended.email);
-    await markPendingSignupVerified(suspended.email, suspended.email);
+    await markPendingSignupVerified((await getPendingSignup())!);
     const result = await completeSignup({}, form({ csrf_token, password: 'Another Correct Battery 99!' }));
     assert.deepEqual(result, { error: 'An account with this email already exists. Sign in instead.' });
   });

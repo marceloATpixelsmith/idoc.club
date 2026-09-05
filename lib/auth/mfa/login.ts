@@ -8,7 +8,7 @@ import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { decideMfa, roleRequiresTotp } from './decision';
 import { mfaStore } from './store';
 import { beginTotpEnrollment } from './totp';
-import { setPendingPrimaryAuth } from './pending-primary-auth';
+import { generatePendingCsrfNonce, setPendingPrimaryAuth } from './pending-primary-auth';
 import { readRememberedTotpDeviceToken } from './remembered-device-cookie';
 import { verifyRememberedDevice } from './remembered-device';
 import { webauthnStore } from './webauthn-store';
@@ -50,7 +50,7 @@ export async function beginPrimaryMfa(user: User, method: 'google' | 'password',
     const hasWebAuthn = (await webauthnStore.getActiveCredentials(subjectId, MFA_APPLICATION_ID)).length > 0;
     await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, maxAttempts: 5, nowMs: Date.now(),
       purpose: 'login', subjectId, transactionId, expiresAtMs: Date.now() + 10 * 60 * 1000 });
-    await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: factor.factorId, hasWebAuthn,
+    await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce(), factorId: factor.factorId, hasWebAuthn,
       method, returnTo, sessionVersion: user.sessionVersion, stage: 'challenge', subjectId: user.id, transactionId });
     return true;
   }
@@ -58,7 +58,7 @@ export async function beginPrimaryMfa(user: User, method: 'google' | 'password',
   const enrollment = await beginTotpEnrollment({ accountLabel: user.email, applicationId: MFA_APPLICATION_ID,
     encryptionKey: config.encryptionKeys.get(config.activeKeyId)!, issuer: 'IDOC', keyId: config.activeKeyId,
     store: mfaStore, subjectId });
-  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, factorId: enrollment.factorId, hasWebAuthn: false,
+  await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce(), factorId: enrollment.factorId, hasWebAuthn: false,
     method, returnTo, sessionVersion: user.sessionVersion, stage: 'enrollment', subjectId: user.id,
     transactionId: enrollment.transactionId });
   return true;

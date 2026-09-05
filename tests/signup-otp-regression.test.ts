@@ -30,5 +30,5 @@ test('email OTP rate-limit identifiers preserve issue buckets and fit varchar(30
 
 test('signup cookie state changes navigate to distinct same-route targets', () => {
   assert.match(signupActions, /startPendingSignup\(email, emailDisplay\)[\s\S]*redirect\('\/sign-up\?stage=verify'\)/);
-  assert.match(signupActions, /markPendingSignupVerified\(pending\.email, pending\.emailDisplay\)[\s\S]*redirect\('\/sign-up\?stage=password'\)/);
+  assert.match(signupActions, /markPendingSignupVerified\(pending\)[\s\S]*redirect\('\/sign-up\?stage=password'\)/);
 });

@@ -41,7 +41,8 @@ export default async function MfaPage() {
     : setup ? 'Set up your authenticator app to continue.' : 'Enter the current code from your authenticator app.'}
     title={pending.stage === 'recovery-entry' ? 'Authenticator recovery' : recoveryAck ? 'Finish authenticator recovery'
       : setup ? 'Set up authenticator' : 'Two-step verification'}>
-    <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} provisioningUri={provisioningUri}
-      qrCodeDataUrl={qrCodeDataUrl} rememberDeviceDays={rememberedDevice?.days} rememberDeviceEnabled={rememberedDevice?.enabled} />
+    <MfaForm hasWebAuthn={pending.stage === 'challenge' && pending.hasWebAuthn} mode={pending.stage} pendingCsrfNonce={pending.csrfNonce}
+      provisioningUri={provisioningUri} qrCodeDataUrl={qrCodeDataUrl} rememberDeviceDays={rememberedDevice?.days}
+      rememberDeviceEnabled={rememberedDevice?.enabled} />
   </AuthShell>;
 }

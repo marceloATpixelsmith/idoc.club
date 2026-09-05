@@ -23,6 +23,6 @@ export default async function SignInPage({
     const params = await searchParams;
     return <EmailStep initialError={googleErrorMessage(params.google)} />;
   }
-  if (pending.stage === 'login-otp') return <OtpStep allowRemember={pending.allowRemember} email={pending.email} />;
-  return <PasswordStep email={pending.email} />;
+  if (pending.stage === 'login-otp') return <OtpStep allowRemember={pending.allowRemember} email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
+  return <PasswordStep email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
 }

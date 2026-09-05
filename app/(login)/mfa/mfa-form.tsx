@@ -4,7 +4,7 @@ import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useActionState, useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
-import { CsrfField } from '@/components/security/csrf-field';
+import { CsrfEvidence } from '@/components/security/csrf-evidence';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import {
@@ -67,8 +67,8 @@ function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
   );
 }
 
-export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
-  hasWebAuthn?: boolean; mode: Mode; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
+export function MfaForm({ hasWebAuthn, mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
+  hasWebAuthn?: boolean; mode: Mode; pendingCsrfNonce?: string; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
 }) {
   const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
@@ -86,7 +86,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
 
   if (state.recoveryCodes) return (
     <form action={acknowledge} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       <p>Store these recovery codes somewhere safe. Each code can only be used once.</p>
       <div className="idoc-auth-recovery-codes">
         <div className="idoc-auth-recovery-codes__copy-row">
@@ -112,7 +112,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
   );
   if (mode === 'recovery-ack') return (
     <form action={cancel} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       <p className="idoc-auth-error" role="alert">The one-time recovery-code display is no longer available. Sign in again with your new authenticator, then generate a fresh recovery-code set from account security.</p>
       <input name="cancel" type="hidden" value="yes" />
       <button className="idoc-auth-button" type="submit">Sign in again</button>
@@ -121,7 +121,7 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
   if (mode === 'recovery-entry') return (
     <>
       <form action={formAction} className="idoc-auth-form">
-        <CsrfField />
+        <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
         <div className="idoc-auth-field">
           <label className="idoc-auth-label" htmlFor="recoveryCode">Recovery code</label>
           <input autoComplete="off" autoFocus className="idoc-auth-input" id="recoveryCode" maxLength={64} name="recoveryCode" required />
@@ -129,13 +129,13 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
         <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Checking" /> : 'Continue'}</button>
       </form>
-      <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
+      <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" /><button type="submit">Cancel and sign in again</button></form>
     </>
   );
   return (
     <>
     <form action={formAction} className="idoc-auth-form">
-      <CsrfField />
+      <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
       {(mode === 'enrollment' || mode === 'replacement') && provisioningUri ? <>
         <p>Scan the QR code with your authenticator app, then enter the 6-digit code it generates.</p>
         <div className="idoc-auth-totp-enrollment">
@@ -165,9 +165,9 @@ export function MfaForm({ hasWebAuthn, mode, provisioningUri, qrCodeDataUrl, rem
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
     {(mode === 'challenge' || mode === 'step-up') && hasWebAuthn ? <PasskeyButton mode={mode} /> : null}
-    {mode === 'challenge' ? <form action={recover}><CsrfField /><input name="recover" type="hidden" value="yes" />
+    {mode === 'challenge' ? <form action={recover}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="recover" type="hidden" value="yes" />
       <button disabled={recovering} type="submit">Use a recovery code</button></form> : null}
-    {mode === 'replacement' ? <form action={cancel}><CsrfField /><input name="cancel" type="hidden" value="yes" />
+    {mode === 'replacement' ? <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" />
       <button type="submit">Cancel and sign in again</button></form> : null}
     </>
   );

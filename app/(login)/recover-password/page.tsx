@@ -6,6 +6,6 @@ import { PasswordStep } from './password-step';
 export default async function RecoverPasswordPage() {
   const pending = await getPendingPasswordReset();
   if (!pending) return <EmailStep />;
-  if (pending.stage === 'authorized') return <PasswordStep />;
-  return <OtpStep />;
+  if (pending.stage === 'authorized') return <PasswordStep pendingCsrfNonce={pending.csrfNonce} />;
+  return <OtpStep pendingCsrfNonce={pending.csrfNonce} />;
 }

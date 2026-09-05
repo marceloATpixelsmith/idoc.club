@@ -1,9 +1,24 @@
 import 'server-only';
 
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { requestCookies, testRequestEnvironment } from '@/lib/auth/request-cookies';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 import { logWarn } from '@/lib/observability/logger';
+
+/** Mints a fresh per-flow nonce for a NEW anonymous, multi-stage, redirect()-driven continuation
+ * flow (lib/auth/mfa/pending-primary-auth.ts, pending-signup.ts, pending-login.ts,
+ * pending-password-reset.ts). Every one of these flows shares the same real, confirmed production
+ * failure mode: the general CSRF cookie's token is sourced from a React Context living in the root
+ * layout, which Next.js can reuse rather than re-render across the client-side navigation that
+ * follows every redirect() a stage transition makes -- so the token a later stage's form submits
+ * can legitimately drift from the current general cookie through no fault of the member's. Each
+ * flow's own signed, httpOnly continuation cookie carries this nonce alongside its other stage
+ * data instead, minted once when the flow begins and carried forward unchanged by every later
+ * stage transition -- never call this again for an in-progress flow, or the nonce a member is
+ * currently looking at on their screen stops matching. See requireCsrfTokenOrPendingNonce below. */
+export function generatePendingCsrfNonce(): string {
+  return randomBytes(24).toString('base64url');
+}
 
 // Deliberately does not import from lib/auth/session.ts: session.ts calls issueCsrfToken/
 // clearCsrfToken below to rotate the token at login/logout, so importing getSession() here would
@@ -118,6 +133,29 @@ export async function requireCsrfToken(formData: FormData, expectedSessionRef: s
  * (deliberately non-httpOnly) CSRF cookie. */
 export async function requireCsrfTokenValue(token: string | null | undefined, expectedSessionRef: string | null, subjectId?: number | null): Promise<void> {
   if (!(await csrfEvidenceIsValid(token, expectedSessionRef, subjectId))) throw new CsrfError();
+}
+
+/** For the small family of Server Actions driving lib/auth/mfa/pending-primary-auth.ts's multi-step
+ * anonymous continuation flow (recovery-entry -> replacement -> recovery-ack, etc.): a real,
+ * reproducible production report proved the general session-bound CSRF cookie can legitimately
+ * drift from what an in-flight page's form submits, through no fault of the member's -- see that
+ * file's PendingPrimaryAuth.csrfNonce doc comment for the full mechanism. Accepts the request when
+ * EITHER the general CSRF cookie matches (unchanged fallback, still checked and still logged the
+ * same way on failure) OR the submitted value exactly matches the flow's own per-flow nonce, which
+ * is minted and read together with the rest of that signed, httpOnly cookie and can never drift
+ * out from under its own form the way the general cookie can. `pendingNonce` is `null` when no such
+ * flow is active (pendingAccount() already returned null), in which case this is identical to
+ * requireCsrfToken. */
+export async function requireCsrfTokenOrPendingNonce(
+  formData: FormData,
+  expectedSessionRef: string | null,
+  subjectId: number | null | undefined,
+  pendingNonce: string | null,
+): Promise<void> {
+  const value = formData.get(FIELD_NAME);
+  const candidate = typeof value === 'string' ? value : null;
+  if (pendingNonce && candidate && timingSafeStringsEqual(candidate, pendingNonce)) return;
+  if (!(await csrfEvidenceIsValid(candidate, expectedSessionRef, subjectId))) throw new CsrfError();
 }
 
 export const CSRF_FIELD_NAME = FIELD_NAME;

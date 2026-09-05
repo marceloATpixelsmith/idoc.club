@@ -7,8 +7,8 @@ const source = (path: string) => readFileSync(path, 'utf8');
 test('primary login MFA computes WebAuthn availability from the store, never from client input, before setting the pending cookie', () => {
   const login = source('lib/auth/mfa/login.ts');
   assert.match(login, /const hasWebAuthn = \(await webauthnStore\.getActiveCredentials\(subjectId, MFA_APPLICATION_ID\)\)\.length > 0;/);
-  assert.match(login, /setPendingPrimaryAuth\(\{ applicationId: MFA_APPLICATION_ID, factorId: factor\.factorId, hasWebAuthn,/);
-  assert.match(login, /setPendingPrimaryAuth\(\{ applicationId: MFA_APPLICATION_ID, factorId: enrollment\.factorId, hasWebAuthn: false,/);
+  assert.match(login, /setPendingPrimaryAuth\(\{ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce\(\), factorId: factor\.factorId, hasWebAuthn,/);
+  assert.match(login, /setPendingPrimaryAuth\(\{ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce\(\), factorId: enrollment\.factorId, hasWebAuthn: false,/);
 });
 
 test('the pending-primary-auth cookie strictly validates hasWebAuthn is boolean before trusting it', () => {

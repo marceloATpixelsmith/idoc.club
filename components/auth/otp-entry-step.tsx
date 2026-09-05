@@ -6,7 +6,7 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
-import { CsrfField } from '@/components/security/csrf-field';
+import { CsrfEvidence } from '@/components/security/csrf-evidence';
 import type { ActionState } from '@/lib/auth/middleware';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -17,6 +17,7 @@ export function OtpEntryStep({
   cancelAction,
   cancelLabel = 'Use a different email address',
   description,
+  pendingCsrfNonce,
   resendAction,
   title = 'Verify your email',
   verifyAction,
@@ -25,6 +26,7 @@ export function OtpEntryStep({
   cancelAction: OtpAction;
   cancelLabel?: string;
   description: ReactNode;
+  pendingCsrfNonce?: string;
   resendAction: OtpAction;
   title?: string;
   verifyAction: OtpAction;
@@ -51,7 +53,7 @@ export function OtpEntryStep({
     <AuthShell description={description} title={title}>
       <div className="idoc-auth-otp">
         <form action={formAction} className="idoc-auth-form" ref={formRef}>
-          <CsrfField />
+          <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
           <InputOTP
             autoComplete="one-time-code"
             containerClassName="w-full"
@@ -95,7 +97,7 @@ export function OtpEntryStep({
             <span>Resend in {secondsLeft}s</span>
           ) : (
             <form action={resendFormAction} className="inline">
-              <CsrfField />
+              <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
               <button disabled={resendPending} type="submit">Resend</button>
             </form>
           )}
@@ -104,7 +106,7 @@ export function OtpEntryStep({
         {resendState.error ? <p className="idoc-auth-error" role="alert">{resendState.error}</p> : null}
 
         <form action={cancelFormAction} className="idoc-auth-actions__center">
-          <CsrfField />
+          <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
           <button className="idoc-auth-link border-0 bg-transparent p-0" type="submit">{cancelLabel}</button>
         </form>
       </div>

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { users, type NewUser } from '@/lib/db/schema';
-import { hashPassword, setSession } from '@/lib/auth/session';
+import { hashPassword, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
 import { validatedAction } from '@/lib/auth/middleware';
 import { emailDisplayForm, normalizeEmail } from '@/lib/membership/validation';
 import { passwordSchema } from '@/lib/auth/password-policy';
@@ -16,6 +16,7 @@ import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { clearPendingSignup, getPendingSignup, markPendingSignupVerified, startPendingSignup } from '@/lib/auth/pending-signup';
 import { defaultTiming, equalizeAnonymousResponse } from '@/lib/security/response-timing';
 import { requestOrigin } from '@/lib/security/rate-limit';
+import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
 
 const startSignupSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -49,42 +50,47 @@ export const startSignup = validatedAction(startSignupSchema, async ({ email: ra
 
 const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 
-export const verifySignupOtp = validatedAction(verifyOtpSchema, async ({ code }) => {
+export const verifySignupOtp = validatedAction(verifyOtpSchema, async ({ code }, formData) => {
   const pending = await getPendingSignup();
   if (!pending) return { error: 'Your signup session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
   const result = await verifyEmailOtp(pending.email, 'signup_verification', code, origin);
   if (result === 'verified') {
-    await markPendingSignupVerified(pending.email, pending.emailDisplay);
+    await markPendingSignupVerified(pending);
     redirect('/sign-up?stage=password');
   }
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
   if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
   if (result === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   return { error: 'That code is incorrect.' };
-});
+}, { skipCsrf: true });
 
-export const resendSignupOtp = validatedAction(z.object({}), async () => {
+export const resendSignupOtp = validatedAction(z.object({}), async (_data, formData) => {
   const pending = await getPendingSignup();
   if (!pending) return { error: 'Your signup session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
   const result = await issueEmailOtp(pending.email, 'signup_verification', { origin });
   if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.' };
   if (result.status === 'cooldown') return { error: 'Please wait before requesting another code.' };
   if (result.status === 'delivery_failed') return { error: 'We could not send that verification code. Please try again in a moment.' };
   return { success: 'A new code was sent.' };
-});
+}, { skipCsrf: true });
 
-export const cancelSignup = validatedAction(z.object({}), async () => {
+export const cancelSignup = validatedAction(z.object({}), async (_data, formData) => {
+  const pending = await getPendingSignup();
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending?.csrfNonce ?? null);
   await clearPendingSignup();
   redirect('/sign-up');
-});
+}, { skipCsrf: true });
 
 const completeSignupSchema = z.object({ password: passwordSchema });
 
-export const completeSignup = validatedAction(completeSignupSchema, async ({ password }) => {
+export const completeSignup = validatedAction(completeSignupSchema, async ({ password }, formData) => {
   const pending = await getPendingSignup();
   if (!pending || !pending.verified) return { error: 'Your signup session expired. Start again.' };
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, pending.email)).limit(1);
   if (existing) { await clearPendingSignup(); return { error: 'An account with this email already exists. Sign in instead.' }; }
   if ((await checkPasswordBreached(password)).breached) {
@@ -100,4 +106,4 @@ export const completeSignup = validatedAction(completeSignupSchema, async ({ pas
   await clearPendingSignup();
   await setSession(createdUser);
   redirect('/onboarding');
-});
+}, { skipCsrf: true });

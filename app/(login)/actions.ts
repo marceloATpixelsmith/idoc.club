@@ -5,7 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
-import { requireCsrfTokenValue } from '@/lib/security/csrf';
+import { requireCsrfTokenOrPendingNonce, requireCsrfTokenValue } from '@/lib/security/csrf';
 import { redirect } from 'next/navigation';
 import {
   validatedAction,
@@ -36,13 +36,14 @@ const signInSchema = z.object({
 /** Canonical login ordering from pixelsmith-auth-reference contract 1.9.0:
  * email -> password -> authoritative email-verification gate -> MFA/risk -> session.
  * Migrated/imported status is not a public login branch. */
-export const signIn = validatedAction(signInSchema, async (data) => {
+export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { password } = data;
   const email = normalizeEmail(data.email);
   const pending = await getPendingLogin();
   if (!pending || pending.stage !== 'password' || pending.email !== email) {
     return { error: 'Your sign-in session expired. Start again.', email };
   }
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
 
   // Independent dual-bucket throttle on the credential comparison itself (distinct from the
   // Turnstile+rate-limited email-collection step that gates entry into this pending-login stage):
@@ -81,7 +82,7 @@ export const signIn = validatedAction(signInSchema, async (data) => {
       return { error: 'Too many attempts. Please try again in a few minutes.', email };
     }
     await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion,
-      role === 'member' && foundUser.accountState !== 'migrated_pending');
+      role === 'member' && foundUser.accountState !== 'migrated_pending', pending.csrfNonce);
     redirect('/sign-in');
   }
 
@@ -90,7 +91,7 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
     if (issued.status === 'delivery_failed') return { error: 'We could not send the verification code. Please try again.', email };
     if (issued.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.', email };
-    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, false);
+    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, false, pending.csrfNonce);
     redirect('/sign-in');
   }
 
@@ -123,7 +124,7 @@ export const signIn = validatedAction(signInSchema, async (data) => {
     const issued = await issueEmailOtp(email, 'login_verification', { origin, userId: foundUser.id });
     if (issued.status === 'delivery_failed') return { error: 'We could not send the verification code. Please try again.', email };
     if (issued.status === 'rate_limited') return { error: 'Too many attempts. Please try again in a few minutes.', email };
-    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, true);
+    await requireLoginOtp(email, foundUser.id, foundUser.sessionVersion, true, pending.csrfNonce);
     redirect('/sign-in');
   }
 
@@ -134,7 +135,7 @@ export const signIn = validatedAction(signInSchema, async (data) => {
   await clearPendingLogin();
   await setSession(foundUser);
   redirect('/dashboard');
-});
+}, { skipCsrf: true });
 
 const accountLinkSchema = z.object({ email: z.string().email().max(255) });
 const NEUTRAL_RECOVERY = 'If an eligible account uses this address, an email will be sent.';

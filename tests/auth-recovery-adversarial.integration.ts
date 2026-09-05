@@ -328,6 +328,54 @@ test('AUTH-CSRF-003 a session revoked elsewhere does not lock its own browser ou
   assert.equal(row.revokeReason, 'test-revoked-elsewhere');
 });
 
+// A real, reproducible production report: the general site-wide CSRF cookie is sourced from a
+// React Context living in the root layout, which Next.js can reuse (not re-render) across the
+// client-side navigation that follows every redirect() this flow's Server Actions make -- so the
+// token a later stage's form submits can legitimately drift from the current general cookie
+// through no fault of the member's (confirmed via real production logs: reason 'value_mismatch',
+// expectedSessionPresent false -- not a session or multi-tab issue at all). Proves the actual fix:
+// pending-primary-auth's own per-flow csrfNonce is now accepted as an alternative to the general
+// cookie, so a request whose general CSRF token has drifted still succeeds as long as it carries
+// the flow's own current nonce -- and that a request carrying neither still fails closed.
+test('AUTH-CSRF-003 the pending-flow-bound csrfNonce is accepted as an alternative to a drifted general CSRF cookie', async (t) => {
+  await t.test('authorizeAuthenticatorRecovery succeeds on the pending nonce even when the general cookie token is wrong', async () => {
+    const entry = await recoveryEntry();
+    const pending = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
+    assert.ok(pending?.csrfNonce);
+    await withTestRequestCookies(entry.cookies, () => redirected(() =>
+      authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, pending.csrfNonce))));
+    const advanced = await withTestRequestCookies(entry.cookies, getPendingPrimaryAuth);
+    assert.equal(advanced?.stage, 'replacement');
+  });
+
+  await t.test('confirmTotpEnrollment succeeds on the pending nonce even when the general cookie token is wrong', async () => {
+    await resetIdoc();
+    const entry = await replacement();
+    const [factor] = await sql<{ encrypted_secret: string }[]>`
+      select encrypted_secret from idoc.mfa_factors where factor_id=${entry.pending.factorId}`;
+    const newSecret = decryptTotpSecret(factor.encrypted_secret, () => encryptionKey);
+    const result = await withTestRequestCookies(entry.cookies, () =>
+      confirmTotpEnrollment({}, form('code', totp(newSecret), entry.pending.csrfNonce)));
+    assert.match(String((result as { success?: string }).success), /replaced/);
+  });
+
+  await t.test('acknowledgeRecoveryCodes succeeds on the pending nonce even when the general cookie token is wrong', async () => {
+    await resetIdoc();
+    const entry = await recoveryAck();
+    await withTestRequestCookies(entry.cookies, () => redirected(() =>
+      acknowledgeRecoveryCodes({}, form('saved', 'yes', entry.pending.csrfNonce))));
+  });
+
+  await t.test('a request carrying neither a valid general token nor the real pending nonce still fails closed', async () => {
+    await resetIdoc();
+    const entry = await recoveryEntry();
+    await assert.rejects(
+      withTestRequestCookies(entry.cookies, () =>
+        authorizeAuthenticatorRecovery({}, form('recoveryCode', recoveryCode, 'neither-real-value-nor-the-nonce'))),
+    );
+  });
+});
+
 // AUTH-STORAGE-006 / AUTH-CRYPTO-003: "TOTP secrets MUST be encrypted... browser persistence, logs,
 // analytics, and telemetry are prohibited" / "Raw TOTP secrets, recovery codes, remembered tokens,
 // and provisioning artifacts MUST be excluded from logs and telemetry." This drives a real, complete

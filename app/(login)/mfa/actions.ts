@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { validatedAction } from '@/lib/auth/middleware';
 import { clearPendingLogin } from '@/lib/auth/pending-login';
 import { clearSession, getSession, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
-import { requireCsrfTokenValue } from '@/lib/security/csrf';
+import { requireCsrfTokenOrPendingNonce, requireCsrfTokenValue } from '@/lib/security/csrf';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
@@ -114,9 +114,10 @@ async function failAndRestart(message: string) {
   return { error: message };
 }
 
-export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, remember }) => {
+export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, remember }, formData) => {
   const context = await pendingAccount('challenge');
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), context.pending.csrfNonce);
   if (!(await allowed(context.user.id, 'mfa_login_verify'))) return { error: 'Too many attempts. Sign in again later.' };
   const config = mfaConfiguration();
   let result;
@@ -153,7 +154,7 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
   await clearPendingLogin();
   await setSession(context.user);
   redirect(context.pending.returnTo);
-});
+}, { skipCsrf: true });
 
 export async function beginLoginWebAuthn(csrfToken: string) {
   await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), await rawCanonicalUserId());
@@ -212,16 +213,18 @@ async function auditRecoveryCodeRejected(userId: number) {
     values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, 'invalid_or_already_consumed_code')`);
 }
 
-export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.literal('yes') }), async () => {
+export const beginAuthenticatorRecovery = validatedAction(z.object({ recover: z.literal('yes') }), async (_data, formData) => {
   const context = await pendingAccount('challenge');
   if (!context) return failAndRestart('Your verification session expired. Sign in again.');
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), context.pending.csrfNonce);
   await setPendingPrimaryAuth({ ...context.pending, stage: 'recovery-entry' });
   return { success: 'Enter one of your recovery codes.' };
-});
+}, { skipCsrf: true });
 
-export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recoveryCode: z.string().trim().min(1).max(64) }), async ({ recoveryCode }) => {
+export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recoveryCode: z.string().trim().min(1).max(64) }), async ({ recoveryCode }, formData) => {
   const context = await pendingAccount('recovery-entry');
   if (!context) return failAndRestart('Your recovery session expired. Sign in again.');
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), context.pending.csrfNonce);
   if (!(await allowed(context.user.id, 'mfa_recovery_code_verify'))) return failAndRestart('Too many attempts. Sign in again later.');
   const config = mfaConfiguration();
   const enrollment = prepareTotpEnrollment({ accountLabel: context.user.email, applicationId: MFA_APPLICATION_ID,
@@ -250,13 +253,14 @@ export const authorizeAuthenticatorRecovery = validatedAction(z.object({ recover
   await setPendingPrimaryAuth({ ...context.pending, factorId: recovery.factorId, stage: 'replacement',
     transactionId: recovery.transactionId });
   redirect('/mfa');
-});
+}, { skipCsrf: true });
 
-export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }) => {
+export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }, formData) => {
   const pending = await getPendingPrimaryAuth();
   const stage = pending?.stage === 'replacement' ? 'replacement' : 'enrollment';
   const context = await pendingAccount(stage);
   if (!context) return failAndRestart('Your setup session expired. Sign in again.');
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), context.pending.csrfNonce);
   if (!(await allowed(context.user.id, 'mfa_enrollment_confirm'))) return { error: 'Too many attempts. Sign in again later.' };
   const config = mfaConfiguration();
   const resolveKey = (keyId: string) => resolveMfaEncryptionKey(config, keyId);
@@ -312,11 +316,12 @@ export const confirmTotpEnrollment = validatedAction(codeSchema, async ({ code }
   if (result.status !== 'activated') return failAndRestart('Your setup session expired. Sign in again.');
   await setPendingPrimaryAuth({ ...context.pending, stage: 'recovery-ack' });
   return { recoveryCodes: recovery.codes, success: 'Authenticator enabled. Save these recovery codes now.' };
-});
+}, { skipCsrf: true });
 
-export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.literal('yes') }), async () => {
+export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.literal('yes') }), async (_data, formData) => {
   const context = await pendingAccount('recovery-ack');
   if (!context) return failAndRestart('Your setup session expired. Sign in again.');
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), context.pending.csrfNonce);
   const activeFactor = await mfaStore.getActiveTotp(String(context.user.id), MFA_APPLICATION_ID);
   if (!activeFactor || activeFactor.factorId !== context.pending.factorId) return failAndRestart('Your setup session expired. Sign in again.');
   const acknowledgement = await mfaStore.consumeRecoveryAcknowledgement({
@@ -331,10 +336,12 @@ export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.lite
   await clearPendingLogin();
   await setSession(context.user);
   redirect(context.pending.returnTo);
-});
+}, { skipCsrf: true });
 
-export const cancelMfa = validatedAction(z.object({ cancel: z.literal('yes') }), async () => {
+export const cancelMfa = validatedAction(z.object({ cancel: z.literal('yes') }), async (_data, formData) => {
+  const pending = await getPendingPrimaryAuth();
+  await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending?.csrfNonce ?? null);
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   redirect('/sign-in');
-});
+}, { skipCsrf: true });
