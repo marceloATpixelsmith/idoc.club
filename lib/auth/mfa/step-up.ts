@@ -11,7 +11,6 @@ import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { sensitiveActionRequiresFreshStepUp } from './decision';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from './login';
 import { mfaStore } from './store';
-import { webauthnStore } from './webauthn-store';
 import type { MfaRole, SensitiveAction } from './types';
 
 type StepUpUser = Pick<User, 'id' | 'sessionVersion'>;
@@ -43,7 +42,7 @@ type BoundEvidence = {
 // genuinely need a password (change-password, delete-account, Google link/unlink) keep the original
 // one-more-submission behavior rather than caching a plaintext credential server-side to avoid it.
 export type PendingStepUp = BoundEvidence & { resume?: { kind: string; payload: Record<string, string> }; returnTo: string; transactionId: string };
-type FreshStepUp = BoundEvidence & { method: 'totp' | 'webauthn'; transactionId: string };
+type FreshStepUp = BoundEvidence & { method: 'totp'; transactionId: string };
 
 function cookieOptions(maxAge: number) {
   return { httpOnly: true, maxAge, path: '/', sameSite: 'lax' as const, secure: true };
@@ -115,21 +114,13 @@ export async function requireFreshStepUp(
   const factor = configuredFactor === 'totp'
     ? await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID)
     : null;
-  const webAuthnCredentials = configuredFactor === 'totp'
-    ? await webauthnStore.getActiveCredentials(String(user.id), MFA_APPLICATION_ID)
-    : [];
   const hasFreshTotp = Boolean(fresh && fresh.method === 'totp' && typeof fresh.transactionId === 'string' &&
     factor?.factorId === fresh.factorId && matches(fresh, user, binding.session, binding.role, action));
-  const hasFreshWebAuthn = Boolean(fresh && fresh.method === 'webauthn' && typeof fresh.transactionId === 'string' &&
-    webAuthnCredentials.some((credential) => credential.factorId === fresh.factorId) &&
-    matches(fresh, user, binding.session, binding.role, action));
-  // TOTP remains the policy-required factor for privileged step-up; a WebAuthn credential, when the
-  // account has one, is an accepted alternate proof of that same requirement -- not a separate policy.
   const freshnessRequired = sensitiveActionRequiresFreshStepUp({ configuredFactor, hasFreshPolicyFactor: false,
-    hasFreshTotp, hasFreshWebAuthn: false });
-  if (!freshnessRequired && !hasFreshTotp && !hasFreshWebAuthn) return { required: false as const };
+    hasFreshTotp });
+  if (!freshnessRequired && !hasFreshTotp) return { required: false as const };
 
-  if ((hasFreshTotp || hasFreshWebAuthn) && fresh) {
+  if (hasFreshTotp && fresh) {
     const claimed = await mfaStore.consumeStepUpAuthority({ applicationId: MFA_APPLICATION_ID,
       factorId: fresh.factorId, nowMs: Date.now(), subjectId: String(user.id), transactionId: fresh.transactionId });
     (await requestCookies()).delete(AUTHORITY_COOKIE);
@@ -155,14 +146,11 @@ export async function getPendingStepUp() {
   if (!user || user.deletedAt || !['active', 'onboarding'].includes(user.accountState)) return null;
   const binding = await currentBinding(user);
   if (!binding || !matches(pending, user, binding.session, binding.role, pending.action)) return null;
-  const webAuthnCredentials = await webauthnStore.getActiveCredentials(String(user.id), MFA_APPLICATION_ID);
-  return { pending, user, hasWebAuthn: webAuthnCredentials.length > 0 };
+  return { pending, user };
 }
 
-/** Grants fresh step-up authority proven via the given factor. `factorId`/`method` describe whichever
- * factor was actually just verified (TOTP or, when the account has one, WebAuthn) -- not necessarily
- * pending.factorId, which always names the TOTP factor the challenge was created against. */
-export async function grantFreshStepUp(pending: PendingStepUp, evidence: { factorId: string; method: 'totp' | 'webauthn' }) {
+/** Grants fresh step-up authority proven via the given factor. */
+export async function grantFreshStepUp(pending: PendingStepUp, evidence: { factorId: string; method: 'totp' }) {
   const authority: FreshStepUp = { action: pending.action, applicationId: pending.applicationId,
     factorId: evidence.factorId, method: evidence.method, role: pending.role, sessionId: pending.sessionId,
     sessionVersion: pending.sessionVersion, subjectId: pending.subjectId, transactionId: pending.transactionId };

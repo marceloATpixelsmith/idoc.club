@@ -10,16 +10,14 @@ import { Suspense, useActionState } from 'react';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
 import { CsrfField } from '@/components/security/csrf-field';
 import { GoogleIdentityCard } from './google-identity-card';
-import { PasskeysCard } from './passkeys-card';
 
 type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
 type DeleteState = { error?: string; success?: string };
-type Passkey = { credentialId: string; deviceName: string | null; createdAt: string; lastUsedAt: string | null };
-type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; passkeys: Passkey[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
+type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export function SecurityClient({ currentDeviceRemembered, currentSessionId, passkeys, privileged, sessions, totpConfigured }: SecurityClientProps) {
+export function SecurityClient({ currentDeviceRemembered, currentSessionId, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
   const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
   const [replaceState, replaceAction] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
@@ -63,9 +61,6 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, pass
         {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline">Replace authenticator</Button></form>
           <form action={recoveryAction}><CsrfField /><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
-      <Suspense fallback={null}>
-        <PasskeysCard passkeys={passkeys} />
-      </Suspense>
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-gray-500">This browser is {currentDeviceRemembered ? 'remembered for password sign-in verification' : 'not currently remembered'}.</p>
         {(forgetCurrentState.error || forgetAllState.error) ? <p className="text-sm text-red-500">{forgetCurrentState.error || forgetAllState.error}</p> : null}

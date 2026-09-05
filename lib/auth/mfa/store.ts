@@ -179,30 +179,6 @@ export class PostgresMfaStore implements MfaStore {
     });
   }
 
-  /** Completes an existing login/step-up challenge transaction on behalf of a factor whose proof was
-   * already verified externally (WebAuthn's assertion signature, checked by the caller before this is
-   * called) -- the counter-replay bookkeeping acceptTotpChallenge performs is TOTP-specific and does
-   * not apply here. */
-  async acceptChallengeWithVerifiedFactor(input: { transactionId: string; purpose: MfaChallengePurpose; factorId: string; subjectId: string; applicationId: string; nowMs: number }) {
-    const id = userId(input.subjectId);
-    if (id === null) return 'invalid-transaction' as const;
-    return this.sql.begin(async (tx) => {
-      const [challenge] = await tx<Record<string, unknown>[]>`
-        select * from idoc.mfa_challenge_transactions where transaction_id=${input.transactionId} for update`;
-      if (!challenge || Number(challenge.user_id) !== id || challenge.application_id !== input.applicationId ||
-        challenge.purpose !== input.purpose || challenge.consumed_at ||
-        timestampMs(challenge.expires_at) <= input.nowMs) return 'invalid-transaction' as const;
-      if (Number(challenge.attempt_count) >= Number(challenge.max_attempts)) return 'attempts-exhausted' as const;
-      const [factor] = await tx<Record<string, unknown>[]>`
-        select * from idoc.mfa_factors where factor_id=${input.factorId} for update`;
-      if (!factor || Number(factor.user_id) !== id || factor.application_id !== input.applicationId ||
-        factor.status !== 'active' || factor.factor_type !== 'webauthn') return 'inactive' as const;
-      await tx`update idoc.mfa_challenge_transactions set consumed_at=${timestamp(input.nowMs)},
-        satisfied_factor_id=${input.factorId}, attempt_count=attempt_count+1 where transaction_id=${input.transactionId}`;
-      return 'accepted' as const;
-    });
-  }
-
   async consumeStepUpAuthority(input: { transactionId: string; factorId: string; subjectId: string; applicationId: string; nowMs: number }) {
     const id = userId(input.subjectId);
     if (id === null) return 'invalid' as const;

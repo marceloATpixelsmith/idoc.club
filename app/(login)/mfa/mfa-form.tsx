@@ -2,15 +2,12 @@
 
 import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { useActionState, useState } from 'react';
-import { startAuthentication } from '@simplewebauthn/browser';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfEvidence } from '@/components/security/csrf-evidence';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
-import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import {
-  acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery, beginLoginWebAuthn,
-  beginStepUpWebAuthn, cancelMfa, confirmTotpEnrollment, verifyLoginTotp, verifyLoginWebAuthn,
-  verifyStepUpTotp, verifyStepUpWebAuthn,
+  acknowledgeRecoveryCodes, authorizeAuthenticatorRecovery, beginAuthenticatorRecovery,
+  cancelMfa, confirmTotpEnrollment, verifyLoginTotp, verifyStepUpTotp,
 } from './actions';
 
 type State = { error?: string; recoveryCodes?: string[]; success?: string };
@@ -28,47 +25,8 @@ function totpSecretFromProvisioningUri(provisioningUri: string): string {
   }
 }
 
-function PasskeyButton({ mode }: { mode: 'challenge' | 'step-up' }) {
-  const [error, setError] = useState<string>();
-  const [pending, setPending] = useState(false);
-
-  async function usePasskey() {
-    setPending(true);
-    setError(undefined);
-    try {
-      const csrfToken = readCsrfTokenFromDocumentCookie();
-      const begin = mode === 'challenge' ? await beginLoginWebAuthn(csrfToken) : await beginStepUpWebAuthn(csrfToken);
-      let response;
-      try {
-        response = await startAuthentication({ optionsJSON: begin.options });
-      } catch {
-        setError('Passkey verification was cancelled or not completed.');
-        return;
-      }
-      const formData = new FormData();
-      formData.set('ceremonyId', begin.ceremonyId);
-      formData.set('credentialJson', JSON.stringify(response));
-      formData.set('csrf_token', csrfToken);
-      const verify = mode === 'challenge' ? verifyLoginWebAuthn : verifyStepUpWebAuthn;
-      const result = await verify({}, formData);
-      if (result?.error) setError(result.error);
-    } catch {
-      setError('That passkey could not be used. Try again.');
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="idoc-auth-form">
-      <button disabled={pending} onClick={usePasskey} type="button">{pending ? <AuthPendingLabel text="Verifying" /> : 'Use a passkey instead'}</button>
-      {error ? <p className="idoc-auth-error" role="alert">{error}</p> : null}
-    </div>
-  );
-}
-
-export function MfaForm({ hasWebAuthn, mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
-  hasWebAuthn?: boolean; mode: Mode; pendingCsrfNonce?: string; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
+export function MfaForm({ mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl, rememberDeviceDays, rememberDeviceEnabled }: {
+  mode: Mode; pendingCsrfNonce?: string; provisioningUri?: string; qrCodeDataUrl?: string; rememberDeviceDays?: number; rememberDeviceEnabled?: boolean;
 }) {
   const action = mode === 'challenge' ? verifyLoginTotp : mode === 'step-up' ? verifyStepUpTotp : mode === 'recovery-entry' ? authorizeAuthenticatorRecovery : confirmTotpEnrollment;
   const [state, formAction, pending] = useActionState<State, FormData>(action, {});
@@ -164,7 +122,6 @@ export function MfaForm({ hasWebAuthn, mode, pendingCsrfNonce, provisioningUri, 
       {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
-    {(mode === 'challenge' || mode === 'step-up') && hasWebAuthn ? <PasskeyButton mode={mode} /> : null}
     {mode === 'challenge' ? <form action={recover}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="recover" type="hidden" value="yes" />
       <button disabled={recovering} type="submit">Use a recovery code</button></form> : null}
     {mode === 'replacement' ? <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" />

@@ -22,13 +22,11 @@ export function decideMfa(input: {
 }
 
 export function sensitiveActionRequiresFreshStepUp(input: {
-  configuredFactor: 'none' | 'policy-factor' | 'totp' | 'webauthn';
+  configuredFactor: 'none' | 'policy-factor' | 'totp';
   hasFreshPolicyFactor: boolean;
   hasFreshTotp: boolean;
-  hasFreshWebAuthn: boolean;
 }): boolean {
   if (input.configuredFactor === 'none') return false;
   if (input.configuredFactor === 'totp') return !input.hasFreshTotp;
-  if (input.configuredFactor === 'webauthn') return !input.hasFreshWebAuthn;
   return !input.hasFreshPolicyFactor;
 }

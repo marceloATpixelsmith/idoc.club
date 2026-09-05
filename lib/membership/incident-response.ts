@@ -55,7 +55,7 @@ function isForceRevokeIncidentRaceViolation(error: unknown): boolean {
  * Immediately and durably revokes every form of standing authority a user holds: every session
  * (bumping sessionVersion so an already-signed cookie can never be replayed back in, matching
  * suspendUserAccount's mechanism), every remembered/trusted login device, and every MFA factor
- * (TOTP and WebAuthn alike -- both live in idoc.mfa_factors, see schema.ts). Unlike
+ * (idoc.mfa_factors, see schema.ts). Unlike
  * suspendUserAccount, this deliberately does not change users.account_state: the account itself may
  * still be legitimate (a stolen laptop, a leaked session, a suspected credential compromise) and the
  * owner should be able to sign back in and re-enroll MFA once they've regained control, not be

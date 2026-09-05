@@ -26,7 +26,6 @@ export type PendingPrimaryAuth = {
   // general CSRF cookie by the actions in app/(login)/mfa/actions.ts that drive this flow.
   csrfNonce: string;
   factorId: string;
-  hasWebAuthn: boolean;
   method: 'google' | 'password';
   sessionVersion: number;
   stage: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack';
@@ -52,7 +51,7 @@ export async function getPendingPrimaryAuth(): Promise<PendingPrimaryAuth | null
     const { payload } = await jwtVerify(token, mfaConfiguration().continuationKey, { algorithms: ['HS256'] });
     if (payload.applicationId !== 'idoc.club' || !Number.isSafeInteger(payload.subjectId) ||
       !Number.isSafeInteger(payload.sessionVersion) || typeof payload.factorId !== 'string' ||
-      typeof payload.hasWebAuthn !== 'boolean' || typeof payload.csrfNonce !== 'string' || payload.csrfNonce.length < 16 ||
+      typeof payload.csrfNonce !== 'string' || payload.csrfNonce.length < 16 ||
       typeof payload.transactionId !== 'string' || !['google', 'password'].includes(String(payload.method)) ||
       !['challenge', 'enrollment', 'recovery-entry', 'replacement', 'recovery-ack'].includes(String(payload.stage)) || typeof payload.returnTo !== 'string') return null;
     return payload as unknown as PendingPrimaryAuth;

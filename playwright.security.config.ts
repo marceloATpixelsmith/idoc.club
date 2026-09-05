@@ -31,11 +31,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes',
-      // A WebAuthn relying-party ID must be a valid domain; Chromium rejects a bare IP address
-      // (127.0.0.1) even though it's an otherwise-trustworthy local origin. Every other spec still
-      // navigates via the 127.0.0.1 baseURL below and is unaffected -- nothing in this suite asserts
-      // on BASE_URL's literal value -- so only the WebAuthn spec needs to address the app at localhost.
-      BASE_URL: 'http://localhost:3100',
+      BASE_URL: 'http://127.0.0.1:3100',
       POSTGRES_URL: databaseUrl,
       TEST_DATABASE_URL: databaseUrl,
       RATE_LIMIT_HASH_KEY: process.env.RATE_LIMIT_HASH_KEY ?? 'security-e2e-rate-limit-key-32-bytes',
