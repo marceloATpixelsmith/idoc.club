@@ -56,9 +56,9 @@ export function AccountForm() {
           <Suspense fallback={<AccountFields state={state} />}>
             <AccountFieldsWithData state={state} />
           </Suspense>
-          {state.error ? <p className="text-red-500 text-sm">{state.error}</p> : null}
-          {state.success ? <p className="text-green-500 text-sm">{state.success}</p> : null}
-          <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white" disabled={isPending}>
+          {state.error ? <p className="text-red-400 text-sm">{state.error}</p> : null}
+          {state.success ? <p className="text-green-400 text-sm">{state.success}</p> : null}
+          <Button type="submit" className="bg-primary hover:opacity-90 text-primary-foreground" disabled={isPending}>
             {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save Changes'}
           </Button>
         </form>

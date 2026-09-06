@@ -24,9 +24,9 @@ export function AdminProfileForm({ member, profileId }: { member: Member; profil
     <label className="block">Professional classification<select className="block w-full border p-2" name="classification" onChange={(event) => setClassification(event.target.value)} value={classification}><option value="judge">Judge</option><option value="steward">Steward</option><option value="judge_steward">Judge + Steward</option><option value="veterinarian">Veterinarian</option></select></label>
     {classification !== 'veterinarian' ? <fieldset className="space-y-4 border p-4"><legend>Official information</legend><Select initial={official?.nationalFederationCountryCode ?? ''} label="National Federation" name="nationalFederationCountryCode" required values={ISO_COUNTRY_CODES} /><Select initial={official?.idocRegion ?? ''} label="IDOC Region" name="idocRegion" required values={IDOC_REGIONS} /><label className="block">FEI ID (optional)<input className="block w-full border p-2" defaultValue={official?.feiId ?? ''} name="feiId" /></label>{classification === 'judge' || classification === 'judge_steward' ? <><CheckboxGroup initial={judge?.officialStatuses ?? []} label="Official Status as Judge" name="judgeStatus" values={JUDGE_STATUSES} /><Select initial={judge?.isTechnicalDelegate ? 'yes' : 'no'} label="Technical Delegate" name="isTechnicalDelegate" required values={['yes', 'no']} /></> : null}{classification === 'steward' || classification === 'judge_steward' ? <CheckboxGroup initial={steward?.officialStatuses ?? []} label="Official Status as Steward" name="stewardStatus" values={STEWARD_STATUSES} /> : null}</fieldset> : null}
     <label className="block">Administrative reason (required)<textarea className="block w-full border p-2" name="reason" required rows={2} /></label>
-    {state.error ? <p className="text-red-600">{state.error}</p> : null}
-    {state.success ? <p className="text-green-700">{state.success}</p> : null}
-    <button className="rounded bg-orange-600 px-4 py-2 text-white" disabled={pending} type="submit">Save correction</button>
+    {state.error ? <p className="text-red-400">{state.error}</p> : null}
+    {state.success ? <p className="text-green-400">{state.success}</p> : null}
+    <button className="rounded bg-primary px-4 py-2 text-primary-foreground" disabled={pending} type="submit">Save correction</button>
   </form>;
 }
 

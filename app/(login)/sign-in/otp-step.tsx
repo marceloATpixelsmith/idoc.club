@@ -11,7 +11,7 @@ export function OtpStep({ allowRemember, email, pendingCsrfNonce }: { allowRemem
       pendingCsrfNonce={pendingCsrfNonce}
       resendAction={resendLoginOtp}
       verifyFields={allowRemember ? (
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input name="remember" type="checkbox" />
           Remember me for 2 weeks
         </label>

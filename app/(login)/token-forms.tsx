@@ -67,7 +67,7 @@ function Feedback({ state }: { state: State }) {
   return (
     <>
       {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
-      {state.success ? <p className="m-0 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{state.success}</p> : null}
+      {state.success ? <p className="m-0 rounded-md bg-green-500/15 px-3 py-2 text-sm text-green-300">{state.success}</p> : null}
     </>
   );
 }

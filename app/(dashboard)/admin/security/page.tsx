@@ -15,12 +15,12 @@ export default async function AdminSecurityPage() {
       <section className="mt-6">
         <h2 className="text-lg font-semibold">Google OAuth client-secret rotation</h2>
         {latest ? (
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-muted-foreground">
             Latest evidence: version <strong>{latest.toVersion}</strong>, recorded{' '}
             {new Date(latest.createdAtMs).toISOString()}.
           </p>
         ) : (
-          <p className="mt-2 text-sm text-gray-600">No rotation evidence has been recorded yet.</p>
+          <p className="mt-2 text-sm text-muted-foreground">No rotation evidence has been recorded yet.</p>
         )}
         <GoogleOauthRotationForm activeVersion={activeVersion} />
       </section>

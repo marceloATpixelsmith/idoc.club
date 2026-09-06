@@ -27,8 +27,8 @@ export function InputOTPSlot({ className, index, ...props }: ComponentProps<'div
   return (
     <div
       className={cn(
-        'relative flex h-12 w-12 items-center justify-center rounded-lg border border-gray-300 text-lg font-medium text-gray-900 transition-colors',
-        isActive && 'z-10 border-gray-900 ring-2 ring-gray-900/10',
+        'relative flex h-12 w-12 items-center justify-center rounded-lg border border-input text-lg font-medium text-foreground transition-colors',
+        isActive && 'z-10 border-primary ring-2 ring-primary/10',
         className,
       )}
       {...props}
@@ -36,7 +36,7 @@ export function InputOTPSlot({ className, index, ...props }: ComponentProps<'div
       {char}
       {hasFakeCaret ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-5 w-px animate-pulse bg-gray-900" />
+          <div className="h-5 w-px animate-pulse bg-foreground" />
         </div>
       ) : null}
     </div>

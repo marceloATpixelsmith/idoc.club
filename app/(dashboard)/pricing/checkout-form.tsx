@@ -28,7 +28,7 @@ export function CheckoutForm({ mode, label }: { label: string; mode: 'payment' |
           </>
         )}
       </Button>
-      {state.error && <p className="text-red-500 text-sm mt-2">{state.error}</p>}
+      {state.error && <p className="text-red-400 text-sm mt-2">{state.error}</p>}
     </form>
   );
 }

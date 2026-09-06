@@ -1,9 +1,23 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { Archivo, Barlow } from 'next/font/google';
 import { getPublicUser } from '@/lib/db/queries';
 import { currentCsrfToken } from '@/lib/security/csrf';
 import { CsrfProvider } from '@/components/security/csrf-provider';
 import { SWRConfig } from 'swr';
+
+const archivo = Archivo({
+  subsets: ['latin'],
+  variable: '--font-archivo',
+  display: 'swap'
+});
+
+const barlow = Barlow({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-barlow',
+  display: 'swap'
+});
 
 export const metadata: Metadata = {
   title: 'IDOC',
@@ -41,9 +55,9 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className="bg-white font-sans text-black dark:bg-gray-950 dark:text-white"
+      className={`${archivo.variable} ${barlow.variable} bg-background font-sans text-foreground`}
     >
-      <body className="min-h-[100dvh] bg-gray-50">
+      <body className="min-h-[100dvh] bg-background">
         <CsrfProvider token={csrfToken}>
           <SWRConfig
             value={{

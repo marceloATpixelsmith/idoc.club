@@ -10,7 +10,7 @@ export function EmailStep({ initialError = '' }: { initialError?: string }) {
       action={startSignup}
       actions={(
         <div className="idoc-auth-actions__center">
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link className="idoc-auth-link" href="/sign-in">Log in</Link>
           </span>

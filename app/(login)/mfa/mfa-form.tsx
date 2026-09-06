@@ -108,13 +108,13 @@ export function MfaForm({ mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl
         <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" autoFocus disabled={pending} maxLength={6} name="code" onChange={setCode} pattern={REGEXP_ONLY_DIGITS} required value={code}>
           <InputOTPGroup className="grid w-full grid-cols-6 gap-2">
             {[0, 1, 2, 3, 4, 5].map((index) => (
-              <InputOTPSlot className="h-[52px] w-full rounded-[10px] border-[1.5px] border-slate-200 bg-white text-xl font-semibold text-slate-900" index={index} key={index} />
+              <InputOTPSlot className="h-[52px] w-full rounded-[10px] border-[1.5px] border-input bg-surface text-xl font-semibold text-foreground" index={index} key={index} />
             ))}
           </InputOTPGroup>
         </InputOTP>
       </div>
       {mode === 'challenge' && rememberDeviceEnabled ? (
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input name="remember" type="checkbox" />
           Remember this device for {rememberDeviceDays} days
         </label>

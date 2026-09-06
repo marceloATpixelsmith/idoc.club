@@ -48,7 +48,7 @@ export default async function DashboardPage() {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
         <h1 className="text-2xl font-semibold">Pay for your IDOC membership</h1>
-        <p className="max-w-md text-gray-600">
+        <p className="max-w-md text-muted-foreground">
           Your account isn&apos;t an active member yet. Complete payment to unlock your profile, security settings, and the rest of your dashboard.
         </p>
         <Link href="/pricing"><Button size="lg">Pay for membership</Button></Link>
@@ -68,17 +68,17 @@ export default async function DashboardPage() {
 
       <section className="mt-6 max-w-md rounded-lg border p-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-700">Type: <span className="font-medium text-gray-900">{classificationLabel(roles)}</span></p>
+          <p className="text-sm text-foreground">Type: <span className="font-medium text-foreground">{classificationLabel(roles)}</span></p>
           <Link className="text-sm underline" href="/dashboard/profile">Change type</Link>
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <p className="text-sm text-gray-700">Status: {MEMBERSHIP_STATUS_LABELS[entitlement!.status] ?? entitlement!.status}</p>
+          <p className="text-sm text-foreground">Status: {MEMBERSHIP_STATUS_LABELS[entitlement!.status] ?? entitlement!.status}</p>
         </div>
         <div className="mt-1 flex items-center justify-between gap-3">
-          <p className="text-sm text-gray-700">Expires: {entitlement!.validUntil}</p>
+          <p className="text-sm text-foreground">Expires: {entitlement!.validUntil}</p>
           {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
         </div>
-        {message ? <p className="mt-1 text-sm text-gray-700">{message}</p> : null}
+        {message ? <p className="mt-1 text-sm text-foreground">{message}</p> : null}
         {canManageBilling && (
           <form action={manageBillingAction}>
             <CsrfField />
@@ -88,11 +88,11 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mt-6 max-w-2xl">
-        <h2 className="font-medium text-gray-900">Payment history</h2>
+        <h2 className="font-medium text-foreground">Payment history</h2>
         <div className="mt-2 overflow-x-auto">
           <table className="min-w-full border text-sm">
             <thead>
-              <tr className="border-b bg-gray-50 text-left">
+              <tr className="border-b bg-surface text-left">
                 <th className="p-2">Date</th>
                 <th className="p-2">Amount</th>
                 <th className="p-2">Source</th>
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
             </thead>
             <tbody>
               {history.length === 0 && (
-                <tr><td className="p-2 text-gray-500" colSpan={3}>No payments on file yet.</td></tr>
+                <tr><td className="p-2 text-muted-foreground" colSpan={3}>No payments on file yet.</td></tr>
               )}
               {history.map((payment) => (
                 <tr key={payment.id} className="border-b">

@@ -24,19 +24,19 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
 
   return (
     <>
-      <div className="lg:hidden flex items-center justify-between bg-white border-b border-gray-200 p-4">
-        <span className="font-medium">Dashboard</span>
+      <div className="lg:hidden flex items-center justify-between bg-background border-b border-border p-4">
+        <span className="font-medium uppercase tracking-[0.14em] text-sm">Dashboard</span>
         <Button className="-mr-3" variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)}>
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle navigation</span>
         </Button>
       </div>
-      <nav className={`flex-col gap-1 border-b border-gray-200 bg-white p-2 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 ${isMenuOpen ? 'flex' : 'hidden'}`}>
+      <nav className={`flex-col gap-1 border-b border-border bg-background p-2 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 ${isMenuOpen ? 'flex' : 'hidden'}`}>
         {tabs.map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
-              className={`w-full justify-start gap-2 rounded-none border-b-2 border-transparent shadow-none lg:w-auto lg:justify-center ${pathname === tab.href ? 'border-gray-900 text-gray-900' : 'text-gray-500'}`}
+              className={`w-full justify-start gap-2 rounded-none border-b-2 border-transparent shadow-none uppercase tracking-[0.14em] text-xs lg:w-auto lg:justify-center ${pathname === tab.href ? 'border-primary text-foreground' : 'text-muted-foreground'}`}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}

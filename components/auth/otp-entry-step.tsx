@@ -74,7 +74,7 @@ export function OtpEntryStep({
             <InputOTPGroup className="grid w-full grid-cols-6 gap-2">
               {[0, 1, 2, 3, 4, 5].map((index) => (
                 <InputOTPSlot
-                  className="h-[52px] w-full rounded-[10px] border-[1.5px] border-slate-200 bg-white text-xl font-semibold text-slate-900"
+                  className="h-[52px] w-full rounded-[10px] border-[1.5px] border-input bg-surface text-xl font-semibold text-foreground"
                   index={index}
                   key={index}
                 />
