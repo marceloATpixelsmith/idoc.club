@@ -5,15 +5,15 @@ This document is the authoritative IDOC contract for the Geoapify-backed interna
 ## Scope and data flow
 
 - The member chooses an address country before using autocomplete.
-- The browser sends only the selected ISO 3166-1 alpha-2 country code and the partial address text currently typed in the Address 1 field to the IDOC server route `GET /api/address/autocomplete`.
+- The browser sends the selected ISO 3166-1 alpha-2 country code and the partial address text currently typed in the Address 1 field to the IDOC server route `GET /api/address/autocomplete`, plus the browser's current coordinates when the member has granted the one-time geolocation permission prompt (a best-effort ranking hint only -- see below).
 - The browser never receives or sends the Geoapify API key.
-- The IDOC server authenticates the current account before any provider call, rate-limits the request, and then sends the partial address text plus selected country filter to Geoapify.
-- Geoapify returns candidate structured address data. IDOC returns only the fields needed to populate the editable onboarding form: formatted address, address line 1, city/locality, state/province/region, postal code, country name, and country code.
+- The IDOC server authenticates the current account before any provider call, rate-limits the request, and then sends the partial address text, selected country filter, and (when present) the coordinates as a proximity bias to Geoapify.
+- Geoapify returns candidate structured address data. IDOC returns only the fields needed to populate the editable onboarding form: formatted address, address line 1, city/locality, state/province/region, postal code, country name, country code, and (when the provider result carries one) a finer-grained locality below city, such as a colonia on a Mexican address, which the onboarding form copies into Address 2.
 - Selecting a suggestion never makes the provider result authoritative. Every populated address field remains editable, and final profile validation remains server-side in IDOC.
 
 ## Privacy contract
 
-Geoapify is an external processor for optional address autocomplete. Partial home-address text entered into the autocomplete field and the selected country are disclosed to Geoapify when autocomplete is available and the member types at least three characters. IDOC must not send the member's name, email address, FEI ID, professional role, membership status, payment information, session token, or authentication secret to Geoapify.
+Geoapify is an external processor for optional address autocomplete. Partial home-address text entered into the autocomplete field and the selected country are disclosed to Geoapify when autocomplete is available and the member types at least three characters. When the member's browser grants the geolocation permission prompt, their current coordinates are also disclosed to Geoapify as a one-time ranking bias for that request; a denied, dismissed, or unavailable permission simply leaves every request unbiased, with no separate prompt or retry. This is the only page in the application granted the browser's geolocation permission (`next.config.ts`'s `Permissions-Policy` denies it everywhere else). IDOC must not send the member's name, email address, FEI ID, professional role, membership status, payment information, session token, or authentication secret to Geoapify.
 
 Autocomplete is optional convenience functionality. A member must always be able to complete onboarding by entering the address manually if Geoapify is unavailable, disabled, unconfigured, rate-limited, or returns no useful suggestion. Provider failure must not block profile submission once all locally required fields are valid.
 

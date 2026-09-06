@@ -67,6 +67,25 @@ test('optional Address 2 normalizes empty and whitespace-only input to null and 
   }
 });
 
+test('optional FEI ID normalizes empty and whitespace-only input to null and trims a provided value, for both Judge and Steward', async () => {
+  const cases: Array<{ input: string | undefined; expected: string | null }> = [
+    { expected: null, input: '' },
+    { expected: null, input: '   ' },
+    { expected: null, input: undefined },
+    { expected: 'FEI-12345', input: '  FEI-12345  ' },
+  ];
+  for (const { input, expected } of cases) {
+    for (const role of [judgeRole, stewardRole]) {
+      await resetIdoc();
+      const user = await createUser('onboarding');
+      await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } },
+        () => createOwnMemberProfile({ ...profileInput(), roles: [{ ...role, feiId: input }] }));
+      const [row] = await sql`select r.fei_id from idoc.professional_roles r join idoc.profiles p on p.id=r.profile_id where p.user_id=${user.id}`;
+      assert.equal(row.fei_id, expected, `${role.roleType}:${JSON.stringify(input)}`);
+    }
+  }
+});
+
 test('required text fields are trimmed before persistence', async () => {
   const user = await createUser('onboarding');
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile({
@@ -187,7 +206,7 @@ test('the classification list rejects duplicates, unsupported combinations, and 
   }
 });
 
-test('invalid federation, region, FEI ID, official status, and country values are rejected for every classification that carries them', async () => {
+test('invalid federation, region, official status, and country values are rejected for every classification that carries them', async () => {
   const cases = [
     // National federation: Judge alone, Steward alone, and Steward's half of Judge + Steward.
     { ...profileInput(), roles: [{ ...judgeRole, nationalFederationCountryCode: 'XX' }] },
@@ -197,10 +216,6 @@ test('invalid federation, region, FEI ID, official status, and country values ar
     { ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] },
     { ...profileInput(), roles: [{ ...stewardRole, idocRegion: 'Invented Region' }] },
     { ...profileInput(), roles: [judgeRole, { ...stewardRole, idocRegion: 'Invented Region' }] },
-    // FEI ID.
-    { ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] },
-    { ...profileInput(), roles: [{ ...stewardRole, feiId: '' }] },
-    { ...profileInput(), roles: [judgeRole, { ...stewardRole, feiId: '' }] },
     // Official status.
     { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: ['Invented Judge Status'] }] },
     { ...profileInput(), roles: [{ ...stewardRole, officialStatuses: ['Invented Steward Status'] }] },

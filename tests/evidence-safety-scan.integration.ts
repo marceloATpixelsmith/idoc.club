@@ -64,7 +64,7 @@ test('a representative sweep across identity, onboarding, profile, recovery, res
   emails.push(rejectedOnboarding.email);
   await assert.rejects(withTestMembershipBoundary(
     { actor: { id: rejectedOnboarding.id, roles: [] } },
-    () => createOwnMemberProfile({ ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] }),
+    () => createOwnMemberProfile({ ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] }),
   ));
 
   // Profile edit: one success, one rejected invalid edit.

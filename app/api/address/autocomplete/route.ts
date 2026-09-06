@@ -9,11 +9,13 @@ type GeoapifyResult = {
   city?: string;
   country?: string;
   country_code?: string;
+  district?: string;
   formatted?: string;
   housenumber?: string;
   postcode?: string;
   state?: string;
   street?: string;
+  suburb?: string;
 };
 
 type GeoapifyPayload = { results?: GeoapifyResult[] };
@@ -27,6 +29,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const text = searchParams.get('text')?.trim() ?? '';
   const country = searchParams.get('country')?.trim().toUpperCase() ?? '';
+  const rawLat = searchParams.get('lat');
+  const rawLon = searchParams.get('lon');
+  const lat = Number(rawLat);
+  const lon = Number(rawLon);
+  // A bare bias hint, not a hard filter: an out-of-range or absent value is simply not sent to
+  // Geoapify, never rejected, since this only ever ranks results the countrycode filter already
+  // admits -- it cannot smuggle in a result from the wrong country. Both params must actually be
+  // present: Number(null) is 0, a plausible-looking coordinate, so an absent lat/lon (geolocation
+  // denied, unavailable, or still pending) must never silently become a false "equator/prime
+  // meridian" bias instead of no bias at all.
+  const hasBias = rawLat !== null && rawLon !== null
+    && Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 
   if (text.length < 3 || text.length > 160 || !COUNTRY_CODES.has(country)) {
     return Response.json({ suggestions: [] });
@@ -52,6 +66,7 @@ export async function GET(request: Request) {
   endpoint.searchParams.set('filter', `countrycode:${country.toLowerCase()}`);
   endpoint.searchParams.set('limit', '6');
   endpoint.searchParams.set('lang', 'en');
+  if (hasBias) endpoint.searchParams.set('bias', `proximity:${lon},${lat}`);
   endpoint.searchParams.set('apiKey', apiKey);
 
   try {
@@ -68,6 +83,10 @@ export async function GET(request: Request) {
       city: result.city ?? '',
       country: result.country ?? '',
       countryCode: result.country_code?.toUpperCase() ?? country,
+      // Geoapify's "suburb" is the finer-grained locality below city -- e.g. a Mexican address's
+      // colonia -- falling back to "district" when a provider response only carries that instead.
+      // Neither is captured by any other field above, so without this it is silently dropped.
+      district: result.suburb ?? result.district ?? '',
       formatted: result.formatted ?? result.address_line1 ?? text,
       postalCode: result.postcode ?? '',
       stateProvince: result.state ?? '',

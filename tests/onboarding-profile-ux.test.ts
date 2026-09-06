@@ -79,6 +79,18 @@ test('federation default behavior is documented as member-field contract', () =>
   assert.match(onboardingBehavior, /If the member clears National Federation, it becomes eligible for automatic defaulting again/);
 });
 
+test('region default behavior is documented as member-field contract', () => {
+  assert.match(onboardingBehavior, /IDOC Region is a required professional field and remains fully editable/);
+  assert.match(onboardingBehavior, /must not overwrite that explicitly selected region/);
+  assert.match(onboardingBehavior, /Mexico defaults to Central & Latin America, not North America/);
+});
+
+test('geolocation bias and locality-field behavior are documented as member-field contract', () => {
+  assert.match(onboardingBehavior, /never gates or delays typing/);
+  assert.match(onboardingBehavior, /colonia on a Mexican address/);
+  assert.match(onboardingBehavior, /copies that value into Address 2 automatically/);
+});
+
 test('address entry is country-first with Geoapify-assisted structured population and manual fallback', () => {
   assert.ok(source.indexOf('htmlFor="countryCode"') < source.indexOf('htmlFor="address1"'));
   assert.match(source, /disabled=\{!countryCode\}/);
@@ -100,6 +112,64 @@ test('changing address country clears stale structured address values', () => {
   for (const reset of ['setAddress1', 'setAddress2', 'setCity', 'setStateProvince', 'setPostalCode']) {
     assert.match(source, new RegExp(`${reset}\\(''\\)`));
   }
+});
+
+test('IDOC Region defaults from address country without overwriting an explicit manual selection', () => {
+  assert.match(source, /import \{ IDOC_REGION_BY_COUNTRY \} from '@\/lib\/membership\/idoc-regions-by-country'/);
+  assert.match(source, /const \[idocRegion, setIdocRegion\] = useState\(''\)/);
+  assert.match(source, /const \[regionWasManuallyEdited, setRegionWasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /if \(!regionWasManuallyEdited\)/);
+  assert.match(source, /setIdocRegion\(nextCountryCode \? IDOC_REGION_BY_COUNTRY\[nextCountryCode\] \?\? '' : ''\)/);
+  assert.match(source, /function handleRegionChange/);
+  assert.match(source, /setRegionWasManuallyEdited\(Boolean\(nextRegion\)\)/);
+  assert.match(source, /onChange=\{handleRegionChange\}/);
+  assert.match(source, /id="idocRegion".*value=\{idocRegion\}/);
+});
+
+test('the IDOC Region default table maps every ISO country code to a valid IDOC Region exactly once', async () => {
+  const { ISO_COUNTRY_CODES, IDOC_REGIONS } = await import('../lib/membership/validation.ts');
+  const { IDOC_REGION_BY_COUNTRY } = await import('../lib/membership/idoc-regions-by-country.ts');
+  const mapped = Object.keys(IDOC_REGION_BY_COUNTRY);
+  assert.deepEqual(mapped.slice().sort(), ISO_COUNTRY_CODES.slice().sort());
+  for (const code of ISO_COUNTRY_CODES) {
+    assert.ok((IDOC_REGIONS as readonly string[]).includes(IDOC_REGION_BY_COUNTRY[code]), `${code} maps to an invalid region`);
+  }
+});
+
+test('address autocomplete is biased by a best-effort, non-blocking browser geolocation hint', () => {
+  assert.match(source, /const \[geolocationBias, setGeolocationBias\] = useState<\{ lat: number; lon: number \} \| null>\(null\)/);
+  assert.match(source, /navigator\.geolocation\.getCurrentPosition\(/);
+  assert.match(source, /setGeolocationBias\(\{ lat: position\.coords\.latitude, lon: position\.coords\.longitude \}\)/);
+  assert.match(source, /params\.set\('lat', String\(geolocationBias\.lat\)\)/);
+  assert.match(source, /params\.set\('lon', String\(geolocationBias\.lon\)\)/);
+  assert.match(autocompleteRoute, /endpoint\.searchParams\.set\('bias', `proximity:\$\{lon\},\$\{lat\}`\)/);
+  // Bias is applied only after the existing text-length/country validation already passed --
+  // never a basis on its own to accept or reject a request.
+  assert.ok(autocompleteRoute.indexOf('if (text.length') < autocompleteRoute.indexOf("searchParams.set('bias'"));
+});
+
+test('a selected suggestion\'s finer-grained locality (e.g. a Mexican address\'s colonia) fills Address 2 automatically, and never clears an existing value when absent', () => {
+  assert.match(autocompleteRoute, /district: result\.suburb \?\? result\.district \?\? ''/);
+  assert.match(source, /if \(suggestion\.district\) setAddress2\(suggestion\.district\)/);
+  const chooseAddressStart = source.indexOf('function chooseAddress');
+  const chooseAddressEnd = source.indexOf('\n  }', chooseAddressStart);
+  assert.ok(chooseAddressStart >= 0 && chooseAddressEnd > chooseAddressStart);
+  assert.ok(source.indexOf('setAddress2', chooseAddressStart) < chooseAddressEnd, 'setAddress2 must be called from within chooseAddress');
+  // A Codex review finding: an unconditional setAddress2(suggestion.district) would silently erase
+  // a member's own manually-typed Address 2 the moment they picked any suggestion the provider
+  // returned without a district/suburb field, contradicting the documented "leaves Address 2
+  // untouched" behavior.
+  assert.doesNotMatch(source.slice(chooseAddressStart, chooseAddressEnd), /(?<!if \(suggestion\.district\) )setAddress2\(suggestion\.district\)/);
+});
+
+// A Codex review finding: URLSearchParams.get() returns null for an absent param, and Number(null)
+// is 0 -- a plausible-looking coordinate -- so without checking the raw params are actually present
+// first, every request made before geolocation resolves (or after it's denied/unavailable) would
+// silently bias toward the Gulf of Guinea (0,0) instead of staying unbiased.
+test('an absent lat/lon never coerces to a false (0,0) proximity bias', () => {
+  assert.match(autocompleteRoute, /const rawLat = searchParams\.get\('lat'\)/);
+  assert.match(autocompleteRoute, /const rawLon = searchParams\.get\('lon'\)/);
+  assert.match(autocompleteRoute, /const hasBias = rawLat !== null && rawLon !== null/);
 });
 
 test('Geoapify credential remains server-only and autocomplete is limited to authenticated users and selected country', () => {
@@ -132,5 +202,8 @@ test('Geoapify privacy, credential rotation, availability, and failure contracts
     '60 provider calls per account',
     '180 provider calls per request origin',
     'must not send the member\'s name, email address, fei id',
+    'their current coordinates are also disclosed to geoapify',
+    'a denied, dismissed, or unavailable permission simply leaves every request unbiased',
+    'the only page in the application granted the browser\'s geolocation permission',
   ]) assert.ok(normalizedContract.includes(required), `missing provider contract detail: ${required}`);
 });

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
+import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
 import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { CsrfField } from '@/components/security/csrf-field';
 import { completeOnboarding } from './actions';
@@ -18,6 +19,9 @@ type AddressSuggestion = {
   city: string;
   country: string;
   countryCode: string;
+  // The finer-grained locality below city (e.g. a Mexican address's colonia), when the provider
+  // returns one -- see chooseAddress, which copies this into Address 2.
+  district: string;
   formatted: string;
   postalCode: string;
   stateProvince: string;
@@ -48,6 +52,8 @@ export function OnboardingWizard() {
   const [countryCode, setCountryCode] = useState('');
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState('');
   const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
+  const [idocRegion, setIdocRegion] = useState('');
+  const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(false);
   const [address1, setAddress1] = useState('');
   const [address2, setAddress2] = useState('');
   const [city, setCity] = useState('');
@@ -56,6 +62,21 @@ export function OnboardingWizard() {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [autocompleteAvailable, setAutocompleteAvailable] = useState(true);
   const [selectedAddressValue, setSelectedAddressValue] = useState('');
+  const [geolocationBias, setGeolocationBias] = useState<{ lat: number; lon: number } | null>(null);
+
+  useEffect(() => {
+    // A one-time, best-effort bias hint for ranking autocomplete suggestions -- without it, a
+    // short/common street name matches too many places worldwide to be useful (the reported
+    // complaint: address lookup "almost doesn't find the locations"). Never blocks or delays
+    // typing: an unavailable API, a denied/dismissed permission prompt, or any error just leaves
+    // suggestions unbiased, exactly as before this existed.
+    if (step !== 'details' || typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => setGeolocationBias({ lat: position.coords.latitude, lon: position.coords.longitude }),
+      () => {},
+      { maximumAge: 300_000, timeout: 5000 },
+    );
+  }, [step]);
 
   useEffect(() => {
     if (step !== 'details') return;
@@ -77,7 +98,7 @@ export function OnboardingWizard() {
       window.clearTimeout(autofillDelay);
       window.removeEventListener('pageshow', syncReadiness);
     };
-  }, [address1, city, classification, countryCode, nationalFederationCountryCode, postalCode, stateProvince, step]);
+  }, [address1, city, classification, countryCode, idocRegion, nationalFederationCountryCode, postalCode, stateProvince, step]);
 
   useEffect(() => {
     const query = address1.trim();
@@ -90,6 +111,10 @@ export function OnboardingWizard() {
     const timer = window.setTimeout(async () => {
       try {
         const params = new URLSearchParams({ country: countryCode, text: query });
+        if (geolocationBias) {
+          params.set('lat', String(geolocationBias.lat));
+          params.set('lon', String(geolocationBias.lon));
+        }
         const response = await fetch(`/api/address/autocomplete?${params.toString()}`, {
           cache: 'no-store',
           signal: controller.signal,
@@ -113,7 +138,7 @@ export function OnboardingWizard() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [address1, countryCode, selectedAddressValue, step]);
+  }, [address1, countryCode, geolocationBias, selectedAddressValue, step]);
 
   function handleCountryChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextCountryCode = event.target.value;
@@ -121,6 +146,9 @@ export function OnboardingWizard() {
     if (!nationalFederationCountryCode || !federationWasManuallyEdited) {
       setNationalFederationCountryCode(nextCountryCode);
       setFederationWasManuallyEdited(false);
+    }
+    if (!regionWasManuallyEdited) {
+      setIdocRegion(nextCountryCode ? IDOC_REGION_BY_COUNTRY[nextCountryCode] ?? '' : '');
     }
     setAddress1('');
     setAddress2('');
@@ -139,10 +167,17 @@ export function OnboardingWizard() {
     setFederationWasManuallyEdited(Boolean(nextFederationCountryCode));
   }
 
+  function handleRegionChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextRegion = event.target.value;
+    setIdocRegion(nextRegion);
+    setRegionWasManuallyEdited(Boolean(nextRegion));
+  }
+
   function chooseAddress(suggestion: AddressSuggestion) {
     const line1 = suggestion.addressLine1 || suggestion.formatted;
     setAddress1(line1);
     setSelectedAddressValue(line1);
+    if (suggestion.district) setAddress2(suggestion.district);
     setCity(suggestion.city);
     setStateProvince(suggestion.stateProvince);
     setPostalCode(suggestion.postalCode);
@@ -237,7 +272,7 @@ export function OnboardingWizard() {
             {countryCode ? (
               <div className="mt-1">
                 <p className="text-xs text-gray-500">
-                  {autocompleteAvailable ? 'Choose a suggestion to fill city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
+                  {autocompleteAvailable ? 'Choose a suggestion to fill Address 2, city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
                 </p>
                 <p className="mt-0.5 text-right text-[10px] text-gray-400">
                   <a className="underline decoration-gray-300 underline-offset-2" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
@@ -282,14 +317,14 @@ export function OnboardingWizard() {
               </div>
               <div>
                 <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="idocRegion">IDOC Region</Label>
-                <select className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm" id="idocRegion" name="idocRegion" required>
+                <select className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm" id="idocRegion" name="idocRegion" onChange={handleRegionChange} required value={idocRegion}>
                   <option value="">Select</option>
                   {IDOC_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="feiId">FEI ID</Label>
-                <Input id="feiId" name="feiId" required />
+                <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="feiId">FEI ID (optional)</Label>
+                <Input id="feiId" name="feiId" />
               </div>
             </div>
             {classification === 'judge' || classification === 'judge_steward' ? (

@@ -54,7 +54,6 @@ test('onboarding validates and atomically creates each approved classification w
 test('invalid professional payloads persist nothing', async () => {
   const invalid = [
     { ...profileInput(), countryCode: 'XX' },
-    { ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] },
     { ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] },
     { ...profileInput(), roles: [{ ...judgeRole, nationalFederationCountryCode: 'XX' }] },
     { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: ['Invented status'] }] },
@@ -87,7 +86,6 @@ test('canonical field validation rejects every invalid edit without changing the
     { ...profileInput(), countryCode: 'XX' },
     { ...profileInput(), roles: [{ ...judgeRole, nationalFederationCountryCode: 'XX' }] },
     { ...profileInput(), roles: [{ ...judgeRole, idocRegion: 'Invented Region' }] },
-    { ...profileInput(), roles: [{ ...judgeRole, feiId: '' }] },
     { ...profileInput(), roles: [{ ...judgeRole, officialStatuses: ['Invented Judge'] }] },
     { ...profileInput(), roles: [{ ...stewardRole, officialStatuses: ['Invented Steward'] }] },
     { ...profileInput(), roles: [{ ...judgeRole, isTechnicalDelegate: 'yes' }] },

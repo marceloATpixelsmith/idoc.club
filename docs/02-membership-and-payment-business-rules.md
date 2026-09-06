@@ -48,7 +48,7 @@ All fields listed below are required unless marked optional. Email is also the m
   - North America
   - Central & Latin America
   - Pacific
-- FEI ID
+- FEI ID (optional)
 
 ### Judge
 
