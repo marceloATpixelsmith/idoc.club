@@ -93,16 +93,20 @@ test('a forged Origin cannot reach the real sign-out action either: a state-chan
 // session cookie would succeed on Origin checking alone even if the token check were deleted
 // entirely. These two tests isolate the token requirement itself: a real browser, a real
 // authenticated session, and a real Next.js Server Action, with only the CSRF evidence disturbed.
+// /dashboard/profile now also renders the account name/email form (its own separate Server Action)
+// above the professional profile form, so selectors below must scope to the profile form
+// specifically -- the one carrying the "firstName" field -- rather than grab the page's first form.
 test('a real profile-update Server Action rejects a same-origin, correctly authenticated submission whose CSRF token field has been tampered with', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/profile');
+  const profileForm = page.locator('form').filter({ has: page.locator('input[name="firstName"]') });
   await page.evaluate(() => {
-    const field = document.querySelector<HTMLInputElement>('input[name="csrf_token"]');
+    const field = document.querySelector<HTMLInputElement>('form:has(input[name="firstName"]) input[name="csrf_token"]');
     if (!field) throw new Error('csrf_token field not found');
     field.value = `${field.value.slice(0, -4)}0000`;
   });
-  await page.click('button[type="submit"]');
+  await profileForm.locator('button[type="submit"]').click();
   await expect(page.locator('text=session security check failed')).toBeVisible();
   // The session itself is unaffected -- this is a rejected mutation, not a broken session.
   const identity = await context.request.get('/api/user');
@@ -114,8 +118,9 @@ test('the same real profile-update Server Action rejects the submission when the
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/profile');
+  const profileForm = page.locator('form').filter({ has: page.locator('input[name="firstName"]') });
   await context.clearCookies({ name: 'idoc-csrf' });
-  await page.click('button[type="submit"]');
+  await profileForm.locator('button[type="submit"]').click();
   await expect(page.locator('text=session security check failed')).toBeVisible();
   await context.close();
 });
