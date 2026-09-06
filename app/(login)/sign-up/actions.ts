@@ -17,15 +17,17 @@ import { clearPendingSignup, getPendingSignup, markPendingSignupVerified, startP
 import { defaultTiming, equalizeAnonymousResponse } from '@/lib/security/response-timing';
 import { requestOrigin } from '@/lib/security/rate-limit';
 import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
+import { parseMemberClassification } from '@/lib/membership/classification';
 
 const startSignupSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
+  membership: z.string().optional(),
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
 });
 
 /** Neutral outward behavior regardless of whether the email already has an account: an existing
  * account never receives a signup code, while outward response shape/timing remain neutral. */
-export const startSignup = validatedAction(startSignupSchema, async ({ email: rawEmail, turnstileToken }) => {
+export const startSignup = validatedAction(startSignupSchema, async ({ email: rawEmail, membership: rawMembership, turnstileToken }) => {
   const startedAt = defaultTiming.now();
   const email = normalizeEmail(rawEmail);
   const emailDisplay = emailDisplayForm(rawEmail);
@@ -42,7 +44,8 @@ export const startSignup = validatedAction(startSignupSchema, async ({ email: ra
   }
   await equalizeAnonymousResponse(startedAt, defaultTiming);
   if (issueError) return { email, error: issueError };
-  await startPendingSignup(email, emailDisplay);
+  const membership = parseMemberClassification(rawMembership);
+  await startPendingSignup(email, emailDisplay, membership);
   // The signup steps intentionally share one pathname, but a distinct query target forces the
   // browser/RSC tree to navigate after the HttpOnly pending-signup cookie changes.
   redirect('/sign-up?stage=verify');
@@ -105,5 +108,6 @@ export const completeSignup = validatedAction(completeSignupSchema, async ({ pas
   if (!createdUser) return { error: 'Something went wrong creating your account. Please try again.' };
   await clearPendingSignup();
   await setSession(createdUser);
-  redirect('/onboarding');
+  const membershipQuery = pending.membership ? `?membership=${pending.membership}` : '';
+  redirect(`/dashboard${membershipQuery}`);
 }, { skipCsrf: true });

@@ -63,7 +63,6 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     const rows = await client<{ id: number }[]>`
       with created_user as (
         insert into idoc.users (
-          name,
           email,
           password_hash,
           account_state,
@@ -73,7 +72,6 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
           created_at,
           updated_at
         ) values (
-          ${identity.name},
           ${email},
           ${passwordHash},
           'onboarding',
@@ -119,7 +117,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
 
   return {
     newAccount,
-    redirectTo: newAccount || user.accountState === 'onboarding' ? '/onboarding' : identity.returnTo || '/dashboard',
+    redirectTo: identity.returnTo || '/dashboard',
     user,
   };
 }

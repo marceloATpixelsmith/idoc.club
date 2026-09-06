@@ -1,4 +1,4 @@
-import { getPublicUser } from '@/lib/db/queries';
+import { getPublicUser, getUser } from '@/lib/db/queries';
 import { AuthorizationError } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 
@@ -16,7 +16,10 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 
 export async function GET() {
   try {
-    await requireAccountAccess('profile');
+    const user = await getUser();
+    if (!user) throw new AuthorizationError();
+    if (user.accountState === 'onboarding') await requireAccountAccess('onboarding');
+    else await requireAccountAccess('profile');
   } catch (error) {
     if (!(error instanceof AuthorizationError)) throw error;
     return Response.json(null, { headers: NO_STORE });

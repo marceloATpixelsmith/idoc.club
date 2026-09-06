@@ -9,6 +9,10 @@ const envExample = await readFile('.env.example', 'utf8');
 const providerContract = await readFile('docs/15-international-address-autocomplete-security-and-operations.md', 'utf8');
 const onboardingBehavior = await readFile('docs/16-onboarding-demographic-form-behavior.md', 'utf8');
 const rateLimitSource = await readFile('lib/security/rate-limit.ts', 'utf8');
+const dashboardPage = await readFile('app/(dashboard)/dashboard/page.tsx', 'utf8');
+const signupPage = await readFile('app/(login)/sign-up/page.tsx', 'utf8');
+const pendingSignup = await readFile('lib/auth/pending-signup.ts', 'utf8');
+const classification = await readFile('lib/membership/classification.ts', 'utf8');
 
 test('profile creation remains disabled until all required details and consents are complete', () => {
   assert.match(source, /form\.checkValidity\(\)/);
@@ -53,6 +57,25 @@ test('onboarding field labels stay bold and section headers are uppercase withou
 test('going back to classification clears stale form readiness', () => {
   assert.match(source, /setDetailsComplete\(false\); setStep\('type'\)/);
   assert.match(source, /setClassification\(option\.value\); setDetailsComplete\(false\)/);
+});
+
+test('a canonical membership URL parameter survives signup and preselects an emphasized onboarding card', () => {
+  assert.match(classification, /\['judge', 'steward', 'judge_steward', 'veterinarian'\]/);
+  assert.match(signupPage, /parseMemberClassification\(params\.membership\)/);
+  assert.match(pendingSignup, /membership: MemberClassification \| null/);
+  assert.match(dashboardPage, /initialClassification=\{parseMemberClassification\(membership\)\}/);
+  assert.match(source, /useState<Classification \| null>\(initialClassification\)/);
+  assert.match(source, /aria-pressed=\{classification === option\.value\}/);
+  assert.match(source, /ring-2 ring-primary/);
+});
+
+test('onboarding is rendered on My Membership and advances directly to payment', async () => {
+  const onboardingAction = await readFile('app/(dashboard)/onboarding/actions.ts', 'utf8');
+  const onboardingRoute = await readFile('app/(dashboard)/onboarding/page.tsx', 'utf8');
+  assert.match(dashboardPage, /<OnboardingWizard/);
+  assert.match(onboardingRoute, /redirect\(`\/dashboard\$\{query\}`\)/);
+  assert.match(onboardingAction, /redirect\('\/pricing'\)/);
+  assert.match(source, /Continue to payment/);
 });
 
 test('country selectors display names while preserving ISO alpha-2 values', () => {

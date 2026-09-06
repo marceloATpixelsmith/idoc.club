@@ -1,6 +1,6 @@
 {
-  "id": "f4a8c6e2-9d3b-4c17-8e5a-2b6f1d9a7c40",
-  "prevId": "be2b2d98-23ce-4579-8f94-a267c7624692",
+  "id": "6f40a7a0-2234-4c57-9518-ae5e637e17e4",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3293,12 +3293,6 @@
           "type": "serial",
           "primaryKey": true,
           "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
         },
         "email": {
           "name": "email",

@@ -2,18 +2,21 @@ import { redirect } from 'next/navigation';
 import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
+import { getUser } from '@/lib/db/queries';
 
 // Seminar authoring, registration, and payment are Release 5 scope (docs/08-product-roadmap-and-
 // functional-requirements.md) and do not exist yet -- there is no seminar data anywhere in this
 // application. This tab exists so the member-facing navigation already matches the requested final
 // shape; it renders an honest empty state rather than fabricating seminar data.
 export default async function SeminarsPage() {
+  const user = await getUser();
+  if (user?.accountState === 'onboarding') redirect('/dashboard');
   const actor = await requireAccountAccess('profile');
   const privileged = isPrivilegedActor(actor);
   const member = await getOwnPrivateMember();
   // An administrator/super_admin is never a member and must never be gated by membership payment
   // status or pushed into onboarding for lacking a member profile.
-  if (!member && !privileged) redirect('/onboarding');
+  if (!member && !privileged) redirect('/dashboard');
   if (member && !privileged && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   return (
     <main className="flex-1 p-4 lg:p-8">

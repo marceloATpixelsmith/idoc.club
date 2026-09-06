@@ -94,7 +94,7 @@ test('link and unlink persist audit evidence and security notification outbox re
 
 test('Google buttons point to the canonical start route, tagged with the page the user started from so a failure can send them back to it', () => {
   assert.match(login, /googleHref="\/api\/auth\/google\/start\?intent=login"/);
-  assert.match(signup, /googleHref="\/api\/auth\/google\/start\?intent=signup"/);
+  assert.match(signup, /googleHref=\{`\/api\/auth\/google\/start\?intent=signup\$\{membershipQuery\}`\}/);
 });
 
 test('an unexpected start-route failure (no GoogleOidcError.code) still names which phase broke, without logging the exception itself', () => {

@@ -7,6 +7,9 @@ import { CsrfField } from '@/components/security/csrf-field';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
 import { PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
 import { Button } from '@/components/ui/button';
+import { getUser } from '@/lib/db/queries';
+import { parseMemberClassification } from '@/lib/membership/classification';
+import { OnboardingWizard } from '@/app/(dashboard)/onboarding/onboarding-wizard';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -34,12 +37,24 @@ function daysUntil(validUntil: string, today: string): number {
   return Math.round((new Date(`${validUntil}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / MILLISECONDS_PER_DAY);
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ membership?: string }> }) {
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
   // page to see their status and pay/renew, not just currently-entitled members (docs/02's
   // "limited expired-account view").
-  const actor = await requireAccountAccess('profile');
+  const user = await getUser();
+  const onboarding = user?.accountState === 'onboarding';
+  const actor = await requireAccountAccess(onboarding ? 'onboarding' : 'profile');
   const privileged = isPrivilegedActor(actor);
+  const { membership } = await searchParams;
+
+  if (onboarding) {
+    return (
+      <main className="flex-1 p-4 lg:p-8">
+        <OnboardingWizard initialClassification={parseMemberClassification(membership)} />
+      </main>
+    );
+  }
+
   const [member, canManageBilling] = await Promise.all([getOwnPrivateMember(), hasOwnBillingAccount()]);
 
   if (!member) {
@@ -53,7 +68,7 @@ export default async function DashboardPage() {
         </main>
       );
     }
-    redirect('/onboarding');
+    redirect('/dashboard');
   }
 
   const { entitlement, roles, subscription } = member;

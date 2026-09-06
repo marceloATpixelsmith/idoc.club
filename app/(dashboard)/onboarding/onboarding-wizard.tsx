@@ -10,9 +10,10 @@ import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
 import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { CsrfField } from '@/components/security/csrf-field';
+import type { MemberClassification } from '@/lib/membership/classification';
 import { completeOnboarding } from './actions';
 
-type Classification = 'judge' | 'judge_steward' | 'steward' | 'veterinarian';
+type Classification = MemberClassification;
 
 type AddressSuggestion = {
   addressLine1: string;
@@ -42,10 +43,10 @@ function isDetailsFormComplete(form: HTMLFormElement, classification: Classifica
   return true;
 }
 
-export function OnboardingWizard() {
+export function OnboardingWizard({ initialClassification = null }: { initialClassification?: Classification | null }) {
   const [state, action, pending] = useActionState<{ error?: string }, FormData>(completeOnboarding, {});
   const [step, setStep] = useState<'type' | 'details'>('type');
-  const [classification, setClassification] = useState<Classification | null>(null);
+  const [classification, setClassification] = useState<Classification | null>(initialClassification);
   const [detailsComplete, setDetailsComplete] = useState(false);
   const detailsFormRef = useRef<HTMLFormElement>(null);
 
@@ -190,7 +191,8 @@ export function OnboardingWizard() {
         <div className="grid gap-3 sm:grid-cols-2">
           {TYPE_OPTIONS.map((option) => (
             <button
-              className={`cursor-pointer rounded-lg border p-4 text-left transition-colors ${classification === option.value ? 'border-primary bg-surface' : 'border-border hover:border-input'}`}
+              aria-pressed={classification === option.value}
+              className={`cursor-pointer rounded-lg border p-4 text-left transition-all ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border hover:border-input'}`}
               key={option.value}
               onClick={() => { setClassification(option.value); setDetailsComplete(false); }}
               type="button"
@@ -362,7 +364,7 @@ export function OnboardingWizard() {
         <div className="flex items-center gap-3">
           <button className="cursor-pointer text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
           <Button className="flex-1" disabled={pending || !detailsComplete} size="lg" type="submit">
-            {pending ? 'Saving…' : 'Create profile'}
+            {pending ? 'Saving…' : 'Continue to payment'}
           </Button>
         </div>
       </form>

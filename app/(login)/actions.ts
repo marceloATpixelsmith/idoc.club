@@ -247,30 +247,27 @@ export const deleteAccount = validatedActionWithUser(
 );
 
 const updateAccountSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
   email: z.string().email('Invalid email address')
 });
 
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
-    const name = data.name;
     const email = normalizeEmail(data.email);
     if (email !== user.email) {
       if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account',
-        { kind: 'update-account-email', payload: { email: data.email, name } })).required) redirect('/mfa');
+        { kind: 'update-account-email', payload: { email: data.email } })).required) redirect('/mfa');
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-      if (duplicate) return { error: 'That email address is unavailable.', name };
-      await db.update(users).set({ name }).where(eq(users.id, user.id));
+      if (duplicate) return { error: 'That email address is unavailable.' };
       await issueEmailVerification(user.id, data.email);
       await consumeFreshStepUp();
-      return { name, success: 'Check the new address to verify your email change.' };
+      return { success: 'Check the new address to verify your email change.' };
     }
     // The normalized identity is unchanged (only casing/whitespace may differ, or nothing did), so
     // this never needs step-up, a duplicate check, or verification -- but the display form the
     // member actually typed must still survive (AUTH-IDENTITY-003), or a pure casing correction
     // would report success while silently leaving the old display casing in place.
-    await db.update(users).set({ emailDisplay: emailDisplayForm(data.email), name }).where(eq(users.id, user.id));
-    return { name, success: 'Account updated successfully.' };
+    await db.update(users).set({ emailDisplay: emailDisplayForm(data.email) }).where(eq(users.id, user.id));
+    return { success: 'Account updated successfully.' };
   }
 );

@@ -33,5 +33,5 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
   } catch {
     return { error: 'Review all required fields. A profile can only be created once.' };
   }
-  redirect('/dashboard');
+  redirect('/pricing');
 }

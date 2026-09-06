@@ -4,6 +4,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { requestCookies } from '@/lib/auth/request-cookies';
 import { authSecretForServer } from '@/lib/runtime/configuration';
 import { generatePendingCsrfNonce } from '@/lib/security/csrf';
+import { parseMemberClassification, type MemberClassification } from '@/lib/membership/classification';
 
 // Tracks an anonymous, in-progress signup (email submitted, awaiting OTP verification, then a
 // password) without creating a `users` row until the password step completes — so an abandoned
@@ -17,7 +18,13 @@ const signingKey = () => new TextEncoder().encode(authSecretForServer());
 // startPendingSignup (the flow's only entry point) and carried forward unchanged by
 // markPendingSignupVerified, so the general CSRF cookie's real, confirmed client-side-navigation
 // staleness risk never applies to this flow's own forms.
-type PendingSignup = { csrfNonce: string; email: string; emailDisplay: string; verified: boolean };
+type PendingSignup = {
+  csrfNonce: string;
+  email: string;
+  emailDisplay: string;
+  membership: MemberClassification | null;
+  verified: boolean;
+};
 
 async function setPendingSignupCookie(data: PendingSignup) {
   const token = await new SignJWT(data)
@@ -30,8 +37,8 @@ async function setPendingSignupCookie(data: PendingSignup) {
   });
 }
 
-export async function startPendingSignup(email: string, emailDisplay: string) {
-  await setPendingSignupCookie({ csrfNonce: generatePendingCsrfNonce(), email, emailDisplay, verified: false });
+export async function startPendingSignup(email: string, emailDisplay: string, membership: MemberClassification | null = null) {
+  await setPendingSignupCookie({ csrfNonce: generatePendingCsrfNonce(), email, emailDisplay, membership, verified: false });
 }
 
 export async function markPendingSignupVerified(pending: PendingSignup) {
@@ -45,7 +52,13 @@ export async function getPendingSignup(): Promise<PendingSignup | null> {
     const { payload } = await jwtVerify(token, signingKey(), { algorithms: ['HS256'] });
     if (typeof payload.email !== 'string' || typeof payload.emailDisplay !== 'string' || typeof payload.verified !== 'boolean' ||
       typeof payload.csrfNonce !== 'string' || payload.csrfNonce.length < 16) return null;
-    return { csrfNonce: payload.csrfNonce, email: payload.email, emailDisplay: payload.emailDisplay, verified: payload.verified };
+    return {
+      csrfNonce: payload.csrfNonce,
+      email: payload.email,
+      emailDisplay: payload.emailDisplay,
+      membership: parseMemberClassification(typeof payload.membership === 'string' ? payload.membership : null),
+      verified: payload.verified,
+    };
   } catch {
     return null;
   }
