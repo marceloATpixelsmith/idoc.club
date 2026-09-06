@@ -7,7 +7,7 @@ import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 import { startGoogleMockIdp } from './google-mock-idp';
 
-const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'recovery-administrator', 'super-administrator'] as const;
+const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'administrator-no-profile', 'recovery-administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
 
 export const E2E_TOTP_SECRET = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -45,7 +45,11 @@ export default async function globalSetup() {
       insert into idoc.users(email,password_hash,email_verified_at,account_state)
       values(${`${name}@security.example.test`},'synthetic-not-a-usable-password',now(),${accountState})
       returning id,session_version`;
-    if (name !== 'onboarding') {
+    // 'administrator-no-profile' is the never-onboarded-as-a-member administrator: an
+    // administrator/super_admin is never itself a member, so this fixture exercises the real case
+    // of an admin who has no profiles/memberships row at all, distinct from 'administrator' (which,
+    // like every other non-onboarding fixture, also happens to carry an ordinary member profile).
+    if (name !== 'onboarding' && name !== 'administrator-no-profile') {
       const [profile] = await sql<{ id: number }[]>`
         insert into idoc.profiles(user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code)
         values(${user.id},${name},'Security Fixture','1 Test Road','Test City','Test State','00000','DE')
@@ -54,7 +58,7 @@ export default async function globalSetup() {
       await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
         values(${profile.id},${name === 'expired' ? 'expired' : 'active'},'2025-01-01',${name === 'expired' ? '2025-12-31' : '2099-12-31'},'migration')`;
     }
-    if (name === 'administrator' || name === 'recovery-administrator' || name === 'super-administrator') {
+    if (name === 'administrator' || name === 'administrator-no-profile' || name === 'recovery-administrator' || name === 'super-administrator') {
       await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${user.id},${name === 'super-administrator' ? 'super_admin' : 'administrator'},${user.id})`;
       // Mandatory MFA requires an active TOTP factor before any privileged flow can be exercised; the
       // raw secret is fixed and exported so specs can compute a valid current code without

@@ -4,7 +4,7 @@ import { hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { listActiveSessions } from '@/lib/auth/session-registry';
-import { getSecurityPageUser } from '@/lib/db/queries';
+import { getActivityLogs, getSecurityPageUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { SecurityClient } from './security-client';
@@ -22,12 +22,14 @@ export default async function SecurityPage() {
     const member = await getOwnPrivateMember();
     if (member && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   }
-  const [sessions, currentDeviceRemembered, factor] = await Promise.all([
+  const [sessions, currentDeviceRemembered, factor, logs] = await Promise.all([
     listActiveSessions(user.id, user.sessionVersion),
     privileged ? Promise.resolve(false) : hasValidLoginDeviceTrust(user),
     privileged ? mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID) : Promise.resolve(null),
+    getActivityLogs(),
   ]);
   return <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
+    logs={logs.map(({ action, id, timestamp }) => ({ action, id, timestamp: timestamp.toISOString() }))}
     privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }) =>
       ({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />;
 }

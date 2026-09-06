@@ -190,20 +190,18 @@ export async function signOut(csrfToken: string) {
 const updatePasswordSchema = z.object({
   currentPassword: passwordEntrySchema,
   newPassword: passwordSchema,
-  confirmPassword: passwordSchema
 });
 
 export const updatePassword = validatedActionWithUser(
   updatePasswordSchema,
   async (data, _, user) => {
-    const { currentPassword, newPassword, confirmPassword } = data;
+    const { currentPassword, newPassword } = data;
 
     if ((await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) redirect('/mfa');
 
     const isPasswordValid = await comparePasswords(currentPassword, user.passwordHash);
     if (!isPasswordValid) return { error: 'Current password is incorrect.' };
     if (currentPassword === newPassword) return { error: 'New password must be different from the current password.' };
-    if (confirmPassword !== newPassword) return { error: 'New password and confirmation password do not match.' };
     if ((await checkPasswordBreached(newPassword)).breached) {
       await notifyWebmasterOfBreachedPasswordAttempt({ email: user.email, source: 'password-change' });
       return { error: 'This password has appeared in a public data breach. Please choose a different password.' };

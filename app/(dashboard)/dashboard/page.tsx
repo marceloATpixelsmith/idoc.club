@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { manageBillingAction } from '@/lib/payments/actions';
 import { getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requireAccountAccess } from '@/lib/membership/data-access';
+import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { CsrfField } from '@/components/security/csrf-field';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
 import { PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
@@ -37,14 +38,29 @@ export default async function DashboardPage() {
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
   // page to see their status and pay/renew, not just currently-entitled members (docs/02's
   // "limited expired-account view").
-  await requireAccountAccess('profile');
+  const actor = await requireAccountAccess('profile');
+  const privileged = isPrivilegedActor(actor);
   const [member, canManageBilling] = await Promise.all([getOwnPrivateMember(), hasOwnBillingAccount()]);
-  if (!member) redirect('/onboarding');
+
+  if (!member) {
+    // An administrator/super_admin is never a member and must never be pushed into onboarding just
+    // for visiting their own dashboard -- only an ordinary account without a profile yet needs that.
+    if (privileged) {
+      return (
+        <main className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+          <h1 className="text-2xl font-semibold">My Membership</h1>
+          <p className="max-w-md text-gray-600">You have no member profile. This page is for members; as an administrator you are never gated by it.</p>
+        </main>
+      );
+    }
+    redirect('/onboarding');
+  }
+
   const { entitlement, roles, subscription } = member;
   const today = new Date().toISOString().slice(0, 10);
   const entitled = isEntitled(entitlement, today);
 
-  if (!entitled) {
+  if (!entitled && !privileged) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
         <h1 className="text-2xl font-semibold">Pay for your IDOC membership</h1>
@@ -71,14 +87,20 @@ export default async function DashboardPage() {
           <p className="text-sm text-gray-700">Type: <span className="font-medium text-gray-900">{classificationLabel(roles)}</span></p>
           <Link className="text-sm underline" href="/dashboard/profile">Change type</Link>
         </div>
-        <div className="mt-2 flex items-center justify-between">
-          <p className="text-sm text-gray-700">Status: {MEMBERSHIP_STATUS_LABELS[entitlement!.status] ?? entitlement!.status}</p>
-        </div>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <p className="text-sm text-gray-700">Expires: {entitlement!.validUntil}</p>
-          {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
-        </div>
-        {message ? <p className="mt-1 text-sm text-gray-700">{message}</p> : null}
+        {entitlement ? (
+          <>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-sm text-gray-700">Status: {MEMBERSHIP_STATUS_LABELS[entitlement.status] ?? entitlement.status}</p>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-700">Expires: {entitlement.validUntil}</p>
+              {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
+            </div>
+            {message ? <p className="mt-1 text-sm text-gray-700">{message}</p> : null}
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-gray-700">No membership record on file.</p>
+        )}
         {canManageBilling && (
           <form action={manageBillingAction}>
             <CsrfField />

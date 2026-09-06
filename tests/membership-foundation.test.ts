@@ -123,6 +123,10 @@ test('account-state policy separates onboarding, member, administration, and exp
   assert.equal(mayAccessAccountFunction({ accountState: 'onboarding', actor: member, entitled: false }, 'account'), false);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, 'member'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, 'member'), false);
+  // An administrator/super_admin reading their own activity log (the only 'member' caller,
+  // getActivityLogs()) is never gated by their own irrelevant entitlement either.
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: administrator, entitled: false }, 'member'), true);
+  assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: superAdmin, entitled: false }, 'member'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, 'profile'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: administrator, entitled: false }, 'administration'), true);
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: superAdmin, entitled: false }, 'administration'), true);
