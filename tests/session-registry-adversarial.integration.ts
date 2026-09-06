@@ -183,4 +183,26 @@ test('the security page session list excludes a session that has gone idle-stale
   assert.equal(staleRow.revoked_at, null, 'idle exclusion from the list is a query-time filter, not an explicit revocation');
 });
 
+test('a registered device label round-trips through both readActiveSession and listActiveSessions, and defaults to null when omitted', async () => {
+  await resetIdoc();
+  const user = await createUser();
+  const now = new Date();
+
+  const labeled = randomUUID();
+  await registerSession({ sessionId: labeled, userId: user.id, sessionVersion: 0, authenticatedAt: now,
+    lastActivityAt: now, absoluteExpiresAt: absoluteExpiryFrom(now), deviceLabel: 'Chrome on macOS' });
+  const unlabeled = randomUUID();
+  await registerSession({ sessionId: unlabeled, userId: user.id, sessionVersion: 0, authenticatedAt: now,
+    lastActivityAt: now, absoluteExpiresAt: absoluteExpiryFrom(now) });
+
+  const labeledRead = await readActiveSession(labeled, user.id);
+  assert.equal(labeledRead?.deviceLabel, 'Chrome on macOS');
+  const unlabeledRead = await readActiveSession(unlabeled, user.id);
+  assert.equal(unlabeledRead?.deviceLabel, null);
+
+  const active = await listActiveSessions(user.id, 0);
+  assert.equal(active.find((session) => session.sessionId === labeled)?.deviceLabel, 'Chrome on macOS');
+  assert.equal(active.find((session) => session.sessionId === unlabeled)?.deviceLabel, null);
+});
+
 test.after(closeHarness);

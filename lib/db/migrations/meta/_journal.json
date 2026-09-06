@@ -253,6 +253,13 @@
       "when": 1788292800000,
       "tag": "0035_remove_webauthn_passkeys",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0036_session_device_label",
+      "breakpoints": true
     }
   ]
 }

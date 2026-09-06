@@ -36,12 +36,18 @@ test('the authoritative Postgres read paths for session validity, account access
   }
 });
 
-test("lib/auth/session.ts's catches are all narrowly around token *parsing*, never around a database call, so a DB failure there still has no fallback path", () => {
+test("lib/auth/session.ts's catches are all narrowly around token *parsing* or best-effort device-label capture, never around a database call, so a DB failure there still has no fallback path", () => {
   const source = readFileSync(path.join(root, 'lib/auth/session.ts'), 'utf8');
   const catchBlocks = [...source.matchAll(/\{[^{}]*\}\s*catch\s*\{[^{}]*\}/g)].map((match) => match[0]);
   assert.ok(catchBlocks.length > 0, 'expected to find the known JWT-parsing catch blocks in session.ts');
   for (const block of catchBlocks) {
-    assert.match(block, /verifyToken\(/, `unexpected catch block in session.ts not wrapping verifyToken(): ${block}`);
+    // Token parsing (verifyToken) always fails closed. The device-label capture is deliberately the
+    // one exception -- headers() itself can throw when called outside a real request scope (e.g. an
+    // isolated test harness), and an absent/unparseable User-Agent must never fail a login, only
+    // leave the label null -- but it is still never a database call, so the DB-failure guarantee
+    // below holds regardless of which of these two it is.
+    assert.match(block, /verifyToken\(|'user-agent'/,
+      `unexpected catch block in session.ts not wrapping verifyToken() or the device-label header read: ${block}`);
     assert.doesNotMatch(block, /\b(?:db\.|await\s+sql`)/, `a catch block in session.ts appears to wrap a database call: ${block}`);
   }
 });

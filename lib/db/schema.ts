@@ -51,6 +51,12 @@ export const authSessions = idocSchema.table('auth_sessions', {
   absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   revokeReason: varchar('revoke_reason', { length: 80 }),
+  // A short, human-readable device/browser label (e.g. "Chrome on macOS") derived from the
+  // request's User-Agent header at the moment this session was created -- see
+  // lib/auth/session-device-label.ts. Deliberately never the raw User-Agent string itself: the
+  // whole point of the "Active sessions" list is letting the owner tell their own device apart from
+  // an intruder's, and this derived label is the minimum data that actually serves that purpose.
+  deviceLabel: varchar('device_label', { length: 100 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
