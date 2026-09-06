@@ -22,8 +22,8 @@ test('pending-flow cookies are not interchangeable with a session', async ({ bro
 
 test('account-state and role boundaries are enforced on direct requests', async ({ browser }) => {
   const cases = [
-    ['onboarding', '/dashboard', false],
-    ['onboarding', '/onboarding', true],
+    ['onboarding', '/dashboard', true],
+    ['onboarding', '/onboarding', false],
     ['suspended', '/dashboard', false],
     ['expired', '/dashboard', true],
     ['member-a', '/admin', false],

@@ -13,6 +13,7 @@ const dashboardPage = await readFile('app/(dashboard)/dashboard/page.tsx', 'utf8
 const signupPage = await readFile('app/(login)/sign-up/page.tsx', 'utf8');
 const pendingSignup = await readFile('lib/auth/pending-signup.ts', 'utf8');
 const classification = await readFile('lib/membership/classification.ts', 'utf8');
+const nextConfig = await readFile('next.config.ts', 'utf8');
 
 test('profile creation remains disabled until all required details and consents are complete', () => {
   assert.match(source, /form\.checkValidity\(\)/);
@@ -21,6 +22,11 @@ test('profile creation remains disabled until all required details and consents 
   assert.match(source, /disabled=\{pending \|\| !detailsComplete\}/);
   assert.match(source, /<ConsentCheckbox name="termsAccepted" required>/);
   assert.match(source, /<ConsentCheckbox name="privacyAccepted" required>/);
+});
+
+test('dashboard onboarding receives the sole geolocation permission exception', () => {
+  assert.match(nextConfig, /source: '\/dashboard'[\s\S]*geolocation=\(self\)/);
+  assert.doesNotMatch(nextConfig, /source: '\/onboarding'[\s\S]*geolocation=\(self\)/);
 });
 
 test('readiness is recomputed for restored and browser-autofilled form values', () => {

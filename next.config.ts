@@ -13,8 +13,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Every route denies geolocation/camera/microphone by default, except /onboarding below --
-        // the one page that requests the browser's current position, as a best-effort ranking hint
+        // Every route denies geolocation/camera/microphone by default, except /dashboard below --
+        // the page that hosts onboarding and requests the browser's current position as a best-effort ranking hint
         // for address autocomplete (see onboarding-wizard.tsx). A single shared Permissions-Policy
         // matching every route would otherwise make that request silently rejected by the browser
         // before the page ever gets a chance to use it.
@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
         headers: [...baseSecurityHeaders, { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }]
       },
       {
-        source: '/onboarding',
+        source: '/dashboard',
         headers: [...baseSecurityHeaders, { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' }]
       }
     ];

@@ -42,12 +42,11 @@ test('CSP uses a fresh framework script nonce and denies unapproved origins', as
   expect(scriptNonces.every((nonce) => nonce === firstNonce)).toBe(true);
 });
 
-test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
-  // An unauthenticated request to /onboarding redirects to /sign-in before ever reaching the
-  // onboarding page itself, so its headers would just be /sign-in's -- this must authenticate as
-  // the 'onboarding'-state fixture to actually observe the onboarding page's own response.
+test('only the dashboard-hosted onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
+  // This must authenticate as the onboarding-state fixture to observe the dashboard response that
+  // now hosts the form rather than the compatibility redirect at /onboarding.
   const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
-  const onboarding = await context.request.get('/onboarding');
+  const onboarding = await context.request.get('/dashboard');
   expect(onboarding.headers()['permissions-policy']).toContain('geolocation=(self)');
   await context.close();
   for (const route of ['/sign-in', '/api/user']) {

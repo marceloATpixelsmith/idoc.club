@@ -61,14 +61,14 @@ function pathAndQuery(location: string | undefined) {
   return `${url.pathname}${url.search}`;
 }
 
-test('a signup attempt with a fresh Google identity creates a new account and lands on onboarding', async ({ page }) => {
+test('a signup attempt with a fresh Google identity creates a new account and lands on dashboard onboarding', async ({ page }) => {
   const identity = freshIdentity();
   await configureMockIdentity(identity);
 
   await page.goto('/api/auth/google/start?intent=signup');
   await expect(page.locator('#continue')).toBeVisible();
   await page.click('#continue');
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
 
   const users = await withDb((sql) => sql<{ id: number }[]>`select id from idoc.users where email = ${identity.email}`);
   expect(users).toHaveLength(1);
@@ -86,7 +86,7 @@ test('a login attempt with an already-linked Google identity signs into the same
   const firstPage = await firstContext.newPage();
   await firstPage.goto('/api/auth/google/start?intent=signup');
   await firstPage.click('#continue');
-  await expect(firstPage).toHaveURL(/\/onboarding$/);
+  await expect(firstPage).toHaveURL(/\/dashboard$/);
   await firstContext.close();
 
   // A brand new browser context: nothing about this second sign-in reuses the first attempt's
@@ -97,9 +97,9 @@ test('a login attempt with an already-linked Google identity signs into the same
   await secondPage.goto('/api/auth/google/start?intent=login');
   await secondPage.click('#continue');
   // Still an onboarding-state account (nothing in this spec completes onboarding), so login also
-  // lands on /onboarding -- the behavioral proof that matters here is that no *second* account or
+  // lands on dashboard onboarding -- the behavioral proof that matters here is that no *second* account or
   // identity link was silently created for the same Google identity.
-  await expect(secondPage).toHaveURL(/\/onboarding$/);
+  await expect(secondPage).toHaveURL(/\/dashboard$/);
   await secondContext.close();
 
   const users = await withDb((sql) => sql<{ id: number }[]>`select id from idoc.users where email = ${identity.email}`);
@@ -150,7 +150,7 @@ test('a consumed callback cannot be replayed against the live route', async ({ b
   const replayUrl = await page.locator('#continue').getAttribute('href');
   expect(replayUrl).toBeTruthy();
   await page.click('#continue');
-  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
 
   const replay = await context.request.get(replayUrl!, { maxRedirects: 0 });
   expect(replay.status()).toBe(302);
