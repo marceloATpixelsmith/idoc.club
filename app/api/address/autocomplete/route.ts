@@ -29,12 +29,18 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const text = searchParams.get('text')?.trim() ?? '';
   const country = searchParams.get('country')?.trim().toUpperCase() ?? '';
-  const lat = Number(searchParams.get('lat'));
-  const lon = Number(searchParams.get('lon'));
+  const rawLat = searchParams.get('lat');
+  const rawLon = searchParams.get('lon');
+  const lat = Number(rawLat);
+  const lon = Number(rawLon);
   // A bare bias hint, not a hard filter: an out-of-range or absent value is simply not sent to
   // Geoapify, never rejected, since this only ever ranks results the countrycode filter already
-  // admits -- it cannot smuggle in a result from the wrong country.
-  const hasBias = Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+  // admits -- it cannot smuggle in a result from the wrong country. Both params must actually be
+  // present: Number(null) is 0, a plausible-looking coordinate, so an absent lat/lon (geolocation
+  // denied, unavailable, or still pending) must never silently become a false "equator/prime
+  // meridian" bias instead of no bias at all.
+  const hasBias = rawLat !== null && rawLon !== null
+    && Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 
   if (text.length < 3 || text.length > 160 || !COUNTRY_CODES.has(country)) {
     return Response.json({ suggestions: [] });

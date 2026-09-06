@@ -148,13 +148,28 @@ test('address autocomplete is biased by a best-effort, non-blocking browser geol
   assert.ok(autocompleteRoute.indexOf('if (text.length') < autocompleteRoute.indexOf("searchParams.set('bias'"));
 });
 
-test('a selected suggestion\'s finer-grained locality (e.g. a Mexican address\'s colonia) fills Address 2 automatically', () => {
+test('a selected suggestion\'s finer-grained locality (e.g. a Mexican address\'s colonia) fills Address 2 automatically, and never clears an existing value when absent', () => {
   assert.match(autocompleteRoute, /district: result\.suburb \?\? result\.district \?\? ''/);
-  assert.match(source, /setAddress2\(suggestion\.district\)/);
+  assert.match(source, /if \(suggestion\.district\) setAddress2\(suggestion\.district\)/);
   const chooseAddressStart = source.indexOf('function chooseAddress');
   const chooseAddressEnd = source.indexOf('\n  }', chooseAddressStart);
   assert.ok(chooseAddressStart >= 0 && chooseAddressEnd > chooseAddressStart);
   assert.ok(source.indexOf('setAddress2', chooseAddressStart) < chooseAddressEnd, 'setAddress2 must be called from within chooseAddress');
+  // A Codex review finding: an unconditional setAddress2(suggestion.district) would silently erase
+  // a member's own manually-typed Address 2 the moment they picked any suggestion the provider
+  // returned without a district/suburb field, contradicting the documented "leaves Address 2
+  // untouched" behavior.
+  assert.doesNotMatch(source.slice(chooseAddressStart, chooseAddressEnd), /(?<!if \(suggestion\.district\) )setAddress2\(suggestion\.district\)/);
+});
+
+// A Codex review finding: URLSearchParams.get() returns null for an absent param, and Number(null)
+// is 0 -- a plausible-looking coordinate -- so without checking the raw params are actually present
+// first, every request made before geolocation resolves (or after it's denied/unavailable) would
+// silently bias toward the Gulf of Guinea (0,0) instead of staying unbiased.
+test('an absent lat/lon never coerces to a false (0,0) proximity bias', () => {
+  assert.match(autocompleteRoute, /const rawLat = searchParams\.get\('lat'\)/);
+  assert.match(autocompleteRoute, /const rawLon = searchParams\.get\('lon'\)/);
+  assert.match(autocompleteRoute, /const hasBias = rawLat !== null && rawLon !== null/);
 });
 
 test('Geoapify credential remains server-only and autocomplete is limited to authenticated users and selected country', () => {
@@ -187,5 +202,8 @@ test('Geoapify privacy, credential rotation, availability, and failure contracts
     '60 provider calls per account',
     '180 provider calls per request origin',
     'must not send the member\'s name, email address, fei id',
+    'their current coordinates are also disclosed to geoapify',
+    'a denied, dismissed, or unavailable permission simply leaves every request unbiased',
+    'the only page in the application granted the browser\'s geolocation permission',
   ]) assert.ok(normalizedContract.includes(required), `missing provider contract detail: ${required}`);
 });

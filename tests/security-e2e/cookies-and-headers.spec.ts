@@ -14,6 +14,15 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
+test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ request }) => {
+  const onboarding = await request.get('/onboarding');
+  expect(onboarding.headers()['permissions-policy']).toContain('geolocation=(self)');
+  for (const route of ['/sign-in', '/api/user']) {
+    const response = await request.get(route);
+    expect(response.headers()['permissions-policy']).toContain('geolocation=()');
+  }
+});
+
 test('session/auth API responses carry an explicit Cache-Control: no-store', async ({ request }) => {
   // AUTH-TRANSPORT-002: these two routes reflect the caller's own session/linked-identity state, so
   // a shared or browser cache must never be allowed to serve one visitor's response to another.

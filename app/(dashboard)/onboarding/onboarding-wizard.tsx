@@ -177,7 +177,7 @@ export function OnboardingWizard() {
     const line1 = suggestion.addressLine1 || suggestion.formatted;
     setAddress1(line1);
     setSelectedAddressValue(line1);
-    setAddress2(suggestion.district);
+    if (suggestion.district) setAddress2(suggestion.district);
     setCity(suggestion.city);
     setStateProvince(suggestion.stateProvince);
     setPostalCode(suggestion.postalCode);
