@@ -47,7 +47,14 @@ type ValidatedActionWithUserFunction<S extends z.ZodType<any, any>, T> = (
 
 export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
   schema: S,
-  action: ValidatedActionWithUserFunction<S, T>
+  action: ValidatedActionWithUserFunction<S, T>,
+  // Every consumer of this wrapper is an account-mutating action (change password, delete account,
+  // update name/email, link/unlink Google, forget a remembered device, replace an authenticator,
+  // regenerate recovery codes) except signing a *different* session out, which docs/25 section 1
+  // requires stay reachable for a never-paid or post-grace-expired account alongside the payment
+  // gate ("receive only the membership-payment gate and logout") -- logOutSession/
+  // logOutOtherSessions pass this to keep using the permissive, read-adjacent 'account' operation.
+  options?: { allowWithoutEntitlement?: boolean },
 ) {
   return async (prevState: ActionState, formData: FormData) => {
     const user = await getUser();
@@ -55,7 +62,7 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
       throw new Error('User is not authenticated');
     }
     await requireCsrfToken(formData, await rawCanonicalSessionId(), user.id);
-    await requireAccountAccess('account');
+    await requireAccountAccess(options?.allowWithoutEntitlement ? 'account' : 'account_mutation');
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {

@@ -52,7 +52,7 @@ export const logOutSession = validatedActionWithUser(sessionSchema, async ({ ses
   await audit(user.id, 'security.session.logged_out', 'member-security-page');
   refreshSecurityPage();
   return { success: 'That session has been logged out.' };
-});
+}, { allowWithoutEntitlement: true });
 
 export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_, __, user) => {
   const current = await canonicalSession(user.id);
@@ -65,7 +65,7 @@ export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_
   });
   refreshSecurityPage();
   return { success: 'Your other sessions have been logged out.' };
-});
+}, { allowWithoutEntitlement: true });
 
 export const forgetThisDevice = validatedActionWithUser(emptySchema, async (_, __, user) => {
   if (await authoritativeMfaRole(user.id) !== 'member') return { error: 'Remembered login devices do not apply to privileged accounts.' };

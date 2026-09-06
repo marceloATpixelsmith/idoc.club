@@ -12,7 +12,7 @@ import { emailDisplayForm, normalizeEmail } from '../lib/membership/validation.t
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
-import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createMembership, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 // AUTH-IDENTITY-003: "Trusted server code MUST trim surrounding email whitespace, apply
 // deterministic Unicode-aware case-insensitive comparison, preserve a display form where useful,
@@ -113,6 +113,9 @@ test('normalizeEmail and emailDisplayForm both trim surrounding whitespace and n
 // the submitted display form survives an account update.
 test('updateAccount persists a display-form-only casing correction even when the normalized email is unchanged', async () => {
   const fixture = await createUser();
+  // updateAccount is entitlement-gated (docs/25 section 1): a real, currently-entitled member is
+  // what this test's own scenario represents.
+  await createMembership((await createProfile(fixture.id)).id);
   await sql`update idoc.users set email_display=${fixture.email} where id=${fixture.id}`;
   const [user] = await db.select().from(users).where(eq(users.id, fixture.id)).limit(1);
   const cookies = new TestCookies();

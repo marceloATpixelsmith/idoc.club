@@ -22,7 +22,7 @@ import { eq } from 'drizzle-orm';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
-import { closeHarness, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
 const encryptionKey = randomBytes(32);
@@ -242,6 +242,9 @@ test('AUTH-OTP-002: valid email OTP cannot become MFA, step-up, or privileged se
 
 test('AUTH-API-002: protected account mutation uses the signed server session, never forged subject fields', async () => {
   const actor = await userWithPassword(false);
+  // updateAccount is entitlement-gated (docs/25 section 1): a real, currently-entitled member is
+  // what this test's own scenario -- a legitimate account changing its own name -- represents.
+  await createMembership((await createProfile(actor.id)).id);
   const victim = await userWithPassword(false);
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, async () => {

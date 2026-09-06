@@ -25,7 +25,7 @@ import { eq } from 'drizzle-orm';
 import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
-import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
 const encryptionKey = randomBytes(32);
@@ -180,6 +180,9 @@ test('AUTH-LIFECYCLE-002: completeSignup rejects duplicate registration for an e
 
 test('AUTH-PASSWORD-005: an ordinary member (no configured MFA factor) changes password, rotating session authority and queuing evidence', async () => {
   const user = await realUser('active');
+  // updatePassword is entitlement-gated (docs/25 section 1): a real, currently-entitled member is
+  // what "an ordinary member changes password" represents.
+  await createMembership((await createProfile(user.id)).id);
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, async () => {
     await setSession(user);
@@ -220,6 +223,7 @@ test('AUTH-PASSWORD-005: an ordinary member (no configured MFA factor) changes p
 
 test('AUTH-PASSWORD-005: an incorrect current password is rejected without mutating the credential, session version, or evidence', async () => {
   const user = await realUser('active');
+  await createMembership((await createProfile(user.id)).id);
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, () => setSession(user));
   const csrf_token = csrfTokenFrom(cookies);
@@ -237,6 +241,7 @@ test('AUTH-PASSWORD-005: an incorrect current password is rejected without mutat
 
 test('AUTH-PASSWORD-005: reusing the current password as the new password is rejected without mutation', async () => {
   const user = await realUser('active');
+  await createMembership((await createProfile(user.id)).id);
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, () => setSession(user));
   const csrf_token = csrfTokenFrom(cookies);

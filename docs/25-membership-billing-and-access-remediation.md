@@ -34,6 +34,8 @@ This document is the actionable implementation and acceptance source for the Rel
 | Five-day failed-recurring grace | `lib/payments/renewal.ts`, webhook/notification code | Generalize to non-recurring expiration. |
 | Reconciliation | `lib/payments/reconciliation*.ts`, daily Cron route | Retain and extend for pending schedules/transitions. |
 | Manual payment and entitlement recording | `lib/payments/manual-payments.ts` | Retain. |
+| Payment-only gate on the member dashboard | `app/(dashboard)/dashboard/layout.tsx`, `dashboard/page.tsx` | A never-paid or post-grace-expired member sees only a "Pay for membership" button; every other dashboard sub-page (Profile, Security, Activity, Seminars) redirects back to it, both as a real per-request check and reflected in the tab bar. Administrators/Super Admins are never gated by this. |
+| Payment-only gate on profile/account mutation | `lib/membership/account-access.ts` (`'profile_mutation'`/`'account_mutation'` operations), `updateMemberProfile`, `deleteOwnAccount`, `lib/auth/middleware.ts`'s `validatedActionWithUser` | A never-paid or post-grace-expired, non-privileged actor cannot edit their profile, change their password/name/email, delete their account, link/unlink Google, forget a remembered device, or replace an authenticator/regenerate recovery codes -- enforced at the shared authorization-policy function, not only at the page/UI layer, so a direct Server Action call is rejected the same way. Signing a session out (`logOutSession`/`logOutOtherSessions`) explicitly stays reachable, matching "receive only the membership-payment gate and logout." An administrator/super_admin correcting a member's own profile is exempt regardless of the administrator's own entitlement. |
 
 ### 2.2 Implemented but inconsistent with the approved contract
 
@@ -43,8 +45,6 @@ This document is the actionable implementation and acceptance source for the Rel
 | Two configured Stripe Products | `STRIPE_RECURRING_PRODUCT_ID`, `STRIPE_ONE_TIME_PRODUCT_ID`; `lib/runtime/configuration.ts` | Replace for new Checkout with one `STRIPE_MEMBERSHIP_PRODUCT_ID`. Do not modify valid imported legacy Product/Price linkage. |
 | Renewal choice exists only at Checkout | `lib/payments/actions.ts`, `lib/payments/checkout.ts` | Add owned Billing Settings and future-effective switching in both directions. |
 | Portal creates only payment/invoice/cancel features | `lib/payments/stripe.ts` | Keep Portal narrow; add IDOC-owned renewal preference rather than exposing plan selection. |
-| Dashboard accepts profile-level access | dashboard page/layout and `requireAccountAccess('profile')` call sites | Apply the payment-only gate to every member surface and privileged data boundary. |
-| Expired accounts can reach limited dashboard/profile capabilities | membership data-access/dashboard implementation | After five-day grace, allow only payment and logout. |
 | Grace begins on recurring payment failure only | `handleInvoicePaymentFailed` and renewal-notice scan | Add non-recurring paid-through expiration entry into the same five-day full-access grace state. |
 | Stripe email-sync failure is queued but not retried | `lib/membership/email-verification.ts` inserts `stripe.customer_email_sync`; no consumer exists | Implement a leased, retrying, dead-lettering worker and operational visibility. |
 
@@ -56,7 +56,6 @@ This document is the actionable implementation and acceptance source for the Rel
 - Future recurring activation exactly at the existing paid-through date.
 - Reversal/replacement of a pending renewal-mode transition.
 - Transition confirmation and immutable audit evidence.
-- Complete payment-only route/action/data-access enforcement.
 - Non-recurring expiration-to-grace transition.
 - Automated tests and real Stripe test-mode proof for the revised contract.
 
