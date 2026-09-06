@@ -29,12 +29,12 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Notification delivery history</h1>
     <Link className="mt-2 inline-block underline text-sm" href="/admin/members">← Search members</Link>
-    {!history && <p className="mt-4 text-sm text-gray-700">Search for a member on the <Link className="underline" href="/admin/members">Members page</Link> to view their notification history.</p>}
+    {!history && <p className="mt-4 text-sm text-foreground">Search for a member on the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link> to view their notification history.</p>}
     {history && (
       <section className="mt-8 overflow-x-auto">
         <table className="min-w-full border text-sm">
           <thead>
-            <tr className="border-b bg-gray-50 text-left">
+            <tr className="border-b bg-surface text-left">
               <th className="p-2">Kind</th>
               <th className="p-2">Created</th>
               <th className="p-2">Sent</th>
@@ -45,7 +45,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
           </thead>
           <tbody>
             {history.length === 0 && (
-              <tr><td className="p-2 text-gray-500" colSpan={6}>No notifications on file for this member.</td></tr>
+              <tr><td className="p-2 text-muted-foreground" colSpan={6}>No notifications on file for this member.</td></tr>
             )}
             {history.map((row) => (
               <tr key={row.id} className="border-b">

@@ -27,8 +27,8 @@ export function EntitlementCorrectionForm({ currentValidUntil, profileId }: { cu
       </select>
     </label>
     <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
-    <button className="rounded bg-orange-600 px-3 py-1 text-sm text-white" disabled={pending} type="submit">Correct entitlement</button>
-    {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    {state.success && <p className="text-sm text-green-700">{state.success}</p>}
+    <button className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground" disabled={pending} type="submit">Correct entitlement</button>
+    {state.error && <p className="text-sm text-red-400">{state.error}</p>}
+    {state.success && <p className="text-sm text-green-400">{state.success}</p>}
   </form>;
 }

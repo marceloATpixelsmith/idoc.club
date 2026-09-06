@@ -1,15 +1,15 @@
 .idoc-auth-shell {
-  --auth-primary-color: #111827;
-  --auth-link-color: #111827;
-  --auth-turnstile-color: #111827;
-  --auth-page-title-color: #111827;
-  --auth-instruction-color: #64748b;
-  --auth-input-color: #0f172a;
-  --auth-error-color: #dc2626;
-  --auth-terms-color: #64748b;
+  --auth-primary-color: var(--gold);
+  --auth-link-color: var(--gold);
+  --auth-turnstile-color: var(--gold);
+  --auth-page-title-color: var(--foreground);
+  --auth-instruction-color: var(--muted-foreground);
+  --auth-input-color: var(--foreground);
+  --auth-error-color: oklch(0.75 0.18 25);
+  --auth-terms-color: var(--muted-foreground);
   display: flex;
   min-height: 100vh;
-  background: #ffffff;
+  background: var(--gradient-midnight);
 }
 
 .idoc-auth-shell__visual {
@@ -23,6 +23,19 @@
   background-size: cover;
 }
 
+.idoc-auth-shell__visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    var(--background) 0%,
+    oklch(0.16 0.045 265 / 55%) 16%,
+    oklch(0.16 0.045 265 / 10%) 38%,
+    transparent 60%
+  );
+}
+
 .idoc-auth-shell__content {
   display: flex;
   order: 1;
@@ -31,7 +44,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: #ffffff;
+  background: var(--gradient-midnight);
 }
 
 .idoc-auth-shell__inner {
@@ -83,10 +96,11 @@
 
 .idoc-auth-page__title {
   margin: 0;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-display), 'Archivo', Arial, Helvetica, sans-serif;
   font-size: 32px;
   font-weight: 700;
-  line-height: 1.5;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
   color: var(--auth-page-title-color);
   text-align: center;
 }
@@ -94,7 +108,7 @@
 .idoc-auth-page__instructions {
   width: 100%;
   margin: 0;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.5;
@@ -120,11 +134,13 @@
 }
 
 .idoc-auth-label {
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
   font-weight: 500;
   line-height: 1.5;
-  color: #0f172a;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--auth-instruction-color);
 }
 
 .idoc-auth-input {
@@ -132,24 +148,25 @@
   width: 100%;
   height: 48px;
   padding: 0 16px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 10px;
-  background: #ffffff;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.5;
   color: var(--auth-input-color);
   outline: none;
+  transition: border-color 0.2s ease;
 }
 
 .idoc-auth-input::placeholder {
-  color: #64748b;
+  color: var(--auth-instruction-color);
 }
 
 .idoc-auth-input:focus {
   border-color: var(--auth-primary-color);
-  box-shadow: 0 0 0 3px #e5e7eb;
+  box-shadow: 0 0 0 3px oklch(0.83 0.13 87 / 20%);
 }
 
 .idoc-auth-totp-enrollment {
@@ -164,6 +181,9 @@
   width: 200px;
   height: 200px;
   object-fit: contain;
+  border-radius: 10px;
+  background: var(--foreground);
+  padding: 8px;
 }
 
 .idoc-auth-totp-enrollment__manual {
@@ -172,7 +192,7 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 14px;
   color: var(--auth-instruction-color);
   text-align: center;
@@ -181,14 +201,14 @@
 .idoc-auth-totp-enrollment__manual code {
   max-width: 100%;
   padding: 8px 12px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 6px;
-  background: #f8fafc;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
-  color: #0f172a;
+  color: var(--auth-input-color);
   overflow-wrap: anywhere;
   user-select: all;
 }
@@ -213,9 +233,9 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--auth-primary-color);
   cursor: pointer;
   transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
@@ -223,13 +243,13 @@
 
 .idoc-auth-recovery-codes__copy-button:hover {
   border-color: var(--auth-primary-color);
-  background: #f8fafc;
+  background: var(--surface-raised);
 }
 
 .idoc-auth-recovery-codes__copy-button:focus-visible {
   outline: none;
   border-color: var(--auth-primary-color);
-  box-shadow: 0 0 0 3px #e5e7eb;
+  box-shadow: 0 0 0 3px oklch(0.83 0.13 87 / 20%);
 }
 
 .idoc-auth-recovery-codes__copy-button svg {
@@ -239,7 +259,7 @@
 
 .idoc-auth-recovery-codes__copy-status {
   margin: 0;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
@@ -253,9 +273,9 @@
   gap: 8px 16px;
   margin: 0;
   padding: 16px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--surface);
   list-style: none;
 }
 
@@ -265,11 +285,11 @@
 }
 
 .idoc-auth-recovery-codes__item code {
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
-  color: #0f172a;
+  color: var(--auth-input-color);
   overflow-wrap: anywhere;
 }
 
@@ -289,7 +309,7 @@
 }
 
 .idoc-auth-checkbox__label {
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 16px;
   line-height: 1.5;
   color: var(--auth-instruction-color);
@@ -305,7 +325,7 @@
   margin: 0;
   padding: 8px 12px;
   border-radius: 6px;
-  background: #fef2f2;
+  background: oklch(0.6 0.21 25 / 16%);
   font-size: 14px;
   line-height: 1.5;
   color: var(--auth-error-color);
@@ -319,11 +339,12 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
+  font-size: 0.75rem;
   line-height: 1.5;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.18em;
   cursor: pointer;
 }
 
@@ -331,14 +352,14 @@
   padding: 0;
   border: 0;
   background: var(--auth-primary-color);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 4%);
-  font-weight: 600;
-  color: #ffffff;
+  box-shadow: var(--shadow-gold);
+  color: var(--primary-foreground);
+  transition: opacity 0.2s ease;
 }
 
 .idoc-auth-button:hover:not(:disabled) {
-  background: #1f2937;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 10%), 0 1px 3px rgb(0 0 0 / 6%);
+  opacity: 0.9;
+  box-shadow: var(--shadow-gold);
 }
 
 .idoc-auth-button:disabled,
@@ -392,7 +413,7 @@
 }
 
 .idoc-auth-link {
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
@@ -415,7 +436,7 @@
 .idoc-auth-divider__line {
   flex: 1;
   height: 1px;
-  background: #e2e8f0;
+  background: var(--border);
 }
 
 .idoc-auth-divider__label {
@@ -429,16 +450,14 @@
 .idoc-auth-google-button {
   gap: 10px;
   padding: 12px 16px;
-  border: 1.5px solid #dadce0;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 4%);
-  font-weight: 500;
+  border: 1.5px solid var(--input);
+  background: var(--surface);
+  box-shadow: var(--shadow-deep);
   color: var(--auth-input-color);
 }
 
 .idoc-auth-google-button:hover:not(:disabled) {
-  background: #f8fafc;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 10%), 0 1px 3px rgb(0 0 0 / 6%);
+  background: var(--surface-raised);
 }
 
 .idoc-auth-google-icon {
@@ -515,9 +534,9 @@
   justify-content: space-between;
   gap: 16px;
   padding: 0 16px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--surface);
   font-size: 16px;
   line-height: 1.5;
   color: var(--auth-instruction-color);
@@ -541,9 +560,9 @@
   gap: 6px;
   margin: 0;
   padding: 14px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--input);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--surface);
   font-size: 14px;
   line-height: 1.5;
   list-style: none;
@@ -553,11 +572,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: var(--auth-instruction-color);
 }
 
 .idoc-auth-requirement--met {
-  color: #15803d;
+  color: oklch(0.75 0.17 145);
 }
 
 .idoc-auth-requirement__dot {
@@ -565,11 +584,11 @@
   height: 6px;
   flex: 0 0 6px;
   border-radius: 999px;
-  background: #cbd5e1;
+  background: var(--border);
 }
 
 .idoc-auth-requirement--met .idoc-auth-requirement__dot {
-  background: #16a34a;
+  background: oklch(0.75 0.17 145);
 }
 
 .idoc-auth-otp {
@@ -589,9 +608,9 @@
 .idoc-auth-otp [data-slot='input-otp-slot'] {
   width: 100%;
   height: 52px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--input);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--surface);
   font-size: 20px;
   font-weight: 600;
   color: var(--auth-input-color);
@@ -616,8 +635,9 @@
 }
 
 .idoc-auth-resend button:disabled {
-  color: #94a3b8;
+  color: var(--auth-instruction-color);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .idoc-auth-turnstile {
@@ -625,6 +645,7 @@
   min-width: 0;
   min-height: 65px;
   overflow: hidden;
+  border-radius: 10px;
 }
 
 .idoc-auth-turnstile > div,
@@ -637,14 +658,14 @@
   padding: 8px 12px;
   font-size: 14px;
   line-height: 1.5;
-  color: #64748b;
+  color: var(--auth-instruction-color);
 }
 
 .idoc-auth-turnstile__error {
   margin: 8px 0 0;
   padding: 8px 12px;
   border-radius: 6px;
-  background: #fef2f2;
+  background: oklch(0.6 0.21 25 / 16%);
   font-size: 14px;
   line-height: 1.5;
   color: var(--auth-error-color);
@@ -663,7 +684,7 @@
 
 .idoc-auth-shell__legal {
   margin: 0;
-  font-family: 'Manrope', Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.6;

@@ -27,7 +27,7 @@ export function PasswordField({ autoComplete, id, label, maxLength, minLength, n
           name={name} required={required} type={visible ? 'text' : 'password'} />
         <button
           aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
           onClick={() => setVisible((value) => !value)}
           type="button"
         >

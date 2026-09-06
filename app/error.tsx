@@ -12,13 +12,13 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
 
   return (
     <main className="max-w-md mx-auto px-4 py-24 text-center">
-      <h1 className="text-2xl font-medium text-gray-900 mb-2">Something went wrong</h1>
-      <p className="text-gray-600 mb-6">
+      <h1 className="text-2xl font-medium text-foreground mb-2">Something went wrong</h1>
+      <p className="text-muted-foreground mb-6">
         An unexpected error occurred. It has been reported automatically.
-        {error.digest ? <span className="block text-xs text-gray-400 mt-2">Reference: {error.digest}</span> : null}
+        {error.digest ? <span className="block text-xs text-muted-foreground mt-2">Reference: {error.digest}</span> : null}
       </p>
       <button
-        className="rounded-full bg-orange-500 px-6 py-2 text-white hover:bg-orange-600"
+        className="rounded-full bg-primary px-6 py-2 text-primary-foreground hover:opacity-90"
         onClick={() => reset()}
         type="button"
       >

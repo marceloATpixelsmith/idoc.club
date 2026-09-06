@@ -11,11 +11,11 @@ export function SuspendAccountForm({ userId }: { userId: number }) {
   return <form action={action} className="mt-2 max-w-md space-y-2">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
-    <p className="text-sm text-gray-700">Immediately blocks this user from signing in and revokes all active sessions and remembered devices.</p>
+    <p className="text-sm text-foreground">Immediately blocks this user from signing in and revokes all active sessions and remembered devices.</p>
     <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
     <button className="rounded bg-red-600 px-3 py-1 text-sm text-white" disabled={pending} type="submit">Suspend account</button>
-    {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    {state.success && <p className="text-sm text-green-700">{state.success}</p>}
+    {state.error && <p className="text-sm text-red-400">{state.error}</p>}
+    {state.success && <p className="text-sm text-green-400">{state.success}</p>}
   </form>;
 }
 
@@ -36,8 +36,8 @@ export function ReinstateAccountForm({ userId }: { userId: number }) {
     </label>
     <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
     <button className="rounded bg-green-700 px-3 py-1 text-sm text-white" disabled={pending} type="submit">Reinstate account</button>
-    {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    {state.success && <p className="text-sm text-green-700">{state.success}</p>}
+    {state.error && <p className="text-sm text-red-400">{state.error}</p>}
+    {state.success && <p className="text-sm text-green-400">{state.success}</p>}
   </form>;
 }
 
@@ -50,11 +50,11 @@ export function ForceRevokeAllAuthorityForm({ userId }: { userId: number }) {
   return <form action={action} className="mt-2 max-w-md space-y-2">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
-    <p className="text-sm text-gray-700">Immediately revokes every session, remembered device, and MFA factor for this user (incident response). The account itself remains sign-in-eligible.</p>
+    <p className="text-sm text-foreground">Immediately revokes every session, remembered device, and MFA factor for this user (incident response). The account itself remains sign-in-eligible.</p>
     <label className="block text-sm">Incident reference (required)<input className="mt-1 block w-full border p-2" name="incidentReference" required type="text" /></label>
     <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
     <button className="rounded bg-red-800 px-3 py-1 text-sm text-white" disabled={pending} type="submit">Force-revoke all authority</button>
-    {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    {state.success && <p className="text-sm text-green-700">{state.success}</p>}
+    {state.error && <p className="text-sm text-red-400">{state.error}</p>}
+    {state.success && <p className="text-sm text-green-400">{state.success}</p>}
   </form>;
 }

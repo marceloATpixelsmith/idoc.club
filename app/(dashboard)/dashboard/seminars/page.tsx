@@ -18,7 +18,7 @@ export default async function SeminarsPage() {
   return (
     <main className="flex-1 p-4 lg:p-8">
       <h1 className="text-2xl font-semibold">My Seminars</h1>
-      <p className="mt-3 text-gray-600">You have no seminar registrations yet.</p>
+      <p className="mt-3 text-muted-foreground">You have no seminar registrations yet.</p>
     </main>
   );
 }

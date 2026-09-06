@@ -190,13 +190,13 @@ export function OnboardingWizard() {
         <div className="grid gap-3 sm:grid-cols-2">
           {TYPE_OPTIONS.map((option) => (
             <button
-              className={`cursor-pointer rounded-lg border p-4 text-left transition-colors ${classification === option.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-400'}`}
+              className={`cursor-pointer rounded-lg border p-4 text-left transition-colors ${classification === option.value ? 'border-primary bg-surface' : 'border-border hover:border-input'}`}
               key={option.value}
               onClick={() => { setClassification(option.value); setDetailsComplete(false); }}
               type="button"
             >
-              <div className="font-medium text-gray-900">{option.label}</div>
-              <div className="mt-1 text-sm text-gray-600">{option.description}</div>
+              <div className="font-medium text-foreground">{option.label}</div>
+              <div className="mt-1 text-sm text-muted-foreground">{option.description}</div>
             </button>
           ))}
         </div>
@@ -221,24 +221,24 @@ export function OnboardingWizard() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="firstName">First name</Label>
+            <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="firstName">First name</Label>
             <Input id="firstName" name="firstName" required />
           </div>
           <div>
-            <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="lastName">Last name</Label>
+            <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="lastName">Last name</Label>
             <Input id="lastName" name="lastName" required />
           </div>
         </div>
 
         <fieldset className="space-y-4 border-0 p-0">
-          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">ADDRESS</legend>
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">ADDRESS</legend>
           <div>
-            <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="countryCode">Country</Label>
+            <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="countryCode">Country</Label>
             <CountrySelect id="countryCode" name="countryCode" onChange={handleCountryChange} value={countryCode} />
           </div>
 
           <div className="relative">
-            <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="address1">Street address / Address 1</Label>
+            <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="address1">Street address / Address 1</Label>
             <Input
               aria-autocomplete="list"
               aria-controls="address-suggestions"
@@ -255,10 +255,10 @@ export function OnboardingWizard() {
               value={address1}
             />
             {suggestions.length > 0 ? (
-              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg" id="address-suggestions" role="listbox">
+              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-surface shadow-lg" id="address-suggestions" role="listbox">
                 {suggestions.map((suggestion, index) => (
                   <button
-                    className="block w-full border-b border-gray-100 px-3 py-2 text-left text-sm text-gray-700 last:border-0 hover:bg-gray-50"
+                    className="block w-full border-b border-border px-3 py-2 text-left text-sm text-foreground last:border-0 hover:bg-surface"
                     key={`${suggestion.formatted}-${index}`}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => chooseAddress(suggestion)}
@@ -271,7 +271,7 @@ export function OnboardingWizard() {
             ) : null}
             {countryCode ? (
               <div className="mt-1">
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {autocompleteAvailable ? 'Choose a suggestion to fill Address 2, city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
                 </p>
                 <p className="mt-0.5 text-right text-[10px] text-gray-400">
@@ -282,21 +282,21 @@ export function OnboardingWizard() {
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="address2">Address 2 (optional)</Label>
+            <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="address2">Address 2 (optional)</Label>
             <Input autoComplete="address-line2" id="address2" name="address2" onChange={(event) => setAddress2(event.target.value)} value={address2} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="city">City / Locality</Label>
+              <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="city">City / Locality</Label>
               <Input autoComplete="address-level2" id="city" name="city" onChange={(event) => setCity(event.target.value)} required value={city} />
             </div>
             <div>
-              <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="stateProvince">State / Province / Region</Label>
+              <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="stateProvince">State / Province / Region</Label>
               <Input autoComplete="address-level1" id="stateProvince" name="stateProvince" onChange={(event) => setStateProvince(event.target.value)} required value={stateProvince} />
             </div>
             <div>
-              <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="postalCode">Postal / ZIP code</Label>
+              <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="postalCode">Postal / ZIP code</Label>
               <Input autoComplete="postal-code" id="postalCode" name="postalCode" onChange={(event) => setPostalCode(event.target.value)} required value={postalCode} />
             </div>
           </div>
@@ -304,10 +304,10 @@ export function OnboardingWizard() {
 
         {classification !== 'veterinarian' ? (
           <fieldset className="space-y-4 border-0 p-0">
-            <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">OFFICIAL INFORMATION</legend>
+            <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">OFFICIAL INFORMATION</legend>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="nationalFederationCountryCode">National Federation</Label>
+                <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="nationalFederationCountryCode">National Federation</Label>
                 <CountrySelect
                   id="nationalFederationCountryCode"
                   name="nationalFederationCountryCode"
@@ -316,14 +316,14 @@ export function OnboardingWizard() {
                 />
               </div>
               <div>
-                <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="idocRegion">IDOC Region</Label>
-                <select className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm" id="idocRegion" name="idocRegion" onChange={handleRegionChange} required value={idocRegion}>
+                <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="idocRegion">IDOC Region</Label>
+                <select className="flex h-9 w-full rounded-md border border-input bg-surface px-3 py-1 text-sm" id="idocRegion" name="idocRegion" onChange={handleRegionChange} required value={idocRegion}>
                   <option value="">Select</option>
                   {IDOC_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="feiId">FEI ID (optional)</Label>
+                <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="feiId">FEI ID (optional)</Label>
                 <Input id="feiId" name="feiId" />
               </div>
             </div>
@@ -331,8 +331,8 @@ export function OnboardingWizard() {
               <>
                 <CheckboxGroup label="Official status as Judge" name="judgeStatus" values={JUDGE_STATUSES} />
                 <div>
-                  <Label className="mb-1.5 block text-sm font-bold text-gray-700" htmlFor="isTechnicalDelegate">Are you a Technical Delegate?</Label>
-                  <select className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm sm:w-48" id="isTechnicalDelegate" name="isTechnicalDelegate">
+                  <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="isTechnicalDelegate">Are you a Technical Delegate?</Label>
+                  <select className="flex h-9 w-full rounded-md border border-input bg-surface px-3 py-1 text-sm sm:w-48" id="isTechnicalDelegate" name="isTechnicalDelegate">
                     <option value="no">No</option>
                     <option value="yes">Yes</option>
                   </select>
@@ -346,21 +346,21 @@ export function OnboardingWizard() {
         ) : null}
 
         <fieldset className="space-y-3 border-0 p-0">
-          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gray-800">CONSENT</legend>
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">CONSENT</legend>
           <ConsentCheckbox name="termsAccepted" required>
-            {' '}I have read and agree to the <a className="underline" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
+            {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
           </ConsentCheckbox>
           <ConsentCheckbox name="privacyAccepted" required>
-            {' '}This site collects names, emails and other user information. I consent to the terms set forth in the <a className="underline" href="/privacy" target="_blank">Privacy Policy</a>.
+            {' '}This site collects names, emails and other user information. I consent to the terms set forth in the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/privacy" target="_blank">Privacy Policy</a>.
           </ConsentCheckbox>
           <ConsentCheckbox defaultChecked name="keepUpdated">
             {' '}Keep me updated on IDOC events, workshops, and certifications.
           </ConsentCheckbox>
         </fieldset>
 
-        {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+        {state.error ? <p className="text-sm text-red-400">{state.error}</p> : null}
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer text-sm text-gray-600 underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
+          <button className="cursor-pointer text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
           <Button className="flex-1" disabled={pending || !detailsComplete} size="lg" type="submit">
             {pending ? 'Saving…' : 'Create profile'}
           </Button>
@@ -383,7 +383,7 @@ function CountrySelect({
 }) {
   return (
     <select
-      className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm"
+      className="flex h-9 w-full rounded-md border border-input bg-surface px-3 py-1 text-sm"
       id={id}
       name={name}
       onChange={onChange}
@@ -399,10 +399,10 @@ function CountrySelect({
 function CheckboxGroup({ label, name, values }: { label: string; name: string; values: readonly string[] }) {
   return (
     <fieldset>
-      <legend className="mb-1.5 block text-sm font-bold text-gray-700">{label}</legend>
+      <legend className="mb-1.5 block text-sm font-bold text-foreground">{label}</legend>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {values.map((value) => (
-          <label className="flex items-center gap-2 text-sm text-gray-700" key={value}>
+          <label className="flex items-center gap-2 text-sm text-foreground" key={value}>
             <input name={name} type="checkbox" value={value} />
             {value}
           </label>
@@ -414,7 +414,7 @@ function CheckboxGroup({ label, name, values }: { label: string; name: string; v
 
 function ConsentCheckbox({ children, defaultChecked, name, required = false }: { children: ReactNode; defaultChecked?: boolean; name: string; required?: boolean }) {
   return (
-    <label className="flex items-start gap-2 text-sm text-gray-700">
+    <label className="flex items-start gap-2 text-sm text-foreground">
       <input defaultChecked={defaultChecked} className="mt-0.5" name={name} required={required} type="checkbox" />
       <span>{children}</span>
     </label>

@@ -41,7 +41,7 @@ export function GoogleIdentityCard() {
         <CardTitle>Google Sign-In</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           {linked ? 'A Google account is connected to your IDOC account.' : 'Connect Google as an additional way to sign in to IDOC.'}
         </p>
         <form action={linked ? unlinkAction : linkAction} className="space-y-4">
@@ -58,8 +58,8 @@ export function GoogleIdentityCard() {
               maxLength={128}
             />
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          {success && <p className="text-green-500 text-sm">{success}</p>}
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {success && <p className="text-green-400 text-sm">{success}</p>}
           <Button type="submit" disabled={linkPending || unlinkPending} variant={linked ? 'outline' : 'default'}>
             {linked ? 'Disconnect Google' : 'Connect Google'}
           </Button>

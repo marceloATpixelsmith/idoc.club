@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 export default function HomePage() {
   return (
     <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-      <h1 className="text-3xl font-medium text-gray-900 mb-4">IDOC</h1>
-      <p className="text-gray-600 mb-10">
+      <h1 className="text-3xl font-medium text-foreground mb-4">IDOC</h1>
+      <p className="text-muted-foreground mb-10">
         The IDOC membership platform is under active development. Sign in to an existing
         account, join as a member, or view membership pricing below.
       </p>
