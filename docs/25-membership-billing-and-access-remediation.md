@@ -14,6 +14,9 @@ This document is the actionable implementation and acceptance source for the Rel
 - A previously paid member retains full member access during a five-calendar-day grace window: recurring failure starts on the failed scheduled-renewal date; non-recurring grace consists of the five full calendar days beginning the day after `valid_until`.
 - Payment received during grace continues/restores active entitlement. After grace without payment, member access ends and the payment-only state applies.
 - Suspension overrides payment/grace and requires separate administrator reinstatement.
+- New-account demographic onboarding occurs on My Membership inside the dashboard before first payment. The rest of the dashboard remains locked; the account may only complete onboarding, proceed to payment, or sign out.
+- A valid public signup `membership` parameter (`judge`, `steward`, `judge_steward`, or `veterinarian`) is carried through password or Google signup and visually preselects the matching onboarding card without preventing the member from changing it.
+- Previously paid, post-grace members keep their stored professional classification and proceed directly to payment rather than repeating demographic onboarding.
 
 ## 2. Current implementation alignment
 
@@ -88,7 +91,7 @@ Requirements:
 
 ### 4.1 First payment
 
-1. Authenticated, onboarded, never-paid account is routed to the Membership Payment page.
+1. A newly authenticated account is locked to My Membership, where it chooses a professional classification and completes demographics; an already-onboarded never-paid or post-grace account proceeds directly to Membership Payment.
 2. Page shows one IDOC Annual Membership, €80, 12 months.
 3. Automatic renewal control is on by default and can be cleared.
 4. The account may log out without paying but cannot enter any dashboard/member route.

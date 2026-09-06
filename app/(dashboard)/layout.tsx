@@ -51,8 +51,8 @@ function UserMenu() {
     <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
       <DropdownMenuTrigger>
         <Avatar className="cursor-pointer size-9">
-          <AvatarImage alt={user.name || ''} />
-          <AvatarFallback>{userInitials(user.name, user.email)}</AvatarFallback>
+          <AvatarImage alt={[user.firstName, user.lastName].filter(Boolean).join(' ')} />
+          <AvatarFallback>{userInitials(user.firstName, user.lastName, user.email)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="flex flex-col gap-1">

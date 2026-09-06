@@ -59,10 +59,9 @@ test('renderWidget always removes any existing widget from the container before 
   assert.match(renderWidgetBody, /if \(widgetIdRef\.current\) \{\s*window\.turnstile\.remove\(widgetIdRef\.current\);\s*widgetIdRef\.current = null;\s*\}/);
 });
 
-test('a visible, explicit loading state is shown while the widget has not yet rendered or failed, so the disabled submit button is not unexplained', () => {
-  assert.match(widget, /idoc-auth-turnstile__loading/);
-  assert.match(widget, /!scriptLoaded && !failed/);
-  assert.match(widget, /Loading security check/);
+test('the managed widget stays hidden while loading or passing silently and appears only when interaction is required', () => {
+  assert.match(widget, /appearance: 'interaction-only'/);
+  assert.doesNotMatch(widget, /idoc-auth-turnstile__loading/);
 });
 
 test('the real Turnstile widget configuration itself is untouched by the resilience changes', () => {

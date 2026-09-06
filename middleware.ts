@@ -11,6 +11,7 @@ import {
 } from '@/lib/auth/session';
 import { touchSession } from '@/lib/auth/session-registry';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
+import { contentSecurityPolicy } from '@/lib/security/content-security-policy';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 
 const protectedRoutes = '/dashboard';
@@ -42,10 +43,13 @@ function isPossibleServerActionRequest(request: NextRequest): boolean {
 
 export async function middleware(request: NextRequest) {
   const requestId = crypto.randomUUID();
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = contentSecurityPolicy(nonce);
 
   if (isPossibleServerActionRequest(request) && request.headers.get('origin') === null) {
     const res = new NextResponse('Invalid Server Actions request.', { status: 403 });
     res.headers.set(REQUEST_ID_HEADER, requestId);
+    res.headers.set('Content-Security-Policy', csp);
     return res;
   }
 
@@ -81,10 +85,14 @@ export async function middleware(request: NextRequest) {
   }
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
+  // Next.js reads this request policy and applies its nonce to framework-rendered scripts.
+  forwardedHeaders.set('Content-Security-Policy', csp);
+  forwardedHeaders.set('x-nonce', nonce);
   const next = () => NextResponse.next({ request: { headers: forwardedHeaders } });
 
   const finish = (res: NextResponse) => {
     res.headers.set(REQUEST_ID_HEADER, requestId);
+    res.headers.set('Content-Security-Policy', csp);
     if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     if (mintedCsrfToken) res.cookies.set({ name: csrfCookieName(), value: mintedCsrfToken, ...csrfCookieOptions() });
     return res;

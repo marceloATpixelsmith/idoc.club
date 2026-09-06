@@ -1,17 +1,9 @@
 {
   "note": "AUTH-OPERATIONS-011: machine-readable mirror of docs/07 section 15.6's release-signoff checklist. Never edit an item's description here without updating the matching markdown checkbox in docs/07 (and vice versa) -- scripts/validate-release-checklist.mjs fails CI the moment the two diverge, in either direction. Filling in status/evidence for a real release is an operator's job; nothing in this repository or its CI can set status to \"verified\" on its own -- see AUTH-OPERATIONS-011's own canonical requirement text: production readiness must be an explicit machine-readable evidence checklist, 'never a certification or automatic security claim.' To mark an item verified, set status to \"verified\" and evidence to a structured object: {\"verifiedBy\": \"<real operator identifier>\", \"verifiedAt\": \"<ISO 8601 timestamp, not in the future>\", \"notes\": \"<at least 15 characters describing what was actually checked>\"} -- a bare string, an empty/placeholder value in any field, or a future timestamp fails validation just as hard as a stale item list does.",
-  "source": "docs/07-administrator-and-operations-runbook.md#156-release-signoff-leave-unchecked-until-manually-proved",
+  "source": "docs/07-administrator-and-operations-runbook.md#156-release-signoff-manual-evidence-only",
   "items": [
-    { "id": "release-1-verification-green", "description": "Release 1 Verification is green on final deployed code head", "status": "verified", "evidence": {
-      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
-      "verifiedAt": "2026-09-04T18:21:26Z",
-      "notes": "Production (Vercel deployment dpl_ANkSN7nywoz7VMMPE44XG6q9LnJ1) is running commit 406596b5, and the Release 1 Verification GitHub Actions workflow run for that exact commit (run 33896757225, https://github.com/marceloATpixelsmith/idoc.club/actions/runs/33896757225) completed with conclusion success."
-    } },
-    { "id": "production-migrations-applied", "description": "Production database migrations are applied", "status": "verified", "evidence": {
-      "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
-      "verifiedAt": "2026-09-04T18:28:52Z",
-      "notes": "34 of 35 migrations recorded in idoc.__drizzle_migrations; the one gap (0007_account_delivery_token_eligibility) is a self-healed bookkeeping quirk, not a real schema gap: 0007's out-of-order timestamp caused the migrator to silently skip it, but 0008_reconcile_account_delivery_eligibility (which did run) adds the same terminal_at/terminal_reason columns via ADD COLUMN IF NOT EXISTS. Confirmed both columns exist on idoc.account_delivery_outbox in production via information_schema.columns, and zero runtime errors on /api/cron/account-delivery in the last 7 days."
-    } },
+    { "id": "release-1-verification-green", "description": "Release 1 Verification is green on final deployed code head", "status": "unchecked", "evidence": null },
+    { "id": "production-migrations-applied", "description": "Production database migrations are applied", "status": "unchecked", "evidence": null },
     { "id": "production-auth-variables-configured", "description": "Required Production auth variables are configured in Vercel", "status": "verified", "evidence": {
       "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
       "verifiedAt": "2026-09-04T18:33:44Z",

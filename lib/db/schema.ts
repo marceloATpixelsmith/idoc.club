@@ -19,7 +19,6 @@ export const idocSchema = pgSchema('idoc');
 
 export const users = idocSchema.table('users', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
   // AUTH-IDENTITY-003: `email` is the normalized (trimmed, case-folded) identity used for lookup,
   // comparison, and uniqueness -- every existing call site keeps using it unchanged. This column
@@ -169,7 +168,7 @@ export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
-    user: Pick<User, 'id' | 'name' | 'email'>;
+    user: Pick<User, 'id' | 'email'>;
   })[];
 };
 

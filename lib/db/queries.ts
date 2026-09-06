@@ -1,9 +1,9 @@
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, users } from './schema';
+import { activityLogs, profiles, users } from './schema';
 import { getSession } from '@/lib/auth/session';
 
-export type PublicUser = { email: string; id: number; name: string | null };
+export type PublicUser = { email: string; firstName: string | null; id: number; lastName: string | null };
 export type SecurityPageUser = { id: number; sessionVersion: number };
 
 /** AUTH-API-003: the only user-shaped value ever sent to the browser -- every server-rendered
@@ -12,7 +12,15 @@ export type SecurityPageUser = { id: number; sessionVersion: number };
  * passwordHash, sessionVersion, accountState, and other server-only fields. */
 export async function getPublicUser(): Promise<PublicUser | null> {
   const user = await getUser();
-  return user ? { email: user.emailDisplay ?? user.email, id: user.id, name: user.name } : null;
+  if (!user) return null;
+  const [profile] = await db.select({ firstName: profiles.firstName, lastName: profiles.lastName })
+    .from(profiles).where(eq(profiles.userId, user.id)).limit(1);
+  return {
+    email: user.emailDisplay ?? user.email,
+    firstName: profile?.firstName ?? null,
+    id: user.id,
+    lastName: profile?.lastName ?? null,
+  };
 }
 
 /** Authenticates the current session while selecting only the fields the server-rendered security
@@ -73,10 +81,11 @@ export async function getActivityLogs() {
       id: activityLogs.id,
       action: activityLogs.action,
       timestamp: activityLogs.timestamp,
-      userName: users.name
+      userName: sql<string>`concat_ws(' ', ${profiles.firstName}, ${profiles.lastName})`,
     })
     .from(activityLogs)
     .leftJoin(users, eq(activityLogs.userId, users.id))
+    .leftJoin(profiles, eq(profiles.userId, users.id))
     .where(eq(activityLogs.userId, user.id))
     .orderBy(desc(activityLogs.timestamp))
     .limit(10);

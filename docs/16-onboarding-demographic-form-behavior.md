@@ -2,6 +2,16 @@
 
 This document is authoritative for the member demographic onboarding form presentation and defaulting behavior. The signup field dictionary and required professional fields remain defined in `docs/02-membership-and-payment-business-rules.md`.
 
+## Dashboard placement and signup intent
+
+After the password or Google signup step creates the authenticated account, the account opens My Membership inside the dashboard. Until profile onboarding and payment are complete, the other dashboard navigation is hidden and direct requests to those pages return the account to My Membership. The header continues to provide sign-out.
+
+Public links may add a `membership` query parameter to `/sign-up`. The accepted values are `judge`, `steward`, `judge_steward`, and `veterinarian`. Email signup carries a valid value in the signed pending-signup cookie through the email, OTP, and password steps. Google signup carries it through the server-owned OAuth transaction return path. Invalid values are ignored and never become trusted profile data.
+
+When My Membership opens the classification step, a valid carried value preselects the matching card and emphasizes it with the primary gold border, ring, tinted surface, and glow. The member may still choose any other classification before continuing. Profile submission validates the final selection server-side, activates the completed profile, and moves directly to membership payment.
+
+First name and last name are canonical profile fields. The redundant `users.name` field is removed; account settings cannot maintain a second, conflicting name value.
+
 ## Section presentation
 
 The demographic form presents ADDRESS, OFFICIAL INFORMATION, and CONSENT as uppercase section headings with clear vertical separation. These sections are not enclosed in rounded gray containers. Field labels remain bold.

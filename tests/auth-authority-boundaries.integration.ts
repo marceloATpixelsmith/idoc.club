@@ -243,7 +243,7 @@ test('AUTH-OTP-002: valid email OTP cannot become MFA, step-up, or privileged se
 test('AUTH-API-002: protected account mutation uses the signed server session, never forged subject fields', async () => {
   const actor = await userWithPassword(false);
   // updateAccount is entitlement-gated (docs/25 section 1): a real, currently-entitled member is
-  // what this test's own scenario -- a legitimate account changing its own name -- represents.
+  // what this test's own scenario -- a legitimate account changing its own email display form -- represents.
   await createMembership((await createProfile(actor.id)).id);
   const victim = await userWithPassword(false);
   const cookies = new TestCookies();
@@ -252,20 +252,17 @@ test('AUTH-API-002: protected account mutation uses the signed server session, n
     await setSession(actor);
     await withTestMembershipBoundary({ actor: { id: actor.id, roles: [] } }, async () => {
       const form = new FormData();
-      form.set('name', 'Actor changed'); form.set('email', actor.email);
+      form.set('email', actor.email);
       form.set('userId', String(victim.id)); form.set('id', String(victim.id));
       form.set('actorId', String(victim.id)); form.set('subject', JSON.stringify({ id: victim.id }));
       form.set('csrf_token', csrfTokenFrom(cookies));
-      assert.deepEqual(await updateAccount({}, form), { name: 'Actor changed', success: 'Account updated successfully.' });
+      assert.deepEqual(await updateAccount({}, form), { success: 'Account updated successfully.' });
     });
   });
-  assert.equal((await sql`select name from idoc.users where id=${actor.id}`)[0].name, 'Actor changed');
-  assert.notEqual((await sql`select name from idoc.users where id=${victim.id}`)[0].name, 'Actor changed');
   const anonymousCookies = new TestCookies();
   const anonymousCsrfToken = await issueTestCsrfToken(anonymousCookies, null);
-  const anonymous = new FormData(); anonymous.set('name', 'Anonymous'); anonymous.set('email', victim.email);
+  const anonymous = new FormData(); anonymous.set('email', victim.email);
   anonymous.set('userId', String(victim.id)); anonymous.set('csrf_token', anonymousCsrfToken);
   await withTestRequestCookies(anonymousCookies, async () => assert.rejects(
     () => updateAccount({}, anonymous), /User is not authenticated/));
-  assert.notEqual((await sql`select name from idoc.users where id=${victim.id}`)[0].name, 'Anonymous');
 });

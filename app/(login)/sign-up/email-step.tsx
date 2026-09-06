@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { EmailEntryStep } from '@/components/auth/email-entry-step';
 import { startSignup } from './actions';
 
-export function EmailStep({ initialError = '' }: { initialError?: string }) {
+export function EmailStep({ initialError = '', membership }: { initialError?: string; membership: string | null }) {
+  const membershipQuery = membership ? `&returnTo=${encodeURIComponent(`/dashboard?membership=${membership}`)}` : '';
   return (
     <EmailEntryStep
       action={startSignup}
@@ -17,7 +18,8 @@ export function EmailStep({ initialError = '' }: { initialError?: string }) {
         </div>
       )}
       dividerLabel="or"
-      googleHref="/api/auth/google/start?intent=signup"
+      googleHref={`/api/auth/google/start?intent=signup${membershipQuery}`}
+      hiddenFields={membership ? { membership } : undefined}
       initialError={initialError}
       showGoogle
       submitLabel="Sign up"

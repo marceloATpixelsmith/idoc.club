@@ -19,6 +19,7 @@ export function EmailEntryStep({
   description,
   dividerLabel,
   googleHref,
+  hiddenFields,
   initialError = '',
   showGoogle = false,
   submitLabel,
@@ -30,6 +31,7 @@ export function EmailEntryStep({
   description?: ReactNode;
   dividerLabel?: string;
   googleHref?: string;
+  hiddenFields?: Record<string, string>;
   initialError?: string;
   showGoogle?: boolean;
   submitLabel: string;
@@ -48,6 +50,9 @@ export function EmailEntryStep({
     <AuthShell description={description} title={title}>
       <form action={formAction} className="idoc-auth-form">
         <CsrfField />
+        {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
+          <input key={name} name={name} type="hidden" value={value} />
+        ))}
         <input name="turnstileToken" type="hidden" value={turnstileToken} />
 
         <div className="idoc-auth-field">

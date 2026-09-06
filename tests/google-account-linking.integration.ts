@@ -30,7 +30,7 @@ test('a first-time Google identity with a verified email and no existing account
   const claim = identity();
   const result = await authenticateGoogleIdentity(claim);
   assert.equal(result.newAccount, true);
-  assert.equal(result.redirectTo, '/onboarding');
+  assert.equal(result.redirectTo, '/dashboard');
   assert.equal(result.user.accountState, 'onboarding');
   assert.equal(result.user.email, claim.email);
 

@@ -126,11 +126,10 @@ test('updateAccount persists a display-form-only casing correction even when the
     await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, async () => {
       const form = new FormData();
       const correctedCasing = user.email.replace(/^([a-z])/, (first) => first.toUpperCase());
-      form.set('name', 'Same Member');
       form.set('email', correctedCasing);
       form.set('csrf_token', csrfToken);
       const result = await updateAccount({}, form);
-      assert.deepEqual(result, { name: 'Same Member', success: 'Account updated successfully.' });
+      assert.deepEqual(result, { success: 'Account updated successfully.' });
 
       const [row] = await sql`select email, email_display from idoc.users where id=${user.id}`;
       assert.equal(row.email, user.email, 'the normalized identity must not change for a casing-only edit');

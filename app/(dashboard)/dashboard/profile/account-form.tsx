@@ -14,42 +14,34 @@ import { CsrfField } from '@/components/security/csrf-field';
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 type ActionState = {
-  name?: string;
   error?: string;
   success?: string;
 };
 
 type AccountFieldsProps = {
   state: ActionState;
-  nameValue?: string;
   emailValue?: string;
 };
 
-function AccountFields({ state, nameValue = '', emailValue = '' }: AccountFieldsProps) {
+function AccountFields({ emailValue = '' }: AccountFieldsProps) {
   return (
-    <>
-      <div>
-        <Label htmlFor="name" className="mb-2">Name</Label>
-        <Input id="name" name="name" placeholder="Enter your name" defaultValue={state.name || nameValue} required />
-      </div>
-      <div>
-        <Label htmlFor="email" className="mb-2">Email</Label>
-        <Input id="email" name="email" type="email" placeholder="Enter your email" defaultValue={emailValue} required />
-      </div>
-    </>
+    <div>
+      <Label htmlFor="email" className="mb-2">Email</Label>
+      <Input id="email" name="email" type="email" placeholder="Enter your email" defaultValue={emailValue} required />
+    </div>
   );
 }
 
 function AccountFieldsWithData({ state }: { state: ActionState }) {
   const { data: user } = useSWR<PublicUser>('/api/user', fetcher);
-  return <AccountFields state={state} nameValue={user?.name ?? ''} emailValue={user?.email ?? ''} />;
+  return <AccountFields state={state} emailValue={user?.email ?? ''} />;
 }
 
 export function AccountForm() {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(updateAccount, {});
   return (
     <Card>
-      <CardHeader><CardTitle>Name and email</CardTitle></CardHeader>
+      <CardHeader><CardTitle>Account email</CardTitle></CardHeader>
       <CardContent>
         <form className="space-y-4" action={formAction}>
           <CsrfField />

@@ -192,6 +192,17 @@ test('onboarding profile completion atomically activates only onboarding account
   assert.match(access, /accountState: 'active'/);
 });
 
+test('first and last name live only on the canonical profile record', () => {
+  const schema = readFileSync(new URL('../lib/db/schema.ts', import.meta.url), 'utf8');
+  const usersTable = schema.slice(schema.indexOf('export const users ='), schema.indexOf('export const authSessions'));
+  const profilesTable = schema.slice(schema.indexOf('export const profiles ='), schema.indexOf('export const onboardingConsents'));
+  const migration = readFileSync(new URL('../lib/db/migrations/0037_remove_redundant_user_name.sql', import.meta.url), 'utf8');
+  assert.doesNotMatch(usersTable, /name: varchar\('name'/);
+  assert.match(profilesTable, /firstName: varchar\('first_name'/);
+  assert.match(profilesTable, /lastName: varchar\('last_name'/);
+  assert.match(migration, /DROP COLUMN IF EXISTS "name"/);
+});
+
 test('migrated activation requires imported profile, role, entitlement, and mapping foundations', () => {
   const recovery = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
   assert.match(recovery, /missing_imported_profile/);

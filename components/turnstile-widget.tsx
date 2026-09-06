@@ -54,6 +54,7 @@ export function TurnstileWidget({
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         action,
+        appearance: 'interaction-only',
         callback: onVerify,
         'error-callback': () => setFailed(true),
         'expired-callback': () => onVerify?.(''),
@@ -123,13 +124,6 @@ export function TurnstileWidget({
         strategy="afterInteractive"
       />
       <div ref={containerRef} />
-      {/* Reserves visible space and gives an explicit reason the submit button below stays
-       * disabled while the widget hasn't rendered yet -- previously this window was an empty,
-       * unexplained gap, and a member who started filling the form had no way to tell "still
-       * loading" apart from "broken." */}
-      {!scriptLoaded && !failed ? (
-        <p className="idoc-auth-turnstile__loading" aria-live="polite">Loading security check…</p>
-      ) : null}
       {failed ? (
         <p className="idoc-auth-turnstile__error" role="alert">
           The security check didn&apos;t load. Check your connection or disable any script/ad

@@ -14,12 +14,39 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
-test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
-  // An unauthenticated request to /onboarding redirects to /sign-in before ever reaching the
-  // onboarding page itself, so its headers would just be /sign-in's -- this must authenticate as
-  // the 'onboarding'-state fixture to actually observe the onboarding page's own response.
+test('CSP uses a fresh framework script nonce and denies unapproved origins', async ({ request }) => {
+  const first = await request.get('/sign-in');
+  const second = await request.get('/sign-in');
+  const firstPolicy = first.headers()['content-security-policy'];
+  const secondPolicy = second.headers()['content-security-policy'];
+  const firstNonce = firstPolicy.match(/'nonce-([^']+)'/)?.[1];
+  const secondNonce = secondPolicy.match(/'nonce-([^']+)'/)?.[1];
+
+  expect(firstNonce).toBeTruthy();
+  expect(secondNonce).toBeTruthy();
+  expect(firstNonce).not.toBe(secondNonce);
+  expect(firstPolicy.match(/script-src[^;]+/)?.[0]).not.toContain("'unsafe-inline'");
+  // The security E2E web server runs through `next dev --turbopack`, whose hot-update runtime needs
+  // eval. The pure policy test separately proves that production omits this development-only token.
+  expect(firstPolicy.match(/script-src[^;]+/)?.[0]).toContain("'unsafe-eval'");
+  expect(firstPolicy).toContain("img-src 'self' data:");
+  expect(firstPolicy).not.toContain('img-src https:');
+  expect(firstPolicy).toContain("connect-src 'self' https://challenges.cloudflare.com");
+  expect(firstPolicy).toContain('frame-src https://challenges.cloudflare.com');
+  expect(firstPolicy).toContain("frame-ancestors 'none'");
+  expect(firstPolicy).not.toContain('evil.example');
+
+  const html = await first.text();
+  const scriptNonces = [...html.matchAll(/<script[^>]+nonce="([^"]+)"/g)].map((match) => match[1]);
+  expect(scriptNonces.length).toBeGreaterThan(0);
+  expect(scriptNonces.every((nonce) => nonce === firstNonce)).toBe(true);
+});
+
+test('only the dashboard-hosted onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
+  // This must authenticate as the onboarding-state fixture to observe the dashboard response that
+  // now hosts the form rather than the compatibility redirect at /onboarding.
   const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
-  const onboarding = await context.request.get('/onboarding');
+  const onboarding = await context.request.get('/dashboard');
   expect(onboarding.headers()['permissions-policy']).toContain('geolocation=(self)');
   await context.close();
   for (const route of ['/sign-in', '/api/user']) {

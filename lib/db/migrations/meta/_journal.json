@@ -260,6 +260,13 @@
       "when": 1788300000000,
       "tag": "0036_session_device_label",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788386400000,
+      "tag": "0037_remove_redundant_user_name",
+      "breakpoints": true
     }
   ]
 }

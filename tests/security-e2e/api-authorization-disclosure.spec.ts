@@ -14,14 +14,29 @@ test('an anonymous request and a disallowed-account-state session both receive t
   expect(await anonymous.json()).toBeNull();
   expect(anonymous.headers()['cache-control']).toBe('no-store');
 
-  for (const fixture of ['onboarding', 'suspended']) {
-    const context = await browser.newContext({ storageState: `.security-e2e/${fixture}.json` });
-    const response = await context.request.get('/api/user');
-    expect(response.status(), fixture).toBe(200);
-    expect(await response.json(), fixture).toBeNull();
-    expect(response.headers()['cache-control'], fixture).toBe('no-store');
-    await context.close();
-  }
+  const context = await browser.newContext({ storageState: '.security-e2e/suspended.json' });
+  const response = await context.request.get('/api/user');
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toBeNull();
+  expect(response.headers()['cache-control']).toBe('no-store');
+  await context.close();
+});
+
+// AUTH-API-004 (docs/16): an onboarding account is not "disallowed" here the way suspended/deleted/
+// unverified are -- My Membership onboarding now lives inside the dashboard layout, and that
+// layout's header calls this same endpoint to render the account's own identity while onboarding is
+// still in progress. It gets its real (profile-less) identity back, never the generic null.
+test('an onboarding session receives its own generic identity, not the anonymous/disallowed null', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
+  const response = await context.request.get('/api/user');
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body).not.toBeNull();
+  expect(body.email).toBe('onboarding@security.example.test');
+  expect(body.firstName).toBeNull();
+  expect(body.lastName).toBeNull();
+  expect(response.headers()['cache-control']).toBe('no-store');
+  await context.close();
 });
 
 test('an eligible session receives only its own identity, at the real HTTP layer, distinct account to distinct account', async ({ browser }) => {
