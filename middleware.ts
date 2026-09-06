@@ -15,6 +15,23 @@ import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } fro
 
 const protectedRoutes = '/dashboard';
 
+function contentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "img-src 'self' data:",
+    `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`,
+    // Next.js and Tailwind currently emit framework/style attributes without a nonce hook. This is
+    // deliberately the sole unsafe-inline exception; scripts never receive it in production.
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' https://challenges.cloudflare.com",
+    'frame-src https://challenges.cloudflare.com',
+  ].join('; ');
+}
+
 // A lightweight substitute for a full APM/tracing vendor integration (docs/21 AUTH-LOG-004): every
 // request is assigned a fresh correlation ID here, before any application code runs, so a single
 // request's log lines can be tied together by grepping one ID. Always generated server-side --
@@ -42,10 +59,13 @@ function isPossibleServerActionRequest(request: NextRequest): boolean {
 
 export async function middleware(request: NextRequest) {
   const requestId = crypto.randomUUID();
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = contentSecurityPolicy(nonce);
 
   if (isPossibleServerActionRequest(request) && request.headers.get('origin') === null) {
     const res = new NextResponse('Invalid Server Actions request.', { status: 403 });
     res.headers.set(REQUEST_ID_HEADER, requestId);
+    res.headers.set('Content-Security-Policy', csp);
     return res;
   }
 
@@ -81,10 +101,14 @@ export async function middleware(request: NextRequest) {
   }
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
+  // Next.js reads this request policy and applies its nonce to framework-rendered scripts.
+  forwardedHeaders.set('Content-Security-Policy', csp);
+  forwardedHeaders.set('x-nonce', nonce);
   const next = () => NextResponse.next({ request: { headers: forwardedHeaders } });
 
   const finish = (res: NextResponse) => {
     res.headers.set(REQUEST_ID_HEADER, requestId);
+    res.headers.set('Content-Security-Policy', csp);
     if (legacyCookie) res.cookies.delete(LEGACY_SESSION_COOKIE_NAME);
     if (mintedCsrfToken) res.cookies.set({ name: csrfCookieName(), value: mintedCsrfToken, ...csrfCookieOptions() });
     return res;

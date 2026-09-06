@@ -1,6 +1,6 @@
 {
   "note": "AUTH-OPERATIONS-011: machine-readable mirror of docs/07 section 15.6's release-signoff checklist. Never edit an item's description here without updating the matching markdown checkbox in docs/07 (and vice versa) -- scripts/validate-release-checklist.mjs fails CI the moment the two diverge, in either direction. Filling in status/evidence for a real release is an operator's job; nothing in this repository or its CI can set status to \"verified\" on its own -- see AUTH-OPERATIONS-011's own canonical requirement text: production readiness must be an explicit machine-readable evidence checklist, 'never a certification or automatic security claim.' To mark an item verified, set status to \"verified\" and evidence to a structured object: {\"verifiedBy\": \"<real operator identifier>\", \"verifiedAt\": \"<ISO 8601 timestamp, not in the future>\", \"notes\": \"<at least 15 characters describing what was actually checked>\"} -- a bare string, an empty/placeholder value in any field, or a future timestamp fails validation just as hard as a stale item list does.",
-  "source": "docs/07-administrator-and-operations-runbook.md#156-release-signoff-leave-unchecked-until-manually-proved",
+  "source": "docs/07-administrator-and-operations-runbook.md#156-release-signoff-manual-evidence-only",
   "items": [
     { "id": "release-1-verification-green", "description": "Release 1 Verification is green on final deployed code head", "status": "verified", "evidence": {
       "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",

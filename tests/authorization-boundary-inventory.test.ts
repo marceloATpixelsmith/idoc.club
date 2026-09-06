@@ -149,11 +149,10 @@ test('the SaaS-starter team-query code path is fully removed, not merely unroute
 });
 
 test('activity_logs.ip_address is no longer read or rendered', () => {
-  // A Codex review caught that this column -- a plain unhashed varchar(45), never actually written
-  // to by any code path -- was still selected by getActivityLogs() and rendered raw. Activity now
+  // A Codex review caught that this column -- a plain unhashed varchar(45), written by historical code
+  // but no longer read by the current application -- was still selected by getActivityLogs() and rendered raw. Activity now
   // renders as a table at the bottom of the My Security tab (security-client.tsx), not a standalone
-  // /dashboard/activity page, but the same guarantee applies: the column itself is left in the
-  // schema (nothing writes to it; dropping it is a separate, more deliberate decision), the
+  // schema (dropping it and investigating historical contents are separate operational decisions), the
   // read/render path is gone.
   const queries = readFileSync(path.join(root, 'lib/db/queries.ts'), 'utf8');
   assert.doesNotMatch(queries, /ipAddress/);

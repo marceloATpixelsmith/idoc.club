@@ -10,7 +10,7 @@ import { extractRunbookItems, validateChecklist } from '../scripts/validate-rele
 // state (docs/07 and docs/25-release-readiness-checklist.json as they actually exist right now) passes
 // cleanly.
 
-const heading = '## 15.6 Release signoff (leave unchecked until manually proved)';
+const heading = '## 15.6 Release signoff (manual evidence only)';
 const realEvidence = { notes: 'Confirmed via a real deploy dashboard check.', verifiedAt: '2026-09-01T12:00:00Z', verifiedBy: 'ops-lead-jane' };
 function runbook(items: string[]) {
   return `# doc\n\n${heading}\n\n${items.map((item) => `- [ ] ${item}: __________`).join('\n')}\n\n## 16. Next section\n`;

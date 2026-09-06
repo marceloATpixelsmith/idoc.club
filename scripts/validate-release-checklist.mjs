@@ -12,8 +12,8 @@ import { readFileSync } from 'node:fs';
 
 const RUNBOOK_PATH = 'docs/07-administrator-and-operations-runbook.md';
 const CHECKLIST_PATH = 'docs/25-release-readiness-checklist.json';
-const CHECKLIST_HEADING = '## 15.6 Release signoff (leave unchecked until manually proved)';
-const CHECKBOX_LINE = /^- \[ \] (.+): _+$/;
+const CHECKLIST_HEADING = '## 15.6 Release signoff (manual evidence only)';
+const CHECKBOX_LINE = /^- \[[ x]\] (.+): _+$/;
 
 export function extractRunbookItems(markdown) {
   const startIndex = markdown.indexOf(CHECKLIST_HEADING);

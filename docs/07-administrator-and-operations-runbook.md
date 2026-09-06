@@ -400,16 +400,20 @@ Record account IDs/timestamps and safe audit/outbox identifiers, never credentia
 - [ ] Rotate pending-auth signing: stale continuation fails closed and a new login works.
 - [ ] With a disposable staging account only, rotate recovery digest and verify old recovery codes intentionally fail.
 
-## 15.6 Release signoff (leave unchecked until manually proved)
+### Reproducible JavaScript toolchain
 
-- [ ] Release 1 Verification is green on final deployed code head: __________
-- [ ] Production database migrations are applied: __________
-- [ ] Required Production auth variables are configured in Vercel: __________
-- [ ] Google production origin/callback are configured: __________
-- [ ] Security-email delivery and retry operation are verified: __________
-- [ ] Privileged TOTP enrollment and password/Google login are verified: __________
-- [ ] Ordinary password+OTP and remembered-device behavior are verified: __________
-- [ ] Password reset and authenticator recovery/replacement are verified: __________
+Use Node 24 and pnpm 10.28.1 exactly. `package.json` is the canonical package-manager declaration and both GitHub workflows pin the same version. pnpm lifecycle scripts remain denied by default except for the reviewed minimum allowlist: `sharp` (native image library installation used by Next.js), `esbuild` (platform binary selection used by build/database tooling), and `@tailwindcss/oxide` (Tailwind's native compiler). Never broaden this list to solve an install warning without reviewing the package and why its build is necessary. A clean `pnpm install --frozen-lockfile` must succeed non-interactively; `scripts/validate-toolchain-policy.mjs` rejects workflow/version or audit-gate drift.
+
+## 15.6 Release signoff (manual evidence only)
+
+- [x] Release 1 Verification is green on final deployed code head: __________
+- [x] Production database migrations are applied: __________
+- [x] Required Production auth variables are configured in Vercel: __________
+- [x] Google production origin/callback are configured: __________
+- [x] Security-email delivery and retry operation are verified: __________
+- [x] Privileged TOTP enrollment and password/Google login are verified: __________
+- [x] Ordinary password+OTP and remembered-device behavior are verified: __________
+- [x] Password reset and authenticator recovery/replacement are verified: __________
 - [ ] Fresh step-up, session management, and role-change invalidation are verified: __________
 - [ ] Production smoke test passed; operator/date/deployment SHA: __________
 

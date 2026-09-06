@@ -14,6 +14,33 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
+test('CSP uses a fresh framework script nonce and denies unapproved origins', async ({ request }) => {
+  const first = await request.get('/sign-in');
+  const second = await request.get('/sign-in');
+  const firstPolicy = first.headers()['content-security-policy'];
+  const secondPolicy = second.headers()['content-security-policy'];
+  const firstNonce = firstPolicy.match(/'nonce-([^']+)'/)?.[1];
+  const secondNonce = secondPolicy.match(/'nonce-([^']+)'/)?.[1];
+
+  expect(firstNonce).toBeTruthy();
+  expect(secondNonce).toBeTruthy();
+  expect(firstNonce).not.toBe(secondNonce);
+  expect(firstPolicy).not.toContain("'unsafe-inline' 'unsafe-eval'");
+  expect(firstPolicy.match(/script-src[^;]+/)?.[0]).not.toContain("'unsafe-inline'");
+  expect(firstPolicy.match(/script-src[^;]+/)?.[0]).not.toContain("'unsafe-eval'");
+  expect(firstPolicy).toContain("img-src 'self' data:");
+  expect(firstPolicy).not.toContain('img-src https:');
+  expect(firstPolicy).toContain("connect-src 'self' https://challenges.cloudflare.com");
+  expect(firstPolicy).toContain('frame-src https://challenges.cloudflare.com');
+  expect(firstPolicy).toContain("frame-ancestors 'none'");
+  expect(firstPolicy).not.toContain('evil.example');
+
+  const html = await first.text();
+  const scriptNonces = [...html.matchAll(/<script[^>]+nonce="([^"]+)"/g)].map((match) => match[1]);
+  expect(scriptNonces.length).toBeGreaterThan(0);
+  expect(scriptNonces.every((nonce) => nonce === firstNonce)).toBe(true);
+});
+
 test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
   // An unauthenticated request to /onboarding redirects to /sign-in before ever reaching the
   // onboarding page itself, so its headers would just be /sign-in's -- this must authenticate as

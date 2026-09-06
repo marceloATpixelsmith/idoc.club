@@ -34,3 +34,7 @@ For context on what's already implemented, see `docs/21-authentication-security-
 (the authoritative control-by-control inventory) and `docs/20-authentication-security-test-acceptance.md`
 (what's automatically verified). Neither of those documents, nor this policy, constitutes a claim of
 penetration-test certification.
+
+## Release-evidence boundary
+
+Repository security checks include a blocking high-severity dependency audit and behavioral authentication tests. They do not constitute production sign-off. The authoritative checklist currently preserves eight previously recorded operator-verification entries while fresh step-up/session/role invalidation and the production smoke test remain unchecked; the repository must not manufacture those two manual results.
