@@ -406,8 +406,8 @@ Use Node 24 and pnpm 10.28.1 exactly. `package.json` is the canonical package-ma
 
 ## 15.6 Release signoff (manual evidence only)
 
-- [x] Release 1 Verification is green on final deployed code head: __________
-- [x] Production database migrations are applied: __________
+- [ ] Release 1 Verification is green on final deployed code head: __________
+- [ ] Production database migrations are applied: __________
 - [x] Required Production auth variables are configured in Vercel: __________
 - [x] Google production origin/callback are configured: __________
 - [x] Security-email delivery and retry operation are verified: __________
