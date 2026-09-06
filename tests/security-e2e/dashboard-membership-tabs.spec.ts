@@ -20,9 +20,8 @@ test('a not-yet-entitled member sees only the paywall on every dashboard sub-pag
   await page.goto('/dashboard');
   await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Pay for membership' })).toBeVisible();
-  // Only the My Membership tab itself is offered -- no other tab invites a click that would just
-  // bounce back.
-  for (const label of ['My Profile', 'My Security', 'My Seminars']) {
+  // No tab bar at all -- a "menu" offering exactly one destination you can't leave isn't a menu.
+  for (const label of ['My Membership', 'My Profile', 'My Security', 'My Seminars']) {
     await expect(page.getByRole('link', { name: label })).toHaveCount(0);
   }
   // A direct visit to any other dashboard sub-page (bookmark, typed URL) bounces back too -- this
@@ -41,6 +40,19 @@ test('an administrator is never gated by membership payment status and can still
   await page.goto('/dashboard/security');
   await expect(page).toHaveURL(/\/dashboard\/security$/);
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
+  await context.close();
+});
+
+test('an administrator with no member profile sees the full tab bar and an honest "no profile" message, never the onboarding or paywall redirect', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/administrator-no-profile.json' });
+  const page = await context.newPage();
+  await page.goto('/dashboard');
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
+  await expect(page.getByText('You have no member profile')).toBeVisible();
+  for (const label of ['My Profile', 'My Security', 'My Seminars']) {
+    await expect(page.getByRole('link', { name: label })).toBeVisible();
+  }
   await context.close();
 });
 

@@ -1,13 +1,18 @@
 import { redirect } from 'next/navigation';
-import { getOwnPrivateMember } from '@/lib/membership/data-access';
+import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
+import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { AccountForm } from './account-form';
 import { ProfileForm } from './profile-form';
 
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ confirmDetails?: string }> }) {
+  const actor = await requireAccountAccess('profile');
+  const privileged = isPrivilegedActor(actor);
   const member = await getOwnPrivateMember();
-  if (!member) redirect('/onboarding');
-  if (!isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
+  // An administrator/super_admin is never a member and must never be gated by membership payment
+  // status or pushed into onboarding for lacking a member profile -- they just see no profile form.
+  if (!member && !privileged) redirect('/onboarding');
+  if (member && !privileged && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   const { confirmDetails } = await searchParams;
   return (
     <section className="space-y-8 p-4 lg:p-8">
@@ -20,7 +25,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         ) : null}
         <AccountForm />
       </div>
-      <ProfileForm member={member} />
+      {member ? <ProfileForm member={member} /> : null}
     </section>
   );
 }
