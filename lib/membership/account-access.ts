@@ -11,13 +11,23 @@ export type AccountState = 'active' | 'deleted' | 'migrated_pending' | 'onboardi
 // member's entitlement.
 export type AccountFunction = 'account' | 'account_mutation' | 'administration' | 'billing_boundary' | 'member' | 'onboarding' | 'profile' | 'profile_mutation' | 'renewal';
 
+/** An administrator/super_admin is never a member and must never be gated by membership payment
+ * status anywhere -- the dashboard paywall included. Shared here so every call site (the account
+ * policy below, and each dashboard page's own paywall check) agrees on exactly the same definition. */
+export function isPrivilegedActor(actor: Actor): boolean {
+  return actor.roles.includes('administrator') || actor.roles.includes('super_admin');
+}
+
 /** Pure policy used at server boundaries; UI visibility is never an authorization decision. */
 export function mayAccessAccountFunction(input: { accountState: AccountState; actor: Actor; entitled: boolean }, operation: AccountFunction) {
   if (input.accountState === 'deleted' || input.accountState === 'suspended' || input.accountState === 'migrated_pending' || input.accountState === 'unverified') return false;
-  const privileged = input.actor.roles.includes('administrator') || input.actor.roles.includes('super_admin');
+  const privileged = isPrivilegedActor(input.actor);
   if (operation === 'administration') return privileged;
   if (input.accountState === 'onboarding') return operation === 'onboarding';
-  if (operation === 'member') return input.entitled;
+  // Own-account activity history is read-only and not itself membership content -- an
+  // administrator/super_admin reading their own activity log is never gated by their own
+  // (irrelevant) entitlement either.
+  if (operation === 'member') return input.entitled || privileged;
   if (operation === 'account_mutation' || operation === 'profile_mutation') return input.entitled || privileged;
   // Active and expired members retain read-only account/profile access, sign-out, and future
   // billing/renewal boundaries even without current entitlement.

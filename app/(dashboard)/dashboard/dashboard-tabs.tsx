@@ -14,13 +14,14 @@ const ALL_TABS = [
 ];
 
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
- * paywall gate, which is the actual enforcement point. This only keeps the tab bar itself from
- * inviting a click into a tab that would just bounce back to My Membership; it is UI convenience,
- * never an authorization boundary on its own. */
+ * paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
+ * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
+ * entitled (or for a privileged administrator/super_admin, who is never gated by payment status),
+ * the real bar appears. This is UI convenience, never an authorization boundary on its own. */
 export function DashboardTabs({ entitled }: { entitled: boolean }) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const tabs = entitled ? ALL_TABS : ALL_TABS.slice(0, 1);
+  if (!entitled) return null;
 
   return (
     <>
@@ -32,7 +33,7 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
         </Button>
       </div>
       <nav className={`flex-col gap-1 border-b border-border bg-background p-2 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 ${isMenuOpen ? 'flex' : 'hidden'}`}>
-        {tabs.map((tab) => (
+        {ALL_TABS.map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"

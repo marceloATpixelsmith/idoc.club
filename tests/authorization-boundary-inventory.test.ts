@@ -150,14 +150,15 @@ test('the SaaS-starter team-query code path is fully removed, not merely unroute
 
 test('activity_logs.ip_address is no longer read or rendered', () => {
   // A Codex review caught that this column -- a plain unhashed varchar(45), never actually written
-  // to by any code path -- was still selected by getActivityLogs() and rendered raw on
-  // /dashboard/activity, contradicting a blanket "IP is never retained raw" claim elsewhere in this
-  // codebase's own security documentation. The column itself is left in the schema (nothing writes
-  // to it; dropping it is a separate, more deliberate decision), but the read/render path is gone.
+  // to by any code path -- was still selected by getActivityLogs() and rendered raw. Activity now
+  // renders as a table at the bottom of the My Security tab (security-client.tsx), not a standalone
+  // /dashboard/activity page, but the same guarantee applies: the column itself is left in the
+  // schema (nothing writes to it; dropping it is a separate, more deliberate decision), the
+  // read/render path is gone.
   const queries = readFileSync(path.join(root, 'lib/db/queries.ts'), 'utf8');
   assert.doesNotMatch(queries, /ipAddress/);
-  const activityPage = readFileSync(path.join(root, 'app/(dashboard)/dashboard/activity/page.tsx'), 'utf8');
-  assert.doesNotMatch(activityPage, /ipAddress|from IP/);
+  const securityClient = readFileSync(path.join(root, 'app/(dashboard)/dashboard/security/security-client.tsx'), 'utf8');
+  assert.doesNotMatch(securityClient, /ipAddress|from IP/);
 });
 
 test('delegates-to-data-access actions call an ownership-enforcing membership data-access function', () => {
