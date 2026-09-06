@@ -11,6 +11,8 @@
  */
 
 :root {
+  color-scheme: dark;
+
   --radius: 0.25rem;
 
   --background: oklch(0.16 0.045 265);

@@ -41,7 +41,7 @@ Imported/migrated accounts use the same public sign-in surface. Migration status
 
 ## Canonical UI and branding adoption
 
-IDOC authentication pages use the reference shell geometry and responsive behavior. IDOC-specific customization is limited to application branding and route values. The production Cloudflare widget remains real and server-verified and uses the canonical light/flexible presentation.
+IDOC authentication pages use the reference shell geometry (split layout, 48px field/button height, 10px control radius) and responsive behavior. IDOC-specific customization covers application branding, route values, and — since the September 2026 visual redesign — the application-wide visual theme (color palette, typography, and control coloring/styling) applied on top of that unchanged canonical geometry; it does not alter the canonical shell structure, layout mechanics, or control behavior. The production Cloudflare widget remains real and server-verified and uses the canonical light/flexible presentation regardless of the surrounding page theme.
 
 The 24 August 2026 UI parity pass aligned the implemented login, signup, verification, recovery, reset, and compatibility auth surfaces with the canonical reference geometry, copy, and controls.
 
