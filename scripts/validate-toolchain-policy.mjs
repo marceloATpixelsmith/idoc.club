@@ -25,11 +25,27 @@ const securityWorkflow = await readFile(
   new URL('.github/workflows/auth-security-verification.yml', root),
   'utf8'
 );
-const blockingAudit = /^\s+- run: pnpm audit --audit-level=high\s*$/m;
-if (!blockingAudit.test(securityWorkflow)) {
-  throw new Error('Authentication security CI must run blocking pnpm audit --audit-level=high.');
+
+export function hasBlockingHighAudit(workflow) {
+  const lines = workflow.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const auditLine = lines[index];
+    const match = auditLine.match(/^(\s*)- run:\s*pnpm audit --audit-level=high\s*$/);
+    if (!match) continue;
+    const stepIndent = match[1].length;
+    const stepLines = [auditLine];
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const line = lines[next];
+      if (line.trim() !== '' && line.length - line.trimStart().length <= stepIndent) break;
+      stepLines.push(line);
+    }
+    const step = stepLines.join('\n');
+    if (!/^\s*continue-on-error\s*:/m.test(step)) return true;
+  }
+  return false;
 }
-if (/pnpm audit --audit-level=high[^\n]*(?:\|\||continue-on-error)/.test(securityWorkflow)) {
+
+if (!hasBlockingHighAudit(securityWorkflow)) {
   throw new Error('Authentication security CI must not bypass high-severity audit failures.');
 }
 

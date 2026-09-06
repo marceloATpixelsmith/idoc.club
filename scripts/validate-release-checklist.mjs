@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 const RUNBOOK_PATH = 'docs/07-administrator-and-operations-runbook.md';
 const CHECKLIST_PATH = 'docs/25-release-readiness-checklist.json';
 const CHECKLIST_HEADING = '## 15.6 Release signoff (manual evidence only)';
-const CHECKBOX_LINE = /^- \[[ x]\] (.+): _+$/;
+const CHECKBOX_LINE = /^- \[([ x])\] (.+): _+$/;
 
 export function extractRunbookItems(markdown) {
   const startIndex = markdown.indexOf(CHECKLIST_HEADING);
@@ -24,7 +24,12 @@ export function extractRunbookItems(markdown) {
   const items = [];
   for (const line of section.split('\n')) {
     const match = line.match(CHECKBOX_LINE);
-    if (match) items.push(match[1].trim());
+    if (match) {
+      items.push({
+        description: match[2].trim(),
+        status: match[1] === 'x' ? 'verified' : 'unchecked',
+      });
+    }
   }
   return items;
 }
@@ -76,7 +81,7 @@ export function validateChecklist(runbookMarkdown, checklistJsonText) {
   }
   const maxLength = Math.max(runbookItems.length, jsonDescriptions.length);
   for (let index = 0; index < maxLength; index += 1) {
-    const fromRunbook = runbookItems[index];
+    const fromRunbook = runbookItems[index]?.description;
     const fromJson = jsonDescriptions[index];
     if (fromRunbook === undefined) {
       errors.push(`${CHECKLIST_PATH} item ${index} ("${fromJson}") has no matching checkbox in docs/07 §15.6.`);
@@ -85,6 +90,16 @@ export function validateChecklist(runbookMarkdown, checklistJsonText) {
     } else if (fromRunbook !== fromJson) {
       errors.push(`Item ${index} text drifted between docs/07 §15.6 and ${CHECKLIST_PATH}:\n` +
         `    docs/07:  "${fromRunbook}"\n    ${CHECKLIST_PATH}: "${fromJson}"`);
+    }
+  }
+
+  const comparableLength = Math.min(runbookItems.length, checklist.items.length);
+  for (let index = 0; index < comparableLength; index += 1) {
+    const runbookStatus = runbookItems[index].status;
+    const checklistStatus = checklist.items[index].status;
+    if (runbookStatus !== checklistStatus) {
+      errors.push(`Item ${index} status drifted between docs/07 §15.6 and ${CHECKLIST_PATH}: ` +
+        `docs/07 is "${runbookStatus}" but ${CHECKLIST_PATH} is "${checklistStatus}".`);
     }
   }
 

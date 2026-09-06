@@ -12,8 +12,12 @@ import { extractRunbookItems, validateChecklist } from '../scripts/validate-rele
 
 const heading = '## 15.6 Release signoff (manual evidence only)';
 const realEvidence = { notes: 'Confirmed via a real deploy dashboard check.', verifiedAt: '2026-09-01T12:00:00Z', verifiedBy: 'ops-lead-jane' };
-function runbook(items: string[]) {
-  return `# doc\n\n${heading}\n\n${items.map((item) => `- [ ] ${item}: __________`).join('\n')}\n\n## 16. Next section\n`;
+function runbook(items: Array<string | { description: string; status: 'unchecked' | 'verified' }>) {
+  return `# doc\n\n${heading}\n\n${items.map((item) => {
+    const description = typeof item === 'string' ? item : item.description;
+    const marker = typeof item === 'string' || item.status === 'unchecked' ? ' ' : 'x';
+    return `- [${marker}] ${description}: __________`;
+  }).join('\n')}\n\n## 16. Next section\n`;
 }
 function checklist(items: { description: string; evidence?: unknown; id?: string; status?: string }[]) {
   return JSON.stringify({ items: items.map((item, index) => ({
@@ -45,7 +49,7 @@ test('reworded item text between the two sources is flagged even when the count 
 
 test('a "verified" item with no evidence is rejected -- the checklist must never self-certify', () => {
   const errors = validateChecklist(
-    runbook(['First item']),
+    runbook([{ description: 'First item', status: 'verified' }]),
     checklist([{ description: 'First item', status: 'verified' }]),
   );
   assert.equal(errors.length, 1);
@@ -54,7 +58,7 @@ test('a "verified" item with no evidence is rejected -- the checklist must never
 
 test('a "verified" item whose evidence is a bare string (not a structured object) is rejected', () => {
   const errors = validateChecklist(
-    runbook(['First item']),
+    runbook([{ description: 'First item', status: 'verified' }]),
     checklist([{ description: 'First item', evidence: 'Verified by ops 2026-09-02, deploy SHA abc1234.', status: 'verified' }]),
   );
   assert.equal(errors.length, 1);
@@ -63,7 +67,7 @@ test('a "verified" item whose evidence is a bare string (not a structured object
 
 test('a "verified" item whose evidence fields are placeholder text is rejected field by field', () => {
   const errors = validateChecklist(
-    runbook(['First item']),
+    runbook([{ description: 'First item', status: 'verified' }]),
     checklist([{ description: 'First item', evidence: { notes: 'done', verifiedAt: '2026-09-01T12:00:00Z', verifiedBy: 'n/a' }, status: 'verified' }]),
   );
   assert.equal(errors.length, 2);
@@ -73,7 +77,7 @@ test('a "verified" item whose evidence fields are placeholder text is rejected f
 
 test('a "verified" item with a future verifiedAt timestamp is rejected', () => {
   const errors = validateChecklist(
-    runbook(['First item']),
+    runbook([{ description: 'First item', status: 'verified' }]),
     checklist([{ description: 'First item', evidence: { ...realEvidence, verifiedAt: '2099-01-01T00:00:00Z' }, status: 'verified' }]),
   );
   assert.equal(errors.length, 1);
@@ -89,9 +93,17 @@ test('an "unchecked" item that already carries evidence is rejected as an ambigu
   assert.match(errors[0], /ambiguous in-between state/);
 });
 
-test('a genuinely verified item with real, structured evidence passes cleanly', () => {
+test('a checkbox marker that disagrees with the JSON status is rejected', () => {
   const errors = validateChecklist(
     runbook(['First item']),
+    checklist([{ description: 'First item', evidence: realEvidence, status: 'verified' }]),
+  );
+  assert.ok(errors.some((error) => /status drifted/.test(error)));
+});
+
+test('a genuinely verified item with real, structured evidence passes cleanly', () => {
+  const errors = validateChecklist(
+    runbook([{ description: 'First item', status: 'verified' }]),
     checklist([{ description: 'First item', evidence: realEvidence, status: 'verified' }]),
   );
   assert.deepEqual(errors, []);

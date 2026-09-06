@@ -11,26 +11,10 @@ import {
 } from '@/lib/auth/session';
 import { touchSession } from '@/lib/auth/session-registry';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
+import { contentSecurityPolicy } from '@/lib/security/content-security-policy';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 
 const protectedRoutes = '/dashboard';
-
-function contentSecurityPolicy(nonce: string): string {
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    "object-src 'none'",
-    "img-src 'self' data:",
-    `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`,
-    // Next.js and Tailwind currently emit framework/style attributes without a nonce hook. This is
-    // deliberately the sole unsafe-inline exception; scripts never receive it in production.
-    "style-src 'self' 'unsafe-inline'",
-    "connect-src 'self' https://challenges.cloudflare.com",
-    'frame-src https://challenges.cloudflare.com',
-  ].join('; ');
-}
 
 // A lightweight substitute for a full APM/tracing vendor integration (docs/21 AUTH-LOG-004): every
 // request is assigned a fresh correlation ID here, before any application code runs, so a single
