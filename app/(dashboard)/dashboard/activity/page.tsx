@@ -11,8 +11,11 @@ import {
   CheckCircle,
   type LucideIcon,
 } from 'lucide-react';
+import { redirect } from 'next/navigation';
 import { ActivityType } from '@/lib/db/schema';
 import { getActivityLogs } from '@/lib/db/queries';
+import { getOwnPrivateMember } from '@/lib/membership/data-access';
+import { isEntitled } from '@/lib/membership/entitlement';
 
 const iconMap: Record<ActivityType, LucideIcon> = {
   [ActivityType.SIGN_UP]: UserPlus,
@@ -69,6 +72,8 @@ function formatAction(action: ActivityType): string {
 }
 
 export default async function ActivityPage() {
+  const member = await getOwnPrivateMember();
+  if (member && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   const logs = await getActivityLogs();
 
   return (

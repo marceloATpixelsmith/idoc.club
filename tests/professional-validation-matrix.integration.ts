@@ -41,6 +41,11 @@ test('valid onboarding and edit persist exact canonical values for every approve
     await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput(roles)));
     const created = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember());
     assertRolesMatchExactly(created?.roles, roles, `create:${roles.map((r) => r.roleType).join('+')}`);
+    // updateMemberProfile is entitlement-gated (docs/25 section 1): completing onboarding alone
+    // (createOwnMemberProfile, above) never confers entitlement -- a real payment does. This test's
+    // own purpose is verifying field/role persistence across classifications, not the paywall, so
+    // it needs a real, currently-valid membership before it can exercise the edit half.
+    await createMembership(created!.profile.id);
 
     // Rotate to the next classification so every classification in this list is exercised as
     // both a creation target (above) and an edit destination (below) across the full loop.

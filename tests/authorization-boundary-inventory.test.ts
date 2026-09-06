@@ -108,7 +108,11 @@ test('session-boundary actions are wrapped in validatedActionWithUser before any
     }
   }
   const authMiddleware = readFileSync(path.join(root, 'lib/auth/middleware.ts'), 'utf8');
-  assert.match(authMiddleware, /requireAccountAccess\('account'\)/);
+  // Gated by default ('account_mutation', requires entitlement or a privileged role); an individual
+  // action opts back into the permissive, always-reachable 'account' operation only by explicitly
+  // passing { allowWithoutEntitlement: true } -- see logOutSession/logOutOtherSessions, the one
+  // documented exception (docs/25 section 1: "receive only the membership-payment gate and logout").
+  assert.match(authMiddleware, /requireAccountAccess\(options\?\.allowWithoutEntitlement \? 'account' : 'account_mutation'\)/);
 });
 
 test('pre-authentication actions are never wrapped in validatedActionWithUser', () => {

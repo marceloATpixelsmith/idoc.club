@@ -133,7 +133,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
 
 export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor('profile');
+  const actor = await authenticatedActor('profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
@@ -200,7 +200,7 @@ function roleMatches(existing: typeof professionalRoles.$inferSelect, desired: M
 }
 
 export async function deleteOwnAccount() {
-  const actor = await authenticatedActor('account');
+  const actor = await authenticatedActor('account_mutation');
   return db.transaction(async (tx) => {
     await tx.update(users).set({
       accountState: 'deleted',

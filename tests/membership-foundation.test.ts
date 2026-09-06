@@ -129,6 +129,37 @@ test('account-state policy separates onboarding, member, administration, and exp
   assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, 'administration'), false);
 });
 
+// docs/25 section 1: "Never-paid and post-grace expired accounts receive only the membership-payment
+// gate and logout after authentication." The read/mutation split below is what makes that real:
+// 'profile'/'account' (basic identity display, sign-out, an administrator viewing any member's
+// profile for support) must stay reachable regardless of entitlement, while 'profile_mutation'/
+// 'account_mutation' (editing profile fields, changing password, deleting the account, linking/
+// unlinking Google, forgetting a remembered device, replacing an authenticator) require either
+// current entitlement or a privileged role -- an administrator correcting a member's profile is
+// never themselves that member's entitlement.
+test('profile/account mutation operations require entitlement unless the actor is privileged, while read-only operations never do', () => {
+  const member = { id: 1, roles: ['member'] };
+  const administrator = { id: 2, roles: ['administrator'] };
+  const superAdmin = { id: 3, roles: ['super_admin'] };
+  for (const operation of ['profile_mutation', 'account_mutation'] as const) {
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, operation), false);
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, operation), true);
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: administrator, entitled: false }, operation), true);
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: superAdmin, entitled: false }, operation), true);
+  }
+  // Read-only 'profile'/'account' are unaffected by entitlement either way -- sign-out and an
+  // administrator's read access to a member's own profile must never depend on that member's or
+  // the administrator's own entitlement.
+  for (const operation of ['profile', 'account'] as const) {
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: false }, operation), true);
+    assert.equal(mayAccessAccountFunction({ accountState: 'active', actor: member, entitled: true }, operation), true);
+  }
+  // The blocked account states still block every operation, mutation or not.
+  for (const accountState of ['unverified', 'suspended', 'migrated_pending', 'deleted'] as const) {
+    assert.equal(mayAccessAccountFunction({ accountState, actor: administrator, entitled: false }, 'profile_mutation'), false);
+  }
+});
+
 test('recovery and activation store digests, claim once, and revoke sessions', () => {
   const source = readFileSync(new URL('../lib/membership/account-recovery.ts', import.meta.url), 'utf8');
   const delivery = readFileSync(new URL('../lib/notifications/account-delivery.ts', import.meta.url), 'utf8');
