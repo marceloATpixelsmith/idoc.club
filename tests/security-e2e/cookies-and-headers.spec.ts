@@ -14,9 +14,14 @@ test('browser security headers are present on public and sensitive responses', a
   }
 });
 
-test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ request }) => {
-  const onboarding = await request.get('/onboarding');
+test('only the onboarding form is granted browser geolocation; every other route still denies it', async ({ browser, request }) => {
+  // An unauthenticated request to /onboarding redirects to /sign-in before ever reaching the
+  // onboarding page itself, so its headers would just be /sign-in's -- this must authenticate as
+  // the 'onboarding'-state fixture to actually observe the onboarding page's own response.
+  const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
+  const onboarding = await context.request.get('/onboarding');
   expect(onboarding.headers()['permissions-policy']).toContain('geolocation=(self)');
+  await context.close();
   for (const route of ['/sign-in', '/api/user']) {
     const response = await request.get(route);
     expect(response.headers()['permissions-policy']).toContain('geolocation=()');

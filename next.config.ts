@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
         // for address autocomplete (see onboarding-wizard.tsx). A single shared Permissions-Policy
         // matching every route would otherwise make that request silently rejected by the browser
         // before the page ever gets a chance to use it.
-        source: '/:path((?!onboarding$).*)',
+        source: '/(.*)',
         headers: [...baseSecurityHeaders, { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }]
       },
       {
