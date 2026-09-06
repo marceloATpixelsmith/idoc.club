@@ -53,6 +53,10 @@ test('an administrator with no member profile sees the full tab bar and an hones
   for (const label of ['My Profile', 'My Security', 'My Seminars']) {
     await expect(page.getByRole('link', { name: label })).toBeVisible();
   }
+  // The advertised My Seminars tab must actually be reachable, not just visible in the bar.
+  await page.goto('/dashboard/seminars');
+  await expect(page).toHaveURL(/\/dashboard\/seminars$/);
+  await expect(page.getByRole('heading', { name: 'My Seminars' })).toBeVisible();
   await context.close();
 });
 
