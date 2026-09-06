@@ -60,13 +60,17 @@ test('an administrator with no member profile sees the full tab bar and an hones
   await context.close();
 });
 
-test('My Profile merges the account name/email form with the professional profile form', async ({ browser }) => {
+test('My Profile merges the account email form with the professional profile form', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/profile');
   await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeVisible();
-  await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
+  // First/last name are the canonical name fields (docs/16) -- the redundant account-level "Name"
+  // field was removed along with users.name, so account settings never maintain a second,
+  // conflicting name value.
+  await expect(page.getByLabel('First Name')).toBeVisible();
+  await expect(page.getByLabel('Last Name')).toBeVisible();
   await expect(page.locator('label:has-text("Address 1")')).toBeVisible();
   await context.close();
 });

@@ -101,10 +101,21 @@ test('a real profile-update Server Action rejects a same-origin, correctly authe
   const page = await context.newPage();
   await page.goto('/dashboard/profile');
   const profileForm = page.locator('form').filter({ has: page.locator('input[name="firstName"]') });
-  await page.evaluate(() => {
-    const field = document.querySelector<HTMLInputElement>('form:has(input[name="firstName"]) input[name="csrf_token"]');
-    if (!field) throw new Error('csrf_token field not found');
-    field.value = `${field.value.slice(0, -4)}0000`;
+  // Tamper the token on the wire, not in the DOM: this hidden field is a React-controlled input
+  // (CsrfField), and submitting the form re-renders it from its own (untampered) React state before
+  // FormData is captured -- a raw `field.value = ...` mutation is silently undone by that same click,
+  // so it can never reliably reach the network as tampered. Intercepting and corrupting the real
+  // outgoing request body proves the same thing a DOM-level tamper intended to, deterministically.
+  await page.route('**/dashboard/profile', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'POST') { await route.continue(); return; }
+    const body = request.postDataBuffer();
+    if (!body) { await route.continue(); return; }
+    const tampered = body.toString('latin1').replace(
+      /(name="\d*_?csrf_token"\r\n\r\n)([^\r\n]+)/,
+      (_match, prefix: string, token: string) => `${prefix}${token.slice(0, -4)}0000`,
+    );
+    await route.continue({ postData: Buffer.from(tampered, 'latin1') });
   });
   await profileForm.locator('button[type="submit"]').click();
   await expect(page.locator('text=session security check failed')).toBeVisible();
