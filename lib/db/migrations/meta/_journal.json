@@ -281,6 +281,13 @@
       "when": 1788814800000,
       "tag": "0039_support_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788901200000,
+      "tag": "0040_news_articles",
+      "breakpoints": true
     }
   ]
 }

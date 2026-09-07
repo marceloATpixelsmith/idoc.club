@@ -53,6 +53,10 @@ The canonical organization address and seminar-payment-method configuration foun
 
 The authenticated Support Inbox provides paid/grace members with private, threaded Billing / Membership, Seminars, and Technical Support conversations. Administrators manage the shared searchable queue, replies, persisted assignment, close/reopen workflow, and unread member-message state; Super Admins own category defaults. Default changes apply only to new conversations. The existing expired/unpaid payment gate is unchanged: gated accounts do not receive Support as an exception. Migration `0039` owns this durable history and no support deletion is provided.
 
+### News/Blog cross-cutting capability
+
+An initial, unified News/Blog article slice is implemented ahead of full Release 6 sequencing: administrator authoring/publishing at `/admin/news`, a draft/scheduled/published/archived lifecycle with server-evaluated (UTC) scheduled publication, server-side rich-text sanitization, and a public `/news` listing plus `/news/[slug]` article pages. See [Release 6](#9-release-6---news-and-blog) below for full scope and what remains deferred, and [07 Administrator and Operations Runbook](07-administrator-and-operations-runbook.md#newsblog-operations) for operations. Migration `0040` owns this durable history; deletion is restricted to draft or archived articles, matching this document's existing "deactivate/retain before destroy" convention (Organization Settings payment methods, Support Inbox history).
+
 # 3. Phase 0 - decisions and data dictionary
 
 All core membership-policy decisions in this section are approved. No production membership schema or conditional signup form should diverge from them.
@@ -173,11 +177,13 @@ Release 1 security follow-up: live canonical TOTP enrollment, login challenge, a
 
 # 9. Release 6 - news and blog
 
-- News and blog article types with author, draft/published/scheduled state, publication date, featured media, categories/tags, SEO fields and revisions.
+- **Implemented slice:** a single unified News/Blog article type (`idoc.news_articles`, migration `0040`) with slug, title, subtitle, rich-text content, publication date, and a draft/scheduled/published/archived status lifecycle. Administrators create, edit, preview, publish, unpublish, schedule, and archive articles at `/admin/news`; deletion is restricted to draft or archived articles per the retention rule in [07 Administrator and Operations Runbook](07-administrator-and-operations-runbook.md#newsblog-operations). Scheduled publication is evaluated server-side against PostgreSQL `now()` (UTC) by a Vercel Cron job, with the public site independently re-checking the publication date on every read. Public pages (`/news` listing and `/news/[slug]`) show only published, already-due articles, with pagination, an empty state, `notFound()` handling, canonical URLs, and Open Graph metadata. Rich-text content is sanitized server-side against an explicit allowlist before storage and again before rendering.
+
+- **Deferred to a later iteration:** author byline display, featured media, categories/tags, dedicated SEO fields beyond page metadata, and revision history. These remain part of the original Release 6 vision but are out of scope for this implemented slice; audit-log history (who changed what and when) is recorded for every mutation in the meantime.
 
 - Administrators receive authoring/publishing permissions; the president is an administrator.
 
-- Articles are public by default when intended, with optional use of the same audience restriction system as CMS pages.
+- Articles are public by default when intended. Optional use of the same audience restriction system as CMS pages (Release 4) remains a later decision, not yet implemented for News/Blog.
 
 # 10. Cross-cutting acceptance gates
 
