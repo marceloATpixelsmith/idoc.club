@@ -46,3 +46,8 @@ test('multiple rows are newline-separated in order', () => {
 test('an empty rows array still produces just the header', () => {
   assert.equal(toCsv([], ['a', 'b']), 'a,b');
 });
+
+test('spreadsheet formulas in member-controlled fields are neutralized', () => {
+  const csv = toCsv([{ a: '=1+1', b: '+cmd', c: '-2+3', d: '@SUM(A1)' }], ['a', 'b', 'c', 'd']);
+  assert.equal(csv, "a,b,c,d\r\n'=1+1,'+cmd,'-2+3,'@SUM(A1)");
+});

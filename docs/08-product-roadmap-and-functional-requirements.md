@@ -107,6 +107,15 @@ Implementation status: Phase 1 (backend billing foundation) is complete — `sub
 
 14. Build administrator tools: member search, profile correction, roles/levels, change-request review, manual payments, entitlement correction, suspension/reinstatement, audit, exports, notification history and Stripe reconciliation.
 
+    The administrator roster and persisted-ledger revenue reporting now provide server-side,
+    URL-addressable combined filters, deterministic pagination, bounded/audited formula-safe CSV,
+    and per-currency UTC aggregates. Pause semantics remain an unresolved product decision: define
+    entitlement, expiration, Stripe collection, resumption, manual/one-time handling, and notices
+    before enabling it. Archive remains deferred until durable Stripe/Mailchimp reconciliation and
+    future seminar-registration snapshots exist; it must not be substituted with suspension,
+    revocation, deletion, or destructive history removal. Seminar registrations remain Release 5
+    scope and are not fabricated by this administration slice.
+
 15. Complete automated boundary/transition testing plus a real Stripe test-mode and manual-payment lifecycle before using live billing. This includes both first-payment modes, switching in both directions, reversing a pending switch, concurrent/replayed requests, both grace-entry paths, post-grace denial, Portal, reconciliation, email-sync retry, and restricted-key permissions.
 
 # 6. Release 3 - migration and membership launch
