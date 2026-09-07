@@ -60,6 +60,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   google_oauth_failure_alert_rate_limited: { attribution: 'system', category: 'auth', resource: 'google-oauth-failure-alert', retentionClass: 'security' },
   google_oauth_failure_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
   google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['configuration', 'invalid_request', 'rate_limited', 'unexpected_error:authorization_request', 'unexpected_error:configuration', 'unexpected_error:transaction', 'unexpected_error:transaction_purge'] }, resource: 'google-oauth', retentionClass: 'security' },
+  directory_map_query_failed: { attribution: 'system', category: 'operational', resource: 'directory-map', retentionClass: 'operational' },
   brevo_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },
   brevo_webhook_authentication_failed: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'security' },
   brevo_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },

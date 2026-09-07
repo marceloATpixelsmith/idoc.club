@@ -28,6 +28,11 @@ const PROVIDER_ORIGIN_MAX_REQUESTS = 180;
 const IDENTIFIER_MAX_REQUESTS: Readonly<Record<string, number>> = {
   login_email: 20,
   login_password: 8,
+  // A legitimate member refining filters/typing a search is many requests in normal use, not
+  // guessing risk -- generous like the address-autocomplete provider budget (checkProviderRateLimit's
+  // PROVIDER_USER_MAX_REQUESTS), high enough for real browsing but still bounding sustained
+  // directory scraping/enumeration by one account.
+  member_directory_search: 60,
   mfa_enrollment_confirm: 5,
   mfa_login_verify: 5,
   mfa_password_reset_verify: 5,

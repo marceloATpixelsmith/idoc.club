@@ -384,18 +384,3 @@ export const aboutMilestones: { date: string; text: string }[] = [
     text: "IDOC releases a press statement regarding abusive treatment of horses during the warm-up phase at FEI competitions.",
   },
 ];
-
-export const membersDirectoryPlaceholder: { name: string; country: string; role: string; level: string }[] = [
-  { name: "Anna Bergström", country: "SWE", role: "Judge", level: "FEI 4* / L3" },
-  { name: "Carlos Medina", country: "ESP", role: "Judge", level: "FEI 3* / L2" },
-  { name: "Danielle Roux", country: "FRA", role: "Steward", level: "Steward Level 3" },
-  { name: "Elena Rossi", country: "ITA", role: "Judge", level: "FEI 5* / L4" },
-  { name: "Fiona Walsh", country: "IRL", role: "Veterinarian", level: "FEI Vet" },
-  { name: "Gerd Lindqvist", country: "FIN", role: "Judge", level: "FEI 4* / L3" },
-  { name: "Hiroshi Tanaka", country: "JPN", role: "Steward", level: "Steward Level 2" },
-  { name: "Isabel Duarte", country: "POR", role: "Judge", level: "FEI 3* / L2" },
-  { name: "Johan de Vries", country: "NED", role: "Judge", level: "FEI 5* / L4" },
-  { name: "Karin Schuster", country: "AUT", role: "Veterinarian", level: "FEI Vet" },
-  { name: "Liam O'Connor", country: "CAN", role: "Steward", level: "Steward Level 4" },
-  { name: "Mariana Silva", country: "BRA", role: "Judge", level: "FEI 4* / L3" },
-];
