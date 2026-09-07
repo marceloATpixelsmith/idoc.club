@@ -2,7 +2,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, organizationSettings, seminarPaymentMethods } from '@/lib/db/schema';
 import { requireSuperAdmin, type Actor } from '@/lib/membership/authorization';
-import { formatOrganizationAddress, sanitizeBankInstructions, type OrganizationAddress } from '@/lib/organization/format';
+import { formatOrganizationAddress, hasVisibleBankInstructions, sanitizeBankInstructions, type OrganizationAddress } from '@/lib/organization/format';
 import 'server-only';
 
 export { formatOrganizationAddress, sanitizeBankInstructions } from '@/lib/organization/format';
@@ -35,7 +35,7 @@ export async function updateOrganizationSettings(actor: Actor, input: { address:
   const address = { address1: clean(input.address.address1, 200), address2: clean(input.address.address2, 200), city: clean(input.address.city, 100),
     country: clean(input.address.country, 100), postalCode: clean(input.address.postalCode, 30), stateProvince: clean(input.address.stateProvince, 100) };
   const sanitizedInstructions = sanitizeBankInstructions(input.bankInstructions.trim());
-  if (input.bankEnabled && !sanitizedInstructions.replace(/<[^>]*>/g, '').trim()) throw new Error('Bank Transfer instructions are required when the method is enabled.');
+  if (input.bankEnabled && !hasVisibleBankInstructions(sanitizedInstructions)) throw new Error('Bank Transfer instructions are required when the method is enabled.');
 
   await db.transaction(async (tx) => {
     const [beforeAddress] = await tx.select().from(organizationSettings).where(eq(organizationSettings.id, 1)).for('update');
