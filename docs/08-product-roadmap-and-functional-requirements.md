@@ -45,6 +45,10 @@ This document translates the approved project direction into an ordered product 
 | Release 5   | Seminars                          | Seminar authoring, eligibility/capacity, registration, Stripe/manual payments, attendance, refunds, reminders and reports.                    |
 | Release 6   | Complete-project public launch     | News/blog publishing plus final whole-product acceptance, production routing cutover, monitoring and post-stabilization legacy retirement. |
 
+### Organization Settings foundation (bounded Release 5 prerequisite)
+
+The canonical organization address and seminar-payment-method configuration foundation is implemented. Super Admins own the settings interface; the shared server-owned address appears consistently in the public footer and contact page. Stable methods are Online via Stripe (always enabled and protected), Bank Transfer (optional, with required server-sanitized rich-text instructions when enabled), and Cash at the Event (optional). Changes are safely audited, methods are deactivated rather than deleted, and migration `0038` seeds canonical identities idempotently in the dedicated schema. Seminar creation, registration, method selection, historical payment references, and actual seminar payment processing remain deferred to Release 5 and are not marked complete by this slice; membership billing and entitlement behavior is unchanged.
+
 # 3. Phase 0 - decisions and data dictionary
 
 All core membership-policy decisions in this section are approved. No production membership schema or conditional signup form should diverge from them.

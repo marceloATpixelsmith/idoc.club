@@ -19,6 +19,10 @@ Working project document. Update this document when project decisions change.
 
 # 1. Security objective
 
+## Organization settings security
+
+Organization Settings reads and mutations require the existing restricted settings-management tier (Super Admin) at the server boundary, in addition to normal administration account access; browser visibility is not authorization. Mutations use the canonical CSRF evidence check and reassert the protected `online_stripe` identity rather than trusting submitted identifiers or protection flags. Bank Transfer instructions permit only minimal formatting (`p`, `br`, emphasis, lists, and safe HTTP(S)/email links) after server sanitization; active content, event handlers, unsafe URL schemes, embeds, scripts, SVG, and MathML are removed. Audit evidence records changed address field names and instruction presence/change flags, never complete address values or full transfer instructions.
+
 Protect member identity, professional information, membership entitlement and billing references through defense in depth. The starter template is scaffolding; production security depends on the IDOC-specific data model, authorization rules, deployment configuration and operational practices.
 
 # 2. Mandatory controls
