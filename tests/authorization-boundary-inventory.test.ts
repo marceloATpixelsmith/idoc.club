@@ -65,6 +65,13 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
     unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/seminars/actions.ts': {
+    cancelSeminarAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', markSeminarRegistrationPaidAction: 'delegates-to-data-access',
+    publishSeminarAction: 'delegates-to-data-access', revertSeminarToDraftAction: 'delegates-to-data-access', updateSeminarAction: 'delegates-to-data-access',
+  },
+  'app/(dashboard)/dashboard/seminars/actions.ts': {
+    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerForSeminarAction: 'delegates-to-data-access',
+  },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
@@ -81,6 +88,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
   'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
+  'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',
   'app/api/auth/google/link/start/route.ts': 'authenticated-fresh-verification-oauth-boundary',
   'app/api/auth/google/link/status/route.ts': 'authenticated-account-boundary',

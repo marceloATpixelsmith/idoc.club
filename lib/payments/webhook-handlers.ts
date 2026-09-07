@@ -1,9 +1,9 @@
 import 'server-only';
 
 import type Stripe from 'stripe';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, memberships, notificationOutbox, payments, profiles, stripeEvents, subscriptions, users } from '@/lib/db/schema';
+import { auditLog, billingAccounts, memberships, notificationOutbox, payments, profiles, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeOneTimeProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
@@ -127,9 +127,37 @@ async function handleInvoicePaymentActionRequired(_tx: Transaction, _event: Stri
   return undefined;
 }
 
+// Seminar payments are classified separately from membership billing and never touch membership
+// entitlement (docs/02 §12) -- this only ever updates idoc.seminar_registrations, distinguished
+// from a membership checkout entirely by the `kind` metadata createSeminarCheckoutSession sets, so
+// it can never be confused with the membership one-time-fee path below even if amounts coincide.
+async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: Stripe.Checkout.Session) {
+  const registrationId = Number(session.metadata?.registrationId);
+  if (!Number.isInteger(registrationId)) return;
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+  if (!paymentIntentId) return;
+  const [registration] = await tx.select({ priceCents: seminars.priceCents }).from(seminarRegistrations)
+    .innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
+    .where(eq(seminarRegistrations.id, registrationId)).limit(1);
+  if (!registration) return;
+  // Grant credit only against this seminar's own current fee, matching the amount/currency
+  // tamper check the membership one-time-fee path already performs (docs/04 §3).
+  if (session.amount_total !== registration.priceCents || session.currency?.toLowerCase() !== 'eur') return;
+  const updated = await tx.update(seminarRegistrations).set({
+    markedPaidByUserId: null, paidAt: new Date(), paymentStatus: 'paid', stripePaymentIntentId: paymentIntentId, updatedAt: new Date(),
+  }).where(and(eq(seminarRegistrations.id, registrationId), ne(seminarRegistrations.paymentStatus, 'paid')))
+    .returning({ id: seminarRegistrations.id });
+  if (!updated[0]) return;
+  await tx.insert(auditLog).values({
+    action: 'admin.seminar_registration.payment_marked_paid', afterJson: { trigger: 'stripe_checkout' },
+    entityId: String(registrationId), entityType: 'seminar_registration',
+  });
+}
+
 async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
   const session = event.data.object as Stripe.Checkout.Session;
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
+  if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session);
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;
   const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;

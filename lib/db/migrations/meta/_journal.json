@@ -288,6 +288,13 @@
       "when": 1788901200000,
       "tag": "0040_news_articles",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788987600000,
+      "tag": "0041_seminars",
+      "breakpoints": true
     }
   ]
 }
