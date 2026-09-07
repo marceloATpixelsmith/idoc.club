@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getPrivateMember, listAuditHistory, requireAccountAccess } from '@/lib/membership/data-access';
+import { getPrivateMember, listAdminPaymentHistory, listAuditHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { listAdminMembers, type MemberFilters, MEMBERSHIP_STATUSES } from '@/lib/membership/admin-memberships';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listActiveRoles } from '@/lib/membership/role-grants';
@@ -10,6 +10,17 @@ import { EntitlementCorrectionForm } from './entitlement-correction-form';
 import { ReinstateForm, SuspendForm } from './membership-status-form';
 import { ForceRevokeAllAuthorityForm, ReinstateAccountForm, SuspendAccountForm } from './account-suspension-form';
 import { RolesSection } from './roles-section';
+import { BulkMemberSelection } from './bulk-member-selection';
+import { ExtendExpirationForm } from './extend-expiration-form';
+
+const PAYMENT_SOURCE_LABELS: Record<string, string> = {
+  bank_transfer: 'Bank transfer', cash: 'Cash', complimentary: 'Complimentary grant',
+  paypal: 'PayPal', stripe_one_time: 'Stripe one-time', stripe_recurring: 'Stripe recurring',
+};
+
+function money(amountCents: number, currency: string) {
+  return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(amountCents / 100);
+}
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<MemberFilters & { profileId?: string }> }) {
   const actor = await requireAccountAccess('administration');
@@ -31,6 +42,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const auditHistory = profileId && Number.isInteger(profileId) ? await listAuditHistory(profileId) : [];
   const activeRoles = selected && isSuperAdmin ? await listActiveRoles(selected.profile.userId) : [];
   const accountState = selected ? await getUserAccountState(selected.profile.userId) : null;
+  const paymentHistory = selected ? await listAdminPaymentHistory(selected.profile.id) : [];
 
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Members</h1>
@@ -49,7 +61,8 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
       <button className="self-end rounded-md border px-3 py-2 text-sm" type="submit">Apply filters</button>
     </form>
     <div className="mt-4 flex items-center justify-between text-sm"><span>{listing.total} matching members</span><Link className="underline" href={`/api/admin/export/members?${new URLSearchParams(Object.entries(params).filter(([,value]) => value !== undefined).map(([key,value]) => [key,String(value)]))}`}>Export filtered CSV</Link></div>
-    <div className="mt-2 overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Member</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Expires</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Country</th></tr></thead><tbody>{listing.rows.length === 0 ? <tr><td className="p-4" colSpan={5}>No members match these filters.</td></tr> : listing.rows.map((member) => <tr className="border-t" key={member.profileId}><td className="p-2"><Link className="underline" href={`/admin/members?profileId=${member.profileId}&status=${listing.filters.status}`}>{member.firstName} {member.lastName}</Link><span className="block text-muted-foreground">{member.email}</span></td><td className="p-2">{member.status}</td><td className="p-2">{member.validUntil ?? '—'}</td><td className="p-2">{member.membershipType ?? '—'}</td><td className="p-2">{member.country}</td></tr>)}</tbody></table></div>
+    <div className="mt-2 overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Select</th><th className="p-2 text-left">Member</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Expires</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Country</th></tr></thead><tbody>{listing.rows.length === 0 ? <tr><td className="p-4" colSpan={6}>No members match these filters.</td></tr> : listing.rows.map((member) => <tr className="border-t" key={member.profileId}><td className="p-2"><input aria-label={`Select ${member.firstName} ${member.lastName}`} form="bulk-member-actions" name="profileId" type="checkbox" value={member.profileId} /></td><td className="p-2"><Link className="underline" href={`/admin/members?profileId=${member.profileId}&status=${listing.filters.status}`}>{member.firstName} {member.lastName}</Link><span className="block text-muted-foreground">{member.email}</span></td><td className="p-2">{member.status}</td><td className="p-2">{member.validUntil ?? '—'}</td><td className="p-2">{member.membershipType ?? '—'}</td><td className="p-2">{member.country}</td></tr>)}</tbody></table></div>
+    <BulkMemberSelection />
     <nav className="mt-4 flex gap-3 text-sm" aria-label="Pagination">{listing.filters.page > 1 && <Link className="underline" href={paginationHref(listing.filters.page - 1)}>Previous</Link>}{listing.filters.page * listing.pageSize < listing.total && <Link className="underline" href={paginationHref(listing.filters.page + 1)}>Next</Link>}</nav>
     {selected && (
       <>
@@ -59,11 +72,27 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
             Status: {selected.entitlement ? (MEMBERSHIP_STATUS_LABELS[selected.entitlement.status] ?? selected.entitlement.status) : 'No membership on file'}
           </p>
           {selected.entitlement && <p className="text-sm text-foreground">Paid through: {selected.entitlement.validUntil}</p>}
-          <div className="mt-3 flex gap-4 text-sm">
-            <Link className="text-primary underline underline-offset-4 hover:opacity-80" href={`/admin/payments?profileId=${selected.profile.id}`}>Record a payment</Link>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#payment-history">View Payment History</a>
+            <Link className="text-primary underline underline-offset-4 hover:opacity-80" href={`/admin/payments?profileId=${selected.profile.id}`}>Record Manual Payment</Link>
+            {selected.entitlement && <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#extend-expiration">Extend Expiration Date</a>}
+            <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#edit-member">Edit Member Information</a>
+            <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#edit-member">Change Membership Type</a>
+            <a className="text-primary underline underline-offset-4 hover:opacity-80" href={`mailto:${encodeURIComponent(selected.email)}`}>Email Member</a>
+            <span aria-disabled="true" className="text-muted-foreground" title="Seminar registrations are not implemented yet.">View Seminars (unavailable)</span>
             <Link className="text-primary underline underline-offset-4 hover:opacity-80" href={`/admin/notifications?profileId=${selected.profile.id}`}>Notification history</Link>
           </div>
+          <p className="mt-3 text-sm text-muted-foreground">Seminar registrations are not implemented yet. A future authorized administrator route will show only this member’s registrations.</p>
         </section>
+
+        <section className="mt-8 max-w-2xl" id="payment-history">
+          <h3 className="font-medium text-foreground">Payment History</h3>
+          <div className="mt-2 overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Payment date</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Origin</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>
+            {paymentHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={5}>No payments have been recorded for this member.</td></tr> : paymentHistory.map((payment, index) => <tr className="border-t" key={`${payment.paidAt.toISOString()}-${index}`}><td className="p-2">{payment.paidAt.toISOString()}</td><td className="p-2">{money(payment.amountCents, payment.currency)}</td><td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td><td className="p-2">{payment.source.startsWith('stripe_') ? 'Stripe' : 'Manual'}</td><td className="p-2">{payment.reference ?? '—'}</td></tr>)}
+          </tbody></table></div>
+        </section>
+
+        {selected.entitlement && <section className="mt-8 max-w-2xl" id="extend-expiration"><h3 className="font-medium text-foreground">Extend Expiration Date</h3><p className="mt-1 text-sm text-muted-foreground">Extension only: this does not add a payment or change Stripe billing dates. Use Correct entitlement below for a genuine correction.</p><ExtendExpirationForm currentValidUntil={selected.entitlement.validUntil} profileId={selected.profile.id} /></section>}
 
         <section className="mt-8 max-w-2xl">
           <h3 className="font-medium text-foreground">Membership status</h3>
@@ -87,8 +116,9 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} profileId={selected.profile.id} />
         </section>
 
-        <section className="mt-8 max-w-2xl">
-          <h3 className="font-medium text-foreground">Correct profile / roles &amp; levels</h3>
+        <section className="mt-8 max-w-2xl" id="edit-member">
+          <h3 className="font-medium text-foreground">Edit Member Information / Change Membership Type</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Membership type changes preserve role history and do not change expiration, payments, or Stripe billing.</p>
           <AdminProfileForm member={selected} profileId={selected.profile.id} />
         </section>
 

@@ -116,6 +116,17 @@ Implementation status: Phase 1 (backend billing foundation) is complete — `sub
     revocation, deletion, or destructive history removal. Seminar registrations remain Release 5
     scope and are not fabricated by this administration slice.
 
+    PR #177 delivered the roster filtering/pagination/export and UTC, per-currency persisted-ledger
+    revenue foundation. The corrective member-detail slice adds selected-member payment history,
+    canonical manual-payment links, a locked/idempotent expiration-only extension, clearly labeled
+    canonical profile/classification editing, canonical-email `mailto:`, and an honest seminar
+    dependency state. Stable row selection and a 50-member bulk-action shell are present, but Bulk
+    Revoke is disabled because only the distinct Super Admin incident operation Force Revoke All
+    Authority exists. Archive and Pause remain unavailable for the dependencies above. Payment rows
+    do not snapshot payment-time classification, so historical membership-type revenue attribution
+    is explicitly unavailable and is not inferred from current roles. Support/external-operation
+    durability and Release 5 seminar identity snapshots remain later dependencies.
+
 15. Complete automated boundary/transition testing plus a real Stripe test-mode and manual-payment lifecycle before using live billing. This includes both first-payment modes, switching in both directions, reversing a pending switch, concurrent/replayed requests, both grace-entry paths, post-grace denial, Portal, reconciliation, email-sync retry, and restricted-key permissions.
 
 # 6. Release 3 - migration and membership launch

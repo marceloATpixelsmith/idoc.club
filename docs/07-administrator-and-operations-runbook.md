@@ -16,6 +16,32 @@ cells with an apostrophe. Administrators must narrow an over-limit export.
 default range is the first UTC day of the month eleven months ago through today. Complimentary
 entries are not revenue; results remain grouped by currency.
 
+The selected-member panel provides Payment History, Record Manual Payment, Extend Expiration Date,
+Edit Member Information, Change Membership Type, Email Member, and an honest unavailable View
+Seminars placeholder. Payment History is a newest-first, member-scoped safe projection of the
+persisted ledger. Email Member is only a `mailto:` link to the current canonical account address.
+The eventual seminar route must re-authorize the administrator and scope registrations to the
+server-resolved member; no registration schema or registration data exists in this slice.
+
+Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
+bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action
+**Force Revoke All Authority**; it is not an ordinary canonical Revoke User operation and must not
+be reinterpreted as Bulk Revoke. Product owners must define ordinary revoke eligibility, effects,
+privileged/self protections, notices, and retry semantics before Bulk Revoke can be enabled. A
+future enabled bulk operation must re-fetch every ID, re-authorize and re-evaluate eligibility,
+confirm access removal, prevent duplicate submission, preserve filters, and report per-member
+success/failure/skipped outcomes.
+
+Archive Membership remains unavailable until durable Stripe/Mailchimp external-operation handling
+and seminar-registration identity snapshots exist. Pause Membership remains unavailable until
+entitlement, expiration, collection, resumption, manual/one-time behavior, and notice rules are
+approved. Neither control substitutes another account or membership transition.
+
+Payment rows do not snapshot professional classification. Revenue reporting therefore cannot
+reliably filter or group historical receipts by membership type and must not join to a member's
+current roles as if those roles applied at payment time. A later deliberate migration may snapshot
+classification for new payments, but historical rows must not be backfilled from current state.
+
 The roster keeps never-paid, active, grace, expired, suspended, revoked-account, archived, and
 deleted states distinct. `canceled` remains an internal renewal state and is active only while paid
 through. **Pause remains unavailable:** no approved rules define entitlement, expiration, Stripe

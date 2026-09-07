@@ -5,7 +5,7 @@ import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data
 import { requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { parseMemberProfileFormData } from '@/lib/membership/validation';
-import { correctEntitlement, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
+import { correctEntitlement, extendMembershipExpiration, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
 import { forceRevokeAllAuthority } from '@/lib/membership/incident-response';
@@ -98,6 +98,18 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
     return { success: 'Entitlement corrected.' };
   } catch (error) {
     return friendlyError(error, 'The entitlement could not be corrected.');
+  }
+}
+
+export async function extendExpirationForm(_state: FormState, formData: FormData): Promise<FormState> {
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The expiration date could not be extended.'); }
+  try {
+    const result = await extendMembershipExpiration(Number(formData.get('profileId')), {
+      reason: formData.get('reason'), validUntil: formData.get('validUntil'),
+    });
+    return { success: result.unchanged ? 'Expiration date was already set; no duplicate change was recorded.' : 'Expiration date extended.' };
+  } catch (error) {
+    return friendlyError(error, 'The expiration date could not be extended.');
   }
 }
 
