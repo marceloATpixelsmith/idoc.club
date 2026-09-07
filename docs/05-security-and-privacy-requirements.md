@@ -71,6 +71,8 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 - Do not expose migration/import tooling to normal authenticated users.
 
+- Support messages are private plain text: render them only through React text nodes, never raw HTML. A member may query and mutate only conversations whose server-derived `member_user_id` matches the authenticated identity. Administrator operations require a current Administrator or Super Admin grant; submitted assignee IDs are revalidated as active eligible privileged identities. Public UUIDs, not sequential row IDs, appear in URLs. General audit rows for assignment and close/reopen contain identifiers and state changes but never message bodies. Support remains behind the existing paid/grace member-content gate.
+
 - Disable or remove temporary migration endpoints after cutover.
 
 # 5. Account activation and enumeration

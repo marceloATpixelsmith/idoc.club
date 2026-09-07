@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   integer,
+  uuid,
   boolean,
   date,
   jsonb,
@@ -302,6 +303,49 @@ export const auditLog = idocSchema.table('audit_log', {
   reason: text('reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Member-owned, immutable threaded support. Public UUIDs keep internal sequence IDs out of URLs. */
+export const supportConversations = idocSchema.table('support_conversations', {
+  id: serial('id').primaryKey(),
+  publicId: uuid('public_id').notNull().defaultRandom().unique(),
+  memberUserId: integer('member_user_id').notNull().references(() => users.id),
+  category: varchar('category', { length: 30 }).notNull(),
+  subject: varchar('subject', { length: 160 }).notNull(),
+  status: varchar('status', { length: 30 }).notNull().default('open'),
+  assignedAdminUserId: integer('assigned_admin_user_id').references(() => users.id),
+  memberReadAt: timestamp('member_read_at', { withTimezone: true }),
+  adminReadAt: timestamp('admin_read_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`),
+  check('support_conversations_status_check', sql`${table.status} in ('open', 'admin_responded', 'member_replied', 'closed')`),
+  check('support_conversations_subject_length_check', sql`char_length(${table.subject}) between 1 and 160`),
+  index('support_conversations_member_activity_idx').on(table.memberUserId, table.updatedAt),
+  index('support_conversations_admin_queue_idx').on(table.assignedAdminUserId, table.status, table.updatedAt),
+]);
+
+export const supportMessages = idocSchema.table('support_messages', {
+  id: serial('id').primaryKey(),
+  conversationId: integer('conversation_id').notNull().references(() => supportConversations.id),
+  authorUserId: integer('author_user_id').notNull().references(() => users.id),
+  authorSide: varchar('author_side', { length: 10 }).notNull(),
+  body: text('body').notNull(),
+  idempotencyKey: uuid('idempotency_key').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('support_messages_author_side_check', sql`${table.authorSide} in ('member', 'admin')`),
+  check('support_messages_body_length_check', sql`char_length(${table.body}) between 1 and 10000`),
+  uniqueIndex('support_messages_author_idempotency_unique').on(table.authorUserId, table.idempotencyKey),
+  index('support_messages_thread_idx').on(table.conversationId, table.createdAt, table.id),
+]);
+
+export const supportCategoryDefaults = idocSchema.table('support_category_defaults', {
+  category: varchar('category', { length: 30 }).primaryKey(),
+  administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
+  updatedBy: integer('updated_by').notNull().references(() => users.id),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
 
 export const notificationOutbox = idocSchema.table('notification_outbox', {
   id: serial('id').primaryKey(),

@@ -4,13 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Shield, Menu, UserCog, GraduationCap } from 'lucide-react';
+import { Users, Shield, Menu, UserCog, GraduationCap, LifeBuoy } from 'lucide-react';
 
 const ALL_TABS = [
   { href: '/dashboard', icon: Users, label: 'My Membership' },
   { href: '/dashboard/profile', icon: UserCog, label: 'My Profile' },
   { href: '/dashboard/security', icon: Shield, label: 'My Security' },
   { href: '/dashboard/seminars', icon: GraduationCap, label: 'My Seminars' },
+  { href: '/dashboard/support', icon: LifeBuoy, label: 'Support' },
 ];
 
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
@@ -18,7 +19,7 @@ const ALL_TABS = [
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
  * entitled (or for a privileged administrator/super_admin, who is never gated by payment status),
  * the real bar appears. This is UI convenience, never an authorization boundary on its own. */
-export function DashboardTabs({ entitled }: { entitled: boolean }) {
+export function DashboardTabs({ entitled, memberSupport, supportUnread }: { entitled: boolean; memberSupport: boolean; supportUnread: number }) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   if (!entitled) return null;
@@ -33,7 +34,7 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
         </Button>
       </div>
       <nav className={`flex-col gap-1 border-b border-border bg-background p-2 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 ${isMenuOpen ? 'flex' : 'hidden'}`}>
-        {ALL_TABS.map((tab) => (
+        {ALL_TABS.filter((tab) => memberSupport || tab.href !== '/dashboard/support').map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
@@ -41,6 +42,7 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}
+              {tab.href === '/dashboard/support' && supportUnread > 0 ? <span aria-label={`${supportUnread} unread support replies`} className="rounded-full bg-primary px-2 py-0.5 text-primary-foreground">{supportUnread}</span> : null}
             </Button>
           </Link>
         ))}
