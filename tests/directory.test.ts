@@ -81,7 +81,7 @@ test('directory pagination uses a fixed, server-controlled page size and a bound
 });
 
 test('directory search input length is capped, and search/filter values are escaped before use in a LIKE pattern', () => {
-  assert.match(memberDirectorySource, /q\?\.trim\(\)\.slice\(0, 100\)/);
+  assert.match(memberDirectorySource, /firstString\(input\.q\)\?\.trim\(\)\.slice\(0, 100\)/);
   assert.match(memberDirectorySource, /replaceAll\('%', '\\\\%'\)\.replaceAll\('_', '\\\\_'\)/);
 });
 
@@ -117,4 +117,25 @@ test('no Server Action or CSRF token is used by the directory surfaces: both are
 test('the dashboard navigation exposes the Directory tab using the existing dashboard layout', () => {
   assert.match(dashboardTabs, /\/dashboard\/directory/);
   assert.match(dashboardTabs, /label: 'Directory'/);
+});
+
+test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
+  assert.match(memberDirectorySource, /function firstString\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
+  // Every filter field normalized() reads goes through firstString first, not a bare `.trim()`
+  // straight off the raw input -- the actual finding this fixes was `input.country?.trim()`
+  // throwing when `country` was an array.
+  for (const field of ['country', 'federation', 'membershipType', 'q', 'region']) {
+    assert.match(memberDirectorySource, new RegExp(`firstString\\(input\\.${field}\\)`));
+  }
+});
+
+test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
+  assert.match(memberPageSource, /function displayValue\(value: string \| string\[\] \| undefined\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
+  for (const field of ['q', 'membershipType', 'country', 'federation', 'region']) {
+    assert.match(memberPageSource, new RegExp(`displayValue\\(params\\.${field}\\)`));
+  }
+});
+
+test('the public map page forces per-request dynamic rendering so it cannot be frozen as a static build-time snapshot', () => {
+  assert.match(publicPageSource, /export const dynamic = 'force-dynamic';/);
 });

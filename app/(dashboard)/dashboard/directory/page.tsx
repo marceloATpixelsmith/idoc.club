@@ -20,6 +20,12 @@ function roleLabel(role: DirectoryRoleDetail) {
   return role.officialStatuses && role.officialStatuses.length > 0 ? `${type} — ${role.officialStatuses.join(', ')}` : type;
 }
 
+// searchParams values are string | string[] | undefined at runtime (a repeated query key becomes
+// an array); an array is never a meaningful single form-field default, so it displays as unset.
+function displayValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? undefined : value;
+}
+
 export default async function MemberDirectoryPage({ searchParams }: { searchParams: Promise<MemberDirectoryFilters> }) {
   const user = await getUser();
   if (user?.accountState === 'onboarding') redirect('/dashboard');
@@ -64,32 +70,32 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
       <form method="get" className="mt-6 grid gap-3 rounded-lg border p-4 md:grid-cols-4">
         <label className="text-sm md:col-span-2">
           Name
-          <input className="mt-1 block w-full rounded-md border p-2" defaultValue={params.q} name="q" type="search" />
+          <input className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.q)} name="q" type="search" />
         </label>
         <label className="text-sm">
           Membership type
-          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={params.membershipType ?? ''} name="membershipType">
+          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.membershipType) ?? ''} name="membershipType">
             <option value="">All</option>
             {MEMBERSHIP_TYPE_FILTERS.map((type) => <option key={type} value={type}>{MEMBERSHIP_TYPE_LABELS[type]}</option>)}
           </select>
         </label>
         <label className="text-sm">
           Country
-          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={params.country ?? ''} name="country">
+          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.country) ?? ''} name="country">
             <option value="">All</option>
             {COUNTRY_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
           </select>
         </label>
         <label className="text-sm">
           Federation
-          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={params.federation ?? ''} name="federation">
+          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.federation) ?? ''} name="federation">
             <option value="">All</option>
             {COUNTRY_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
           </select>
         </label>
         <label className="text-sm">
           IDOC Region
-          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={params.region ?? ''} name="region">
+          <select className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.region) ?? ''} name="region">
             <option value="">All</option>
             {IDOC_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
           </select>
