@@ -8,6 +8,7 @@ import {
   uuid,
   boolean,
   date,
+  time,
   jsonb,
   uniqueIndex,
   index,
@@ -373,6 +374,66 @@ export const newsArticles = idocSchema.table('news_articles', {
   check('news_articles_subtitle_length_check', sql`${table.subtitle} is null or char_length(${table.subtitle}) between 1 and 300`),
   check('news_articles_content_length_check', sql`char_length(${table.contentHtml}) between 1 and 20000`),
   index('news_articles_publication_queue_idx').on(table.status, table.publicationDate),
+]);
+
+/** Administrator-authored seminars. `paymentMethodCanonicalId` references the same canonical
+ * `seminar_payment_methods` identities Organization Settings owns (migration 0038) -- a seminar
+ * never invents its own payment-method identity. `priceCents`/`paymentMethodCanonicalId` become
+ * immutable at the application layer once any registration exists (lib/seminars/seminars.ts),
+ * and `capacity` may only be lowered to at least the current active-registration count. */
+export const seminars = idocSchema.table('seminars', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 200 }).notNull(),
+  description: text('description').notNull(),
+  seminarDate: date('seminar_date').notNull(),
+  startTime: time('start_time').notNull(),
+  endTime: time('end_time').notNull(),
+  timezone: varchar('timezone', { length: 60 }).notNull(),
+  location: text('location').notNull(),
+  capacity: integer('capacity').notNull(),
+  priceCents: integer('price_cents').notNull(),
+  registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
+  createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
+  updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('seminars_status_check', sql`${table.status} in ('draft', 'published', 'canceled')`),
+  check('seminars_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
+  check('seminars_description_length_check', sql`char_length(${table.description}) between 1 and 10000`),
+  check('seminars_location_length_check', sql`char_length(${table.location}) between 1 and 2000`),
+  check('seminars_capacity_check', sql`${table.capacity} > 0`),
+  check('seminars_price_check', sql`${table.priceCents} >= 0`),
+  check('seminars_time_order_check', sql`${table.endTime} > ${table.startTime}`),
+  index('seminars_status_date_idx').on(table.status, table.seminarDate),
+]);
+
+/** One row per member registration; canceling reuses the same row (registration_status flips back
+ * to 'registered' on re-registration) rather than inserting a second row, so the unique constraint
+ * on (seminar_id, profile_id) is a real, permanent duplicate-registration guard, not just a
+ * point-in-time check. `paymentStatus` and `registrationStatus` are deliberately independent
+ * columns -- canceling a registration never overwrites its payment history and vice versa. */
+export const seminarRegistrations = idocSchema.table('seminar_registrations', {
+  id: serial('id').primaryKey(),
+  seminarId: integer('seminar_id').notNull().references(() => seminars.id),
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
+  paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
+  stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
+  stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }).unique(),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  markedPaidByUserId: integer('marked_paid_by_user_id').references(() => users.id),
+  registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
+  canceledAt: timestamp('canceled_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled')`),
+  check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'bank_transfer_pending', 'cash_pending', 'paid')`),
+  uniqueIndex('seminar_registrations_seminar_profile_unique').on(table.seminarId, table.profileId),
+  index('seminar_registrations_seminar_status_idx').on(table.seminarId, table.registrationStatus),
+  index('seminar_registrations_profile_idx').on(table.profileId),
 ]);
 
 export const notificationOutbox = idocSchema.table('notification_outbox', {
