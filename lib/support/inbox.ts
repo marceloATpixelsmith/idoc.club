@@ -26,7 +26,12 @@ const messageSchema = z.string().trim().min(1).max(10_000);
 const subjectSchema = z.string().trim().min(1).max(160);
 const keySchema = z.string().uuid();
 
-export class SupportValidationError extends Error {}
+export class SupportValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SupportValidationError';
+  }
+}
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new SupportValidationError('Review the support form fields.');
@@ -87,7 +92,9 @@ export async function memberUnreadCount() {
 
 export async function getOwnConversation(publicIdValue: unknown) {
   const actor = await requireSupportMember();
-  const publicId = parse(publicIdSchema, publicIdValue);
+  const parsedPublicId = publicIdSchema.safeParse(publicIdValue);
+  if (!parsedPublicId.success) return null;
+  const publicId = parsedPublicId.data;
   return client.begin(async (sql) => {
     const rows = await sql<ConversationRow[]>`select public_id,subject,category,status,updated_at from idoc.support_conversations
       where public_id=${publicId}::uuid and member_user_id=${actor.id} for update`;
@@ -119,13 +126,23 @@ export async function listEligibleAdministrators() {
     left join idoc.profiles p on p.user_id=u.id where u.account_state='active' group by u.id,p.first_name,p.last_name order by display_name`;
 }
 
-export async function listAdminConversations(input: Record<string, string | undefined>) {
+export type SupportSearchParams = Record<string, string | string[] | undefined>;
+function firstSearchValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export async function listAdminConversations(input: SupportSearchParams) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
-  const page = Math.max(1, Number.parseInt(input.page ?? '1', 10) || 1); const limit = 20; const offset = (page - 1) * limit;
-  const category: string | null = SUPPORT_CATEGORIES.includes(input.category as SupportCategory) ? input.category ?? null : null;
-  const status: string | null = SUPPORT_STATUSES.includes(input.status as never) ? input.status ?? null : null;
-  const assigned = input.assigned === 'unassigned' ? -1 : (input.assigned ? await resolveEligibleAdministrator(input.assigned) : null);
-  const search = (input.q ?? '').trim().slice(0, 100);
+  const pageValue = firstSearchValue(input.page);
+  const categoryValue = firstSearchValue(input.category);
+  const statusValue = firstSearchValue(input.status);
+  const assignedValue = firstSearchValue(input.assigned);
+  const searchValue = firstSearchValue(input.q);
+  const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1); const limit = 20; const offset = (page - 1) * limit;
+  const category: string | null = SUPPORT_CATEGORIES.includes(categoryValue as SupportCategory) ? categoryValue ?? null : null;
+  const status: string | null = SUPPORT_STATUSES.includes(statusValue as never) ? statusValue ?? null : null;
+  const assigned = assignedValue === 'unassigned' ? -1 : (assignedValue ? await resolveEligibleAdministrator(assignedValue) : null);
+  const search = (searchValue ?? '').trim().slice(0, 100);
   const rows = await client`select c.public_id,c.subject,c.category,c.status,c.updated_at,c.assigned_admin_user_id,
     coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
     coalesce(ap.first_name||' '||ap.last_name,au.email_display,au.email) assignee_name,
@@ -147,7 +164,10 @@ export async function adminUnreadCount() {
 }
 
 export async function getAdminConversation(value: unknown) {
-  const actor = await requireAccountAccess('administration'); requireAdministrator(actor); const publicId = parse(publicIdSchema, value);
+  const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
+  const parsedPublicId = publicIdSchema.safeParse(value);
+  if (!parsedPublicId.success) return null;
+  const publicId = parsedPublicId.data;
   return client.begin(async (sql) => {
     const rows = await sql<AdminConversationRow[]>`select c.*,coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
       (select email from idoc.users where id=c.assigned_admin_user_id) assigned_admin_key
@@ -208,6 +228,12 @@ export async function setCategoryDefault(categoryValue: unknown, administratorVa
   const actor = await requireAccountAccess('administration'); requireSuperAdmin(actor); const category = parse(categorySchema, categoryValue);
   const administratorId = await resolveEligibleAdministrator(administratorValue);
   if (administratorId === null) throw new SupportValidationError('Choose an eligible administrator.');
-  await client`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())
-    on conflict(category) do update set administrator_user_id=excluded.administrator_user_id,updated_by=excluded.updated_by,updated_at=now()`;
+  await client.begin(async (sql) => {
+    const current = await sql<{ administrator_user_id: number }[]>`select administrator_user_id from idoc.support_category_defaults where category=${category} for update`;
+    if (current[0]?.administrator_user_id === administratorId) return;
+    await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())
+      on conflict(category) do update set administrator_user_id=excluded.administrator_user_id,updated_by=excluded.updated_by,updated_at=now()`;
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+      values(${actor.id},'support.category_default.changed','support_category_default',${category},${JSON.stringify({ administratorUserId: current[0]?.administrator_user_id ?? null })}::jsonb,${JSON.stringify({ administratorUserId: administratorId })}::jsonb)`;
+  });
 }
