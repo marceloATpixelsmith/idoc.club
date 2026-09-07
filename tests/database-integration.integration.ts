@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 38);
+  assert.equal(count, 39);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 38);
+    assert.equal(count, 39);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -135,7 +135,7 @@ test('migration 0035 removes passkey/WebAuthn support without a foreign-key viol
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -252,7 +252,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
     order by table_name`;
-  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
+  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox', 'idoc.organization_settings', 'idoc.seminar_payment_methods'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   // A handful of post-0030 migrations added an index to a table this snapshot already tracks
@@ -369,8 +369,14 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   assert.deepEqual(triggers.map(({ table_name, name, function_name }) => ({ table_name, name, function_name })), [
     { table_name: 'audit_log', name: 'audit_log_immutable', function_name: 'reject_immutable_history_change' },
     { table_name: 'profile_change_history', name: 'profile_change_history_immutable', function_name: 'reject_immutable_history_change' },
+    { table_name: 'seminar_payment_methods', name: 'seminar_payment_methods_no_delete', function_name: 'protect_canonical_seminar_payment_methods' },
   ]);
-  for (const trigger of triggers) assert.match(trigger.definition, /BEFORE DELETE OR UPDATE/);
+  for (const trigger of triggers) {
+    const expectedTiming = trigger.name === 'seminar_payment_methods_no_delete'
+      ? /BEFORE DELETE ON/
+      : /BEFORE DELETE OR UPDATE/;
+    assert.match(trigger.definition, expectedTiming);
+  }
   assert.equal((await sql`select count(*)::int as count from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='idoc' and t.typtype='e'`)[0].count, 0, 'enum semantics are represented by the compared checks');
 });
 
@@ -386,7 +392,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 38);
+  assert.equal(count, 39);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

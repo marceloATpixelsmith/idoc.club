@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PageHeader } from '@/components/site/PageHeader';
+import { formatOrganizationAddress, getPublicOrganizationAddress } from '@/lib/organization/settings';
 
 export const metadata: Metadata = {
   title: 'Contact IDOC',
@@ -11,7 +12,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const addressLines = formatOrganizationAddress(await getPublicOrganizationAddress());
   return (
     <>
       <PageHeader
@@ -23,8 +25,7 @@ export default function ContactPage() {
         <div>
           <h2 className="rule-gold text-2xl">Secretariat</h2>
           <address className="mt-6 space-y-1 text-sm not-italic leading-relaxed text-muted-foreground">
-            <p>Van De Reydtlaan 83</p>
-            <p>2960 Brecht, Belgium</p>
+            {addressLines.map((line) => <p key={line}>{line}</p>)}
             <p>+32 476 914 795</p>
             <p>
               <a href="mailto:accounts@idoc.club" className="text-gold hover:opacity-80">
