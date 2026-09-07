@@ -25,8 +25,7 @@ CREATE TABLE "idoc"."support_messages" (
 	"idempotency_key" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "support_messages_author_side_check" CHECK ("author_side" in ('member', 'admin')),
-	CONSTRAINT "support_messages_body_length_check" CHECK (char_length("body") between 1 and 10000),
-	CONSTRAINT "support_messages_author_idempotency_unique" UNIQUE("author_user_id", "idempotency_key")
+	CONSTRAINT "support_messages_body_length_check" CHECK (char_length("body") between 1 and 10000)
 );
 --> statement-breakpoint
 CREATE TABLE "idoc"."support_category_defaults" (
