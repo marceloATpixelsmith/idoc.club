@@ -16,7 +16,7 @@ test('administrator payment history is scoped, safe, and newest first', async ()
   await sql`insert into idoc.payments(profile_id,source,amount_cents,currency,paid_at,administrator_id,reason,reference)
     values(${first.id},'cash',8000,'EUR','2026-01-01',${admin.id},'private reason','receipt-safe')`;
   await sql`insert into idoc.payments(profile_id,source,amount_cents,currency,paid_at,administrator_id,reason)
-    values(${second.id},'cash',8000,'EUR','2027-01-01',${admin.id},'unrelated',null)`;
+    values(${second.id},'cash',8000,'EUR','2027-01-01',${admin.id},'unrelated')`;
 
   const history = await asAdmin(admin.id, () => listAdminPaymentHistory(first.id));
   assert.equal(history.length, 2);
