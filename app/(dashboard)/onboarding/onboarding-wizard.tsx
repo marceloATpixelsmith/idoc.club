@@ -57,6 +57,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
   const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(false);
   const [address1, setAddress1] = useState('');
   const [address2, setAddress2] = useState('');
+  const [address2WasManuallyEdited, setAddress2WasManuallyEdited] = useState(false);
   const [city, setCity] = useState('');
   const [stateProvince, setStateProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
@@ -153,6 +154,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
     }
     setAddress1('');
     setAddress2('');
+    setAddress2WasManuallyEdited(false);
     setCity('');
     setStateProvince('');
     setPostalCode('');
@@ -178,7 +180,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
     const line1 = suggestion.addressLine1 || suggestion.formatted;
     setAddress1(line1);
     setSelectedAddressValue(line1);
-    if (suggestion.district) setAddress2(suggestion.district);
+    if (suggestion.district && !address2WasManuallyEdited) setAddress2(suggestion.district);
     setCity(suggestion.city);
     setStateProvince(suggestion.stateProvince);
     setPostalCode(suggestion.postalCode);
@@ -285,7 +287,16 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
 
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="address2">Address 2 (optional)</Label>
-            <Input autoComplete="address-line2" id="address2" name="address2" onChange={(event) => setAddress2(event.target.value)} value={address2} />
+            <Input
+              autoComplete="address-line2"
+              id="address2"
+              name="address2"
+              onChange={(event) => {
+                setAddress2(event.target.value);
+                setAddress2WasManuallyEdited(true);
+              }}
+              value={address2}
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -325,7 +336,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="feiId">FEI ID (optional)</Label>
+                <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="feiId">FEI Number (optional)</Label>
                 <Input id="feiId" name="feiId" />
               </div>
             </div>
