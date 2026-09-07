@@ -75,7 +75,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
             <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#payment-history">View Payment History</a>
             <Link className="text-primary underline underline-offset-4 hover:opacity-80" href={`/admin/payments?profileId=${selected.profile.id}`}>Record Manual Payment</Link>
-            <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#extend-expiration">Extend Expiration Date</a>
+            {selected.entitlement && <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#extend-expiration">Extend Expiration Date</a>}
             <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#edit-member">Edit Member Information</a>
             <a className="text-primary underline underline-offset-4 hover:opacity-80" href="#edit-member">Change Membership Type</a>
             <a className="text-primary underline underline-offset-4 hover:opacity-80" href={`mailto:${encodeURIComponent(selected.email)}`}>Email Member</a>
