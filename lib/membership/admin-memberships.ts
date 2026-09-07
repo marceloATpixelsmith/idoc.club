@@ -8,11 +8,11 @@ import { requireAccountAccess } from './data-access';
 
 export const ADMIN_MEMBER_PAGE_SIZE = 25;
 export const MEMBER_EXPORT_LIMIT = 25_000;
-export const MEMBERSHIP_STATUSES = ['never_paid', 'active', 'grace', 'expired', 'paused', 'suspended', 'revoked', 'archived', 'deleted'] as const;
+export const MEMBERSHIP_STATUSES = ['never_paid', 'active', 'grace', 'expired', 'review_required', 'paused', 'suspended', 'revoked', 'archived', 'deleted'] as const;
 export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 export type MemberFilters = {
   country?: string; expiresFrom?: string; expiresTo?: string; federation?: string;
-  membershipType?: 'judge' | 'steward' | 'combo' | 'veterinarian'; page?: number;
+  membershipType?: 'judge' | 'steward' | 'combo' | 'veterinarian'; page?: number | string;
   q?: string; region?: string; sort?: 'name_asc' | 'name_desc' | 'expires_asc' | 'expires_desc';
   status?: MembershipStatusFilter;
 };
@@ -23,12 +23,13 @@ export type AdminMemberRow = {
   status: string; userId: number; validUntil: string | null;
 };
 
-function normalized(input: MemberFilters): Required<Pick<MemberFilters, 'page' | 'sort' | 'status'>> & MemberFilters {
+function normalized(input: MemberFilters): Omit<MemberFilters, 'page' | 'sort' | 'status'> & { page: number; sort: NonNullable<MemberFilters['sort']>; status: MembershipStatusFilter } {
+  const page = Number(input.page);
   return {
     ...input,
     country: input.country?.trim().toUpperCase() || undefined,
     federation: input.federation?.trim().toUpperCase() || undefined,
-    page: Math.max(1, Math.trunc(input.page ?? 1)),
+    page: Number.isSafeInteger(page) && page > 0 ? page : 1,
     q: input.q?.trim().slice(0, 200) || undefined,
     region: input.region?.trim().slice(0, 40) || undefined,
     sort: input.sort ?? 'name_asc',
@@ -43,7 +44,7 @@ function queryParts(raw: MemberFilters) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
   }
-  const effectiveStatus = sql`case when u.account_state = 'deleted' then 'deleted' when u.account_state = 'suspended' then 'revoked' when m.status is null then 'never_paid' when m.status = 'grace' then 'grace' when m.status = 'suspended' then 'suspended' when m.status = 'archived' then 'archived' when m.status = 'paused' then 'paused' when m.status in ('active','complimentary','canceled') and m.valid_until >= current_date then 'active' else 'expired' end`;
+  const effectiveStatus = sql`case when u.account_state = 'deleted' then 'deleted' when u.account_state = 'suspended' then 'revoked' when m.status is null then 'never_paid' when m.status = 'grace' then 'grace' when m.status = 'review_required' then 'review_required' when m.status = 'suspended' then 'suspended' when m.status = 'archived' then 'archived' when m.status = 'paused' then 'paused' when m.status in ('active','complimentary','canceled') and m.valid_until >= current_date then 'active' else 'expired' end`;
   conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   if (filters.expiresFrom) conditions.push(sql`m.valid_until >= ${filters.expiresFrom}`);
   if (filters.expiresTo) conditions.push(sql`m.valid_until <= ${filters.expiresTo}`);
