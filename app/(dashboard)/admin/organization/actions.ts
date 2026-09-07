@@ -1,5 +1,7 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
+
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { updateOrganizationSettings } from '@/lib/organization/settings';
@@ -17,6 +19,8 @@ export async function saveOrganizationSettings(_state: OrganizationSettingsState
       bankInstructions: String(formData.get('bankInstructions') ?? ''),
       cashEnabled: formData.get('cashEnabled') === 'on',
     });
+    revalidatePath('/', 'layout');
+    revalidatePath('/contact');
     return { success: 'Organization settings saved.' };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Organization settings could not be saved.' };
