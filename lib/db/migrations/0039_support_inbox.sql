@@ -44,5 +44,6 @@ ALTER TABLE "idoc"."support_category_defaults" ADD CONSTRAINT "support_category_
 ALTER TABLE "idoc"."support_category_defaults" ADD CONSTRAINT "support_category_defaults_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "idoc"."users"("id");
 CREATE INDEX "support_conversations_member_activity_idx" ON "idoc"."support_conversations" ("member_user_id", "updated_at");
 CREATE INDEX "support_conversations_admin_queue_idx" ON "idoc"."support_conversations" ("assigned_admin_user_id", "status", "updated_at");
+CREATE UNIQUE INDEX "support_messages_author_idempotency_unique" ON "idoc"."support_messages" ("author_user_id", "idempotency_key");
 CREATE INDEX "support_messages_thread_idx" ON "idoc"."support_messages" ("conversation_id", "created_at", "id");
 CREATE TRIGGER "support_messages_immutable" BEFORE UPDATE OR DELETE ON "idoc"."support_messages" FOR EACH ROW EXECUTE FUNCTION "idoc"."reject_immutable_history_change"();
