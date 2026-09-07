@@ -34,7 +34,7 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
 
   return (
     <main className="flex-1 p-4 lg:p-8">
-      <h1 className="text-2xl font-semibold">Seminars</h1>
+      <h1 className="text-2xl font-semibold">My Seminars</h1>
       <nav className="mt-4 flex gap-4 border-b border-border">
         <Link className={`pb-2 uppercase tracking-[0.14em] text-xs ${activeTab === 'current' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`} href="/dashboard/seminars">Current</Link>
         <Link className={`pb-2 uppercase tracking-[0.14em] text-xs ${activeTab === 'past' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`} href="/dashboard/seminars?tab=past">Past</Link>
