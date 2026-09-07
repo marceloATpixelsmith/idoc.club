@@ -75,6 +75,8 @@ If the Codex review quota is unavailable, a repository administrator or maintain
 
 Super Admins manage the canonical address and future seminar payment methods at `/admin/organization`. Online via Stripe is a required protected default and cannot be disabled or repurposed. Bank Transfer may be enabled only with sanitized member-facing instructions; disabling it preserves those instructions. Cash at the Event may be enabled or disabled. Prefer deactivation: do not delete methods, especially after future seminar records reference them. Deploy migration `0038` through the isolated `idoc.__drizzle_migrations` ledger before this interface is used, and verify the three canonical rows occur exactly once.
 
+Administrators and Super Admins operate the Support Inbox at `/admin/support`; the navigation count is the number of conversations with unread member messages. Opening a thread advances only the administrator read cursor. Replies, assignment/reassignment, close, and reopen are server-authorized and serialized against the conversation. Reopening derives `Admin Responded` or `Member Replied` from the latest immutable message. Super Admins configure category defaults at `/admin/support/defaults`; a changed default affects new conversations only. Deploy migration `0039` before use. Never copy message bodies into the general audit log or request authentication secrets in support.
+
 This runbook defines normal administrative actions, exception handling and escalation boundaries. It is intended to prevent ad-hoc database edits and preserve a reliable audit trail.
 
 # 2. Normal member lookup

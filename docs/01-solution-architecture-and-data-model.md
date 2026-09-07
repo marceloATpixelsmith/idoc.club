@@ -62,6 +62,9 @@ Release 1 implements these concepts in the `idoc` schema. Authentication users n
 | membership_adjustments | Manual grants/extensions/suspensions with reasons.                                 | profile_id, action, effective_at, reason, actor_id                                        |
 | audit_log              | Immutable administrative/event history.                                            | actor_id, action, entity_type, entity_id, before_json, after_json, created_at             |
 | migration_map          | Traceability from legacy IDs to new IDs and migration status.                      | legacy_type, legacy_id, new_entity_id, disposition, confidence, reviewed_by               |
+| support_conversations  | Member-owned support case, public UUID, workflow, assignment, and per-side read cursors. | public_id, member_user_id, category, subject, status, assigned_admin_user_id, member_read_at, admin_read_at |
+| support_messages       | Immutable chronological plain-text support messages with retry identity.           | conversation_id, author_user_id, author_side, body, idempotency_key, created_at            |
+| support_category_defaults | Super-Admin-managed default assignment for each support category.                | category, administrator_user_id, updated_by, updated_at                                    |
 
 # 4. Recommended membership status model
 
@@ -111,6 +114,8 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 - Client-submitted membership status, role, level, amount, Stripe identifiers or administrator flags are never trusted without server-side authorization.
 
 - Authentication alone never authorizes dashboard or member-site access. Every member page, action, route, and data-access boundary derives current paid/grace entitlement server-side. Navigation hiding is not an access control.
+
+- Support follows the same paid/grace member gate. Migration `0039` adds constrained categories and workflow states, public UUID URLs, append-only messages, idempotency keys, persisted assignment/defaults, and separate member/admin read cursors. Member ownership and Administrator/Super Admin authority are re-established at every server read and mutation.
 
 - Migration records must retain the legacy primary identifiers needed to trace every imported value back to WordPress/MemberPress.
 
