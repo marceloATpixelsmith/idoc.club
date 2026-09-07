@@ -15,6 +15,12 @@ Working project document. Update this document when project decisions change.
 
 # 1. Architecture principles
 
+## Organization settings foundation
+
+`idoc.organization_settings` owns the singleton structured public organization address (two address lines, city, state/province/region, postal code, and country). Public footer and contact rendering select only those columns and share one formatter; an absent or partial address renders without placeholders or malformed separators.
+
+`idoc.seminar_payment_methods` owns durable canonical seminar-payment identities, labels, activation state, protected state, deterministic order, optional sanitized instructions, and timestamps. Migration `0038` idempotently seeds `online_stripe` (enabled and system protected), `bank_transfer`, and `cash_event`. Methods are deactivated rather than deleted; future registration/payment foreign keys must use these durable rows and restrict destructive deletion. No Stripe credentials or membership-payment behavior live in this table.
+
 - Authentication answers who the person is.
 
 - Authorization answers what that authenticated person may do.

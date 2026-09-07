@@ -12,6 +12,7 @@ export default async function AdminPage() {
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/payments">Record a manual payment</Link>
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/exports">Exports</Link>
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/reconciliation">Stripe reconciliation</Link>
+    {isSuperAdmin && <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/organization">Organization Settings — Super Admin</Link>}
     {isSuperAdmin && <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/security">Security operations — Super Admin</Link>}
   </main>;
 }

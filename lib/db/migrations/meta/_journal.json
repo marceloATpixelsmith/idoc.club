@@ -267,6 +267,13 @@
       "when": 1788386400000,
       "tag": "0037_remove_redundant_user_name",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788728400000,
+      "tag": "0038_organization_settings",
+      "breakpoints": true
     }
   ]
 }

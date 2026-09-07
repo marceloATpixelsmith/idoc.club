@@ -213,6 +213,36 @@ export const profiles = idocSchema.table('profiles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Singleton, server-owned public organization identity. Private settings must use separate tables. */
+export const organizationSettings = idocSchema.table('organization_settings', {
+  id: integer('id').primaryKey().default(1),
+  address1: varchar('address_1', { length: 200 }),
+  address2: varchar('address_2', { length: 200 }),
+  city: varchar('city', { length: 100 }),
+  stateProvince: varchar('state_province', { length: 100 }),
+  postalCode: varchar('postal_code', { length: 30 }),
+  country: varchar('country', { length: 100 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('organization_settings_singleton_check', sql`${table.id} = 1`)]);
+
+/** Seminar payment choices are durable identities, not membership-payment provider state. */
+export const seminarPaymentMethods = idocSchema.table('seminar_payment_methods', {
+  id: serial('id').primaryKey(),
+  canonicalId: varchar('canonical_id', { length: 40 }).notNull().unique(),
+  displayLabel: varchar('display_label', { length: 100 }).notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  systemProtected: boolean('system_protected').notNull().default(false),
+  displayOrder: integer('display_order').notNull(),
+  instructionsHtml: text('instructions_html'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('seminar_payment_methods_identity_check', sql`${table.canonicalId} in ('online_stripe', 'bank_transfer', 'cash_event')`),
+  check('seminar_payment_methods_stripe_protected_check', sql`${table.canonicalId} <> 'online_stripe' or (${table.enabled} and ${table.systemProtected} and ${table.instructionsHtml} is null)`),
+  uniqueIndex('seminar_payment_methods_display_order_unique').on(table.displayOrder),
+]);
+
 /** Evidence captured only when a member actually submits the onboarding form. */
 export const onboardingConsents = idocSchema.table('onboarding_consents', {
   profileId: integer('profile_id').primaryKey().references(() => profiles.id, { onDelete: 'cascade' }),

@@ -23,6 +23,10 @@ If the Codex review quota is unavailable, a repository administrator or maintain
 
 # 1. Purpose
 
+## Organization Settings operations
+
+Super Admins manage the canonical address and future seminar payment methods at `/admin/organization`. Online via Stripe is a required protected default and cannot be disabled or repurposed. Bank Transfer may be enabled only with sanitized member-facing instructions; disabling it preserves those instructions. Cash at the Event may be enabled or disabled. Prefer deactivation: do not delete methods, especially after future seminar records reference them. Deploy migration `0038` through the isolated `idoc.__drizzle_migrations` ledger before this interface is used, and verify the three canonical rows occur exactly once.
+
 This runbook defines normal administrative actions, exception handling and escalation boundaries. It is intended to prevent ad-hoc database edits and preserve a reliable audit trail.
 
 # 2. Normal member lookup

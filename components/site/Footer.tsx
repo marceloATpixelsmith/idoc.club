@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { formatOrganizationAddress, getPublicOrganizationAddress } from '@/lib/organization/settings';
 
-export function Footer() {
+export async function Footer() {
+  const addressLines = formatOrganizationAddress(await getPublicOrganizationAddress());
   return (
     <footer className="mt-24 border-t border-border bg-surface/60">
       <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 lg:grid-cols-4 lg:px-8">
@@ -17,8 +19,7 @@ export function Footer() {
         <div>
           <h4 className="eyebrow">Contact</h4>
           <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
-            <li>Van De Reydtlaan 83</li>
-            <li>2960 Brecht, Belgium</li>
+            {addressLines.length > 0 && <li><address className="not-italic">{addressLines.map((line) => <span className="block" key={line}>{line}</span>)}</address></li>}
             <li>+32 476 914 795</li>
             <li>
               <a href="mailto:accounts@idoc.club" className="hover:text-gold">
