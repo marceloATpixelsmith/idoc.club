@@ -46,4 +46,10 @@ CREATE INDEX "support_conversations_member_activity_idx" ON "idoc"."support_conv
 CREATE INDEX "support_conversations_admin_queue_idx" ON "idoc"."support_conversations" ("assigned_admin_user_id", "status", "updated_at");
 CREATE UNIQUE INDEX "support_messages_author_idempotency_unique" ON "idoc"."support_messages" ("author_user_id", "idempotency_key");
 CREATE INDEX "support_messages_thread_idx" ON "idoc"."support_messages" ("conversation_id", "created_at", "id");
-CREATE TRIGGER "support_messages_immutable" BEFORE UPDATE OR DELETE ON "idoc"."support_messages" FOR EACH ROW EXECUTE FUNCTION "idoc"."reject_immutable_history_change"();
+CREATE OR REPLACE FUNCTION "idoc"."reject_support_message_change"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'Support messages are immutable';
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER "support_messages_immutable" BEFORE UPDATE OR DELETE ON "idoc"."support_messages" FOR EACH ROW EXECUTE FUNCTION "idoc"."reject_support_message_change"();
