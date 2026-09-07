@@ -19,7 +19,7 @@ function dates(input: RevenueFilters) {
 export async function getRevenueReport(input: RevenueFilters = {}) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const range = dates(input);
-  const conditions = [sql`paid_at >= ${range.from}::date`, sql`paid_at < (${range.to}::date + interval '1 day')`, sql`source <> 'complimentary'`];
+  const conditions = [sql`paid_at >= (${range.from}::date::timestamp at time zone 'UTC')`, sql`paid_at < ((${range.to}::date::timestamp at time zone 'UTC') + interval '1 day')`, sql`source <> 'complimentary'`];
   if (input.source) conditions.push(sql`source = ${input.source}`);
   if (input.origin === 'stripe') conditions.push(sql`source in ('stripe_recurring','stripe_one_time')`);
   if (input.origin === 'manual') conditions.push(sql`source not in ('stripe_recurring','stripe_one_time','complimentary')`);
