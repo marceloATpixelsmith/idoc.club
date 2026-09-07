@@ -1,58 +1,60 @@
 import type { Metadata } from 'next';
-import { Lock } from 'lucide-react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/site/PageHeader';
-import { membersDirectoryPlaceholder } from '@/lib/content/site';
+import { ConcentrationMap } from '@/components/directory/concentration-map';
+import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
 
 export const metadata: Metadata = {
   title: 'IDOC Members Directory — Officials Worldwide',
   description:
-    'A directory of IDOC members: dressage judges, stewards and veterinarians, their country, official level and role.',
+    'An interactive map of where IDOC dressage judges, stewards and veterinarians are based worldwide, aggregated by country to protect member privacy.',
   openGraph: {
     title: 'IDOC Members Directory',
-    description: 'Placeholder directory of IDOC judges, stewards and veterinarians worldwide.',
+    description: 'Member concentration by country for the International Dressage Officials Club.',
   },
 };
 
-export default function MembersDirectoryPage() {
+export default async function MembersDirectoryPage() {
+  const result = await getPublicMemberConcentration();
+
   return (
     <>
       <PageHeader
         eyebrow="Members"
         title="Members Directory"
-        intro="A searchable directory of IDOC officials — judges, stewards and veterinarians — with country, discipline level and contact details."
+        intro="Where IDOC officials — judges, stewards and veterinarians — are based worldwide, shown by country to protect individual members' privacy."
       />
 
       <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-        <div className="flex items-start gap-4 border border-gold/40 bg-surface/50 p-6">
-          <Lock className="mt-0.5 size-5 shrink-0 text-gold" />
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Placeholder content. The entries below are examples only — the real directory
-            will be populated from IDOC membership records and will later be visible to
-            signed-in members only.
+        {!result.ok ? (
+          <p className="border border-border bg-surface/50 p-6 text-sm leading-relaxed text-muted-foreground">
+            The members map is temporarily unavailable. Please try again shortly.
           </p>
-        </div>
+        ) : result.areas.length === 0 ? (
+          <p className="border border-border bg-surface/50 p-6 text-sm leading-relaxed text-muted-foreground">
+            Not enough member data is available yet to show the map. Check back soon.
+          </p>
+        ) : (
+          <ConcentrationMap areas={result.areas} />
+        )}
 
-        <div className="mt-10 overflow-x-auto border border-border">
-          <table className="w-full min-w-[40rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface/50 text-[0.68rem] uppercase tracking-[0.16em] text-muted-foreground">
-                <th className="px-6 py-4 font-medium">Name</th>
-                <th className="px-6 py-4 font-medium">Country</th>
-                <th className="px-6 py-4 font-medium">Role</th>
-                <th className="px-6 py-4 font-medium">Level</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {membersDirectoryPlaceholder.map((m) => (
-                <tr key={m.name}>
-                  <td className="px-6 py-4 font-display text-lg">{m.name}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{m.country}</td>
-                  <td className="px-6 py-4 text-gold">{m.role}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{m.level}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <p className="mt-10 text-xs leading-relaxed text-muted-foreground">
+          To protect individual members, this map never shows names, exact addresses, exact
+          coordinates, or any other identifying detail — only a country&rsquo;s total member count,
+          and only once that country has at least {result.ok ? result.threshold : 'a minimum number of'} current
+          members.
+        </p>
+
+        <div className="mt-10 flex items-start gap-4 border border-gold/40 bg-surface/50 p-6">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            IDOC members can search the full directory — filterable by membership type, federation,
+            country and region — from{' '}
+            <Link className="text-gold underline underline-offset-4" href="/dashboard/directory">
+              their member dashboard
+            </Link>
+            . <Link className="text-gold underline underline-offset-4" href="/sign-in">Sign in</Link> to
+            use it.
+          </p>
         </div>
       </section>
     </>
