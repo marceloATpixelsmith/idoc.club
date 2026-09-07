@@ -6,7 +6,7 @@ import { listAllPaymentsForExport } from '@/lib/membership/exports';
 export async function GET() {
   try {
     const rows = await listAllPaymentsForExport();
-    return new Response(toCsv(rows, ['firstName', 'lastName', 'email', 'paidAt', 'amountCents', 'currency', 'source']), {
+    return new Response(`\uFEFF${toCsv(rows, ['firstName', 'lastName', 'email', 'paidAt', 'amountCents', 'currency', 'source'])}`, {
       headers: {
         'Content-Disposition': 'attachment; filename="payments.csv"',
         'Content-Type': 'text/csv; charset=utf-8',

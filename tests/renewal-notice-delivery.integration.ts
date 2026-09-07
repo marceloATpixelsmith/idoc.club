@@ -128,6 +128,28 @@ test('both renewal-notice Cron routes reject missing, lowercase, and mismatched-
   assert.equal((await sql`select count(*)::int as count from idoc.notification_outbox`)[0].count, 0);
 });
 
+test('a member-supplied firstName is HTML-escaped before it reaches the rendered email body, closing an HTML-injection vector', async () => {
+  const { row } = await queueNotice('membership.renewal_reminder', {
+    firstName: '<a href="https://evil.example">Click</a>', renewalDate: '2026-09-01',
+  });
+  let capturedHtml = '';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    capturedHtml = JSON.parse(String(init?.body)).htmlContent;
+    return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
+  };
+  try {
+    const result = await deliverNextRenewalNotice('escape-test-worker');
+    assert.equal(result.status, 'delivered');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.doesNotMatch(capturedHtml, /<a href="https:\/\/evil\.example">Click<\/a>/);
+  assert.match(capturedHtml, /&lt;a href=&quot;https:\/\/evil\.example&quot;&gt;Click&lt;\/a&gt;/);
+  const [stored] = await sql`select sent_at from idoc.notification_outbox where id=${row.id}`;
+  assert.ok(stored.sent_at);
+});
+
 test('the scan Cron route authenticates then returns the enqueue summary', async () => {
   const response = await scanRoute(new Request('https://idoc.club/api/cron/renewal-notice-scan', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
   assert.equal(response.status, 200);

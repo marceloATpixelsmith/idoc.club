@@ -33,12 +33,12 @@ const ACTIVITY_LABELS: Record<string, string> = {
 export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
   const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
-  const [replaceState, replaceAction] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
+  const [replaceState, replaceAction, isReplacePending] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
   const [recoveryState, recoveryAction, isRecoveryPending] = useActionState<RecoveryState, FormData>(regenerateRecoveryCodes, {});
-  const [forgetCurrentState, forgetCurrentAction] = useActionState<PasswordState, FormData>(forgetThisDevice, {});
-  const [forgetAllState, forgetAllAction] = useActionState<PasswordState, FormData>(forgetAllRememberedDevices, {});
-  const [logoutOneState, logoutOneAction] = useActionState<PasswordState, FormData>(logOutSession, {});
-  const [logoutOthersState, logoutOthersAction] = useActionState<PasswordState, FormData>(logOutOtherSessions, {});
+  const [forgetCurrentState, forgetCurrentAction, isForgetCurrentPending] = useActionState<PasswordState, FormData>(forgetThisDevice, {});
+  const [forgetAllState, forgetAllAction, isForgetAllPending] = useActionState<PasswordState, FormData>(forgetAllRememberedDevices, {});
+  const [logoutOneState, logoutOneAction, isLogoutOnePending] = useActionState<PasswordState, FormData>(logOutSession, {});
+  const [logoutOthersState, logoutOthersAction, isLogoutOthersPending] = useActionState<PasswordState, FormData>(logOutOtherSessions, {});
 
   return (
     <section className="flex-1 p-4 lg:p-8">
@@ -72,15 +72,15 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
         {recoveryState.error ? <p className="text-sm text-red-400">{recoveryState.error}</p> : null}
         {recoveryState.recoveryCodes ? <><p className="text-sm font-medium">Save these codes now. They will not be shown again.</p>
           <ul aria-label="New recovery codes">{recoveryState.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
-        {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline">Replace authenticator</Button></form>
+        {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline" disabled={isReplacePending}>{isReplacePending ? 'Starting…' : 'Replace authenticator'}</Button></form>
           <form action={recoveryAction}><CsrfField /><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
       </> : <Card className="mb-8"><CardHeader><CardTitle>Remembered devices</CardTitle></CardHeader><CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">This browser is {currentDeviceRemembered ? 'remembered for password sign-in verification' : 'not currently remembered'}.</p>
         {(forgetCurrentState.error || forgetAllState.error) ? <p className="text-sm text-red-400">{forgetCurrentState.error || forgetAllState.error}</p> : null}
         {(forgetCurrentState.success || forgetAllState.success) ? <p className="text-sm text-green-400">{forgetCurrentState.success || forgetAllState.success}</p> : null}
-        <div className="flex flex-wrap gap-3"><form action={forgetCurrentAction}><CsrfField /><Button disabled={!currentDeviceRemembered} type="submit" variant="outline">Forget this device</Button></form>
-        <form action={forgetAllAction}><CsrfField /><Button type="submit" variant="outline">Forget all remembered devices</Button></form></div>
+        <div className="flex flex-wrap gap-3"><form action={forgetCurrentAction}><CsrfField /><Button disabled={!currentDeviceRemembered || isForgetCurrentPending} type="submit" variant="outline">{isForgetCurrentPending ? 'Forgetting…' : 'Forget this device'}</Button></form>
+        <form action={forgetAllAction}><CsrfField /><Button disabled={isForgetAllPending} type="submit" variant="outline">{isForgetAllPending ? 'Forgetting…' : 'Forget all remembered devices'}</Button></form></div>
       </CardContent></Card>}
 
       <Card className="mb-8"><CardHeader><CardTitle>Active sessions</CardTitle></CardHeader><CardContent className="space-y-5">
@@ -90,9 +90,9 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
         {sessions.map((session) => <div className="rounded-md border p-4" key={session.sessionId}>
           <p className="font-medium">{session.sessionId === currentSessionId ? 'Current session' : 'Another session'}{session.deviceLabel ? ` — ${session.deviceLabel}` : ''}</p>
           <dl className="mt-2 grid gap-1 text-sm text-muted-foreground"><div>Authenticated: {formatDate(session.authenticatedAt)}</div><div>Last activity: {formatDate(session.lastActivityAt)}</div><div>Expires: {formatDate(session.absoluteExpiresAt)}</div></dl>
-          {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><CsrfField /><input name="sessionId" type="hidden" value={session.sessionId} /><Button type="submit" variant="outline">Log out this session</Button></form> : null}
+          {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><CsrfField /><input name="sessionId" type="hidden" value={session.sessionId} /><Button disabled={isLogoutOnePending} type="submit" variant="outline">{isLogoutOnePending ? 'Logging out…' : 'Log out this session'}</Button></form> : null}
         </div>)}
-        <form action={logoutOthersAction}><CsrfField /><Button type="submit" variant="outline">Log out other sessions</Button></form>
+        <form action={logoutOthersAction}><CsrfField /><Button disabled={isLogoutOthersPending} type="submit" variant="outline">{isLogoutOthersPending ? 'Logging out…' : 'Log out other sessions'}</Button></form>
       </CardContent></Card>
 
       <Card className="mb-8">

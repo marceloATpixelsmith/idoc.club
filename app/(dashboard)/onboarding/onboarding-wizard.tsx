@@ -226,11 +226,11 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="firstName">First name</Label>
-            <Input id="firstName" name="firstName" required />
+            <Input id="firstName" maxLength={100} name="firstName" required />
           </div>
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="lastName">Last name</Label>
-            <Input id="lastName" name="lastName" required />
+            <Input id="lastName" maxLength={100} name="lastName" required />
           </div>
         </div>
 
@@ -249,6 +249,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
               autoComplete="street-address"
               disabled={!countryCode}
               id="address1"
+              maxLength={200}
               name="address1"
               onChange={(event) => {
                 setAddress1(event.target.value);
@@ -290,6 +291,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
             <Input
               autoComplete="address-line2"
               id="address2"
+              maxLength={200}
               name="address2"
               onChange={(event) => {
                 setAddress2(event.target.value);
@@ -302,15 +304,15 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="city">City / Locality</Label>
-              <Input autoComplete="address-level2" id="city" name="city" onChange={(event) => setCity(event.target.value)} required value={city} />
+              <Input autoComplete="address-level2" id="city" maxLength={100} name="city" onChange={(event) => setCity(event.target.value)} required value={city} />
             </div>
             <div>
               <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="stateProvince">State / Province / Region</Label>
-              <Input autoComplete="address-level1" id="stateProvince" name="stateProvince" onChange={(event) => setStateProvince(event.target.value)} required value={stateProvince} />
+              <Input autoComplete="address-level1" id="stateProvince" maxLength={100} name="stateProvince" onChange={(event) => setStateProvince(event.target.value)} required value={stateProvince} />
             </div>
             <div>
               <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="postalCode">Postal / ZIP code</Label>
-              <Input autoComplete="postal-code" id="postalCode" name="postalCode" onChange={(event) => setPostalCode(event.target.value)} required value={postalCode} />
+              <Input autoComplete="postal-code" id="postalCode" maxLength={30} name="postalCode" onChange={(event) => setPostalCode(event.target.value)} required value={postalCode} />
             </div>
           </div>
         </fieldset>

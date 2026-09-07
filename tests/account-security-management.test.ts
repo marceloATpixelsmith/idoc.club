@@ -60,3 +60,14 @@ test('password change and deletion deliberately invalidate authentication state'
   assert.match(deletion, /forgetAllLoginDevices\(user\.id, 'account-deleted'\)/);
   assert.match(deletion, /requireFreshStepUp\(user, 'change-security-settings'/);
 });
+
+test('every session-mutating form on the My Security page disables its submit button while its own action is pending, preventing a double-click from firing a duplicate request', () => {
+  const pendingFlags: Record<string, string> = {
+    beginAuthenticatorReplacement: 'isReplacePending', forgetAllRememberedDevices: 'isForgetAllPending',
+    forgetThisDevice: 'isForgetCurrentPending', logOutOtherSessions: 'isLogoutOthersPending', logOutSession: 'isLogoutOnePending',
+  };
+  for (const [action, flag] of Object.entries(pendingFlags)) {
+    assert.match(client, new RegExp(`\\[\\w+, \\w+, ${flag}\\] = useActionState<\\w+State, FormData>\\(${action}, \\{\\}\\)`), `${action} must destructure its pending flag (${flag})`);
+    assert.match(client, new RegExp(`disabled=\\{[^}]*${flag}[^}]*\\}`), `${flag} must gate a submit button's disabled prop`);
+  }
+});

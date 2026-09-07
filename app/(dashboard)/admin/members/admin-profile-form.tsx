@@ -8,6 +8,11 @@ import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES } fro
 type Role = { feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null; nationalFederationCountryCode: string | null; officialStatuses: string[] | null; roleType: string };
 type Member = { profile: Record<string, unknown>; roles: Role[] };
 const fields = [['firstName', 'First Name'], ['lastName', 'Last Name'], ['address1', 'Address 1'], ['address2', 'Address 2 (optional)'], ['city', 'City'], ['stateProvince', 'State/Province'], ['postalCode', 'ZIP/postal code']] as const;
+// Matches lib/db/schema.ts's profiles column lengths (memberProfileSchema enforces the same limits
+// server-side; this is the client-side half of the same requirement).
+const FIELD_MAX_LENGTH: Record<string, number> = {
+  address1: 200, address2: 200, city: 100, firstName: 100, lastName: 100, postalCode: 30, stateProvince: 100,
+};
 
 export function AdminProfileForm({ member, profileId }: { member: Member; profileId: number }) {
   const judge = member.roles.find((role) => role.roleType === 'judge');
@@ -19,7 +24,7 @@ export function AdminProfileForm({ member, profileId }: { member: Member; profil
   return <form action={action} className="max-w-2xl space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
-    {fields.map(([name, label]) => <label className="block" key={name}>{label}<input className="block w-full border p-2" defaultValue={String(member.profile[name] ?? '')} name={name} required={name !== 'address2'} /></label>)}
+    {fields.map(([name, label]) => <label className="block" key={name}>{label}<input className="block w-full border p-2" defaultValue={String(member.profile[name] ?? '')} maxLength={FIELD_MAX_LENGTH[name]} name={name} required={name !== 'address2'} /></label>)}
     <Select initial={String(member.profile.countryCode)} label="Country" name="countryCode" required values={ISO_COUNTRY_CODES} />
     <label className="block">Professional classification<select className="block w-full border p-2" name="classification" onChange={(event) => setClassification(event.target.value)} value={classification}><option value="judge">Judge</option><option value="steward">Steward</option><option value="judge_steward">Judge + Steward</option><option value="veterinarian">Veterinarian</option></select></label>
     {classification !== 'veterinarian' ? <fieldset className="space-y-4 border p-4"><legend>Official information</legend><Select initial={official?.nationalFederationCountryCode ?? ''} label="National Federation" name="nationalFederationCountryCode" required values={ISO_COUNTRY_CODES} /><Select initial={official?.idocRegion ?? ''} label="IDOC Region" name="idocRegion" required values={IDOC_REGIONS} /><label className="block">FEI ID (optional)<input className="block w-full border p-2" defaultValue={official?.feiId ?? ''} name="feiId" /></label>{classification === 'judge' || classification === 'judge_steward' ? <><CheckboxGroup initial={judge?.officialStatuses ?? []} label="Official Status as Judge" name="judgeStatus" values={JUDGE_STATUSES} /><Select initial={judge?.isTechnicalDelegate ? 'yes' : 'no'} label="Technical Delegate" name="isTechnicalDelegate" required values={['yes', 'no']} /></> : null}{classification === 'steward' || classification === 'judge_steward' ? <CheckboxGroup initial={steward?.officialStatuses ?? []} label="Official Status as Steward" name="stewardStatus" values={STEWARD_STATUSES} /> : null}</fieldset> : null}

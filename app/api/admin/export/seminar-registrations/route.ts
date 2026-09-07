@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const seminarId = url.searchParams.get('seminarId');
     const rows = await exportSeminarRegistrationsCsvRows(seminarId);
-    return new Response(`﻿${toCsv(rows, ['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'registered_at', 'canceled_at', 'paid_at'])}`, {
+    return new Response(`\uFEFF${toCsv(rows, ['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'registered_at', 'canceled_at', 'paid_at'])}`, {
       headers: {
         'Content-Disposition': 'attachment; filename="seminar-registrations.csv"',
         'Content-Type': 'text/csv; charset=utf-8',

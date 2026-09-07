@@ -95,8 +95,11 @@ test('listAllAuditLogForExport caps at EXPORT_ROW_LIMIT rows, keeping the most r
   const rows = await asAdministration(superAdmin.id, () => listAllAuditLogForExport());
   assert.equal(rows.length, EXPORT_ROW_LIMIT, 'the export must cap at EXPORT_ROW_LIMIT, not return every row');
 
+  // +1 for the export's own new audit_log row (listAllAuditLogForExport now audits itself, like
+  // every other admin CSV export) -- it is inserted after the capped select above runs, so it can
+  // never appear among the returned/capped rows themselves.
   const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log`;
-  assert.equal(totalCount, EXPORT_ROW_LIMIT + overflow, 'sanity check: real row volume in the table must actually exceed the cap');
+  assert.equal(totalCount, EXPORT_ROW_LIMIT + overflow + 1, 'sanity check: real row volume in the table must actually exceed the cap');
 
   // The oldest `overflow` rows (highest `n`, furthest in the past) must be the ones excluded --
   // the cap keeps the most recent history, not an arbitrary or oldest-first slice. Rows arrive
@@ -188,4 +191,27 @@ test('the notifications export route returns CSV with the correct headers and co
   assert.match(body, /firstName,lastName,email,kind,createdAt,sentAt/);
   assert.match(body, new RegExp(member.email));
   assert.match(body, /membership\.renewal_reminder/);
+});
+
+test('the payments, audit-log, and notifications exports each write their own audit_log row recording the actor and result count -- the same convention as the members and seminar-registrations exports', async () => {
+  const superAdmin = await superAdminUser();
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.payments(profile_id, source, amount_cents, currency, paid_at, administrator_id, reason)
+    values (${profile.id}, 'cash', 8000, 'EUR', now(), ${admin.id}, 'fixture payment')`;
+  await sql`insert into idoc.notification_outbox(profile_id, kind, payload) values (${profile.id}, 'membership.renewal_reminder', '{}')`;
+
+  await asAdministration(superAdmin.id, () => listAllPaymentsForExport());
+  await asAdministration(superAdmin.id, () => listAllAuditLogForExport());
+  await asAdministration(admin.id, () => listAllNotificationsForExport());
+
+  const [paymentsExport] = await sql`select * from idoc.audit_log where action = 'admin.payments.exported' order by id desc limit 1`;
+  assert.ok(paymentsExport); assert.equal(paymentsExport.actor_id, superAdmin.id); assert.equal(paymentsExport.after_json.resultCount, 1);
+
+  const [auditLogExport] = await sql`select * from idoc.audit_log where action = 'admin.audit_log.exported' order by id desc limit 1`;
+  assert.ok(auditLogExport); assert.equal(auditLogExport.actor_id, superAdmin.id);
+
+  const [notificationsExport] = await sql`select * from idoc.audit_log where action = 'admin.notifications.exported' order by id desc limit 1`;
+  assert.ok(notificationsExport); assert.equal(notificationsExport.actor_id, admin.id); assert.equal(notificationsExport.after_json.resultCount, 1);
 });

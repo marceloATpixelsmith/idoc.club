@@ -35,7 +35,7 @@ export async function listAllMembersForExport() {
 export async function listAllPaymentsForExport() {
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  return db.select({
+  const rows = await db.select({
     amountCents: payments.amountCents, currency: payments.currency, email: users.email,
     firstName: profiles.firstName, lastName: profiles.lastName, paidAt: payments.paidAt, source: payments.source,
   }).from(payments)
@@ -43,18 +43,22 @@ export async function listAllPaymentsForExport() {
     .innerJoin(users, eq(profiles.userId, users.id))
     .orderBy(desc(payments.paidAt))
     .limit(EXPORT_ROW_LIMIT);
+  await db.insert(auditLog).values({ action: 'admin.payments.exported', actorId: actor.id, afterJson: { resultCount: rows.length }, entityId: 'payment-ledger', entityType: 'export' });
+  return rows;
 }
 
 export async function listAllAuditLogForExport() {
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
-  return db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(EXPORT_ROW_LIMIT);
+  const rows = await db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(EXPORT_ROW_LIMIT);
+  await db.insert(auditLog).values({ action: 'admin.audit_log.exported', actorId: actor.id, afterJson: { resultCount: rows.length }, entityId: 'audit-log', entityType: 'export' });
+  return rows;
 }
 
 export async function listAllNotificationsForExport() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  return db.select({
+  const rows = await db.select({
     createdAt: notificationOutbox.createdAt, email: users.email, firstName: profiles.firstName,
     kind: notificationOutbox.kind, lastName: profiles.lastName, sentAt: notificationOutbox.sentAt,
   }).from(notificationOutbox)
@@ -62,4 +66,6 @@ export async function listAllNotificationsForExport() {
     .innerJoin(users, eq(profiles.userId, users.id))
     .orderBy(desc(notificationOutbox.createdAt))
     .limit(EXPORT_ROW_LIMIT);
+  await db.insert(auditLog).values({ action: 'admin.notifications.exported', actorId: actor.id, afterJson: { resultCount: rows.length }, entityId: 'notification-history', entityType: 'export' });
+  return rows;
 }
