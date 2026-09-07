@@ -4,6 +4,13 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { ConcentrationMap } from '@/components/directory/concentration-map';
 import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
 
+// This page has no dynamic API of its own (no cookies/headers/searchParams), so without this it
+// could be statically prerendered once at build time -- silently freezing the advertised member
+// counts until the next deployment, and (since a query failure here is caught into an "unavailable"
+// result rather than thrown) permanently baking in a transient build-time outage as if it were the
+// real state. Every request re-aggregates current membership data fresh.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'IDOC Members Directory — Officials Worldwide',
   description:
