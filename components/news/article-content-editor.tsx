@@ -1,14 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import { sanitizeArticleContent } from '@/lib/news/sanitize';
 
 /** Rich-text editor for article bodies, following the same contentEditable + document.execCommand
  * + hidden-input pattern already used by app/(dashboard)/admin/organization/organization-settings-form.tsx
  * for Bank Transfer instructions -- kept intentionally lightweight (no new editor dependency). The
  * hidden field carries the live innerHTML to the Server Action, which re-sanitizes it before storage
- * regardless of what this toolbar produced. */
+ * regardless of what this toolbar produced; initialHtml is re-sanitized here too (it is always
+ * previously-stored, already-sanitized content, but sanitizing again immediately before render
+ * matches the same defense-in-depth the public article view already applies). */
 export function ArticleContentEditor({ initialHtml = '' }: { initialHtml?: string }) {
-  const [html, setHtml] = useState(initialHtml);
+  const sanitizedInitialHtml = sanitizeArticleContent(initialHtml);
+  const [html, setHtml] = useState(sanitizedInitialHtml);
   const command = (name: string, value?: string) => document.execCommand(name, false, value);
   return (
     <div>
@@ -36,7 +40,7 @@ export function ArticleContentEditor({ initialHtml = '' }: { initialHtml?: strin
         aria-labelledby="article-content-editor"
         className="mt-2 min-h-64 rounded-md border p-3"
         contentEditable
-        dangerouslySetInnerHTML={{ __html: initialHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizedInitialHtml }}
         id="article-content-editor"
         onInput={(event) => setHtml(event.currentTarget.innerHTML)}
         role="textbox"

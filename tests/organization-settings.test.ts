@@ -30,6 +30,13 @@ test('saving settings revalidates every public address surface', () => {
   assert.ok(action.indexOf('await updateOrganizationSettings') < action.indexOf("revalidatePath('/', 'layout')"));
 });
 
+test('the settings form re-sanitizes previously-stored bank instructions immediately before rendering them, not just at the last save', () => {
+  const form = readFileSync(new URL('../app/(dashboard)/admin/organization/organization-settings-form.tsx', import.meta.url), 'utf8');
+  assert.match(form, /sanitizeBankInstructions\(bank\.instructionsHtml \?\? ''\)/);
+  assert.match(form, /dangerouslySetInnerHTML=\{\{ __html: sanitizedBankInstructions \}\}/);
+  assert.doesNotMatch(form, /dangerouslySetInnerHTML=\{\{ __html: bank\.instructionsHtml/);
+});
+
 test('migration idempotently seeds protected canonical identities', () => {
   const migration = readFileSync(new URL('../lib/db/migrations/0038_organization_settings.sql', import.meta.url), 'utf8');
   assert.match(migration, /ON CONFLICT \("canonical_id"\) DO NOTHING/);

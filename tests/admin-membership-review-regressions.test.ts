@@ -21,9 +21,16 @@ test('membership status options and effective status preserve review-required re
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {
-  assert.match(memberQueries, /const page = Number\(input\.page\)/);
+  assert.match(memberQueries, /const page = pageNumber\(input\.page\)/);
   assert.match(memberQueries, /Number\.isSafeInteger\(page\) && page > 0 \? page : 1/);
   assert.doesNotMatch(memberQueries, /Math\.trunc\(input\.page/);
+});
+
+test('an array-valued (repeated-key) filter is resolved to its first value before any string method is called on it', () => {
+  assert.match(memberQueries, /function firstValue\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? value\[0\] : value;/);
+  for (const field of ['country', 'expiresFrom', 'expiresTo', 'federation', 'membershipType', 'q', 'region', 'sort', 'status']) {
+    assert.match(memberQueries, new RegExp(`firstValue\\(input\\.${field}\\)`));
+  }
 });
 
 test('revenue report boundaries are explicit inclusive UTC calendar dates', () => {

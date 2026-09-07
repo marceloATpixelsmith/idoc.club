@@ -10,11 +10,17 @@ export const ADMIN_MEMBER_PAGE_SIZE = 25;
 export const MEMBER_EXPORT_LIMIT = 25_000;
 export const MEMBERSHIP_STATUSES = ['never_paid', 'active', 'grace', 'expired', 'review_required', 'paused', 'suspended', 'revoked', 'archived', 'deleted'] as const;
 export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
+// Next.js searchParams values are string | string[] | undefined at runtime (a repeated query key
+// becomes an array) regardless of a narrower page-level annotation, so every filter accepts that
+// real shape; normalized() below resolves an array to its first value (matching the convention
+// already used by lib/news/articles.ts, lib/seminars/seminars.ts, and lib/support/inbox.ts) before
+// calling any string method on it.
+type RawFilterValue = string | string[] | undefined;
 export type MemberFilters = {
-  country?: string; expiresFrom?: string; expiresTo?: string; federation?: string;
-  membershipType?: 'judge' | 'steward' | 'combo' | 'veterinarian'; page?: number | string;
-  q?: string; region?: string; sort?: 'name_asc' | 'name_desc' | 'expires_asc' | 'expires_desc';
-  status?: MembershipStatusFilter;
+  country?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
+  membershipType?: RawFilterValue; page?: number | RawFilterValue;
+  q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
+  status?: RawFilterValue;
 };
 
 export type AdminMemberRow = {
@@ -23,17 +29,43 @@ export type AdminMemberRow = {
   status: string; userId: number; validUntil: string | null;
 };
 
-function normalized(input: MemberFilters): Omit<MemberFilters, 'page' | 'sort' | 'status'> & { page: number; sort: NonNullable<MemberFilters['sort']>; status: MembershipStatusFilter } {
-  const page = Number(input.page);
+const SORT_OPTIONS = ['name_asc', 'name_desc', 'expires_asc', 'expires_desc'] as const;
+type SortOption = typeof SORT_OPTIONS[number];
+const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
+type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
+
+// An array-valued (repeated-key) filter resolves to its first value rather than crashing --
+// matching the convention already used by lib/news/articles.ts, lib/seminars/seminars.ts, and
+// lib/support/inbox.ts -- so a string method is never called directly on an array.
+function firstValue(value: RawFilterValue): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+function pageNumber(value: number | RawFilterValue): number {
+  return Number(typeof value === 'number' ? value : firstValue(value));
+}
+
+type NormalizedMemberFilters = {
+  country?: string; expiresFrom?: string; expiresTo?: string; federation?: string;
+  membershipType?: MembershipTypeOption; page: number; q?: string; region?: string;
+  sort: SortOption; status: MembershipStatusFilter;
+};
+
+function normalized(input: MemberFilters): NormalizedMemberFilters {
+  const page = pageNumber(input.page);
+  const membershipType = firstValue(input.membershipType);
+  const sort = firstValue(input.sort);
+  const status = firstValue(input.status);
   return {
-    ...input,
-    country: input.country?.trim().toUpperCase() || undefined,
-    federation: input.federation?.trim().toUpperCase() || undefined,
+    country: firstValue(input.country)?.trim().toUpperCase() || undefined,
+    expiresFrom: firstValue(input.expiresFrom) || undefined,
+    expiresTo: firstValue(input.expiresTo) || undefined,
+    federation: firstValue(input.federation)?.trim().toUpperCase() || undefined,
+    membershipType: membershipType && MEMBERSHIP_TYPE_OPTIONS.includes(membershipType as MembershipTypeOption) ? membershipType as MembershipTypeOption : undefined,
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
-    q: input.q?.trim().slice(0, 200) || undefined,
-    region: input.region?.trim().slice(0, 40) || undefined,
-    sort: input.sort ?? 'name_asc',
-    status: input.status && MEMBERSHIP_STATUSES.includes(input.status) ? input.status : 'active',
+    q: firstValue(input.q)?.trim().slice(0, 200) || undefined,
+    region: firstValue(input.region)?.trim().slice(0, 40) || undefined,
+    sort: sort && SORT_OPTIONS.includes(sort as SortOption) ? sort as SortOption : 'name_asc',
+    status: status && MEMBERSHIP_STATUSES.includes(status as MembershipStatusFilter) ? status as MembershipStatusFilter : 'active',
   };
 }
 

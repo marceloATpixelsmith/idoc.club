@@ -9,6 +9,7 @@ const migration = readFileSync('lib/db/migrations/0040_news_articles.sql', 'utf8
 const publicPage = readFileSync('app/(marketing)/news/[slug]/page.tsx', 'utf8');
 const listPage = readFileSync('app/(marketing)/news/page.tsx', 'utf8');
 const articleView = readFileSync('components/news/article-view.tsx', 'utf8');
+const articleContentEditor = readFileSync('components/news/article-content-editor.tsx', 'utf8');
 
 test('the four publication states and their length limits are constrained in both the library and the migration', () => {
   for (const value of ['draft', 'scheduled', 'published', 'archived']) assert.match(source, new RegExp(`'${value}'`));
@@ -73,6 +74,12 @@ test('article HTML is only ever rendered through the one sanitizing view compone
   assert.match(articleView, /sanitizeArticleContent\(contentHtml\)/);
   assert.doesNotMatch(publicPage, /dangerouslySetInnerHTML/);
   assert.doesNotMatch(listPage, /dangerouslySetInnerHTML/);
+});
+
+test('the admin content editor re-sanitizes previously-stored article HTML immediately before rendering it, not just at the last save', () => {
+  assert.match(articleContentEditor, /sanitizeArticleContent\(initialHtml\)/);
+  assert.match(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: sanitizedInitialHtml \}\}/);
+  assert.doesNotMatch(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: initialHtml \}\}/);
 });
 
 test('sanitizeArticleContent strips scripts, event handlers, and unsafe link schemes while preserving safe formatting', () => {
