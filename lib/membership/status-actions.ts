@@ -139,3 +139,31 @@ export async function correctEntitlement(profileId: number, untrustedInput: unkn
     return { membership: updated };
   });
 }
+
+const extendExpirationSchema = z.object({
+  reason: reasonSchema,
+  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date as YYYY-MM-DD')
+    .refine(isRealCalendarDate, 'Enter a real calendar date'),
+});
+
+/** Extends an entitlement without touching payment or Stripe records. An equal date is a safe,
+ * idempotent retry; a shorter date must use the broader correction workflow. */
+export async function extendMembershipExpiration(profileId: number, untrustedInput: unknown) {
+  const input = extendExpirationSchema.parse(untrustedInput);
+  const actor = await requireAccountAccess('administration');
+  requireAdministrator(actor);
+  return db.transaction(async (tx) => {
+    const current = await lockLatestMembership(tx, profileId);
+    if (!current) throw new Error('Member has no membership on file to extend.');
+    if (input.validUntil < current.validUntil) throw new Error('An expiration extension cannot shorten the current paid-through date.');
+    if (input.validUntil === current.validUntil) return { membership: current, unchanged: true };
+    const [updated] = await tx.update(memberships).set({ updatedAt: new Date(), validUntil: input.validUntil })
+      .where(eq(memberships.id, current.id)).returning();
+    await tx.insert(auditLog).values({
+      action: 'admin.membership.expiration_extended', actorId: actor.id,
+      afterJson: { validUntil: updated.validUntil }, beforeJson: { validUntil: current.validUntil },
+      entityId: String(profileId), entityType: 'profile', reason: input.reason,
+    });
+    return { membership: updated, unchanged: false };
+  });
+}

@@ -72,13 +72,14 @@ export async function getPrivateMember(profileId: number) {
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return null;
   requireOwnerOrAdmin(actor, profile.userId);
-  const [roles, entitlement, subscription] = await Promise.all([
+  const [roles, entitlement, subscription, account] = await Promise.all([
     db.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
     db.select().from(memberships).where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1),
     db.select({ cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd, currentPeriodEnd: subscriptions.currentPeriodEnd, status: subscriptions.status })
       .from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.createdAt)).limit(1),
+    db.select({ email: sql<string>`coalesce(${users.emailDisplay}, ${users.email})` }).from(users).where(eq(users.id, profile.userId)).limit(1),
   ]);
-  return { entitlement: entitlement[0] ?? null, profile, roles, subscription: subscription[0] ?? null };
+  return { email: account[0]?.email ?? '', entitlement: entitlement[0] ?? null, profile, roles, subscription: subscription[0] ?? null };
 }
 
 export async function getOwnPrivateMember() {
@@ -249,6 +250,22 @@ export async function listOwnPaymentHistory() {
   if (!profile) return [];
   return db.select({ amountCents: payments.amountCents, currency: payments.currency, id: payments.id, paidAt: payments.paidAt, source: payments.source })
     .from(payments).where(eq(payments.profileId, profile.id)).orderBy(desc(payments.paidAt));
+}
+
+/** Administrator projection for one server-resolved member. Deliberately omits database IDs,
+ * administrator identity/reason, and all billing credentials. */
+export async function listAdminPaymentHistory(profileId: number) {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  if (!profile) return [];
+  return db.select({
+    amountCents: payments.amountCents,
+    currency: payments.currency,
+    paidAt: payments.paidAt,
+    reference: sql<string | null>`coalesce(${payments.reference}, ${payments.externalPaymentId})`,
+    source: payments.source,
+  }).from(payments).where(eq(payments.profileId, profile.id)).orderBy(desc(payments.paidAt), desc(payments.id));
 }
 
 export async function hasOwnBillingAccount(): Promise<boolean> {

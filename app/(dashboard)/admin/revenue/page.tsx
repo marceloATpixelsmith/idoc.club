@@ -7,6 +7,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
   const report = await getRevenueReport(filters);
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Membership revenue</h1>
+    <p className="mt-2 text-sm text-muted-foreground">Historical membership-type attribution is unavailable: payment records do not snapshot the member classification at payment time. Current classifications are not used as historical substitutes.</p>
     <p className="mt-1 text-sm text-muted-foreground">Persisted successful payments, grouped by currency. Dates are inclusive UTC calendar dates.</p>
     <form className="mt-6 flex flex-wrap gap-3" method="get">
       <label className="text-sm">From <input className="block rounded-md border" defaultValue={report.range.from} name="from" type="date" /></label>

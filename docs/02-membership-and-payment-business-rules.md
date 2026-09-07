@@ -181,6 +181,8 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - Administrators may set or correct a paid-through date to reflect the real payment date or a justified entitlement correction. This is an audited override and must require a reason.
 
+- The dedicated **Extend Expiration Date** action accepts only a real calendar date on or after the current paid-through date and requires an administrator reason. It changes only the current membership's paid-through date under the membership lock, records previous/new dates and actor/reason, and treats an equal-date retry as already complete. It never creates a payment or changes Stripe billing dates. Shortening or status repair belongs in the broader entitlement-correction tool.
+
 # 5.1 Online renewal choice, notices and failed payments
 
 - The first payment page presents one IDOC Annual Membership at €80 for 12 months and one renewal control. It must not use two pricing cards or describe automatic renewal and one-time payment as different products, plans, membership types, or prices.
@@ -246,6 +248,8 @@ The Release 1 persistence workflow closes the current professional-role rows and
 8. A manual suspension blocks member access regardless of paid-through date. It is distinct from a payment-only account and must not be lifted merely by a new payment; reinstatement is a separate audited administrator action.
 
 9. A refund never automatically changes entitlement. The administrator deciding the refund must choose and record its membership consequence.
+
+10. An administrator classification change reuses canonical profile validation and professional-role history: valid targets are Judge, Steward, Judge + Steward, and Veterinarian, with all target-specific fields required. The change requires a reason and audit before/after evidence, and does not alter payment history, membership expiration, or Stripe Product, Price, subscription, or renewal state.
 
 # 9. Duplicate prevention
 

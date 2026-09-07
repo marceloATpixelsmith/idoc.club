@@ -56,6 +56,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
+    extendExpirationForm: 'delegates-to-data-access',
     grantRoleForm: 'delegates-to-data-access', revokeRoleForm: 'delegates-to-data-access',
     suspendUserAccountForm: 'delegates-to-data-access', reinstateUserAccountForm: 'delegates-to-data-access',
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
