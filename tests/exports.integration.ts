@@ -121,7 +121,7 @@ test('the members export route returns CSV with the correct headers for an admin
   const member = await createUser();
   await createProfile(member.id);
 
-  const response = await asAdministration(admin.id, () => exportMembers());
+  const response = await asAdministration(admin.id, () => exportMembers(new Request('https://idoc.club/api/admin/export/members')));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Content-Type'), 'text/csv; charset=utf-8');
   assert.match(response.headers.get('Content-Disposition') ?? '', /attachment; filename="members\.csv"/);
@@ -167,7 +167,7 @@ test('the audit-log export route rejects a plain administrator with a 401, and s
 // them actually returns 401, not merely that the library function throws.
 test('the members export route rejects a cross-user (ordinary member) request with a 401', async () => {
   const member = await createUser();
-  const response = await asAdministration(member.id, () => exportMembers());
+  const response = await asAdministration(member.id, () => exportMembers(new Request('https://idoc.club/api/admin/export/members')));
   assert.equal(response.status, 401);
 });
 
