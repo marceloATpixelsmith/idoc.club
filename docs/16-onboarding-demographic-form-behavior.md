@@ -26,7 +26,7 @@ On entering the details step, the form makes a single best-effort request for th
 
 ## Address autocomplete locality field
 
-When a selected suggestion carries a finer-grained locality below city (for example, a colonia on a Mexican address), the form copies that value into Address 2 automatically. A suggestion without one leaves Address 2 untouched by that field.
+When a selected suggestion carries a finer-grained locality below city (for example, a colonia on a Mexican address), the form copies that value into Address 2 automatically. A suggestion without one, or a suggestion selected after the member has typed or changed Address 2, leaves Address 2 untouched. Selecting another country clears the address and resets this manual-edit protection for the new address. This is an international secondary-locality rule, not a Mexico-only special case.
 
 ## National Federation default
 
@@ -49,3 +49,19 @@ When the member selects an address Country, the form automatically uses that cou
 Once the member explicitly selects an IDOC Region value, that selection is treated as intentional professional data. Later corrections to the address Country must not overwrite that explicitly selected region.
 
 IDOC Region groups countries more coarsely than by continent or address Country -- for example Mexico defaults to Central & Latin America, not North America -- so it is never derived from address Country or National Federation at read time; it is looked up from the maintained mapping.
+
+## Signup-corrections implementation inventory (7 September 2026)
+
+| Requirement | Status | Evidence / disposition |
+|---|---|---|
+| FEI Number is optional in client and server validation | Already implemented and verified | `feiId` has no HTML `required` attribute and the shared server schema accepts an absent/empty value. |
+| The visible label identifies FEI Number as optional | Already implemented and verified | Onboarding renders **FEI Number (optional)**; the stored canonical field remains `feiId`. |
+| Best-effort current-geolocation bias | Already implemented and verified | The details step requests browser geolocation once and passes valid coordinates through the authenticated provider proxy as a ranking hint. |
+| Denied, unavailable, unsupported, timed-out, or provider-rejected bias does not break entry | Already implemented and verified | Geolocation has a five-second timeout and a no-op error path; autocomplete starts without waiting, omits absent coordinates, and retains manual entry when the provider is unavailable. |
+| Provider secondary locality populates Address 2 internationally | Already implemented and verified | The provider's `suburb`/`district` value is exposed generically and copied when present; no country-specific branch is used. |
+| Member-entered Address 2 is not overwritten | Already implemented and verified | A member edit marks Address 2 as intentional, preventing subsequent suggestions from replacing it; changing country starts a new blank address and resets that marker. |
+| Address country defaults National Federation | Already implemented and verified | ISO country selection supplies the initial federation while the select remains editable. |
+| Address country defaults IDOC Region from one authoritative mapping | Already implemented and verified | `lib/membership/idoc-regions-by-country.ts` is the single complete ISO-country mapping used by onboarding. |
+| Automatically selected National Federation and Region remain editable | Already implemented and verified | Explicit non-empty selections are preserved across later address-country corrections; clearing a selection opts back into defaulting. |
+
+No signup correction in this slice is blocked or superseded. There is no database or migration impact.

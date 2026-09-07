@@ -44,7 +44,7 @@ test('onboarding field labels stay bold and section headers are uppercase withou
     'Country',
     'National Federation',
     'IDOC Region',
-    'FEI ID',
+    'FEI Number (optional)',
     'Official status as Judge',
     'Official status as Steward',
     'Are you a Technical Delegate?',
@@ -177,9 +177,12 @@ test('address autocomplete is biased by a best-effort, non-blocking browser geol
   assert.ok(autocompleteRoute.indexOf('if (text.length') < autocompleteRoute.indexOf("searchParams.set('bias'"));
 });
 
-test('a selected suggestion\'s finer-grained locality (e.g. a Mexican address\'s colonia) fills Address 2 automatically, and never clears an existing value when absent', () => {
+test('a selected suggestion\'s finer-grained locality fills Address 2 without overwriting member-edited content', () => {
   assert.match(autocompleteRoute, /district: result\.suburb \?\? result\.district \?\? ''/);
-  assert.match(source, /if \(suggestion\.district\) setAddress2\(suggestion\.district\)/);
+  assert.match(source, /const \[address2WasManuallyEdited, setAddress2WasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /if \(suggestion\.district && !address2WasManuallyEdited\) setAddress2\(suggestion\.district\)/);
+  assert.match(source, /setAddress2WasManuallyEdited\(true\)/);
+  assert.match(source, /setAddress2WasManuallyEdited\(false\)/);
   const chooseAddressStart = source.indexOf('function chooseAddress');
   const chooseAddressEnd = source.indexOf('\n  }', chooseAddressStart);
   assert.ok(chooseAddressStart >= 0 && chooseAddressEnd > chooseAddressStart);
@@ -188,7 +191,13 @@ test('a selected suggestion\'s finer-grained locality (e.g. a Mexican address\'s
   // a member's own manually-typed Address 2 the moment they picked any suggestion the provider
   // returned without a district/suburb field, contradicting the documented "leaves Address 2
   // untouched" behavior.
-  assert.doesNotMatch(source.slice(chooseAddressStart, chooseAddressEnd), /(?<!if \(suggestion\.district\) )setAddress2\(suggestion\.district\)/);
+  assert.doesNotMatch(source.slice(chooseAddressStart, chooseAddressEnd), /(?<!if \(suggestion\.district && !address2WasManuallyEdited\) )setAddress2\(suggestion\.district\)/);
+});
+
+test('FEI Number is visibly optional and is not required by the client form', () => {
+  assert.match(source, /htmlFor="feiId">FEI Number \(optional\)<\/Label>/);
+  assert.match(source, /id="feiId" name="feiId"/);
+  assert.doesNotMatch(source, /id="feiId" name="feiId" required/);
 });
 
 // A Codex review finding: URLSearchParams.get() returns null for an absent param, and Number(null)

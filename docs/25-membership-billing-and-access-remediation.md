@@ -215,3 +215,32 @@ This remediation is complete only when:
 - all automated release checks pass on the final revision;
 - real Stripe test-mode signoff passes;
 - production Product, restricted key, webhook, environment variables, migrations, legacy linkage, and reconciliation are checked off before live billing.
+
+## 10. Member-dashboard requirement inventory (7 September 2026)
+
+This inventory records the requested dashboard slice against current implementation without changing the broader renewal-preference remediation above.
+
+| Requirement group | Status | Evidence / remaining dependency |
+|---|---|---|
+| Horizontal My Membership, My Profile, My Security, and My Seminars tabs; Membership is default | Already implemented and verified | The shared dashboard tab bar uses exactly these destinations, with `/dashboard` as Membership. |
+| Remove duplicate General and Activity interfaces while retaining old bookmarks | Already implemented and verified | General is removed; `/dashboard/activity` redirects to Security, where owned activity is rendered. There are no General/Activity navigation items. |
+| Never-paid payment/logout-only UI and direct server-side denial | Already implemented and verified | Layout, pages, actions, and shared data-access policy gate Profile, Security, Seminars, history, and mutations; payment and CSRF-protected logout remain reachable. Payment uses the account's already-recorded professional classification and introduces no type-selection step. |
+| Previously-paid expiration and five-day grace are distinct from never-paid | Already implemented and verified | Database entitlement remains authoritative; grace retains dashboard access and post-grace expiration enters the documented payment-only state without repeating onboarding. |
+| Paid membership type, change affordance, expiration, and 15-day Renew boundary | Already implemented and verified | Membership uses canonical Judge, Steward, J&S Combo, and Veterinarian labels; profile editing changes classification independently of billing/payment/expiration records; Renew is shown at 15 days or fewer. |
+| Owned canonical payment-history table with date, amount, currency, and source | Already implemented and verified | The server-owned payment ledger is queried by authenticated profile and supports Stripe plus PayPal, bank transfer, cash, and complimentary sources. Amount and currency are displayed together. |
+| Profile includes verified-email workflow and separate first/last names | Already implemented and verified | My Profile contains account email plus all member fields; ownership, normalized uniqueness, and verification are server-enforced, and no duplicate `users.name` field remains. |
+| Security layout, password controls, activity placement, and deletion confirmation | Already implemented and verified | Password and Google panels form a responsive two-column grid; reusable constrained password fields have stateful accessible show/hide labels; password change has no confirmation field, while deletion retains one; owned activity appears immediately above Delete Account. |
+| My Seminars lists only the member's registered-and-paid seminars with loading/error states | Not implemented | Release 5 seminar authoring/registration/payment schema does not yet exist. The server-gated tab therefore renders an honest empty state and never fabricates or exposes registrations. Authoritative registration querying plus loading/error states remain deferred to the seminar slice. |
+
+No dashboard item is superseded by a newer decision or blocked by an unresolved product decision. The seminar row is a known sequencing/schema dependency, not a product-policy blocker. This slice adds no schema and no migration.
+
+### Manual verification for this slice
+
+1. Start the application with a disposable migrated database and configured Geoapify test credential.
+2. Create a Judge/Steward account, open My Membership onboarding, confirm **FEI Number (optional)** can remain blank, and submit all other required fields.
+3. Deny geolocation and confirm address suggestions and manual entry still work; repeat with geolocation granted and verify requests include a proximity bias without changing the selected-country filter.
+4. Select an address with a district/suburb and confirm it fills Address 2; then type a custom Address 2, choose another suggestion, and confirm the custom value remains.
+5. Confirm address Country defaults National Federation and IDOC Region, and that both selects can subsequently be changed without a later country edit overwriting them.
+6. Sign in as never-paid, grace, post-grace-expired, paid, and privileged fixtures. Confirm the documented tab visibility and direct-URL behavior, including payment and logout access for payment-only accounts.
+7. As a paid member, verify membership label, expiration, the 16-day versus 15-day Renew boundary, owned payment rows, profile email/name fields, password toggles, activity placement, deletion confirmation, and the honest My Seminars empty state.
+8. Visit `/dashboard/activity` and confirm it redirects to My Security; confirm `/dashboard/general` does not render a duplicate dashboard interface.

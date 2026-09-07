@@ -26,6 +26,15 @@ const nextConfig: NextConfig = {
         headers: [...baseSecurityHeaders, { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' }]
       }
     ];
+  },
+  async redirects() {
+    return [
+      {
+        destination: '/dashboard/security',
+        permanent: true,
+        source: '/dashboard/activity'
+      }
+    ];
   }
 };
 
