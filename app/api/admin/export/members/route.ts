@@ -1,18 +1,21 @@
 import 'server-only';
 
 import { toCsv } from '@/lib/admin/csv';
-import { listAllMembersForExport } from '@/lib/membership/exports';
+import { exportAdminMembers, type MemberFilters } from '@/lib/membership/admin-memberships';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const rows = await listAllMembersForExport();
-    return new Response(toCsv(rows, ['firstName', 'lastName', 'email', 'status', 'validUntil']), {
+    const url = new URL(request.url);
+    const filters = Object.fromEntries(url.searchParams) as MemberFilters;
+    const rows = await exportAdminMembers(filters);
+    return new Response(`\uFEFF${toCsv(rows, ['profileId', 'firstName', 'lastName', 'email', 'status', 'validUntil', 'membershipType', 'federation', 'country', 'region'])}`, {
       headers: {
         'Content-Disposition': 'attachment; filename="members.csv"',
         'Content-Type': 'text/csv; charset=utf-8',
       },
     });
-  } catch {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to export members.';
+    return Response.json({ error: message }, { status: message.includes('safe limit') ? 413 : 401 });
   }
 }

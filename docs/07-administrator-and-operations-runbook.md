@@ -2,6 +2,28 @@
 
 **Administrator & Operations Runbook**
 
+## Filtered membership and revenue reporting
+
+`/admin/members` is the canonical administrator roster. It defaults explicitly to active
+entitlements and performs name/email search, status, inclusive expiration date, canonical address
+country, federation, IDOC region, and professional-classification filtering in PostgreSQL. Filters
+are combinable, URL-addressable, sorted deterministically, and returned in pages of 25. The
+filtered CSV endpoint reruns that same authorized query, exports at most 25,000 rows, records only
+the actor, filters, and result count in the audit log, emits a UTF-8 BOM, and prefixes formula-like
+cells with an apostrophe. Administrators must narrow an over-limit export.
+
+`/admin/revenue` aggregates the persisted membership payment ledger, never live Stripe data. Its
+default range is the first UTC day of the month eleven months ago through today. Complimentary
+entries are not revenue; results remain grouped by currency.
+
+The roster keeps never-paid, active, grace, expired, suspended, revoked-account, archived, and
+deleted states distinct. `canceled` remains an internal renewal state and is active only while paid
+through. **Pause remains unavailable:** no approved rules define entitlement, expiration, Stripe
+collection, resumption, manual/one-time handling, or notices. Archive automation also remains
+blocked until a durable external-operation contract covers Stripe and Mailchimp and the Release 5
+seminar schema can preserve future-registration identity snapshots. Existing audited suspension
+and revocation must not be represented as pause or archive.
+
 Day-to-day procedures after the IDOC membership platform goes live
 
 | **Organization**     | International Dressage Officials Club (IDOC)   |
