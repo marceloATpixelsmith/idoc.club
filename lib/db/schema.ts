@@ -347,6 +347,34 @@ export const supportCategoryDefaults = idocSchema.table('support_category_defaul
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
 
+/** Administrator-authored News/Blog articles. `publicationDate` is the administrator-set target date
+ * (also the displayed article date); `publishedAt` is the actual timestamp the article went live,
+ * set either by an immediate publish or by the scheduled-publish Cron transition. Public visibility
+ * additionally requires `publicationDate <= now()` even when status is already 'published', so a
+ * defense-in-depth check never leaks a future-dated article ahead of its scheduled time. */
+export const newsArticles = idocSchema.table('news_articles', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: 160 }).notNull().unique(),
+  title: varchar('title', { length: 200 }).notNull(),
+  subtitle: varchar('subtitle', { length: 300 }),
+  contentHtml: text('content_html').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  publicationDate: timestamp('publication_date', { withTimezone: true }).notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
+  updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('news_articles_status_check', sql`${table.status} in ('draft', 'scheduled', 'published', 'archived')`),
+  check('news_articles_slug_format_check', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+  check('news_articles_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
+  check('news_articles_subtitle_length_check', sql`${table.subtitle} is null or char_length(${table.subtitle}) between 1 and 300`),
+  check('news_articles_content_length_check', sql`char_length(${table.contentHtml}) between 1 and 20000`),
+  index('news_articles_publication_queue_idx').on(table.status, table.publicationDate),
+]);
+
 export const notificationOutbox = idocSchema.table('notification_outbox', {
   id: serial('id').primaryKey(),
   kind: varchar('kind', { length: 50 }).notNull(),

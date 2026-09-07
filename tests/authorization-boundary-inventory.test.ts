@@ -60,6 +60,11 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     assignSupportConversation: 'delegates-to-data-access', changeSupportConversationStatus: 'delegates-to-data-access',
     replyToSupportAsAdmin: 'delegates-to-data-access', updateSupportCategoryDefault: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/news/actions.ts': {
+    archiveNewsArticle: 'delegates-to-data-access', createNewsArticle: 'delegates-to-data-access', deleteNewsArticle: 'delegates-to-data-access',
+    publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
+    unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
+  },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
@@ -84,6 +89,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/clock-skew-check/route.ts': 'shared-secret-header',
   'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
+  'app/api/cron/news-scheduled-publish/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',

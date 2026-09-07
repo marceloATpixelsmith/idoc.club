@@ -15,6 +15,7 @@ export default async function AdminPage() {
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/exports">Exports</Link>
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/reconciliation">Stripe reconciliation</Link>
     <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/support">Support Inbox{supportUnread > 0 ? ` (${supportUnread} unread)` : ''}</Link>
+    <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/news">News / Blog</Link>
     {isSuperAdmin && <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/support/defaults">Support category defaults — Super Admin</Link>}
     {isSuperAdmin && <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/organization">Organization Settings — Super Admin</Link>}
     {isSuperAdmin && <Link className="mt-2 block text-primary underline underline-offset-4 hover:opacity-80" href="/admin/security">Security operations — Super Admin</Link>}

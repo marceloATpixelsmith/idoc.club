@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 40);
+  assert.equal(count, 41);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 40);
+    assert.equal(count, 41);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -135,7 +135,7 @@ test('migration 0035 removes passkey/WebAuthn support without a foreign-key viol
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -202,6 +202,8 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[38].when > journal.entries[37].when, 'the organization-settings migration must follow migration 0037');
   assert.equal(journal.entries[39].tag, '0039_support_inbox');
   assert.ok(journal.entries[39].when > journal.entries[38].when, 'the support-inbox migration must follow migration 0038');
+  assert.equal(journal.entries[40].tag, '0040_news_articles');
+  assert.ok(journal.entries[40].when > journal.entries[39].when, 'the news-articles migration must follow migration 0039');
   const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0030_snapshot.json'), 'utf8'));
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
@@ -248,6 +250,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   for (const tableName of ['idoc.support_category_defaults', 'idoc.support_conversations', 'idoc.support_messages']) {
     expectedSchema[tableName] = supportSnapshot.tables[tableName];
   }
+  const newsSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0040_snapshot.json'), 'utf8'));
+  expectedSchema['idoc.news_articles'] = newsSnapshot.tables['idoc.news_articles'];
   delete expectedSchema['idoc.webauthn_credentials'];
   delete expectedSchema['idoc.webauthn_ceremony_challenges'];
   const expectedMfaFactors = expectedSchema['idoc.mfa_factors'];
@@ -401,7 +405,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 40);
+  assert.equal(count, 41);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/clock-skew-check",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/news-scheduled-publish",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -65,6 +65,7 @@ Release 1 implements these concepts in the `idoc` schema. Authentication users n
 | support_conversations  | Member-owned support case, public UUID, workflow, assignment, and per-side read cursors. | public_id, member_user_id, category, subject, status, assigned_admin_user_id, member_read_at, admin_read_at |
 | support_messages       | Immutable chronological plain-text support messages with retry identity.           | conversation_id, author_user_id, author_side, body, idempotency_key, created_at            |
 | support_category_defaults | Super-Admin-managed default assignment for each support category.                | category, administrator_user_id, updated_by, updated_at                                    |
+| news_articles          | Administrator-authored public News/Blog articles.                                 | slug, title, subtitle, content_html, status, publication_date, published_at, archived_at, created_by_user_id, updated_by_user_id |
 
 # 4. Recommended membership status model
 
@@ -116,6 +117,8 @@ The approved labels, required fields, enumerated IDOC Regions, Judge statuses, a
 - Authentication alone never authorizes dashboard or member-site access. Every member page, action, route, and data-access boundary derives current paid/grace entitlement server-side. Navigation hiding is not an access control.
 
 - Support follows the same paid/grace member gate. Migration `0039` adds constrained categories and workflow states, public UUID URLs, append-only messages, idempotency keys, persisted assignment/defaults, and separate member/admin read cursors. Member ownership and Administrator/Super Admin authority are re-established at every server read and mutation.
+
+- News/Blog articles (migration `0040`) are administrator-authored and public by default once published. `status` is constrained to `draft`, `scheduled`, `published`, or `archived`; `slug` is unique and format-constrained (`^[a-z0-9]+(-[a-z0-9]+)*$`); `title`, `subtitle`, and `content_html` carry documented length limits enforced by both a database `CHECK` constraint and server-side validation in `lib/news/articles.ts`. Every public read requires `status='published' AND publication_date<=now()` at the query layer itself (not only at the UI layer), so a scheduled or draft article is never reachable, including by a guessed slug. A Vercel Cron job (`/api/cron/news-scheduled-publish`, every 5 minutes) transitions overdue `scheduled` articles to `published`; all scheduling comparisons use PostgreSQL's `now()` (UTC) as the one documented evaluation clock, and the admin publication-date input is explicitly UTC. Rich-text `content_html` is sanitized server-side (`lib/news/sanitize.ts`, an explicit tag/attribute allowlist) before every insert/update and again immediately before rendering. Deletion is permitted only from `draft` or `archived` status -- a published or scheduled article must be archived first, preserving a retained record before any irreversible delete. Every create, edit, publish, unpublish, schedule, archive, and delete action writes an `audit_log` row; the scheduled-publish Cron transition writes one too, with a null `actor_id` marking it as a system action.
 
 - Migration records must retain the legacy primary identifiers needed to trace every imported value back to WordPress/MemberPress.
 

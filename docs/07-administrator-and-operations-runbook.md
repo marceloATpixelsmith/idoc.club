@@ -77,6 +77,17 @@ Super Admins manage the canonical address and future seminar payment methods at 
 
 Administrators and Super Admins operate the Support Inbox at `/admin/support`; the navigation count is the number of conversations with unread member messages. Opening a thread advances only the administrator read cursor. Replies, assignment/reassignment, close, and reopen are server-authorized and serialized against the conversation. Reopening derives `Admin Responded` or `Member Replied` from the latest immutable message. Super Admins configure category defaults at `/admin/support/defaults`; a changed default affects new conversations only. Deploy migration `0039` before use. Never copy message bodies into the general audit log or request authentication secrets in support.
 
+## News/Blog operations
+
+Administrators and Super Admins manage public News/Blog articles at `/admin/news`: create, edit, preview, publish, unpublish, schedule, archive, and delete. Deploy migration `0040` before use.
+
+- **Fields:** publication date (UTC), title, subtitle (optional), rich-text content, publication status, and slug (auto-generated from the title if left blank, editable afterward, and rejected on collision).
+- **States:** Draft (never public), Scheduled (never public until its publication date passes), Published (public), Archived (never public, retained for history).
+- **Publishing:** "Publish now" makes an article public immediately; editing the status field to Scheduled with a future publication date defers it. A Vercel Cron job (`/api/cron/news-scheduled-publish`, every 5 minutes, UTC, gated by `CRON_SECRET`) transitions overdue scheduled articles to Published automatically. Public pages independently re-check `publication_date<=now()` on every read, so an article can never appear early even if a transition is delayed.
+- **Deletion:** only Draft or Archived articles can be permanently deleted. Archive a Published or Scheduled article first — this preserves a retained record before an irreversible delete, matching the same "deactivate before delete" preference used elsewhere in this runbook (Organization Settings payment methods, §1).
+- **Preview:** the edit page's Preview link renders the article exactly as the public page would, for any status, without making it publicly reachable.
+- Every create, edit, publish, unpublish, schedule, archive, and delete action is audited under `news_article` entity type; the scheduled-publish Cron transition is audited with a null actor (a system action).
+
 This runbook defines normal administrative actions, exception handling and escalation boundaries. It is intended to prevent ad-hoc database edits and preserve a reliable audit trail.
 
 # 2. Normal member lookup
@@ -227,6 +238,10 @@ Retry delay is `min(3,600, 30 × 2^(attempt − 1))` seconds according to the cu
 ### Stripe reconciliation-scan schedule
 
 Vercel Cron calls `/api/cron/reconciliation-scan` on `0 7 * * *` (daily, UTC — an hour after the renewal-notice scan). It is gated by the same `CRON_SECRET` bearer header as every other Cron route. A run replaces the current findings snapshot only on success; a failure (e.g. Stripe temporarily unreachable) leaves the prior snapshot untouched and is recorded as a failed run, and the Cron route itself returns a non-2xx status so a missed or broken run is visible in Vercel's own Cron monitoring, not just on the `/admin/reconciliation` page. Investigate a run of consecutive failures the same way as any other Cron failure (§12) before assuming a specific finding is stale.
+
+### News scheduled-publish schedule
+
+Vercel Cron calls `/api/cron/news-scheduled-publish` on `*/5 * * * *` (every five minutes, UTC), gated by the same `CRON_SECRET` bearer header as every other Cron route. A run transitions every `news_articles` row with `status='scheduled'` and a `publication_date` at or before the current PostgreSQL `now()` to `status='published'`, in one transaction per article with `FOR UPDATE SKIP LOCKED`, and writes one audit row per transition with a null actor (a system action). The public site independently re-checks `publication_date<=now()` on every read regardless of this Cron's cadence, so a brief delay between an article's scheduled time and this job's next run never makes it appear early — only, at most, a few minutes later than scheduled.
 
 ### Data-retention-purge schedule
 
