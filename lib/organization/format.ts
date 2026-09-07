@@ -19,3 +19,13 @@ export function sanitizeBankInstructions(input: string): string {
     return href && /^(https?:|mailto:)/i.test(href) ? `<a href="${href.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">` : '<a>';
   });
 }
+
+const ENTITY_ENCODED_WHITESPACE = /&(?:nbsp|ensp|emsp|thinsp|hairsp|zwnj|zwj|lrm|rlm);|&#(?:9|10|13|32|160|5760|8192|8193|8194|8195|8196|8197|8198|8199|8200|8201|8202|8203|8232|8233|8239|8287|12288);|&#x(?:9|a|d|20|a0|1680|2000|2001|2002|2003|2004|2005|2006|2007|2008|2009|200a|200b|2028|2029|202f|205f|3000);/gi;
+
+export function hasVisibleBankInstructions(input: string): boolean {
+  return Boolean(input
+    .replace(/<[^>]*>/g, '')
+    .replace(ENTITY_ENCODED_WHITESPACE, ' ')
+    .replace(/[\s\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]/g, '')
+  );
+}
