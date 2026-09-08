@@ -22,7 +22,7 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
   if (!article) notFound();
   const status = String(article.status);
   return (
-    <main className="space-y-8 p-8">
+    <main className="space-y-8 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/news">← News / Blog</Link>
       <header className="flex items-center justify-between">
         <div>

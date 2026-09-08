@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { PageHeader } from '@/components/site/PageHeader';
 import { boardMembers } from '@/lib/content/site';
+import { countryFlagIconPath } from '@/lib/format/country-flag';
 
 export const metadata: Metadata = {
   title: 'IDOC Board Members — Officers & Regional Representatives',
@@ -47,6 +48,15 @@ export default function BoardMembersPage() {
                 </p>
                 <h2 className="mt-3 font-display text-2xl leading-snug">
                   {m.name} <span className="text-muted-foreground">({m.country})</span>
+                  {countryFlagIconPath(m.country) && (
+                    /* eslint-disable-next-line @next/next/no-img-element -- tiny static flag icon */
+                    <img
+                      src={countryFlagIconPath(m.country)!}
+                      alt=""
+                      aria-hidden="true"
+                      className="ml-2 inline-block h-4 w-4 rounded-full align-middle"
+                    />
+                  )}
                 </h2>
                 {m.detail.length > 0 && (
                   <ul className="mt-4 space-y-1 text-sm text-muted-foreground">

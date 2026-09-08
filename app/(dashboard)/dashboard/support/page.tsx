@@ -6,7 +6,7 @@ import { createSupportConversation } from './actions';
 
 export default async function MemberSupportPage() {
   const conversations = await listOwnConversations();
-  return <div className="space-y-8 p-6"><header><h1 className="text-2xl font-semibold">Support</h1><p className="text-muted-foreground">Ask the IDOC team for help and follow your conversations.</p></header>
+  return <div className="space-y-8 py-6 px-5 lg:px-8"><header><h1 className="text-2xl font-semibold">Support</h1><p className="text-muted-foreground">Ask the IDOC team for help and follow your conversations.</p></header>
     <section className="rounded-lg border p-5"><h2 className="mb-4 text-lg font-semibold">New conversation</h2>
       <SupportForm action={createSupportConversation} pendingLabel="Sending" submitLabel="Start conversation">
         <input name="idempotencyKey" type="hidden" value={randomUUID()} />

@@ -21,7 +21,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
     if (!(thrown instanceof RevenueRangeError)) throw thrown;
     error = thrown.message;
   }
-  return <main className="flex-1 p-8">
+  return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Membership revenue</h1>
     <p className="mt-2 text-sm text-muted-foreground">Historical membership-type attribution is unavailable: payment records do not snapshot the member classification at payment time. Current classifications are not used as historical substitutes.</p>
     <p className="mt-1 text-sm text-muted-foreground">Persisted successful payments, grouped by currency. Dates are inclusive UTC calendar dates.</p>

@@ -11,7 +11,7 @@ export default async function AdminPaymentsPage({ searchParams }: { searchParams
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const selected = profileId && Number.isInteger(profileId) ? await getPrivateMember(profileId) : null;
 
-  return <main className="flex-1 p-8">
+  return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Record a manual payment</h1>
     <Link className="mt-2 inline-block underline text-sm" href="/admin/members">← Search members</Link>
     {!selected && <p className="mt-4 text-sm text-foreground">Search for a member on the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link> to record a payment.</p>}

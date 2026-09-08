@@ -14,7 +14,7 @@ export default async function AdminNewsPage({ searchParams }: { searchParams: Pr
   const { rows, page, hasNext } = await listAdminArticles(query);
   const href = (next: number) => `/admin/news?${new URLSearchParams({ ...scalarQuery, page: String(next) }).toString()}`;
   return (
-    <main className="space-y-6 p-8">
+    <main className="space-y-6 py-8 px-5 lg:px-8">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">News / Blog</h1>

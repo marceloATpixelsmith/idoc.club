@@ -10,7 +10,7 @@ export default async function AdminSecurityPage() {
   const { activeVersion } = explicitGoogleOauthClientSecretVersions();
   const latest = await latestGoogleOauthSecretRotation();
   return (
-    <main className="flex-1 p-8">
+    <main className="flex-1 py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">Super Admin security operations</h1>
       <section className="mt-6">
         <h2 className="text-lg font-semibold">Google OAuth client-secret rotation</h2>

@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   return (
     <div className="flex flex-col min-h-[calc(100dvh-96px)] max-w-7xl mx-auto w-full">
       <DashboardTabs entitled={entitled} memberSupport={!privileged} supportUnread={supportUnread} />
-      <main className="flex-1 overflow-y-auto p-0 lg:p-4">{children}</main>
+      <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }

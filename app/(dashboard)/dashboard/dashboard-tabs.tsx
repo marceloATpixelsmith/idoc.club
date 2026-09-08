@@ -27,14 +27,14 @@ export function DashboardTabs({ entitled, memberSupport, supportUnread }: { enti
 
   return (
     <>
-      <div className="lg:hidden flex items-center justify-between bg-background border-b border-border p-4">
+      <div className="lg:hidden flex items-center justify-between bg-background border-b border-border py-4 px-5">
         <span className="font-medium uppercase tracking-[0.14em] text-sm">Dashboard</span>
         <Button className="-mr-3" variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)}>
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle navigation</span>
         </Button>
       </div>
-      <nav className={`flex-col gap-1 border-b border-border bg-background p-2 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:p-0 ${isMenuOpen ? 'flex' : 'hidden'}`}>
+      <nav className={`flex-col gap-1 border-b border-border bg-background py-2 px-5 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:py-0 lg:px-8 ${isMenuOpen ? 'flex' : 'hidden'}`}>
         {ALL_TABS.filter((tab) => memberSupport || tab.href !== '/dashboard/support').map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button

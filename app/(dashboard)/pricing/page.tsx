@@ -5,7 +5,7 @@ const MEMBERSHIP_FEE_EUR = 80;
 
 export default function PricingPage() {
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <main className="max-w-7xl mx-auto px-5 lg:px-8 py-12">
       <h1 className="text-3xl font-medium text-foreground mb-2 text-center">IDOC Membership</h1>
       <p className="text-muted-foreground text-center mb-10">
         €{MEMBERSHIP_FEE_EUR} per year — the same price for every professional classification.

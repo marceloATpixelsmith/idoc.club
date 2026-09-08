@@ -60,7 +60,7 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
   };
 
   return (
-    <main className="flex-1 p-4 lg:p-8">
+    <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">Members Directory</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Search current IDOC officials by membership type, federation, country and region. Contact

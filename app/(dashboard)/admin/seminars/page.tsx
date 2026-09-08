@@ -17,7 +17,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
   const { rows, page, hasNext } = await listAdminSeminars(query);
   const href = (next: number) => `/admin/seminars?${new URLSearchParams({ ...scalarQuery, page: String(next) }).toString()}`;
   return (
-    <main className="space-y-6 p-8">
+    <main className="space-y-6 py-8 px-5 lg:px-8">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Seminars</h1>

@@ -32,14 +32,14 @@ export default async function EditSeminarPage({ params, searchParams }: {
   });
   const status = String(seminar.status);
   return (
-    <main className="space-y-8 p-8">
+    <main className="space-y-8 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/seminars">← Seminars</Link>
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{String(seminar.title)}</h1>
           <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} / {String(seminar.capacity)} registered</p>
         </div>
-        <a className="underline" href={`/api/admin/export/seminar-registrations?seminarId=${id}`}>Export registrations (CSV)</a>
+        <a className="underline" download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}>Export registrations (CSV)</a>
       </header>
 
       <section className="grid gap-6 lg:grid-cols-[1fr_16rem]">

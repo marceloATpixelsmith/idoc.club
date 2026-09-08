@@ -49,7 +49,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   if (onboarding) {
     return (
-      <main className="flex-1 p-4 lg:p-8">
+      <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
         <OnboardingWizard initialClassification={parseMemberClassification(membership)} />
       </main>
     );
@@ -93,7 +93,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const history = await listOwnPaymentHistory();
 
   return (
-    <main className="flex-1 p-4 lg:p-8">
+    <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">My Membership</h1>
       <p className="mt-3">Welcome, {member.profile.firstName} {member.profile.lastName}.</p>
 
