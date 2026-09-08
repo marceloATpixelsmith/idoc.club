@@ -3,23 +3,24 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const memberPage = readFileSync(new URL('../app/(dashboard)/admin/members/page.tsx', import.meta.url), 'utf8');
+const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const memberQueries = readFileSync(new URL('../lib/membership/admin-memberships.ts', import.meta.url), 'utf8');
 const revenueReport = readFileSync(new URL('../lib/payments/revenue-report.ts', import.meta.url), 'utf8');
 const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
 const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
 
 test('member pagination preserves every normalized active filter while replacing only page', () => {
-  assert.match(memberPage, /Object\.entries\(listing\.filters\)/);
-  assert.match(memberPage, /key !== 'page'/);
-  assert.match(memberPage, /query\.set\('page', String\(page\)\)/);
-  assert.match(memberPage, /paginationHref\(listing\.filters\.page - 1\)/);
-  assert.match(memberPage, /paginationHref\(listing\.filters\.page \+ 1\)/);
+  assert.match(memberTable, /Object\.entries\(filters\)/);
+  assert.match(memberTable, /key !== 'page'/);
+  assert.match(memberTable, /params\.set\('page', String\(page\)\)/);
+  assert.match(memberTable, /pageHref\(filters\.page - 1\)/);
+  assert.match(memberTable, /pageHref\(filters\.page \+ 1\)/);
 });
 
 test('membership status options and effective status preserve review-required records', () => {
   assert.match(memberQueries, /'review_required'/);
   assert.match(memberQueries, /m\.status = 'review_required' then 'review_required'/);
-  assert.match(memberPage, /MEMBERSHIP_STATUSES\.map/);
+  assert.match(memberTable, /'review_required'/);
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {

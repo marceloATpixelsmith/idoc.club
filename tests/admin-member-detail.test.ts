@@ -3,25 +3,25 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const page = readFileSync(new URL('../app/(dashboard)/admin/members/page.tsx', import.meta.url), 'utf8');
-const bulk = readFileSync(new URL('../app/(dashboard)/admin/members/bulk-member-selection.tsx', import.meta.url), 'utf8');
+const table = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const revenue = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
 
-test('selected-member actions use canonical links and honest seminar dependency copy', () => {
+test('selected-member actions use canonical links and real seminar history', () => {
   for (const label of ['View Payment History', 'Record Manual Payment', 'Extend Expiration Date',
     'Edit Member Information', 'Change Membership Type', 'Email Member', 'View Seminars']) {
     assert.match(page, new RegExp(label));
   }
   assert.match(page, /mailto:\$\{encodeURIComponent\(selected\.email\)\}/);
-  assert.match(page, /Seminar registrations are not implemented yet/);
-  assert.doesNotMatch(page, /seminarRegistrations|fabricatedRegistration/);
+  assert.match(page, /listAdminSeminarHistoryForMember/);
+  assert.match(page, /Seminar history/);
+  assert.doesNotMatch(page, /not implemented yet/);
 });
 
-test('bulk controls remain unavailable and describe their distinct dependencies', () => {
-  assert.match(bulk, /MAX_ADMIN_MEMBER_BATCH_SIZE = 50/);
-  assert.match(bulk, /Bulk Revoke — unavailable/);
-  assert.match(bulk, /Archive Membership — unavailable/);
-  assert.match(bulk, /Pause Membership — unavailable/);
-  assert.equal((bulk.match(/disabled type="button"/g) ?? []).length, 3);
+test('table exposes selection without unsupported mutations', () => {
+  assert.match(table, /Select all members on this page/);
+  assert.match(table, /Clear selection/);
+  assert.match(table, /Bulk actions unavailable pending policy decisions/);
+  assert.doesNotMatch(table, /Bulk Revoke|Archive Membership|Pause Membership/);
 });
 
 test('revenue UI refuses to attribute historical payments from current classifications', () => {

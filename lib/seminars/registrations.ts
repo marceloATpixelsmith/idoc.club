@@ -83,6 +83,20 @@ export async function listPastSeminarsForMember(profileId: number) {
   return rows.map(withAvailability);
 }
 
+/** Member-centric registration history for the administrator member detail view. */
+export async function listAdminSeminarHistoryForMember(profileIdValue: unknown) {
+  await requireSeminarAdministrator();
+  const profileId = idSchema.safeParse(profileIdValue);
+  if (!profileId.success) return [];
+  return client<{
+    id: number; location: string; paymentStatus: string; registeredAt: Date | string;
+    registrationStatus: string; seminarDate: string; seminarStatus: string; title: string;
+  }[]>`select s.id,s.title,s.seminar_date "seminarDate",s.location,s.status "seminarStatus",
+    r.registration_status "registrationStatus",r.payment_status "paymentStatus",r.registered_at "registeredAt"
+    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+    where r.profile_id=${profileId.data} order by s.seminar_date desc,s.start_time desc,s.id desc`;
+}
+
 /** Registers the authenticated member for a seminar, atomically enforcing capacity and duplicate
  * prevention under a row lock on the seminar itself -- two concurrent registration attempts for the
  * last open seat serialize on this lock, so exactly one succeeds. Canceling and re-registering
