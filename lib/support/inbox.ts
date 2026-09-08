@@ -217,7 +217,7 @@ export async function setConversationAssignment(publicIdValue: unknown, administ
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor); const publicId = parse(publicIdSchema, publicIdValue);
   const values = [...new Set(administratorValues.filter((value): value is string => typeof value === 'string' && value !== ''))];
   const administratorIds = await Promise.all(values.map(resolveEligibleAdministrator));
-  if (administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose eligible administrators.');
+  if (administratorIds.length === 0 || administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose at least one eligible administrator.');
   await client.begin(async (sql) => {
     const rows = await sql<{ id: number }[]>`select id from idoc.support_conversations where public_id=${publicId}::uuid for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
