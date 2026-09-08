@@ -134,9 +134,9 @@ function NavigationLoadingOverlay() {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-md"
     >
       <div className="relative flex size-24 items-center justify-center" aria-hidden="true">
-        <span className="absolute -translate-x-8 size-4 rotate-45 rounded-[5px] bg-gold opacity-25" shadow-lg animate-[navigation-loading-blink_1.2s_ease-in-out_infinite]" />
-        <span className="absolute size-4 rotate-45 rounded-[5px] bg-gold opacity-25" shadow-[0_0_18px_color-mix(in_oklch,var(--gold)_55%,transparent)] animate-[navigation-loading-blink_1.2s_ease-in-out_0.2s_infinite]" />
-        <span className="absolute translate-x-8 size-4 rotate-45 rounded-[5px] bg-gold opacity-25 shadow-[0_0_18px_color-mix(in_oklch,var(--gold)_55%,transparent)] animate-[navigation-loading-blink_1.2s_ease-in-out_0.4s_infinite]" />
+        <span className="navigation-loading-star navigation-loading-star--one" />
+        <span className="navigation-loading-star navigation-loading-star--two" />
+        <span className="navigation-loading-star navigation-loading-star--three" />
       </div>
     </div>
   );
