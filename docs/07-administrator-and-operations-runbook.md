@@ -25,11 +25,11 @@ default range is the first UTC day of the month eleven months ago through today.
 entries are not revenue; results remain grouped by currency.
 
 The selected-member panel provides Payment History, Record Manual Payment, Extend Expiration Date,
-Edit Member Information, Change Membership Type, Email Member, and an honest unavailable View
-Seminars placeholder. Payment History is a newest-first, member-scoped safe projection of the
-persisted ledger. Email Member is only a `mailto:` link to the current canonical account address.
-The eventual seminar route must re-authorize the administrator and scope registrations to the
-server-resolved member; no registration schema or registration data exists in this slice.
+Edit Member Information, Change Membership Type, Email Member, and protected member-centric Seminar
+History. Payment History is a newest-first, member-scoped safe projection of the persisted ledger.
+Seminar History is re-authorized for an administrator and scoped to the server-resolved member before
+reading registration records. Email Member is only a `mailto:` link to the current canonical account
+address.
 
 Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
 bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action
