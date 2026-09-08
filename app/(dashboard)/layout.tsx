@@ -18,6 +18,7 @@ import { userInitials } from '@/lib/format/user-initials';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import { HeaderShell } from '@/components/site/HeaderShell';
 import useSWR, { mutate } from 'swr';
+import { NavigationLoadingProvider } from '@/components/navigation-loading';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -94,7 +95,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <section className="flex flex-col min-h-screen">
       <Header />
-      {children}
+      <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
     </section>
   );
 }

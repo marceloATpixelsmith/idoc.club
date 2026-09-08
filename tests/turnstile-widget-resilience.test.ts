@@ -70,3 +70,22 @@ test('the real Turnstile widget configuration itself is untouched by the resilie
   assert.match(widget, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(widget, /challenges\.cloudflare\.com\/turnstile/);
 });
+
+test('hidden interaction-only Turnstile collapses its layout wrapper without removing the widget DOM', () => {
+  assert.match(widget, /data-challenge-visible=/);
+  assert.match(widget, /height: 0, minHeight: 0, margin: '-16px 0', padding: 0/);
+  assert.doesNotMatch(widget, /display: 'none'/);
+});
+
+test('Turnstile visibility is observed asynchronously and observers are cleaned up on unmount', () => {
+  assert.match(widget, /new MutationObserver\(updateChallengeVisibility\)/);
+  assert.match(widget, /new ResizeObserver\(updateChallengeVisibility\)/);
+  assert.match(widget, /mutationObserver\?\.disconnect\(\)/);
+  assert.match(widget, /resizeObserver\?\.disconnect\(\)/);
+});
+
+test('visible challenges and Turnstile errors preserve layout space', () => {
+  assert.match(widget, /style=\{challengeVisible \|\| failed \? undefined/);
+  assert.match(widget, /getBoundingClientRect\(\)/);
+  assert.match(widget, /setChallengeVisible\(hasVisibleContent\)/);
+});

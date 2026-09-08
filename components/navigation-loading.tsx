@@ -130,17 +130,13 @@ function NavigationLoadingOverlay() {
     <div
       role="status"
       aria-live="polite"
-      aria-label="Loading"
+      aria-label="Navigating"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-md"
     >
-      <div className="flex flex-col items-center gap-5">
-        <div className="relative flex size-20 items-center justify-center">
-          <span className="absolute inset-0 rounded-full border-2 border-gold/25" />
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-gold" />
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img src="/idoc-logo.svg" alt="" aria-hidden="true" className="h-9 w-auto animate-pulse" />
-        </div>
-        <span className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-gold">Loading</span>
+      <div className="relative flex size-24 items-center justify-center" aria-hidden="true">
+        <span className="navigation-loading-star navigation-loading-star--one" />
+        <span className="navigation-loading-star navigation-loading-star--two" />
+        <span className="navigation-loading-star navigation-loading-star--three" />
       </div>
     </div>
   );

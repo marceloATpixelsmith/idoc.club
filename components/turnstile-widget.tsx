@@ -1,7 +1,7 @@
 'use client';
 
 import Script from 'next/script';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
 
 declare global {
@@ -40,11 +40,25 @@ export function TurnstileWidget({
   // widget the script is ready, whether that happens at mount or shortly after.
   const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== 'undefined' && !!window.turnstile);
   const [failed, setFailed] = useState(false);
+  const [challengeVisible, setChallengeVisible] = useState(false);
 
   // Removes any existing widget from the container before rendering a fresh one, so retry() can
   // always call this safely regardless of whether a widget already occupies the container --
   // calling turnstile.render() a second time into the same container without first removing the
   // prior widget would leave two instances stacked in the same node.
+  const updateChallengeVisibility = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const hasVisibleContent = Array.from(container.querySelectorAll('iframe, [role="alert"]')).some((element) => {
+      const styles = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return styles.display !== 'none' && styles.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    });
+
+    setChallengeVisible(hasVisibleContent);
+  }, []);
+
   function renderWidget() {
     if (!containerRef.current || !window.turnstile) return;
     if (widgetIdRef.current) {
@@ -63,6 +77,7 @@ export function TurnstileWidget({
         theme: 'light',
       });
       setFailed(false);
+      window.requestAnimationFrame(updateChallengeVisibility);
     } catch {
       setFailed(true);
     }
@@ -75,12 +90,22 @@ export function TurnstileWidget({
       return undefined;
     }
     renderWidget();
+    const container = containerRef.current;
+    const mutationObserver = container ? new MutationObserver(updateChallengeVisibility) : null;
+    const resizeObserver = container ? new ResizeObserver(updateChallengeVisibility) : null;
+    if (container) {
+      mutationObserver?.observe(container, { childList: true, subtree: true, attributes: true });
+      resizeObserver?.observe(container);
+    }
+    updateChallengeVisibility();
     return () => {
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changing callback identity must not reset a solved challenge.
-  }, [action, scriptLoaded, siteKey]);
+  }, [action, scriptLoaded, siteKey, updateChallengeVisibility]);
 
   // The Cloudflare script sometimes never fires onLoad/onError at all (blocked by a
   // network filter or extension rather than a request that fails outright), which would
@@ -116,7 +141,11 @@ export function TurnstileWidget({
 
   if (!siteKey) return null;
   return (
-    <div className="idoc-auth-turnstile">
+    <div
+      className="idoc-auth-turnstile"
+      data-challenge-visible={challengeVisible ? 'true' : 'false'}
+      style={challengeVisible || failed ? undefined : { height: 0, minHeight: 0, margin: '-16px 0', padding: 0 }}
+    >
       <Script
         onError={() => setFailed(true)}
         onReady={() => setScriptLoaded(true)}
