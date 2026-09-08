@@ -26,7 +26,7 @@ test('a not-yet-entitled member sees only the paywall on every dashboard sub-pag
   }
   // A direct visit to any other dashboard sub-page (bookmark, typed URL) bounces back too -- this
   // is the actual enforcement, not just the hidden nav link.
-  for (const route of ['/dashboard/profile', '/dashboard/seminars']) {
+  for (const route of ['/dashboard/profile', '/seminars']) {
     await page.goto(route);
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
@@ -54,7 +54,7 @@ test('an administrator with no member profile sees the full tab bar and an hones
     await expect(page.getByRole('link', { name: label })).toBeVisible();
   }
   // The advertised My Seminars tab must actually be reachable, not just visible in the bar.
-  await page.goto('/dashboard/seminars');
+  await page.goto('/seminars');
   await expect(page).toHaveURL(/\/dashboard\/seminars$/);
   await expect(page.getByRole('heading', { name: 'My Seminars' })).toBeVisible();
   await context.close();
