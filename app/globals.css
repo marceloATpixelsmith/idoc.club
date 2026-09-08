@@ -217,3 +217,16 @@
     opacity: 1;
   }
 }
+
+
+@keyframes navigation-loading-blink {
+  0%, 100% {
+    opacity: 0.25;
+    transform: rotate(45deg) scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: rotate(45deg) scale(1);
+  }
+}
