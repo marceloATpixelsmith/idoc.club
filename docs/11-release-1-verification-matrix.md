@@ -1,5 +1,9 @@
 # Release 1 behavioral verification matrix
 
+## Admin dashboard and organization-settings regression coverage
+
+Release verification includes the following boundaries: members cannot see or directly access Admin Dashboard; Administrators cannot open Super-Admin-only Organization Settings, support defaults, or security operations; Super Admins receive those navigation destinations and pass their server checks; Online via Stripe remains enabled/system-protected and undeletable; Bank Transfer requires visible instructions; unsafe stored instruction markup is removed before persistence/use and sanitized again at render; and the footer and Contact page share the same public address query/formatter. Because this area changes authorization, settings, payment configuration, and server data boundaries, both Authentication security verification and Release 1 Verification are mandatory for its exact PR head in addition to the fast checks.
+
 > Historical evidence notice (2 September 2026): this matrix records behavior tested during Release 1. Its references to an expired account retaining profile/account-maintenance access describe the current code at that time, not the newly approved product requirement. Docs/02 and docs/25 now require never-paid and post-five-day-grace accounts to receive only payment and logout; that remediation is reopened Release 2 work and requires new evidence rather than rewriting historical test results as if they already passed.
 
 ## Status and evidence rules

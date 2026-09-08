@@ -2,6 +2,12 @@
 
 **Product Roadmap & Functional Requirements**
 
+## Admin and Super-Admin dashboard structure
+
+The authenticated initials menu presents **My Dashboard** first and presents **Admin Dashboard** immediately afterward only when the server-derived actor has an active Administrator or Super Admin grant. The `/admin` area uses a branded, responsive left-side navigation: shared Administrator/Super Admin functions are listed first, and the clearly separated Super-Admin section is rendered only for Super Admins. Each destination remains responsible for its existing server-side authorization; navigation visibility never grants authority.
+
+Organization Settings remains a Super-Admin-only function. It is the single owner of the structured public organization address used by the footer and Contact page and of the existing canonical seminar-payment configuration. Online via Stripe is permanently present, enabled, and protected. Bank Transfer and Cash may be enabled or disabled; enabling Bank Transfer requires server-sanitized visible instructions. This slice does not add or redesign the Memberships table, Revenue dashboard, Support Inbox, News/Blog, or Seminar administration.
+
 > **Authentication release gate:** Authentication/account-security changes must pass the isolated integration and Chromium adversarial acceptance command documented in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). This gate excludes the planned payment/subscription security suite and does not replace independent penetration testing. The control-by-control implementation/documentation/test traceability behind this gate is [Authentication & account-security control inventory](21-authentication-security-control-inventory.md).
 
 From the deployed raw starter to membership launch, restricted content, seminars, news, and blog publishing

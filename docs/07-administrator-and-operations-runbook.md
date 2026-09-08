@@ -2,6 +2,14 @@
 
 **Administrator & Operations Runbook**
 
+## Dashboard navigation and Organization Settings
+
+- Administrators and Super Admins enter through **Admin Dashboard** in the authenticated initials menu. Members do not receive that server-derived menu capability and `/admin` remains default-deny.
+- Shared operational destinations appear before the separate Super Admin group in the responsive left navigation. A missing link is not an authorization control: every page and mutation rechecks current server-managed grants.
+- Organization Settings, support-category defaults, and security operations are Super-Admin-only. Direct access by an Administrator is translated to the standard branded not-found response.
+- Organization address edits update the singleton structured address consumed by both the footer and Contact page. Blank optional values remain absent from public formatting; save revalidation refreshes both consumers.
+- Online via Stripe is a protected canonical seminar-payment method and cannot be disabled, edited, or deleted. Bank Transfer and Cash are the supported alternate methods. Bank Transfer cannot be enabled without visible instructions; submitted rich text is sanitized on the server and sanitized again before rendering. Disabling Bank Transfer preserves its prior instructions unless replacement content is supplied.
+
 ## Filtered membership and revenue reporting
 
 `/admin/members` is the canonical administrator roster. It defaults explicitly to active

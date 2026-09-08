@@ -51,3 +51,23 @@ test('migration idempotently seeds protected canonical identities', () => {
   assert.match(migration, /"canonical_id" <> 'online_stripe' OR \("enabled" AND "system_protected"/);
   assert.match(migration, /BEFORE DELETE ON "idoc"\."seminar_payment_methods"/);
 });
+
+test('organization settings remain Super-Admin-only and reassert Stripe invariants server-side', () => {
+  const settings = readFileSync(new URL('../lib/organization/settings.ts', import.meta.url), 'utf8');
+  assert.match(settings, /export async function getOrganizationSettings\(actor: Actor\) \{\s*requireSuperAdmin\(actor\)/);
+  assert.match(settings, /export async function updateOrganizationSettings[\s\S]*?requireSuperAdmin\(actor\)/);
+  assert.match(settings, /canonical_id='online_stripe'/);
+  assert.match(settings, /enabled=true, system_protected=true/);
+  assert.match(settings, /Bank Transfer instructions are required/);
+});
+
+test('the public footer and contact page consume the same address-only query and formatter', () => {
+  for (const path of ['../components/site/Footer.tsx', '../app/(marketing)/contact/page.tsx']) {
+    const consumer = readFileSync(new URL(path, import.meta.url), 'utf8');
+    assert.match(consumer, /getPublicOrganizationAddress\(\)/);
+    assert.match(consumer, /formatOrganizationAddress/);
+  }
+  const settings = readFileSync(new URL('../lib/organization/settings.ts', import.meta.url), 'utf8');
+  assert.match(settings, /Selects only public address columns/);
+  assert.doesNotMatch(settings.slice(settings.indexOf('getPublicOrganizationAddress'), settings.indexOf('getOrganizationSettings')), /seminarPaymentMethods/);
+});

@@ -27,19 +27,20 @@ export function DashboardTabs({ entitled, memberSupport, supportUnread }: { enti
 
   return (
     <>
-      <div className="lg:hidden flex items-center justify-between bg-background border-b border-border py-4 px-5">
-        <span className="font-medium uppercase tracking-[0.14em] text-sm">Dashboard</span>
+      <div className="flex items-center justify-between border-b border-border bg-surface/50 px-5 py-4 lg:hidden">
+        <div><p className="eyebrow">Member area</p><span className="font-display text-xl">My Dashboard</span></div>
         <Button className="-mr-3" variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)}>
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle navigation</span>
         </Button>
       </div>
-      <nav className={`flex-col gap-1 border-b border-border bg-background py-2 px-5 lg:flex lg:flex-row lg:gap-1 lg:border-0 lg:bg-transparent lg:py-0 lg:px-8 ${isMenuOpen ? 'flex' : 'hidden'}`}>
+      <nav aria-label="My Dashboard" className={`flex-col gap-1 border-b border-border bg-surface/50 px-3 pb-5 pt-2 lg:min-h-[calc(100dvh-96px)] lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-3 lg:pb-5 lg:pt-8 ${isMenuOpen ? 'flex' : 'hidden'} lg:flex`}>
+        <div className="hidden px-3 pb-5 lg:block"><p className="eyebrow">Member area</p><p className="mt-1 font-display text-xl text-foreground">My Dashboard</p></div>
         {ALL_TABS.filter((tab) => memberSupport || tab.href !== '/dashboard/support').map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
-              className={`w-full justify-start gap-2 rounded-none border-b-2 border-transparent shadow-none uppercase tracking-[0.14em] text-xs lg:w-auto lg:justify-center ${pathname === tab.href ? 'border-primary text-foreground' : 'text-muted-foreground'}`}
+              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${pathname === tab.href ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}
