@@ -4,7 +4,7 @@ import { activityLogs, profiles, users } from './schema';
 import { getSession } from '@/lib/auth/session';
 
 export type PublicUser = { email: string; firstName: string | null; id: number; lastName: string | null };
-export type SecurityPageUser = { id: number; sessionVersion: number };
+export type SecurityPageUser = { accountState: 'active' | 'onboarding'; id: number; sessionVersion: number };
 
 /** AUTH-API-003: the only user-shaped value ever sent to the browser -- every server-rendered
  * consumer of the current user's identity (the root layout's SWR fallback, the /api/user route
@@ -46,7 +46,7 @@ export async function getSecurityPageUser(): Promise<SecurityPageUser | null> {
     return null;
   }
 
-  return { id: user.id, sessionVersion: user.sessionVersion };
+  return { accountState: user.accountState as 'active' | 'onboarding', id: user.id, sessionVersion: user.sessionVersion };
 }
 
 export async function getUser() {

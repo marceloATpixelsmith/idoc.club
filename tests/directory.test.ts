@@ -119,6 +119,14 @@ test('the dashboard navigation exposes the Directory tab using the existing dash
   assert.match(dashboardTabs, /label: 'Directory'/);
 });
 
+test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
+  assert.match(memberPageSource, /activeTab = displayValue\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberPageSource, /Map \/ Infographic/);
+  assert.match(memberPageSource, /Search Directory/);
+  assert.match(memberPageSource, /if \(activeTab === 'directory'\)/);
+  assert.match(memberPageSource, /getPublicMemberConcentration/);
+});
+
 test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
   assert.match(memberDirectorySource, /function firstString\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
   // Every filter field normalized() reads goes through firstString first, not a bare `.trim()`

@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ConcentrationMap } from '@/components/directory/concentration-map';
+import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
 import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
@@ -26,7 +28,9 @@ function displayValue(value: string | string[] | undefined): string | undefined 
   return Array.isArray(value) ? undefined : value;
 }
 
-export default async function MemberDirectoryPage({ searchParams }: { searchParams: Promise<MemberDirectoryFilters> }) {
+type DirectoryPageParams = MemberDirectoryFilters & { tab?: string | string[] };
+
+export default async function MemberDirectoryPage({ searchParams }: { searchParams: Promise<DirectoryPageParams> }) {
   const user = await getUser();
   if (user?.accountState === 'onboarding') redirect('/dashboard');
   const actor = await requireAccountAccess('profile');
@@ -41,13 +45,17 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
   if (member && !privileged && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
 
   const params = await searchParams;
+  const activeTab = displayValue(params.tab) === 'directory' ? 'directory' : 'map';
+  const concentration = activeTab === 'map' ? await getPublicMemberConcentration() : null;
   let listing: Awaited<ReturnType<typeof listMemberDirectory>> | null = null;
   let rateLimited = false;
-  try {
-    listing = await listMemberDirectory(params);
-  } catch (error) {
-    if (!(error instanceof DirectoryRateLimitedError)) throw error;
-    rateLimited = true;
+  if (activeTab === 'directory') {
+    try {
+      listing = await listMemberDirectory(params);
+    } catch (error) {
+      if (!(error instanceof DirectoryRateLimitedError)) throw error;
+      rateLimited = true;
+    }
   }
 
   const paginationHref = (page: number) => {
@@ -56,6 +64,7 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
       if (key !== 'page' && value !== undefined && value !== '') query.set(key, String(value));
     }
     query.set('page', String(page));
+    query.set('tab', 'directory');
     return `?${query}`;
   };
 
@@ -63,11 +72,34 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">Members Directory</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Search current IDOC officials by membership type, federation, country and region. Contact
-        details and addresses are never shown here.
+        Explore IDOC&rsquo;s worldwide member concentration, or search current officials using the
+        privacy-minimized member directory.
       </p>
 
+      <nav aria-label="Members directory views" className="mt-4 flex gap-4 border-b border-border">
+        <Link className={`pb-2 uppercase tracking-[0.14em] text-xs ${activeTab === 'map' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`} href="/dashboard/directory">Map / Infographic</Link>
+        <Link className={`pb-2 uppercase tracking-[0.14em] text-xs ${activeTab === 'directory' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground'}`} href="/dashboard/directory?tab=directory">Search Directory</Link>
+      </nav>
+
+      {activeTab === 'map' ? (
+        <section aria-labelledby="member-map-heading">
+          <h2 className="sr-only" id="member-map-heading">Member concentration map</h2>
+          {!concentration?.ok ? (
+            <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The members map is temporarily unavailable. Please try again shortly.</p>
+          ) : concentration.areas.length === 0 ? (
+            <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">Not enough member data is available yet to show the map. Check back soon.</p>
+          ) : <ConcentrationMap areas={concentration.areas} />}
+          <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+            Countries appear only after the privacy-preserving minimum aggregation threshold is met;
+            names, addresses, coordinates, identifiers, and small-group totals are never shown here.
+          </p>
+        </section>
+      ) : (
+        <section aria-labelledby="search-directory-heading">
+          <h2 className="sr-only" id="search-directory-heading">Search the member directory</h2>
+
       <form method="get" className="mt-6 grid gap-3 rounded-lg border p-4 md:grid-cols-4">
+        <input name="tab" type="hidden" value="directory" />
         <label className="text-sm md:col-span-2">
           Name
           <input className="mt-1 block w-full rounded-md border p-2" defaultValue={displayValue(params.q)} name="q" type="search" />
@@ -146,6 +178,8 @@ export default async function MemberDirectoryPage({ searchParams }: { searchPara
             )}
           </nav>
         </>
+      )}
+        </section>
       )}
     </main>
   );
