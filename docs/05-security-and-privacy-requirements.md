@@ -2,6 +2,10 @@
 
 **Security & Privacy Requirements**
 
+## Admin dashboard authorization boundary
+
+The authenticated menu and Admin Dashboard receive only server-derived capability booleans. Regular members receive neither the Admin Dashboard menu item nor administrator data. Administrator and Super-Admin navigation sections are presentation only: the root admin layout rechecks Administrator authority, Super-Admin-only route layouts independently recheck Super Admin authority, and rejected direct URLs use the standard branded not-found response without disclosing that a restricted resource exists.
+
 The automated acceptance evidence for these controls is defined in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). The gate combines database adversarial invariants with an isolated real-browser HTTP boundary and is required for authentication/account-security changes.
 
 The control-by-control traceability matrix — every implemented behavior, its exact code and database location, its documentation and test coverage, and any known implementation gap — is [Authentication & account-security control inventory](21-authentication-security-control-inventory.md). This document states the requirement; document 21 states precisely how, and how completely, each requirement is met.

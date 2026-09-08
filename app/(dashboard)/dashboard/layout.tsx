@@ -27,9 +27,9 @@ export default async function DashboardLayout({
   const supportUnread = entitled && !privileged ? await memberUnreadCount() : 0;
 
   return (
-    <div className="flex flex-col min-h-[calc(100dvh-96px)] max-w-7xl mx-auto w-full">
+    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-7xl flex-col lg:flex-row">
       <DashboardTabs entitled={entitled} memberSupport={!privileged} supportUnread={supportUnread} />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }

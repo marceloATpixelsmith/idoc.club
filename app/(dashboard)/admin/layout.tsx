@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { AdminNavigation } from '@/components/admin-navigation';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
@@ -13,5 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     notFound();
   }
 
-  return children;
+  return (
+    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-7xl flex-col lg:flex-row">
+      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} />
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
 }
