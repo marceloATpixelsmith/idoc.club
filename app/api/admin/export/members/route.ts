@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { toCsv } from '@/lib/admin/csv';
-import { exportAdminMembers, type MemberFilters } from '@/lib/membership/admin-memberships';\nimport { AuthorizationError } from '@/lib/membership/authorization';
+import { exportAdminMembers, type MemberFilters } from '@/lib/membership/admin-memberships';
+import { AuthorizationError } from '@/lib/membership/authorization';
 
 export async function GET(request: Request) {
   try {
@@ -18,6 +19,9 @@ export async function GET(request: Request) {
     if (error instanceof Error && error.message.includes('safe limit')) {
       return Response.json({ error: 'The export is too large. Narrow the filters and try again.' }, { status: 413 });
     }
-    if (error instanceof AuthorizationError) {\n      return Response.json({ error: 'You are not authorized to export members.' }, { status: 401 });\n    }\n    return Response.json({ error: 'Unable to export members.' }, { status: 500 });
+    if (error instanceof AuthorizationError) {
+      return Response.json({ error: 'You are not authorized to export members.' }, { status: 401 });
+    }
+    return Response.json({ error: 'Unable to export members.' }, { status: 500 });
   }
 }
