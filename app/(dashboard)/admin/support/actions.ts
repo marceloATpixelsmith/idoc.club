@@ -17,7 +17,7 @@ export async function replyToSupportAsAdmin(_state: AdminSupportState, formData:
   return run(formData, () => replyAsAdministrator({ body: formData.get('body'), idempotencyKey: formData.get('idempotencyKey'), publicId: formData.get('publicId') }), 'Reply sent.');
 }
 export async function assignSupportConversation(_state: AdminSupportState, formData: FormData) {
-  return run(formData, () => setConversationAssignment(formData.get('publicId'), formData.get('administratorId')), 'Assignment updated.');
+  return run(formData, () => setConversationAssignment(formData.get('publicId'), formData.getAll('administratorIds')), 'Assignment updated.');
 }
 export async function changeSupportConversationStatus(_state: AdminSupportState, formData: FormData) {
   return run(formData, () => setConversationClosed(formData.get('publicId'), formData.get('operation') === 'close'), 'Status updated.');

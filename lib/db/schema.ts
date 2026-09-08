@@ -10,6 +10,7 @@ import {
   date,
   time,
   jsonb,
+  primaryKey,
   uniqueIndex,
   index,
   check,
@@ -340,6 +341,24 @@ export const supportMessages = idocSchema.table('support_messages', {
   uniqueIndex('support_messages_author_idempotency_unique').on(table.authorUserId, table.idempotencyKey),
   index('support_messages_thread_idx').on(table.conversationId, table.createdAt, table.id),
 ]);
+
+/** A conversation may be owned by several administrators. Read progress is deliberately stored
+ * per administrator so opening a shared thread never clears another administrator's unread state. */
+export const supportConversationAdministrators = idocSchema.table('support_conversation_administrators', {
+  conversationId: integer('conversation_id').notNull().references(() => supportConversations.id),
+  administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
+  assignedByUserId: integer('assigned_by_user_id').references(() => users.id),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.conversationId, table.administratorUserId] }),
+  index('support_conversation_administrators_admin_idx').on(table.administratorUserId, table.conversationId),
+]);
+
+export const supportAdministratorReadCursors = idocSchema.table('support_administrator_read_cursors', {
+  conversationId: integer('conversation_id').notNull().references(() => supportConversations.id),
+  administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
+  readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.conversationId, table.administratorUserId] })]);
 
 export const supportCategoryDefaults = idocSchema.table('support_category_defaults', {
   category: varchar('category', { length: 30 }).primaryKey(),

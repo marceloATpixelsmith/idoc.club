@@ -54,6 +54,20 @@ test('message presentation uses escaped React text with whitespace preservation'
   assert.doesNotMatch(memberThread, /dangerouslySetInnerHTML/);
 });
 
+test('administrator assignment and unread state use per-administrator records', () => {
+  assert.match(source, /support_conversation_administrators/);
+  assert.match(source, /support_administrator_read_cursors/);
+  assert.match(source, /administrator_user_id=\$\{actor\.id\}/);
+  assert.match(source, /on conflict\(conversation_id,administrator_user_id\) do update/);
+});
+
+test('the administrator queue provides Tablecn-style server controls', () => {
+  const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
+  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
+  for (const control of ['ActiveFilterChips', 'ColumnVisibility', 'sort:', 'page']) assert.match(page, new RegExp(control));
+  assert.match(controls, /Clear all/);
+});
+
 test('assignment and workflow audit events exclude support bodies', () => {
   assert.match(source, /support\.assignment\.changed/);
   assert.match(source, /support\.conversation\.closed/);

@@ -9,7 +9,7 @@ export const SUPPORT_CATEGORIES = ['billing_membership', 'seminars', 'technical_
 export const SUPPORT_STATUSES = ['open', 'admin_responded', 'member_replied', 'closed'] as const;
 export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
 type ConversationRow = { category: SupportCategory; public_id: string; status: string; subject: string; updated_at: Date };
-type AdminConversationRow = ConversationRow & { assigned_admin_key: string | null; assigned_admin_user_id: number | null; id: number; member_email: string; member_name: string };
+type AdminConversationRow = ConversationRow & { assigned_admin_keys: string[]; id: number; member_email: string; member_name: string };
 
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing_membership: 'Billing/Membership',
@@ -70,6 +70,8 @@ export async function createConversation(input: { body: unknown; category: unkno
       values (${actor.id},${category},${subject},'open',${assigned ?? null},now()) returning id,public_id`;
     await sql`insert into idoc.support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'member',${body},${idempotencyKey}::uuid)`;
+    if (assigned) await sql`insert into idoc.support_conversation_administrators(conversation_id,administrator_user_id)
+      values(${rows[0].id},${assigned}) on conflict do nothing`;
     return rows[0].public_id;
   });
 }
@@ -138,28 +140,45 @@ export async function listAdminConversations(input: SupportSearchParams) {
   const statusValue = firstSearchValue(input.status);
   const assignedValue = firstSearchValue(input.assigned);
   const searchValue = firstSearchValue(input.q);
+  const sortValue = firstSearchValue(input.sort);
+  const directionValue = firstSearchValue(input.direction);
   const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1); const limit = 20; const offset = (page - 1) * limit;
   const category: string | null = SUPPORT_CATEGORIES.includes(categoryValue as SupportCategory) ? categoryValue ?? null : null;
   const status: string | null = SUPPORT_STATUSES.includes(statusValue as never) ? statusValue ?? null : null;
   const assigned = assignedValue === 'unassigned' ? -1 : (assignedValue ? await resolveEligibleAdministrator(assignedValue) : null);
   const search = (searchValue ?? '').trim().slice(0, 100);
+  const sortCandidate = sortValue ?? '';
+  const sort = ['activity', 'member', 'status'].includes(sortCandidate) ? sortCandidate : 'activity';
+  const direction = directionValue === 'asc' ? 'asc' : 'desc';
   const rows = await client`select c.public_id,c.subject,c.category,c.status,c.updated_at,c.assigned_admin_user_id,
     coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
-    coalesce(ap.first_name||' '||ap.last_name,au.email_display,au.email) assignee_name,
-    exists(select 1 from idoc.support_messages m where m.conversation_id=c.id and m.author_side='member' and (c.admin_read_at is null or m.created_at>c.admin_read_at)) unread
+    coalesce((select string_agg(coalesce(nullif(trim(ap.first_name||' '||ap.last_name),''),au.email_display,au.email),', ' order by au.email)
+      from idoc.support_conversation_administrators ca join idoc.users au on au.id=ca.administrator_user_id left join idoc.profiles ap on ap.user_id=au.id
+      where ca.conversation_id=c.id),'') assignee_name,
+    exists(select 1 from idoc.support_messages m where m.conversation_id=c.id and m.author_side='member' and m.created_at>
+      coalesce((select rc.read_at from idoc.support_administrator_read_cursors rc where rc.conversation_id=c.id and rc.administrator_user_id=${actor.id}),'-infinity'::timestamptz)) unread
     from idoc.support_conversations c join idoc.users u on u.id=c.member_user_id left join idoc.profiles p on p.user_id=u.id
-    left join idoc.users au on au.id=c.assigned_admin_user_id left join idoc.profiles ap on ap.user_id=au.id
     where (${category}::text is null or c.category=${category}) and (${status}::text is null or c.status=${status})
-    and (${assigned}::int is null or (${assigned}=-1 and c.assigned_admin_user_id is null) or c.assigned_admin_user_id=${assigned})
+    and (${assigned}::int is null or (${assigned}=-1 and not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id))
+      or exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id=${assigned}))
     and (${search}='' or c.subject ilike ${`%${search}%`} or u.email ilike ${`%${search}%`} or concat_ws(' ',p.first_name,p.last_name) ilike ${`%${search}%`})
-    order by c.updated_at desc limit ${limit + 1} offset ${offset}`;
+    order by
+      case when ${sort}='member' and ${direction}='asc' then concat_ws(' ',p.first_name,p.last_name) end asc,
+      case when ${sort}='member' and ${direction}='desc' then concat_ws(' ',p.first_name,p.last_name) end desc,
+      case when ${sort}='status' and ${direction}='asc' then c.status end asc,
+      case when ${sort}='status' and ${direction}='desc' then c.status end desc,
+      case when ${sort}='activity' and ${direction}='asc' then c.updated_at end asc,
+      c.updated_at desc,c.id desc limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
 }
 
 export async function adminUnreadCount() {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
-  const [row] = await client<{ count: number }[]>`select count(*)::int count from idoc.support_conversations c where exists
-    (select 1 from idoc.support_messages m where m.conversation_id=c.id and m.author_side='member' and (c.admin_read_at is null or m.created_at>c.admin_read_at))`;
+  const [row] = await client<{ count: number }[]>`select count(*)::int count from idoc.support_conversations c
+    join idoc.support_conversation_administrators ca on ca.conversation_id=c.id and ca.administrator_user_id=${actor.id}
+    left join idoc.support_administrator_read_cursors rc on rc.conversation_id=c.id and rc.administrator_user_id=${actor.id}
+    where exists(select 1 from idoc.support_messages m where m.conversation_id=c.id and m.author_side='member'
+      and (rc.read_at is null or m.created_at>rc.read_at))`;
   return row?.count ?? 0;
 }
 
@@ -170,10 +189,12 @@ export async function getAdminConversation(value: unknown) {
   const publicId = parsedPublicId.data;
   return client.begin(async (sql) => {
     const rows = await sql<AdminConversationRow[]>`select c.*,coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
-      (select email from idoc.users where id=c.assigned_admin_user_id) assigned_admin_key
+      coalesce((select array_agg(u2.email order by u2.email) from idoc.support_conversation_administrators ca
+        join idoc.users u2 on u2.id=ca.administrator_user_id where ca.conversation_id=c.id),'{}') assigned_admin_keys
       from idoc.support_conversations c join idoc.users u on u.id=c.member_user_id left join idoc.profiles p on p.user_id=u.id where c.public_id=${publicId}::uuid for update`;
     if (!rows[0]) return null;
-    await sql`update idoc.support_conversations set admin_read_at=now() where id=${rows[0].id}`;
+    await sql`insert into idoc.support_administrator_read_cursors(conversation_id,administrator_user_id,read_at)
+      values(${rows[0].id},${actor.id},now()) on conflict(conversation_id,administrator_user_id) do update set read_at=excluded.read_at`;
     const messages = await sql`select author_side,body,created_at from idoc.support_messages where conversation_id=${rows[0].id} order by created_at,id`;
     return { ...rows[0], messages };
   });
@@ -192,16 +213,20 @@ export async function replyAsAdministrator(input: { body: unknown; idempotencyKe
   });
 }
 
-export async function setConversationAssignment(publicIdValue: unknown, administratorValue: unknown) {
+export async function setConversationAssignment(publicIdValue: unknown, administratorValues: unknown[]) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor); const publicId = parse(publicIdSchema, publicIdValue);
-  const administratorId = administratorValue === '' ? null : await resolveEligibleAdministrator(administratorValue);
-  if (administratorValue !== '' && administratorId === null) throw new SupportValidationError('Choose an eligible administrator.');
+  const values = [...new Set(administratorValues.filter((value): value is string => typeof value === 'string' && value !== ''))];
+  const administratorIds = await Promise.all(values.map(resolveEligibleAdministrator));
+  if (administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose eligible administrators.');
   await client.begin(async (sql) => {
-    const rows = await sql<{ id: number; assigned_admin_user_id: number | null }[]>`select id,assigned_admin_user_id from idoc.support_conversations where public_id=${publicId}::uuid for update`;
+    const rows = await sql<{ id: number }[]>`select id from idoc.support_conversations where public_id=${publicId}::uuid for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
-    await sql`update idoc.support_conversations set assigned_admin_user_id=${administratorId},updated_at=now() where id=${rows[0].id}`;
+    const before = await sql<{ administrator_user_id: number }[]>`select administrator_user_id from idoc.support_conversation_administrators where conversation_id=${rows[0].id} order by administrator_user_id`;
+    await sql`delete from idoc.support_conversation_administrators where conversation_id=${rows[0].id}`;
+    for (const administratorId of administratorIds) await sql`insert into idoc.support_conversation_administrators(conversation_id,administrator_user_id,assigned_by_user_id) values(${rows[0].id},${administratorId},${actor.id})`;
+    await sql`update idoc.support_conversations set assigned_admin_user_id=${administratorIds[0] ?? null},updated_at=now() where id=${rows[0].id}`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
-      values(${actor.id},'support.assignment.changed','support_conversation',${publicId},${JSON.stringify({ assigned: rows[0].assigned_admin_user_id })}::jsonb,${JSON.stringify({ assigned: administratorId })}::jsonb)`;
+      values(${actor.id},'support.assignment.changed','support_conversation',${publicId},${JSON.stringify({ administratorIds: before.map((row) => row.administrator_user_id) })}::jsonb,${JSON.stringify({ administratorIds })}::jsonb)`;
   });
 }
 

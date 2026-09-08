@@ -70,6 +70,14 @@ test('the public listing page has an explicit empty state and pagination', () =>
   assert.match(listPage, /hasNext/);
 });
 
+test('the admin article table provides Tablecn-style date, sorting, pagination, and visibility controls', () => {
+  const page = readFileSync('app/(dashboard)/admin/news/page.tsx', 'utf8');
+  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
+  for (const value of ['name="from"', 'name="to"', 'ActiveFilterChips', 'ColumnVisibility', 'sortLink', 'Pagination']) assert.match(page, new RegExp(value));
+  assert.match(controls, /Clear all/);
+  assert.match(source, /publication_date desc,id desc/);
+});
+
 test('article HTML is only ever rendered through the one sanitizing view component', () => {
   assert.match(articleView, /sanitizeArticleContent\(contentHtml\)/);
   assert.doesNotMatch(publicPage, /dangerouslySetInnerHTML/);

@@ -165,6 +165,14 @@ test('the admin seminar list page supports search and status filtering', () => {
   assert.match(adminListPage, /name="status"/);
 });
 
+test('the admin seminar table provides Tablecn-style date, sorting, pagination, and visibility controls', () => {
+  const page = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
+  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
+  for (const value of ['name="from"', 'name="to"', 'ActiveFilterChips', 'ColumnVisibility', 'sortHref', 'page']) assert.match(page, new RegExp(value));
+  assert.match(controls, /Clear all/);
+  assert.match(seminarsSource, /s\.seminar_date desc,s\.id desc/);
+});
+
 test('Seminars is removed from the member dashboard and retained on the public website', () => {
   const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
   const publicPage = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
