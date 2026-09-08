@@ -1,6 +1,19 @@
 name: Release 1 Verification
 
 on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'public/**'
+      - '**/*.css'
+      - '**/*.svg'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - 'components/navigation-loading.tsx'
+      - 'components/navigation-menu.tsx'
   push:
     branches: [main]
   workflow_dispatch:
