@@ -42,10 +42,12 @@ function isActive(pathname: string, href: string) {
   return href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminNavigation({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+export function AdminNavigation({ isSuperAdmin, unreadCount }: { isSuperAdmin: boolean; unreadCount: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const items = isSuperAdmin ? [...SHARED_ITEMS, ...SUPER_ADMIN_ITEMS] : SHARED_ITEMS;
+  const activeHref = items.filter((item) => isActive(pathname, item.href))
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   return (
     <aside className="border-b border-border bg-surface/50 lg:min-h-[calc(100dvh-96px)] lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r">
@@ -69,7 +71,7 @@ export function AdminNavigation({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         <ul className="space-y-1">
           {items.map((item, index) => {
             const beginsSuperAdminSection = isSuperAdmin && index === SHARED_ITEMS.length;
-            const active = isActive(pathname, item.href);
+            const active = activeHref === item.href;
             return (
               <li className={beginsSuperAdminSection ? 'mt-6 border-t border-border pt-6' : ''} key={item.href}>
                 {beginsSuperAdminSection && <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gold">Super Admin</p>}
