@@ -130,17 +130,13 @@ function NavigationLoadingOverlay() {
     <div
       role="status"
       aria-live="polite"
-      aria-label="Loading"
+      aria-label="Navigating"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-md"
     >
-      <div className="flex flex-col items-center gap-5">
-        <div className="relative flex size-20 items-center justify-center">
-          <span className="absolute inset-0 rounded-full border-2 border-gold/25" />
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-gold" />
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img src="/idoc-logo.svg" alt="" aria-hidden="true" className="h-9 w-auto animate-pulse" />
-        </div>
-        <span className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-gold">Loading</span>
+      <div className="relative flex size-24 items-center justify-center" aria-hidden="true">
+        <span className="absolute size-4 rotate-45 rounded-[5px] bg-gold opacity-25 shadow-[0_0_18px_color-mix(in_oklch,var(--gold)_55%,transparent)] animate-[navigation-loading-blink_1.2s_ease-in-out_infinite]" />
+        <span className="absolute size-4 rotate-45 rounded-[5px] bg-gold opacity-25 shadow-[0_0_18px_color-mix(in_oklch,var(--gold)_55%,transparent)] animate-[navigation-loading-blink_1.2s_ease-in-out_0.2s_infinite]" />
+        <span className="absolute size-4 rotate-45 rounded-[5px] bg-gold opacity-25 shadow-[0_0_18px_color-mix(in_oklch,var(--gold)_55%,transparent)] animate-[navigation-loading-blink_1.2s_ease-in-out_0.4s_infinite]" />
       </div>
     </div>
   );
