@@ -4,16 +4,15 @@ import { hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { listActiveSessions } from '@/lib/auth/session-registry';
-import { getActivityLogs, getSecurityPageUser, getUser } from '@/lib/db/queries';
+import { getActivityLogs, getSecurityPageUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { SecurityClient } from './security-client';
 
 export default async function SecurityPage() {
-  const account = await getUser();
-  if (account?.accountState === 'onboarding') redirect('/dashboard');
   const [user, session] = await Promise.all([getSecurityPageUser(), getSession()]);
   if (!user || !session || session.sessionId.startsWith('legacy-')) redirect('/sign-in');
+  if (user.accountState === 'onboarding') redirect('/dashboard');
   const role = await authoritativeMfaRole(user.id);
   const privileged = role === 'admin' || role === 'super-admin';
   // Administrators/Super Admins are never members and must never be gated by membership payment
