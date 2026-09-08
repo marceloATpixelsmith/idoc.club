@@ -7,7 +7,7 @@ const memberDirectorySource = readFileSync('lib/directory/member-directory.ts', 
 const rateLimitSource = readFileSync('lib/security/rate-limit.ts', 'utf8');
 const concentrationMapSource = readFileSync('components/directory/concentration-map.tsx', 'utf8');
 const publicPageSource = readFileSync('app/(marketing)/about/members-directory/page.tsx', 'utf8');
-const memberPageSource = readFileSync('app/(dashboard)/dashboard/directory/page.tsx', 'utf8');
+const memberPageSource = publicPageSource;
 const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
@@ -50,7 +50,7 @@ test('the concentration map renders a real, always-visible data table as accessi
 });
 
 test('the public directory page renders loading, empty, unavailable, and error states', () => {
-  assert.match(publicPageSource, /result\.ok/);
+  assert.match(publicPageSource, /concentration\?\.ok/);
   assert.match(publicPageSource, /temporarily unavailable/i);
   assert.match(publicPageSource, /Not enough member data/i);
   // Loading is a sibling loading.tsx (Next.js Suspense boundary); the root error.tsx already
@@ -89,11 +89,10 @@ test('ordering is stable across pages: name first, then a non-exposed internal i
   assert.match(memberDirectorySource, /p\.last_name asc, p\.first_name asc, p\.id asc/);
 });
 
-test('the paid directory page enforces the same unauthorized redirect as every other member-only dashboard surface, and handles the rate-limited case explicitly', () => {
-  assert.match(memberPageSource, /if \(!member && !privileged\) redirect\('\/dashboard'\)/);
-  assert.match(memberPageSource, /isEntitled\(member\.entitlement/);
+test('the website directory keeps unauthorized and failure states generic', () => {
+  assert.match(memberPageSource, /Active membership required/);
   assert.match(memberPageSource, /DirectoryRateLimitedError/);
-  assert.match(memberPageSource, /Too many searches/);
+  assert.match(memberPageSource, /directory could not be loaded/i);
 });
 
 test('the paid directory page never renders a database identifier and uses only the row position as a React key', () => {
@@ -114,16 +113,16 @@ test('no Server Action or CSRF token is used by the directory surfaces: both are
   assert.match(memberPageSource, /form method="get"/);
 });
 
-test('the dashboard navigation exposes the Directory tab using the existing dashboard layout', () => {
-  assert.match(dashboardTabs, /\/dashboard\/directory/);
-  assert.match(dashboardTabs, /label: 'Directory'/);
+test('the dashboard navigation omits Directory while the public website retains it', () => {
+  assert.doesNotMatch(dashboardTabs, /\/dashboard\/directory|label: 'Directory'/);
+  assert.match(publicPageSource, /Search Directory/);
 });
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
-  assert.match(memberPageSource, /activeTab = displayValue\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberPageSource, /activeTab = first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
   assert.match(memberPageSource, /Map \/ Infographic/);
   assert.match(memberPageSource, /Search Directory/);
-  assert.match(memberPageSource, /if \(activeTab === 'directory'\)/);
+  assert.match(memberPageSource, /if \(activeTab === 'directory' && user\)/);
   assert.match(memberPageSource, /getPublicMemberConcentration/);
 });
 
@@ -138,9 +137,9 @@ test('directory filters resolve an array-valued (repeated-key) search parameter 
 });
 
 test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
-  assert.match(memberPageSource, /function displayValue\(value: string \| string\[\] \| undefined\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
+  assert.match(memberPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
   for (const field of ['q', 'membershipType', 'country', 'federation', 'region']) {
-    assert.match(memberPageSource, new RegExp(`displayValue\\(params\\.${field}\\)`));
+    assert.match(memberPageSource, new RegExp(`first\\(params\\.${field}\\)`));
   }
 });
 

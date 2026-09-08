@@ -29,7 +29,7 @@ export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
 type RawFilterValue = string | string[] | undefined;
 export type MemberDirectoryFilters = {
   country?: RawFilterValue; federation?: RawFilterValue; membershipType?: RawFilterValue;
-  page?: number | RawFilterValue; q?: RawFilterValue; region?: RawFilterValue;
+  page?: number | RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
 };
 
 export type DirectoryRoleDetail = { officialStatuses: string[] | null; roleType: string };
@@ -68,6 +68,7 @@ function normalized(input: MemberDirectoryFilters) {
     page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, DIRECTORY_MAX_PAGE) : 1,
     q: firstString(input.q)?.trim().slice(0, 100) || undefined,
     region: firstString(input.region)?.trim().slice(0, 40) || undefined,
+    sort: ['country', 'region'].includes(firstString(input.sort) ?? '') ? firstString(input.sort) as 'country' | 'region' : 'name' as const,
   };
 }
 
@@ -101,7 +102,11 @@ const from = sql`from idoc.profiles p
   ) roles on true`;
 // A stable order independent of insertion timing: name first, then the non-exposed internal id as a
 // pure tiebreaker (never selected/returned) so pagination never skips or repeats a row across pages.
-const order = sql`p.last_name asc, p.first_name asc, p.id asc`;
+function directoryOrder(sort: 'country' | 'name' | 'region') {
+  if (sort === 'country') return sql`p.country_code asc, p.last_name asc, p.first_name asc, p.id asc`;
+  if (sort === 'region') return sql`roles.region asc nulls last, p.last_name asc, p.first_name asc, p.id asc`;
+  return sql`p.last_name asc, p.first_name asc, p.id asc`;
+}
 
 /** Server-side searchable/filterable paid-member directory. Re-authorizes independently of any
  * caller (the same defense-in-depth convention as lib/membership/admin-memberships.ts) -- entitled
@@ -112,6 +117,7 @@ export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
   const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
   if (!allowed) throw new DirectoryRateLimitedError();
   const { filters, where } = queryParts(input);
+  const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * DIRECTORY_PAGE_SIZE;
   const [rows, counts] = await Promise.all([
     db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", p.country_code country, roles.federation, roles.region,

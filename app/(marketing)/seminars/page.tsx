@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { CalendarDays, MapPin } from 'lucide-react';
 import { seminars } from '@/lib/content/site';
 import { PageHeader } from '@/components/site/PageHeader';
+import { MemberRegistrations } from '@/components/seminars/member-registrations';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Seminars & Courses — IDOC',
@@ -13,7 +16,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SeminarsPage() {
+export default async function SeminarsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
   return (
     <>
       <PageHeader
@@ -48,6 +52,7 @@ export default function SeminarsPage() {
         >
           FEI Course Calendar
         </a>
+        <MemberRegistrations tab={tab} />
       </div>
     </>
   );

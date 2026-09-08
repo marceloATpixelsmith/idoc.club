@@ -21,6 +21,7 @@ export async function registerForSeminarAction(_state: MemberSeminarState, formD
     return { error: 'Registration could not be completed.' };
   }
   revalidatePath('/dashboard/seminars');
+  revalidatePath('/seminars');
   if (outcome.paymentMethod !== 'online_stripe') return { success: 'You are registered for this seminar.' };
   let checkoutUrl: string;
   try {
@@ -41,5 +42,6 @@ export async function cancelSeminarRegistrationAction(_state: MemberSeminarState
     return { error: 'Your registration could not be canceled.' };
   }
   revalidatePath('/dashboard/seminars');
+  revalidatePath('/seminars');
   return { success: 'Your registration has been canceled.' };
 }
