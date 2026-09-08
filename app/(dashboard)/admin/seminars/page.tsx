@@ -41,7 +41,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
         <ColumnVisibility columns={COLUMNS.map((value) => ({ label: value[0].toUpperCase() + value.slice(1), value }))} hidden={hidden} />
         <button className="self-end rounded bg-primary p-2 text-primary-foreground" type="submit">Filter</button>
       </form>
-      <ActiveFilterChips filters={[{ label: 'Search', name: 'q', value: scalar('q') }, { label: 'Status', name: 'status', value: scalar('status') }, { label: 'From', name: 'from', value: scalar('from') }, { label: 'To', name: 'to', value: scalar('to') }]} pathname="/admin/seminars" />
+      <ActiveFilterChips filters={[{ label: 'Search', name: 'q', value: scalar('q') }, { label: 'Status', name: 'status', value: scalar('status') }, { label: 'From', name: 'from', value: scalar('from') }, { label: 'To', name: 'to', value: scalar('to') }]} pathname="/admin/seminars" query={scalarQuery} />
       {rows.length === 0 ? <div className="rounded-lg border border-dashed p-10 text-center"><h2 className="font-semibold">No seminars found</h2><p className="text-sm text-muted-foreground">Clear filters or create a seminar.</p></div> : (
         <div className="overflow-x-auto">
           <table className="w-full text-left">
