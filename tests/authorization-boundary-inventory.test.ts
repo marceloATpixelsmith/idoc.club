@@ -80,6 +80,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     suspendUserAccountForm: 'delegates-to-data-access', reinstateUserAccountForm: 'delegates-to-data-access',
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access' },
 };
 
 const routeHandlers: Record<string, string> = {
@@ -108,6 +109,17 @@ const routeHandlers: Record<string, string> = {
   'app/api/team/route.ts': 'always-404-no-data-access',
   'app/api/user/route.ts': 'requireAccountAccess',
 };
+
+test('every Server Action file that exists is registered in the authorization inventory manifest', () => {
+  // The per-file export-name check just below only validates files this manifest already names --
+  // a wholly new, unregistered actions.ts file would be silently skipped, not flagged, the same gap
+  // the Route Handler test below closes with a real filesystem scan. This discovers every actual
+  // actions.ts file (app/**/actions.ts, plus lib/payments/actions.ts which lives outside app/) and
+  // requires it to be a registered manifest key.
+  const actual = [...filesBelow(path.join(root, 'app')).filter((file) => file.endsWith('actions.ts')), path.join(root, 'lib/payments/actions.ts')]
+    .map((file) => path.relative(root, file).replaceAll('\\', '/'));
+  assert.deepEqual(actual.sort(), Object.keys(actionFiles).sort());
+});
 
 test('every exported Server Action is accounted for in the authorization inventory', () => {
   for (const [file, manifest] of Object.entries(actionFiles)) {

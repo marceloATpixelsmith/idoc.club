@@ -7,7 +7,7 @@ import { notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './brevo-transactional';
-import { renderTransactionalEmail } from './email-template';
+import { escapeHtml, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
 
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
@@ -136,7 +136,11 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 }
 
 function renderNotice(kind: string, payload: NoticePayload): { html: string; subject: string } {
-  const greeting = payload.firstName ? `Hello ${payload.firstName},` : 'Hello,';
+  // firstName is member-supplied free text (lib/membership/validation.ts's memberProfileSchema
+  // allows any character up to 100 chars, not an HTML-safe allowlist), so it must be escaped before
+  // interpolation into this HTML email body -- matching every other template call site that
+  // interpolates a user-supplied value (breached-password-alert.ts, bounce-complaint-alert.ts).
+  const greeting = payload.firstName ? `Hello ${escapeHtml(payload.firstName)},` : 'Hello,';
   const { bodyHtml, heading, subject } = (() => {
     switch (kind) {
       case 'membership.renewal_reminder':

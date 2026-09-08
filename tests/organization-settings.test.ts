@@ -15,6 +15,14 @@ test('bank instructions retain basic rich text and remove active content', () =>
   assert.doesNotMatch(value, /javascript|onclick|script|iframe|alert/i);
 });
 
+test('sanitizeBankInstructions is idempotent: re-sanitizing an already-sanitized href does not double-escape its query-string ampersands', () => {
+  const once = sanitizeBankInstructions('<a href="https://bank.example/?ref=1&acct=2">Transfer details</a>');
+  assert.match(once, /<a href="https:\/\/bank\.example\/\?ref=1&amp;acct=2">Transfer details<\/a>/);
+  const twice = sanitizeBankInstructions(once);
+  assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
+  assert.doesNotMatch(twice, /&amp;amp;/);
+});
+
 test('entity-encoded and Unicode whitespace do not satisfy required bank instructions', () => {
   for (const value of ['<p>&nbsp;</p>', '<p>&#160;</p>', '<p>&#xA0;</p>', '<p>\u200b</p>', '<p><br></p>']) {
     assert.equal(hasVisibleBankInstructions(sanitizeBankInstructions(value)), false, value);
@@ -28,6 +36,13 @@ test('saving settings revalidates every public address surface', () => {
   assert.match(action, /revalidatePath\('\/', 'layout'\)/);
   assert.match(action, /revalidatePath\('\/contact'\)/);
   assert.ok(action.indexOf('await updateOrganizationSettings') < action.indexOf("revalidatePath('/', 'layout')"));
+});
+
+test('the settings form re-sanitizes previously-stored bank instructions immediately before rendering them, not just at the last save', () => {
+  const form = readFileSync(new URL('../app/(dashboard)/admin/organization/organization-settings-form.tsx', import.meta.url), 'utf8');
+  assert.match(form, /sanitizeBankInstructions\(bank\.instructionsHtml \?\? ''\)/);
+  assert.match(form, /dangerouslySetInnerHTML=\{\{ __html: sanitizedBankInstructions \}\}/);
+  assert.doesNotMatch(form, /dangerouslySetInnerHTML=\{\{ __html: bank\.instructionsHtml/);
 });
 
 test('migration idempotently seeds protected canonical identities', () => {

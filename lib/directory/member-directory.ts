@@ -22,9 +22,14 @@ export const DIRECTORY_MAX_PAGE = 200;
 export const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
 
+// Next.js searchParams values are string | string[] | undefined at runtime (a repeated query key
+// like ?country=DE&country=FR becomes an array) regardless of a narrower page-level annotation, so
+// every filter accepts that real shape and normalized() below explicitly resolves it rather than
+// calling string methods on a value that might actually be an array.
+type RawFilterValue = string | string[] | undefined;
 export type MemberDirectoryFilters = {
-  country?: string; federation?: string; membershipType?: MembershipTypeFilter;
-  page?: number | string; q?: string; region?: string;
+  country?: RawFilterValue; federation?: RawFilterValue; membershipType?: RawFilterValue;
+  page?: number | RawFilterValue; q?: RawFilterValue; region?: RawFilterValue;
 };
 
 export type DirectoryRoleDetail = { officialStatuses: string[] | null; roleType: string };
@@ -44,15 +49,25 @@ type RawDirectoryRow = {
   membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
 
+// An array-valued (repeated-key) filter is treated as absent rather than guessing which value the
+// caller meant -- see the RawFilterValue comment above.
+function firstString(value: RawFilterValue): string | undefined {
+  return Array.isArray(value) ? undefined : value;
+}
+function pageNumber(value: number | RawFilterValue): number {
+  return Number(typeof value === 'number' ? value : firstString(value));
+}
+
 function normalized(input: MemberDirectoryFilters) {
-  const page = Number(input.page);
+  const page = pageNumber(input.page);
+  const membershipType = firstString(input.membershipType);
   return {
-    country: input.country?.trim().toUpperCase().slice(0, 2) || undefined,
-    federation: input.federation?.trim().toUpperCase().slice(0, 2) || undefined,
-    membershipType: input.membershipType && MEMBERSHIP_TYPE_FILTERS.includes(input.membershipType) ? input.membershipType : undefined,
+    country: firstString(input.country)?.trim().toUpperCase().slice(0, 2) || undefined,
+    federation: firstString(input.federation)?.trim().toUpperCase().slice(0, 2) || undefined,
+    membershipType: membershipType && MEMBERSHIP_TYPE_FILTERS.includes(membershipType as MembershipTypeFilter) ? membershipType as MembershipTypeFilter : undefined,
     page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, DIRECTORY_MAX_PAGE) : 1,
-    q: input.q?.trim().slice(0, 100) || undefined,
-    region: input.region?.trim().slice(0, 40) || undefined,
+    q: firstString(input.q)?.trim().slice(0, 100) || undefined,
+    region: firstString(input.region)?.trim().slice(0, 40) || undefined,
   };
 }
 

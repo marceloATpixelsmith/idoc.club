@@ -202,3 +202,18 @@ test('paid directory: sustained searching from one origin is rate-limited using 
   }
   await assert.rejects(() => asMember(user.id, () => listMemberDirectory(), origin), DirectoryRateLimitedError);
 });
+
+test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
+  await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
+  // Simulates a real ?country=DE&country=FR request: Next.js hands this to the page as an array.
+  const listing = await asMember(searcher.id, () => listMemberDirectory({
+    country: ['DE', 'FR'], federation: ['DE', 'PL'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
+  }));
+  // Every array-valued filter fell back to "unset" rather than throwing, so this behaves like an
+  // unfiltered browse (both fixtures visible) rather than a 500.
+  assert.equal(listing.filters.page, 1);
+  assert.equal(listing.filters.country, undefined);
+  assert.ok(listing.rows.some((row) => row.lastName === 'One'));
+  assert.ok(listing.rows.some((row) => row.lastName === 'Two'));
+});

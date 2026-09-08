@@ -8,6 +8,16 @@ export function formatOrganizationAddress(address: OrganizationAddress | null): 
 }
 
 const ALLOWED_TAGS = new Set(['a', 'br', 'em', 'li', 'ol', 'p', 'strong', 'ul']);
+
+// A bare `&` is escaped, but one that already starts a real HTML entity (as in a previously-
+// sanitized href like "...?a=1&amp;b=2") is left alone -- otherwise re-sanitizing already-sanitized
+// content (the Organization Settings form reloading stored instructions) corrupts the URL on every
+// pass by turning `&amp;` into `&amp;amp;`. `"` is never re-escaped this way since a bare `"`
+// cannot itself appear inside an attribute value this regex already captured with quotes.
+function escapeAmpersand(value: string): string {
+  return value.replace(/&(?!amp;|quot;|#39;|lt;|gt;|#\d+;|#x[0-9a-f]+;)/gi, '&amp;');
+}
+
 export function sanitizeBankInstructions(input: string): string {
   const withoutActiveContent = input.replace(/<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
   return withoutActiveContent.replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi, (whole, rawTag: string, attributes: string) => {
@@ -16,7 +26,7 @@ export function sanitizeBankInstructions(input: string): string {
     if (whole.startsWith('</')) return tag === 'br' ? '' : `</${tag}>`;
     if (tag !== 'a') return tag === 'br' ? '<br>' : `<${tag}>`;
     const href = attributes.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim();
-    return href && /^(https?:|mailto:)/i.test(href) ? `<a href="${href.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">` : '<a>';
+    return href && /^(https?:|mailto:)/i.test(href) ? `<a href="${escapeAmpersand(href).replaceAll('"', '&quot;')}">` : '<a>';
   });
 }
 

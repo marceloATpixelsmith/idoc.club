@@ -9,6 +9,7 @@ const migration = readFileSync('lib/db/migrations/0040_news_articles.sql', 'utf8
 const publicPage = readFileSync('app/(marketing)/news/[slug]/page.tsx', 'utf8');
 const listPage = readFileSync('app/(marketing)/news/page.tsx', 'utf8');
 const articleView = readFileSync('components/news/article-view.tsx', 'utf8');
+const articleContentEditor = readFileSync('components/news/article-content-editor.tsx', 'utf8');
 
 test('the four publication states and their length limits are constrained in both the library and the migration', () => {
   for (const value of ['draft', 'scheduled', 'published', 'archived']) assert.match(source, new RegExp(`'${value}'`));
@@ -75,6 +76,12 @@ test('article HTML is only ever rendered through the one sanitizing view compone
   assert.doesNotMatch(listPage, /dangerouslySetInnerHTML/);
 });
 
+test('the admin content editor re-sanitizes previously-stored article HTML immediately before rendering it, not just at the last save', () => {
+  assert.match(articleContentEditor, /sanitizeArticleContent\(initialHtml\)/);
+  assert.match(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: sanitizedInitialHtml \}\}/);
+  assert.doesNotMatch(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: initialHtml \}\}/);
+});
+
 test('sanitizeArticleContent strips scripts, event handlers, and unsafe link schemes while preserving safe formatting', () => {
   const dirty = '<p onclick="steal()">Hello <strong>world</strong></p><script>alert(1)</script>'
     + '<a href="javascript:alert(1)">bad</a><a href="https://idoc.club">good</a><img src=x onerror=alert(1)>';
@@ -85,6 +92,14 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.doesNotMatch(clean, /<img/);
   assert.match(clean, /<strong>world<\/strong>/);
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
+});
+
+test('sanitizeArticleContent is idempotent: re-sanitizing an already-sanitized href does not double-escape its query-string ampersands', () => {
+  const once = sanitizeArticleContent('<a href="https://example.com/?a=1&b=2">link</a>');
+  assert.match(once, /<a href="https:\/\/example\.com\/\?a=1&amp;b=2">link<\/a>/);
+  const twice = sanitizeArticleContent(once);
+  assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
+  assert.doesNotMatch(twice, /&amp;amp;/);
 });
 
 test('hasVisibleContent rejects markup that renders no visible text', () => {

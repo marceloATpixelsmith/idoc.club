@@ -245,3 +245,13 @@ test('Geoapify privacy, credential rotation, availability, and failure contracts
     'the only page in the application granted the browser\'s geolocation permission',
   ]) assert.ok(normalizedContract.includes(required), `missing provider contract detail: ${required}`);
 });
+
+test('onboarding name and address fields enforce the same length limits client-side that memberProfileSchema enforces server-side', () => {
+  assert.match(source, /id="firstName"\s+maxLength=\{100\}/);
+  assert.match(source, /id="lastName"\s+maxLength=\{100\}/);
+  assert.match(source, /maxLength=\{200\}\s*\n\s*name="address1"/);
+  assert.match(source, /maxLength=\{200\}\s*\n\s*name="address2"/);
+  assert.match(source, /id="city" maxLength=\{100\}/);
+  assert.match(source, /id="stateProvince" maxLength=\{100\}/);
+  assert.match(source, /id="postalCode" maxLength=\{30\}/);
+});
