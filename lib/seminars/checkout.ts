@@ -37,14 +37,14 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
   const stripe = testStripeClient ?? getStripeServerClient();
   const baseUrl = baseUrlForServer();
   const session = await stripe.checkout.sessions.create({
-    cancel_url: `${baseUrl}/dashboard/seminars`,
+    cancel_url: `${baseUrl}/seminars`,
     line_items: [{
       price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents },
       quantity: 1,
     }],
     metadata: { kind: 'seminar_registration', profileId: String(row.profile_id), registrationId: String(registrationId) },
     mode: 'payment',
-    success_url: `${baseUrl}/dashboard/seminars?checkout=success`,
+    success_url: `${baseUrl}/seminars?checkout=success`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
   await client`update idoc.seminar_registrations set stripe_checkout_session_id=${session.id},updated_at=now() where id=${registrationId}`;
