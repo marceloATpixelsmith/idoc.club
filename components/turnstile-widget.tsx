@@ -93,8 +93,10 @@ export function TurnstileWidget({
     const container = containerRef.current;
     const mutationObserver = container ? new MutationObserver(updateChallengeVisibility) : null;
     const resizeObserver = container ? new ResizeObserver(updateChallengeVisibility) : null;
-    mutationObserver?.observe(container, { childList: true, subtree: true, attributes: true });
-    resizeObserver?.observe(container);
+    if (container) {
+      mutationObserver?.observe(container, { childList: true, subtree: true, attributes: true });
+      resizeObserver?.observe(container);
+    }
     updateChallengeVisibility();
     return () => {
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
