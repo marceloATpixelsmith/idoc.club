@@ -53,6 +53,16 @@ The canonical organization address and seminar-payment-method configuration foun
 
 The authenticated Support Inbox provides paid/grace members with private, threaded Billing / Membership, Seminars, and Technical Support conversations. Administrators manage the shared searchable queue, replies, persisted assignment, close/reopen workflow, and unread member-message state; Super Admins own category defaults. Default changes apply only to new conversations. The existing expired/unpaid payment gate is unchanged: gated accounts do not receive Support as an exception. Migration `0039` owns this durable history and no support deletion is provided.
 
+### Authenticated navigation
+
+Dashboard and marketing headers use one shared authenticated-user menu. Its gold, dark-blue-initials
+control opens on desktop hover as well as keyboard, click, and touch; returns all authenticated users
+to **My Dashboard** at `/dashboard`; and adds **Admin Dashboard** at `/admin` only for Administrators
+and Super Admins. Menu visibility is a navigation convenience, not an authorization boundary:
+administrator routes continue to authorize every direct request on the server. Anonymous dashboard
+navigation retains **Pricing** and **Sign Up**, sign-out remains CSRF-protected, and the browser-facing
+identity payload remains the minimized `PublicUser` shape.
+
 ### Seminars cross-cutting capability
 
 An initial seminar management and registration slice is implemented: administrator authoring at `/admin/seminars` and paid/grace member registration at `/dashboard/seminars` (Current/Past tabs), using the same three canonical Organization Settings payment methods rather than a seminar-specific payment configuration. See [Release 5](#8-release-5---seminars) below for full scope and what remains deferred, and [07 Administrator and Operations Runbook](07-administrator-and-operations-runbook.md#seminar-operations) for operations. Migration `0041` owns this durable history.
