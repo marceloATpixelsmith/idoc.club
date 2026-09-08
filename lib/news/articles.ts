@@ -104,11 +104,27 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const statusValue = firstValue(input.status);
   const status: NewsStatus | null = NEWS_STATUSES.includes(statusValue as NewsStatus) ? (statusValue as NewsStatus) : null;
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
+  const fromValue = firstValue(input.from) ?? '';
+  const toValue = firstValue(input.to) ?? '';
+  const sortValue = firstValue(input.sort) ?? '';
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromValue) ? fromValue : null;
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(toValue) ? toValue : null;
+  const sort = ['publication', 'title', 'status', 'updated'].includes(sortValue) ? sortValue : 'publication';
+  const direction = firstValue(input.direction) === 'asc' ? 'asc' : 'desc';
   const limit = ADMIN_PAGE_SIZE;
   const offset = (page - 1) * limit;
-  const rows = await client`select id,slug,title,status,publication_date,published_at,updated_at from idoc.news_articles
-    where (${status}::text is null or status=${status}) and (${search}='' or title ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
-    order by updated_at desc limit ${limit + 1} offset ${offset}`;
+  const rows = await client`select id,slug,title,subtitle,status,publication_date,published_at,updated_at from idoc.news_articles
+    where (${status}::text is null or status=${status}) and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
+    and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day'))
+    order by case when ${sort}='publication' and ${direction}='asc' then publication_date end asc,
+      case when ${sort}='publication' and ${direction}='desc' then publication_date end desc,
+      case when ${sort}='title' and ${direction}='asc' then title end asc,
+      case when ${sort}='title' and ${direction}='desc' then title end desc,
+      case when ${sort}='status' and ${direction}='asc' then status end asc,
+      case when ${sort}='status' and ${direction}='desc' then status end desc,
+      case when ${sort}='updated' and ${direction}='asc' then updated_at end asc,
+      case when ${sort}='updated' and ${direction}='desc' then updated_at end desc,
+      publication_date desc,id desc limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
 }
 

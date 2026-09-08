@@ -85,6 +85,7 @@ export function AdminNavigation({ isSuperAdmin, unreadCount }: { isSuperAdmin: b
                 >
                   <item.icon aria-hidden="true" className="size-4 shrink-0" />
                   {item.label}
+                  {item.href === '/admin/support' && unreadCount > 0 ? <span className="ml-auto rounded-full bg-gold px-2 py-0.5 text-xs font-semibold text-navy" title="Unread assigned support conversations">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
                 </Link>
               </li>
             );
