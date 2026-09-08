@@ -18,7 +18,9 @@ import { userInitials } from '@/lib/format/user-initials';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 
 const fetcher = (url: string) => fetch(url).then((response) => response.json());
-const HOVER_CLOSE_DELAY_MS = 120;
+//Radix renders the menu content in a portal. Give the pointer time to cross from the
+//trigger into that portaled content before closing the hover-open menu.
+const HOVER_CLOSE_DELAY_MS = 500;
 
 type AuthenticatedUserMenuProps = {
   loggedOut: ReactNode;
