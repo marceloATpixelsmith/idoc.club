@@ -4,6 +4,7 @@ import { Archivo, Barlow } from 'next/font/google';
 import { getPublicUser } from '@/lib/db/queries';
 import { currentCsrfToken } from '@/lib/security/csrf';
 import { CsrfProvider } from '@/components/security/csrf-provider';
+import { NavigationLoadingProvider } from '@/components/navigation-loading';
 import { SWRConfig } from 'swr';
 
 const archivo = Archivo({
@@ -75,7 +76,7 @@ export default async function RootLayout({
               }
             }}
           >
-            {children}
+            <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
           </SWRConfig>
         </CsrfProvider>
       </body>

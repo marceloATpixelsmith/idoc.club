@@ -18,7 +18,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   if (member && !privileged && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   const { confirmDetails } = await searchParams;
   return (
-    <section className="space-y-8 p-4 lg:p-8">
+    <section className="space-y-8 py-4 lg:py-8 px-5 lg:px-8">
       <div>
         <h1 className="mb-6 text-2xl font-medium">My Profile</h1>
         {confirmDetails ? (

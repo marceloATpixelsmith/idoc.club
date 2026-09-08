@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import type { PublicUser } from '@/lib/db/queries';
 import { userInitials } from '@/lib/format/user-initials';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
+import { HeaderShell } from '@/components/site/HeaderShell';
 import useSWR, { mutate } from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -77,19 +78,15 @@ function UserMenu() {
 
 function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-24 flex justify-between items-center">
-        <Link href="/" className="flex items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img src="/idoc-logo.svg" alt="IDOC — International Dressage Officials Club" className="h-14 w-auto" />
-        </Link>
+    <HeaderShell
+      right={
         <div className="flex items-center space-x-6">
           <Suspense fallback={<div className="h-9" />}>
             <UserMenu />
           </Suspense>
         </div>
-      </div>
-    </header>
+      }
+    />
   );
 }
 

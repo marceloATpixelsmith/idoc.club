@@ -11,7 +11,7 @@ export default async function NewSeminarPage() {
   requireAdministrator(actor);
   const paymentMethods = await listEnabledSeminarPaymentMethods();
   return (
-    <main className="space-y-6 p-8">
+    <main className="space-y-6 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/seminars">← Seminars</Link>
       <h1 className="text-2xl font-semibold">New seminar</h1>
       <SeminarForm action={createSeminarAction} submitLabel="Create seminar">

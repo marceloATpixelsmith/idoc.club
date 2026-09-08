@@ -6,7 +6,7 @@ export default async function AdminExportsPage() {
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
 
-  return <main className="flex-1 p-8">
+  return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Exports</h1>
     <ul className="mt-6 max-w-md space-y-3 text-sm">
       <li><a className="text-primary underline underline-offset-4 hover:opacity-80" href="/api/admin/export/members">Member directory (CSV)</a></li>

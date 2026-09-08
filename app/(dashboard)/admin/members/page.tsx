@@ -44,7 +44,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const accountState = selected ? await getUserAccountState(selected.profile.userId) : null;
   const paymentHistory = selected ? await listAdminPaymentHistory(selected.profile.id) : [];
 
-  return <main className="flex-1 p-8">
+  return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Members</h1>
     <nav className="mt-4 flex gap-4 text-sm" aria-label="Membership views"><Link className="underline" href="/admin/members?status=active">Active</Link><Link className="underline" href="/admin/members?status=expired">Expired</Link><Link className="underline" href="/admin/members?status=archived">Archived</Link><Link className="underline" href="/admin/revenue">Revenue dashboard</Link></nav>
     <p className="mt-3 text-sm">Applied status filter: <strong>{listing.filters.status}</strong>{!params.status && ' (default)'}</p>

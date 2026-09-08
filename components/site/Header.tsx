@@ -6,6 +6,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
 import type { PublicUser } from '@/lib/db/queries';
+import { HeaderShell } from './HeaderShell';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -89,113 +90,112 @@ export function Header() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-6 px-5 lg:px-8">
-        <Link href="/" className="flex items-center gap-3" onClick={() => setOpen(false)}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img src="/idoc-logo.svg" alt="IDOC — International Dressage Officials Club" className="h-14 w-auto" />
-        </Link>
-
-        <div className="hidden items-center gap-10 lg:flex">
-          <nav className="flex items-center gap-7">
-            <Link href="/" className={navClassName(isActive(pathname, '/'))}>
-              Home
-            </Link>
-
-            <AboutDropdown pathname={pathname} />
-
-            {nav.slice(1).map((item) => (
-              <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
-                {item.label}
-              </Link>
-            ))}
-
-            <span className="text-border" aria-hidden="true">
-              |
-            </span>
-            <a
-              href="https://www.facebook.com/groups/646981818825549/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="IDOC on Facebook"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Facebook className="size-4" />
-            </a>
-          </nav>
-
-          <MemberAreaLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />
-        </div>
-
-        <button
-          type="button"
-          aria-label="Toggle navigation"
-          onClick={() => setOpen((v) => !v)}
-          className="text-foreground lg:hidden"
-        >
-          {open ? <X className="size-6" /> : <Menu className="size-6" />}
-        </button>
-      </div>
-
-      {open && (
-        <nav className="border-t border-border bg-background px-5 py-4 lg:hidden">
-          <ul className="flex flex-col gap-1">
-            <li>
-              <Link
-                href="/"
-                onClick={() => setOpen(false)}
-                className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-              >
+    <HeaderShell
+      onLogoClick={() => setOpen(false)}
+      right={
+        <>
+          <div className="hidden items-center gap-10 lg:flex">
+            <nav className="flex items-center gap-7">
+              <Link href="/" className={navClassName(isActive(pathname, '/'))}>
                 Home
               </Link>
-            </li>
-            <li className="pt-2">
-              <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
-                About IDOC
-              </p>
-              <ul className="flex flex-col">
-                {aboutLinks.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </li>
-            {nav.slice(1).map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                >
+
+              <AboutDropdown pathname={pathname} />
+
+              {nav.slice(1).map((item) => (
+                <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
                   {item.label}
                 </Link>
-              </li>
-            ))}
-            <li>
+              ))}
+
+              <span className="text-border" aria-hidden="true">
+                |
+              </span>
               <a
                 href="https://www.facebook.com/groups/646981818825549/"
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                aria-label="IDOC on Facebook"
+                className="text-muted-foreground transition-colors hover:text-foreground"
               >
                 <Facebook className="size-4" />
-                Facebook
               </a>
-            </li>
-            <li>
-              <MemberAreaLink className="mt-3 block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />
-            </li>
-          </ul>
-        </nav>
-      )}
-    </header>
+            </nav>
+
+            <MemberAreaLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />
+          </div>
+
+          <button
+            type="button"
+            aria-label="Toggle navigation"
+            onClick={() => setOpen((v) => !v)}
+            className="text-foreground lg:hidden"
+          >
+            {open ? <X className="size-6" /> : <Menu className="size-6" />}
+          </button>
+        </>
+      }
+      below={
+        open && (
+          <nav className="border-t border-border bg-background px-5 py-4 lg:hidden">
+            <ul className="flex flex-col gap-1">
+              <li>
+                <Link
+                  href="/"
+                  onClick={() => setOpen(false)}
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  Home
+                </Link>
+              </li>
+              <li className="pt-2">
+                <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                  About IDOC
+                </p>
+                <ul className="flex flex-col">
+                  {aboutLinks.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+              {nav.slice(1).map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+              <li>
+                <a
+                  href="https://www.facebook.com/groups/646981818825549/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  <Facebook className="size-4" />
+                  Facebook
+                </a>
+              </li>
+              <li>
+                <MemberAreaLink className="mt-3 block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />
+              </li>
+            </ul>
+          </nav>
+        )
+      }
+    />
   );
 }

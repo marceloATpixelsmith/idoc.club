@@ -26,7 +26,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const history = profileId && Number.isInteger(profileId) ? await listNotificationHistory(profileId) : null;
 
-  return <main className="flex-1 p-8">
+  return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Notification delivery history</h1>
     <Link className="mt-2 inline-block underline text-sm" href="/admin/members">← Search members</Link>
     {!history && <p className="mt-4 text-sm text-foreground">Search for a member on the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link> to view their notification history.</p>}

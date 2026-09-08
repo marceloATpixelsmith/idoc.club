@@ -41,7 +41,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
   const [logoutOthersState, logoutOthersAction, isLogoutOthersPending] = useActionState<PasswordState, FormData>(logOutOtherSessions, {});
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-lg lg:text-2xl font-medium bold text-foreground mb-6">Security Settings</h1>
       <div className="mb-8 grid gap-8 lg:grid-cols-2">
         <Card>

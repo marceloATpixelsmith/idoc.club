@@ -32,7 +32,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
   });
   const status = String(seminar.status);
   return (
-    <main className="space-y-8 p-8">
+    <main className="space-y-8 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/seminars">← Seminars</Link>
       <header className="flex items-center justify-between">
         <div>
