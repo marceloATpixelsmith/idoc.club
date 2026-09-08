@@ -12,7 +12,11 @@ on:
       - 'lib/auth/**'
       - 'lib/security/**'
       - 'lib/membership/authorization.ts'
+      - 'lib/membership/account-access.ts'
       - 'lib/runtime/configuration.ts'
+      - 'lib/db/queries.ts'
+      - 'lib/db/schema.ts'
+      - 'lib/db/migrations/**'
       - 'middleware.ts'
       - 'next.config.ts'
       - 'package.json'
@@ -23,6 +27,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Base commit to compare for manual classification
+        required: false
+        default: origin/main
 permissions:
   contents: read
 jobs:
