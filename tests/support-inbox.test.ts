@@ -32,7 +32,7 @@ test('member boundaries derive ownership and never accept a submitted member ide
 test('administrator mutations authorize roles and revalidate submitted assignees', () => {
   assert.match(source, /requireAccountAccess\('administration'\)/);
   assert.match(source, /requireAdministrator\(actor\)/);
-  assert.match(source, /resolveEligibleAdministrator\(administratorValue\)/);
+  assert.match(source, /values\.map\(resolveEligibleAdministrator\)/);
   assert.match(source, /u\.account_state='active'/);
   assert.match(source, /requireSuperAdmin\(actor\)/);
 });
