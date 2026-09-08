@@ -53,6 +53,14 @@ test('the revenue page catches an invalid-date-range rejection and renders it in
   assert.match(revenuePage, /role="alert"/);
 });
 
+test('the revenue page catches only the dedicated date-range validation error, and re-throws everything else (an AuthorizationError, a database failure) to the normal server error page rather than rendering its raw message', () => {
+  assert.match(revenuePage, /if \(!\(thrown instanceof RevenueRangeError\)\) throw thrown;/);
+  assert.match(revenuePage, /error = thrown\.message;/);
+  assert.match(revenueReport, /export class RevenueRangeError extends Error \{/);
+  assert.match(revenueReport, /throw new RevenueRangeError\(\);/);
+  assert.doesNotMatch(revenueReport, /throw new Error\('Choose a valid date range\.'\)/);
+});
+
 test('the revenue page has an explicit empty state for both breakdown tables, not just the summary cards', () => {
   assert.match(revenuePage, /report\.bySource\.length === 0/);
   assert.match(revenuePage, /report\.overTime\.length === 0/);

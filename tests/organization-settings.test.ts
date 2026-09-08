@@ -15,6 +15,14 @@ test('bank instructions retain basic rich text and remove active content', () =>
   assert.doesNotMatch(value, /javascript|onclick|script|iframe|alert/i);
 });
 
+test('sanitizeBankInstructions is idempotent: re-sanitizing an already-sanitized href does not double-escape its query-string ampersands', () => {
+  const once = sanitizeBankInstructions('<a href="https://bank.example/?ref=1&acct=2">Transfer details</a>');
+  assert.match(once, /<a href="https:\/\/bank\.example\/\?ref=1&amp;acct=2">Transfer details<\/a>/);
+  const twice = sanitizeBankInstructions(once);
+  assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
+  assert.doesNotMatch(twice, /&amp;amp;/);
+});
+
 test('entity-encoded and Unicode whitespace do not satisfy required bank instructions', () => {
   for (const value of ['<p>&nbsp;</p>', '<p>&#160;</p>', '<p>&#xA0;</p>', '<p>\u200b</p>', '<p><br></p>']) {
     assert.equal(hasVisibleBankInstructions(sanitizeBankInstructions(value)), false, value);

@@ -1,4 +1,4 @@
-import { getRevenueReport, type RevenueFilters } from '@/lib/payments/revenue-report';
+import { getRevenueReport, RevenueRangeError, type RevenueFilters } from '@/lib/payments/revenue-report';
 
 const money = (cents: number, currency: string) => new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
 // A repeated query key (?origin=a&origin=b) delivers an array here at runtime regardless of a
@@ -14,7 +14,12 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
   try {
     report = await getRevenueReport(filters);
   } catch (thrown) {
-    error = thrown instanceof Error ? thrown.message : 'Unable to load the revenue report.';
+    // Only the expected, user-facing date-range validation is caught and rendered inline. Anything
+    // else -- an AuthorizationError, a database failure -- is not this page's to interpret or
+    // display, and could carry SQL/schema/infrastructure detail unsafe to show a browser; it
+    // propagates to the normal server error page instead.
+    if (!(thrown instanceof RevenueRangeError)) throw thrown;
+    error = thrown.message;
   }
   return <main className="flex-1 p-8">
     <h1 className="text-2xl font-semibold">Membership revenue</h1>

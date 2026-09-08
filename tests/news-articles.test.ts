@@ -94,6 +94,14 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
 });
 
+test('sanitizeArticleContent is idempotent: re-sanitizing an already-sanitized href does not double-escape its query-string ampersands', () => {
+  const once = sanitizeArticleContent('<a href="https://example.com/?a=1&b=2">link</a>');
+  assert.match(once, /<a href="https:\/\/example\.com\/\?a=1&amp;b=2">link<\/a>/);
+  const twice = sanitizeArticleContent(once);
+  assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
+  assert.doesNotMatch(twice, /&amp;amp;/);
+});
+
 test('hasVisibleContent rejects markup that renders no visible text', () => {
   assert.equal(hasVisibleContent('<p>&nbsp;</p>'), false);
   assert.equal(hasVisibleContent('<p></p>'), false);

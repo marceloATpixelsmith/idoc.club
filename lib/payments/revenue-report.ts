@@ -16,12 +16,23 @@ function firstValue(value: RawFilterValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+// Distinct from any other failure (an AuthorizationError, a database error) so the page can catch
+// and render exactly this one expected, user-facing validation message inline, and let every other
+// exception -- which could carry SQL/schema/infrastructure detail unsafe to show a browser --
+// propagate to the normal server error path instead.
+export class RevenueRangeError extends Error {
+  constructor() {
+    super('Choose a valid date range.');
+    this.name = 'RevenueRangeError';
+  }
+}
+
 function dates(input: RevenueFilters) {
   const today = new Date();
   const to = firstValue(input.to) ?? today.toISOString().slice(0, 10);
   const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 11, 1));
   const from = firstValue(input.from) ?? start.toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Choose a valid date range.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new RevenueRangeError();
   return { from, to };
 }
 
