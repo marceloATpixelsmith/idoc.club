@@ -11,9 +11,12 @@ on:
       - 'components/turnstile-widget.tsx'
       - 'lib/auth/**'
       - 'lib/security/**'
-      - 'lib/membership/**'
-      - 'lib/runtime/**'
-      - 'lib/db/**'
+      - 'lib/membership/authorization.ts'
+      - 'lib/membership/account-access.ts'
+      - 'lib/runtime/configuration.ts'
+      - 'lib/db/queries.ts'
+      - 'lib/db/schema.ts'
+      - 'lib/db/migrations/**'
       - 'middleware.ts'
       - 'next.config.ts'
       - 'package.json'
@@ -21,15 +24,14 @@ on:
       - 'tests/security-e2e/**'
       - 'tests/*auth*'
       - 'tests/*security*'
-      - 'app/(dashboard)/onboarding/**'
-      - 'app/(dashboard)/account/**'
-      - 'app/(dashboard)/admin/members/**'
-      - 'app/(dashboard)/layout.tsx'
-      - 'app/(dashboard)/dashboard/layout.tsx'
-      - 'app/api/user/**'
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Base commit to compare for manual classification
+        required: false
+        default: origin/main
 permissions:
   contents: read
 jobs:

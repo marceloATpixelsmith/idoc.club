@@ -1,6 +1,6 @@
 # CI risk classification and agent merge policy
 
-This policy tells Codex and Claude which verification level a pull request requires before merge.
+This policy tells Codex and Claude which verification level a pull request requires before merge. The repository also runs `scripts/classify-ci-risk.mjs` on every PR so the classification is visible in the Fast PR verification summary.
 
 ## Every pull request
 
@@ -13,8 +13,8 @@ An agent must inspect the complete changed-file list and the PR description befo
 The `Authentication security verification` workflow is required before merge when a pull request changes any of the following:
 
 - Login, signup, logout, password reset, email verification, Google OAuth, MFA, TOTP, recovery codes, trusted devices, sessions, cookies, CSRF, Turnstile, middleware, or security headers.
-- Authorization, membership entitlement, onboarding gates, admin or super-admin access, account state, payment access controls, or server-side data-access boundaries.
-- Database schema, migrations, authentication-related queries, security libraries, or security end-to-end tests.
+- Authorization implementation, authentication gates, onboarding authentication flow, admin or super-admin authorization, account-state enforcement, or payment-access authorization logic.
+- Authentication-related database schema, migrations, queries, security libraries, or security end-to-end tests.
 - Dependencies or runtime configuration that can affect authentication, authorization, cryptography, HTTP handling, or server rendering.
 
 When in doubt, run this workflow. It must pass for the exact current PR head.
@@ -25,6 +25,8 @@ The `Release 1 Verification` workflow is required before merge when a pull reque
 
 - Application runtime code, routes, Server Components, Server Actions, API handlers, database queries, migrations, build configuration, package dependencies, or integration/build-boundary tests.
 - Billing, membership, seminars, directory, administration, publishing, or other behavior that can affect production rendering or database integration.
+
+Member tables, seminar features, support features, admin screens, forms, validation, and database access are Release 1 work by default. They are not Authentication security work merely because they must enforce ordinary ownership, validation, or database safety. Authentication security verification is required only when the authentication or authorization implementation itself changes, as listed above.
 
 The workflow is intentionally skipped automatically for low-risk documentation, static-asset, CSS-only, and navigation-loading/menu-only changes. An agent must still run it manually if the change has any plausible build, runtime, integration, or authorization impact.
 
