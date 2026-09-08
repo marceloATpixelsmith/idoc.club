@@ -144,7 +144,7 @@ export function TurnstileWidget({
     <div
       className="idoc-auth-turnstile"
       data-challenge-visible={challengeVisible ? 'true' : 'false'}
-      style={challengeVisible || failed ? undefined : { height: 0, minHeight: 0, margin: 0, padding: 0 }}
+      style={challengeVisible || failed ? undefined : { height: 0, minHeight: 0, margin: '-16px 0', padding: 0 }}
     >
       <Script
         onError={() => setFailed(true)}
