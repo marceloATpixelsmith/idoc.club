@@ -8,8 +8,11 @@ on:
       - 'app/(dashboard)/dashboard/security/**'
       - 'app/(dashboard)/admin/security/**'
       - 'components/security/**'
+      - 'components/turnstile-widget.tsx'
       - 'lib/auth/**'
       - 'lib/security/**'
+      - 'lib/membership/**'
+      - 'lib/runtime/**'
       - 'lib/db/**'
       - 'middleware.ts'
       - 'next.config.ts'
@@ -18,6 +21,12 @@ on:
       - 'tests/security-e2e/**'
       - 'tests/*auth*'
       - 'tests/*security*'
+      - 'app/(dashboard)/onboarding/**'
+      - 'app/(dashboard)/account/**'
+      - 'app/(dashboard)/admin/members/**'
+      - 'app/(dashboard)/layout.tsx'
+      - 'app/(dashboard)/dashboard/layout.tsx'
+      - 'app/api/user/**'
   push:
     branches: [main]
   workflow_dispatch:
