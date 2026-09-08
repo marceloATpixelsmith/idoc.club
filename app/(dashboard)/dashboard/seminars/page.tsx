@@ -70,8 +70,9 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
     );
   };
 
-  const registeredSeminars = seminars.filter((seminar) => seminar.registration_status !== null);
-  const availableSeminars = seminars.filter((seminar) => seminar.registration_status === null);
+  const registeredSeminars = seminars.filter((seminar) => seminar.registration_status === 'registered');
+  const availableSeminars = seminars.filter((seminar) => seminar.registration_status === null && seminar.availability === 'open');
+  const otherSeminars = seminars.filter((seminar) => !registeredSeminars.includes(seminar) && !availableSeminars.includes(seminar));
 
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
@@ -101,6 +102,13 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
               ? <ul className="mt-3 space-y-6">{availableSeminars.map(seminarCard)}</ul>
               : <p className="mt-3 text-muted-foreground">There are no additional seminars available to you.</p>}
           </section>
+          {otherSeminars.length > 0 ? (
+            <section aria-labelledby="other-seminars-heading">
+              <h2 className="text-lg font-semibold" id="other-seminars-heading">Other seminars</h2>
+              <p className="mt-2 text-sm text-muted-foreground">These seminars are full, closed, canceled, or otherwise unavailable for registration.</p>
+              <ul className="mt-3 space-y-6">{otherSeminars.map(seminarCard)}</ul>
+            </section>
+          ) : null}
         </div>
       )}
     </main>
