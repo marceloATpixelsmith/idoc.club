@@ -243,16 +243,19 @@
 
 .navigation-loading-star--one {
   --navigation-loading-star-x: -34px;
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 .navigation-loading-star--two {
   --navigation-loading-star-x: 0px;
   animation-delay: 0.2s;
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 .navigation-loading-star--three {
   --navigation-loading-star-x: 34px;
   animation-delay: 0.4s;
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 @media (prefers-reduced-motion: reduce) {
