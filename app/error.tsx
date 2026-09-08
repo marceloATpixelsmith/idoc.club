@@ -11,10 +11,14 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   }, [error]);
 
   return (
-    <main className="max-w-md mx-auto px-4 py-24 text-center">
+    <main className="mx-auto flex min-h-[70dvh] max-w-lg items-center px-5 py-16 text-center">
+      <div className="w-full rounded-3xl border border-border bg-card px-6 py-12 shadow-sm sm:px-12">
+      <div className="mx-auto mb-7 flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <span className="text-2xl font-semibold">!</span>
+      </div>
       <h1 className="text-2xl font-medium text-foreground mb-2">Something went wrong</h1>
       <p className="text-muted-foreground mb-6">
-        An unexpected error occurred. It has been reported automatically.
+        We hit an unexpected problem. Please try again, or return to the home page.
         {error.digest ? <span className="block text-xs text-muted-foreground mt-2">Reference: {error.digest}</span> : null}
       </p>
       <button
@@ -24,6 +28,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       >
         Try again
       </button>
+      <a href="/" className="mt-4 block text-sm text-primary underline underline-offset-4">Back to home</a>
+      </div>
     </main>
   );
 }
