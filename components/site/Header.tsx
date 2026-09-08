@@ -3,12 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import useSWR from 'swr';
 import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
-import type { PublicUser } from '@/lib/db/queries';
+import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { HeaderShell } from './HeaderShell';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 const nav = [
   { href: '/', label: 'Home' },
@@ -67,25 +64,15 @@ function AboutDropdown({ pathname }: { pathname: string }) {
   );
 }
 
-function MemberAreaLink({ className }: { className?: string }) {
-  const { data: user } = useSWR<PublicUser>('/api/user', fetcher);
-
-  if (user?.email) {
-    return (
-      <Link href="/dashboard" className={className}>
-        My Dashboard
-      </Link>
-    );
-  }
-
+function MemberLoginLink({ className, onClick }: { className?: string; onClick?: () => void }) {
   return (
-    <Link href="/sign-in" className={className}>
+    <Link href="/sign-in" className={className} onClick={onClick}>
       Member Login
     </Link>
   );
 }
 
-export function Header() {
+export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -122,7 +109,10 @@ export function Header() {
               </a>
             </nav>
 
-            <MemberAreaLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />
+            <AuthenticatedUserMenu
+              showAdminDashboard={showAdminDashboard}
+              loggedOut={<MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+            />
           </div>
 
           <button
@@ -190,7 +180,13 @@ export function Header() {
                 </a>
               </li>
               <li>
-                <MemberAreaLink className="mt-3 block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />
+                <div className="mt-3 flex justify-center">
+                  <AuthenticatedUserMenu
+                    showAdminDashboard={showAdminDashboard}
+                    onNavigate={() => setOpen(false)}
+                    loggedOut={<MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />}
+                  />
+                </div>
               </li>
             </ul>
           </nav>
