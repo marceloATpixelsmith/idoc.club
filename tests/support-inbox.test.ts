@@ -16,6 +16,12 @@ test('support categories, states, body lengths, and opaque identifiers are const
   assert.match(migration, /support_messages_immutable.*BEFORE UPDATE OR DELETE/);
 });
 
+test('member-facing support labels match the approved categories and workflow statuses', () => {
+  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
+    assert.match(source, new RegExp(label.replace('/', '\\/')));
+  }
+});
+
 test('member boundaries derive ownership and never accept a submitted member identity', () => {
   assert.match(source, /member_user_id=\$\{actor\.id\}/);
   assert.doesNotMatch(source, /input\.member|memberUserId:/);

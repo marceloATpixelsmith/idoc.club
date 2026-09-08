@@ -144,6 +144,14 @@ test('the member Seminars page renders every required availability and registrat
   }
 });
 
+test('the member Seminars page separates prominent current registrations, available seminars, and past registrations', () => {
+  for (const label of ['Your current registrations', 'Available seminars', 'Past registrations']) {
+    assert.match(memberPage, new RegExp(label));
+  }
+  assert.match(memberPage, /registeredSeminars/);
+  assert.match(memberPage, /availableSeminars/);
+});
+
 test('the admin edit page offers Publish, Cancel, and Move-to-draft quick actions, and a "Mark paid" control per unpaid registration', () => {
   const adminEditPage = readFileSync('app/(dashboard)/admin/seminars/[id]/page.tsx', 'utf8');
   assert.match(adminEditPage, /publishSeminarAction/);

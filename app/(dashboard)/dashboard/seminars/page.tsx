@@ -32,6 +32,47 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
     seminar.payment_method_canonical_id === 'bank_transfer' && seminar.registration_status === 'registered' && seminar.payment_status === 'bank_transfer_pending');
   const bankInstructionsHtml = needsBankInstructions ? sanitizeBankInstructions((await getSeminarPaymentMethodInstructions('bank_transfer')) ?? '') : null;
 
+  const seminarCard = (seminar: (typeof seminars)[number]) => {
+    const registrationStatus = seminar.registration_status as RegistrationStatus | null;
+    const paymentStatus = seminar.payment_status as PaymentStatus | null;
+    const availability = seminar.availability as SeminarAvailability;
+    return (
+      <li className="rounded-lg border p-4" key={String(seminar.id)}>
+        <h3 className="text-lg font-semibold">{String(seminar.title)}</h3>
+        <p className="text-sm text-muted-foreground">
+          {String(seminar.seminar_date)} · {String(seminar.start_time).slice(0, 5)}–{String(seminar.end_time).slice(0, 5)} ({String(seminar.timezone)})
+        </p>
+        <p className="mt-1 text-sm">{String(seminar.location)}</p>
+        <p className="mt-1 text-sm">€{(Number(seminar.price_cents) / 100).toFixed(2)}</p>
+        <p className="mt-2 font-medium">{AVAILABILITY_LABELS[availability]}</p>
+        {registrationStatus ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-sm">Your registration: <strong>{registrationDisplayLabel(registrationStatus, paymentStatus ?? 'unpaid')}</strong></p>
+            {registrationStatus === 'registered' && paymentStatus === 'bank_transfer_pending' && bankInstructionsHtml ? (
+              // eslint-disable-next-line react/no-danger -- pre-sanitized by lib/organization/format.ts's sanitizeBankInstructions at write time and re-sanitized here before render.
+              <div className="rounded border p-3 text-sm" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} />
+            ) : null}
+            {registrationStatus === 'registered' && paymentStatus === 'cash_pending' ? <p className="text-sm">Pay in cash at the event.</p> : null}
+            {registrationStatus === 'registered' && availability !== 'past' ? (
+              <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration">
+                <input name="seminarId" type="hidden" value={String(seminar.id)} />
+              </SeminarForm>
+            ) : null}
+          </div>
+        ) : availability === 'open' && profileId ? (
+          <div className="mt-3">
+            <SeminarForm action={registerForSeminarAction} pendingLabel="Registering" submitLabel="Register">
+              <input name="seminarId" type="hidden" value={String(seminar.id)} />
+            </SeminarForm>
+          </div>
+        ) : null}
+      </li>
+    );
+  };
+
+  const registeredSeminars = seminars.filter((seminar) => seminar.registration_status !== null);
+  const availableSeminars = seminars.filter((seminar) => seminar.registration_status === null);
+
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">My Seminars</h1>
@@ -41,46 +82,26 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
       </nav>
       {seminars.length === 0 ? (
         <p className="mt-6 text-muted-foreground">{activeTab === 'current' ? 'There are no current seminars.' : 'You have no past seminar registrations.'}</p>
+      ) : activeTab === 'past' ? (
+        <section className="mt-6" aria-labelledby="past-registrations-heading">
+          <h2 className="text-lg font-semibold" id="past-registrations-heading">Past registrations</h2>
+          <ul className="mt-3 space-y-6">{registeredSeminars.map(seminarCard)}</ul>
+        </section>
       ) : (
-        <ul className="mt-6 space-y-6">
-          {seminars.map((seminar) => {
-            const registrationStatus = seminar.registration_status as RegistrationStatus | null;
-            const paymentStatus = seminar.payment_status as PaymentStatus | null;
-            const availability = seminar.availability as SeminarAvailability;
-            return (
-              <li className="rounded-lg border p-4" key={String(seminar.id)}>
-                <h2 className="text-lg font-semibold">{String(seminar.title)}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {String(seminar.seminar_date)} · {String(seminar.start_time).slice(0, 5)}–{String(seminar.end_time).slice(0, 5)} ({String(seminar.timezone)})
-                </p>
-                <p className="mt-1 text-sm">{String(seminar.location)}</p>
-                <p className="mt-1 text-sm">€{(Number(seminar.price_cents) / 100).toFixed(2)}</p>
-                <p className="mt-2 font-medium">{AVAILABILITY_LABELS[availability]}</p>
-                {registrationStatus ? (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-sm">Your registration: <strong>{registrationDisplayLabel(registrationStatus, paymentStatus ?? 'unpaid')}</strong></p>
-                    {registrationStatus === 'registered' && paymentStatus === 'bank_transfer_pending' && bankInstructionsHtml ? (
-                      // eslint-disable-next-line react/no-danger -- pre-sanitized by lib/organization/format.ts's sanitizeBankInstructions at write time and re-sanitized here before render.
-                      <div className="rounded border p-3 text-sm" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} />
-                    ) : null}
-                    {registrationStatus === 'registered' && paymentStatus === 'cash_pending' ? <p className="text-sm">Pay in cash at the event.</p> : null}
-                    {registrationStatus === 'registered' && availability !== 'past' ? (
-                      <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration">
-                        <input name="seminarId" type="hidden" value={String(seminar.id)} />
-                      </SeminarForm>
-                    ) : null}
-                  </div>
-                ) : availability === 'open' && profileId ? (
-                  <div className="mt-3">
-                    <SeminarForm action={registerForSeminarAction} pendingLabel="Registering" submitLabel="Register">
-                      <input name="seminarId" type="hidden" value={String(seminar.id)} />
-                    </SeminarForm>
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="mt-6 space-y-10">
+          <section aria-labelledby="current-registrations-heading">
+            <h2 className="text-lg font-semibold" id="current-registrations-heading">Your current registrations</h2>
+            {registeredSeminars.length > 0
+              ? <ul className="mt-3 space-y-6">{registeredSeminars.map(seminarCard)}</ul>
+              : <p className="mt-3 text-muted-foreground">You have no current seminar registrations.</p>}
+          </section>
+          <section aria-labelledby="available-seminars-heading">
+            <h2 className="text-lg font-semibold" id="available-seminars-heading">Available seminars</h2>
+            {availableSeminars.length > 0
+              ? <ul className="mt-3 space-y-6">{availableSeminars.map(seminarCard)}</ul>
+              : <p className="mt-3 text-muted-foreground">There are no additional seminars available to you.</p>}
+          </section>
+        </div>
       )}
     </main>
   );

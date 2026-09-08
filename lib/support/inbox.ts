@@ -12,12 +12,12 @@ type ConversationRow = { category: SupportCategory; public_id: string; status: s
 type AdminConversationRow = ConversationRow & { assigned_admin_key: string | null; assigned_admin_user_id: number | null; id: number; member_email: string; member_name: string };
 
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
-  billing_membership: 'Billing / Membership',
+  billing_membership: 'Billing/Membership',
   seminars: 'Seminars',
   technical_support: 'Technical Support',
 };
 export const STATUS_LABELS: Record<string, string> = {
-  admin_responded: 'Admin Responded', closed: 'Closed', member_replied: 'Member Replied', open: 'Open',
+  admin_responded: 'Responded to by admin', closed: 'Closed/Resolved', member_replied: 'Member Replied', open: 'Open',
 };
 
 const categorySchema = z.enum(SUPPORT_CATEGORIES);
