@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('an entitled member sees the full tab bar and My Membership shows status, no paywall', async ({ browser }) => {
+test('an entitled member sees the dashboard menu and My Membership shows status, no paywall', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
@@ -8,29 +8,29 @@ test('an entitled member sees the full tab bar and My Membership shows status, n
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   await expect(page.getByText(/^Type: /)).toBeVisible();
   await expect(page.getByText('Payment history')).toBeVisible();
-  for (const label of ['My Profile', 'My Security', 'My Seminars']) {
+  for (const label of ['My Profile', 'My Security']) {
     await expect(page.getByRole('link', { name: label })).toBeVisible();
   }
   await context.close();
 });
 
-test('a not-yet-entitled member sees only the paywall on every dashboard sub-page', async ({ browser }) => {
+test('a not-yet-entitled member sees only the paywall on dashboard pages', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/expired.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
   await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Pay for membership' })).toBeVisible();
   // No tab bar at all -- a "menu" offering exactly one destination you can't leave isn't a menu.
-  for (const label of ['My Membership', 'My Profile', 'My Security', 'My Seminars']) {
+  for (const label of ['My Membership', 'My Profile', 'My Security', 'Member Directory', 'Seminars']) {
     await expect(page.getByRole('link', { name: label })).toHaveCount(0);
   }
-  // A direct visit to any other dashboard sub-page (bookmark, typed URL) bounces back too -- this
-  // is the actual enforcement, not just the hidden nav link.
-  for (const route of ['/dashboard/profile', '/seminars']) {
-    await page.goto(route);
-    await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
-  }
+  // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
+  await page.goto('/dashboard/profile');
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
+  await page.goto('/seminars');
+  await expect(page).toHaveURL(/\/seminars$/);
+  await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();
   await context.close();
 });
 
@@ -43,20 +43,19 @@ test('an administrator is never gated by membership payment status and can still
   await context.close();
 });
 
-test('an administrator with no member profile sees the full tab bar and an honest "no profile" message, never the onboarding or paywall redirect', async ({ browser }) => {
+test('an administrator with no member profile sees the dashboard menu and an honest "no profile" message, never the onboarding or paywall redirect', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/administrator-no-profile.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   await expect(page.getByText('You have no member profile')).toBeVisible();
-  for (const label of ['My Profile', 'My Security', 'My Seminars']) {
+  for (const label of ['My Profile', 'My Security']) {
     await expect(page.getByRole('link', { name: label })).toBeVisible();
   }
-  // The advertised My Seminars tab must actually be reachable, not just visible in the bar.
+  // Seminars is a public website page, not a dashboard tab.
   await page.goto('/seminars');
-  await expect(page).toHaveURL(/\/dashboard\/seminars$/);
-  await expect(page.getByRole('heading', { name: 'My Seminars' })).toBeVisible();
+  await expect(page).toHaveURL(/\/seminars$/);
   await context.close();
 });
 
