@@ -1,0 +1,29 @@
+name: Fast PR verification
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Fast PR checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.1 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/validate-auth-docs.mjs
+      - run: node scripts/validate-release-checklist.mjs
+      - run: node scripts/check-whitespace.mjs
+      - run: pnpm audit --audit-level=high
+      - run: pnpm typecheck
+      - run: pnpm test:ci
