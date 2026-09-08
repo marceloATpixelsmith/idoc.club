@@ -256,9 +256,11 @@ export async function setCategoryDefault(categoryValue: unknown, administratorVa
   if (administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose eligible administrators.');
   await client.begin(async (sql) => {
     const current = await sql<{ administrator_user_id: number }[]>`select administrator_user_id from idoc.support_category_defaults where category=${category} for update`;
-    if (current[0]?.administrator_user_id === administratorId) return;
-    await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())
-      on conflict(category) do update set administrator_user_id=excluded.administrator_user_id,updated_by=excluded.updated_by,updated_at=now()`;
+    const currentIds = current.map((row) => row.administrator_user_id).sort((a, b) => a - b);
+    const nextIds = administratorIds.filter((id): id is number => id !== null).sort((a, b) => a - b);
+    if (currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index])) return;
+    await sql`delete from idoc.support_category_defaults where category=${category}`;
+    for (const administratorId of nextIds) await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
       values(${actor.id},'support.category_default.changed','support_category_default',${category},${JSON.stringify({ administratorIds: current.map((row) => row.administrator_user_id) })}::jsonb,${JSON.stringify({ administratorIds })}::jsonb)`;
   });
