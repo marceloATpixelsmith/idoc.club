@@ -1,3 +1,4 @@
+92 lib/db/queries.ts
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, profiles, users } from './schema';
@@ -88,3 +89,5 @@ export async function getActivityLogs() {
     .leftJoin(profiles, eq(profiles.userId, users.id))
     .where(eq(activityLogs.userId, user.id))
     .orderBy(desc(activityLogs.timestamp))
+    .limit(10);
+}
