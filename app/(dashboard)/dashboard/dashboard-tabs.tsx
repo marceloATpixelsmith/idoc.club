@@ -4,14 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Shield, Menu, UserCog, GraduationCap, LifeBuoy, Search } from 'lucide-react';
+import { Users, Shield, Menu, UserCog, LifeBuoy } from 'lucide-react';
 
 const ALL_TABS = [
   { href: '/dashboard', icon: Users, label: 'My Membership' },
   { href: '/dashboard/profile', icon: UserCog, label: 'My Profile' },
   { href: '/dashboard/security', icon: Shield, label: 'My Security' },
-  { href: '/dashboard/seminars', icon: GraduationCap, label: 'My Seminars' },
-  { href: '/dashboard/directory', icon: Search, label: 'Directory' },
   { href: '/dashboard/support', icon: LifeBuoy, label: 'Support' },
 ];
 

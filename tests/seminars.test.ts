@@ -11,7 +11,7 @@ const adminActions = readFileSync('app/(dashboard)/admin/seminars/actions.ts', '
 const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
-const memberPage = readFileSync('app/(dashboard)/dashboard/seminars/page.tsx', 'utf8');
+const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 
 test('seminar and registration states, and their documented length/value limits, are constrained in the migration', () => {
   assert.match(migration, /"status" in \('draft', 'published', 'canceled'\)/);
@@ -135,8 +135,7 @@ test('registrationDisplayLabel prioritizes Canceled over any stale payment statu
   assert.equal(registrationDisplayLabel('registered', 'unpaid'), 'Unpaid');
 });
 
-test('the member Seminars page renders every required availability and registration/payment status label', () => {
-  assert.match(memberPage, /AVAILABILITY_LABELS/);
+test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /registrationDisplayLabel/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
   for (const label of ['Canceled', 'Registration closed', 'Full', 'Open', 'Past', 'Bank transfer pending', 'Cash pending', 'Paid', 'Unpaid']) {
@@ -145,11 +144,11 @@ test('the member Seminars page renders every required availability and registrat
 });
 
 test('the member Seminars page separates prominent current registrations, available seminars, and past registrations', () => {
-  for (const label of ['Your current registrations', 'Available seminars', 'Past registrations']) {
+  for (const label of ['Your upcoming and current registrations', 'Available seminars', 'Past']) {
     assert.match(memberPage, new RegExp(label));
   }
-  assert.match(memberPage, /registeredSeminars/);
-  assert.match(memberPage, /availableSeminars/);
+  assert.match(memberPage, /const registered/);
+  assert.match(memberPage, /const available/);
 });
 
 test('the admin edit page offers Publish, Cancel, and Move-to-draft quick actions, and a "Mark paid" control per unpaid registration', () => {
@@ -166,9 +165,11 @@ test('the admin seminar list page supports search and status filtering', () => {
   assert.match(adminListPage, /name="status"/);
 });
 
-test('the member dashboard tab for Seminars already exists in the shared dashboard navigation', () => {
+test('Seminars is removed from the member dashboard and retained on the public website', () => {
   const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
-  assert.match(dashboardTabs, /\/dashboard\/seminars/);
+  const publicPage = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
+  assert.doesNotMatch(dashboardTabs, /\/dashboard\/seminars/);
+  assert.match(publicPage, /MemberRegistrations/);
 });
 
 test('initialPaymentStatusForMethod maps each canonical payment method to its own starting payment status', () => {
