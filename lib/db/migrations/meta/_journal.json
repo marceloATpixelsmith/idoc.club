@@ -302,6 +302,13 @@
       "when": 1789074000000,
       "tag": "0042_support_multi_assignment",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789160400000,
+      "tag": "0043_support_category_multi_defaults",
+      "breakpoints": true
     }
   ]
 }
