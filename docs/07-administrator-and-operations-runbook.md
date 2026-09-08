@@ -525,3 +525,9 @@ omitted at runtime; subject-attributed events without a positive internal subjec
 anonymous events cannot accept identity metadata, and system events cannot accept human attribution.
 Never add request/provider bodies, headers, cookies, exception text, credentials, or client-controlled
 error text to the registry. The operational event channel remains separate from durable audit records.
+
+## Membership roster and recorded-revenue reporting
+
+The administrator membership roster provides server-side search, status, expiration-range, federation, country, region, professional-type, sorting, pagination, and matching CSV export. The default view is active memberships. Browser-side column visibility and current-page selection do not grant authority or perform mutations; bulk actions remain unavailable until their account, billing, restoration, session, and audit policies are approved. Member detail uses the existing protected seminar-registration history and displays both current and past associations.
+
+The Revenue navigation item opens the protected recorded-payment report. Its currency-separated cards label gross recorded, Stripe, and manual revenue plus payment count; monthly values and the accessible chart represent persisted successful non-complimentary payment records, not refunds, adjustments, or net revenue.

@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Headphones,
   LayoutDashboard,
+  LineChart,
   Menu,
   Settings,
   ShieldCheck,
@@ -23,6 +24,7 @@ import { useState } from 'react';
 const SHARED_ITEMS = [
   { href: '/admin', icon: LayoutDashboard, label: 'Overview' },
   { href: '/admin/members', icon: Users, label: 'Members' },
+  { href: '/admin/revenue', icon: LineChart, label: 'Revenue' },
   { href: '/admin/payments', icon: CreditCard, label: 'Manual payments' },
   { href: '/admin/exports', icon: FileDown, label: 'Exports' },
   { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },

@@ -34,6 +34,13 @@ type SortOption = typeof SORT_OPTIONS[number];
 const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
 
+export class MemberFilterRangeError extends Error {
+  constructor() {
+    super('Choose valid expiration dates with the start date on or before the end date.');
+    this.name = 'MemberFilterRangeError';
+  }
+}
+
 // An array-valued (repeated-key) filter resolves to its first value rather than crashing --
 // matching the convention already used by lib/news/articles.ts, lib/seminars/seminars.ts, and
 // lib/support/inbox.ts -- so a string method is never called directly on an array.
@@ -55,7 +62,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
   const membershipType = firstValue(input.membershipType);
   const sort = firstValue(input.sort);
   const status = firstValue(input.status);
-  return {
+  const filters: NormalizedMemberFilters = {
     country: firstValue(input.country)?.trim().toUpperCase() || undefined,
     expiresFrom: firstValue(input.expiresFrom) || undefined,
     expiresTo: firstValue(input.expiresTo) || undefined,
@@ -67,6 +74,10 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     sort: sort && SORT_OPTIONS.includes(sort as SortOption) ? sort as SortOption : 'name_asc',
     status: status && MEMBERSHIP_STATUSES.includes(status as MembershipStatusFilter) ? status as MembershipStatusFilter : 'active',
   };
+  const validDate = (value: string | undefined) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!validDate(filters.expiresFrom) || !validDate(filters.expiresTo)
+    || (filters.expiresFrom && filters.expiresTo && filters.expiresFrom > filters.expiresTo)) throw new MemberFilterRangeError();
+  return filters;
 }
 
 function queryParts(raw: MemberFilters) {

@@ -15,7 +15,9 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to export members.';
-    return Response.json({ error: message }, { status: message.includes('safe limit') ? 413 : 401 });
+    if (error instanceof Error && error.message.includes('safe limit')) {
+      return Response.json({ error: 'The export is too large. Narrow the filters and try again.' }, { status: 413 });
+    }
+    return Response.json({ error: 'Unable to export members.' }, { status: 500 });
   }
 }
