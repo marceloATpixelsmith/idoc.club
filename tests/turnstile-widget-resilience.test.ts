@@ -73,7 +73,7 @@ test('the real Turnstile widget configuration itself is untouched by the resilie
 
 test('hidden interaction-only Turnstile collapses its layout wrapper without removing the widget DOM', () => {
   assert.match(widget, /data-challenge-visible=/);
-  assert.match(widget, /height: 0, minHeight: 0, margin: 0, padding: 0/);
+  assert.match(widget, /height: 0, minHeight: 0, margin: '-16px 0', padding: 0/);
   assert.doesNotMatch(widget, /display: 'none'/);
 });
 
