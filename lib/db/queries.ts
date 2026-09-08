@@ -46,7 +46,7 @@ export async function getSecurityPageUser(): Promise<SecurityPageUser | null> {
     return null;
   }
 
-  return { accountState: user.accountState, id: user.id, sessionVersion: user.sessionVersion };
+  return { accountState: user.accountState as 'active' | 'onboarding', id: user.id, sessionVersion: user.sessionVersion };
 }
 
 export async function getUser() {
@@ -88,5 +88,3 @@ export async function getActivityLogs() {
     .leftJoin(profiles, eq(profiles.userId, users.id))
     .where(eq(activityLogs.userId, user.id))
     .orderBy(desc(activityLogs.timestamp))
-    .limit(10);
-}
