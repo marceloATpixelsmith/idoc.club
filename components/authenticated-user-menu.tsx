@@ -78,6 +78,12 @@ export function AuthenticatedUserMenu({
             type="button"
             aria-label={`Open ${accessibleName} menu`}
             className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onPointerDown={(event) => {
+              //A hover-open menu is already visible when the pointer reaches the trigger.
+              //Prevent Radix from toggling it closed on the follow-up mouse click; keyboard
+              //and touch interaction retain Radix's normal toggle behavior.
+              if (event.pointerType === 'mouse' && open) event.preventDefault();
+            }}
           >
             <Avatar className="size-9 cursor-pointer bg-gold shadow-gold">
               <AvatarFallback className="bg-gold font-display text-sm font-bold tracking-wide text-primary-foreground">
