@@ -1,4 +1,3 @@
-92 lib/db/queries.ts
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from './drizzle';
 import { activityLogs, profiles, users } from './schema';
