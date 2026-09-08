@@ -222,42 +222,46 @@
 @keyframes navigation-loading-blink {
   0%, 100% {
     opacity: 0.25;
-    transform: rotate(45deg) scale(0.82);
+    transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
   }
 
   50% {
     opacity: 1;
-    transform: rotate(45deg) scale(1);
+    transform: translateX(var(--navigation-loading-star-x)) scale(1);
   }
 }
 
 .navigation-loading-star {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
+  width: 22px;
+  height: 22px;
   background: var(--gold);
-  box-shadow: 0 0 18px color-mix(in oklch, var(--gold) 55%, transparent);
+  clip-path: polygon(50% 0%, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0% 50%, 39% 38%);
+  filter: drop-shadow(0 0 8px color-mix(in oklch, var(--gold) 55%, transparent));
   animation: navigation-loading-blink 1.2s ease-in-out infinite;
 }
 
 .navigation-loading-star--one {
-  transform: translateX(-32px) rotate(45deg) scale(0.82);
+  --navigation-loading-star-x: -34px;
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 .navigation-loading-star--two {
+  --navigation-loading-star-x: 0px;
   animation-delay: 0.2s;
-  transform: rotate(45deg) scale(0.82);
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 .navigation-loading-star--three {
+  --navigation-loading-star-x: 34px;
   animation-delay: 0.4s;
-  transform: translateX(32px) rotate(45deg) scale(0.82);
+  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .navigation-loading-star {
     animation: none;
     opacity: 1;
+    transform: translateX(var(--navigation-loading-star-x)) scale(1);
   }
 }

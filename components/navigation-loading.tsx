@@ -131,7 +131,7 @@ function NavigationLoadingOverlay() {
       role="status"
       aria-live="polite"
       aria-label="Navigating"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 backdrop-blur-sm"
     >
       <div className="relative flex size-24 items-center justify-center" aria-hidden="true">
         <span className="navigation-loading-star navigation-loading-star--one" />
