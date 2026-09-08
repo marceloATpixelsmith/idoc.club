@@ -23,6 +23,6 @@ export function ColumnVisibility({ columns, hidden }: { columns: { label: string
 }
 
 export function parseHiddenColumns(value: string | string[] | undefined, allColumns: readonly string[]) {
-  const visible = new Set(Array.isArray(value) ? value : value ? [value] : []);
+  const visible = new Set(Array.isArray(value) ? value : value ? [value] : allColumns);
   return new Set(allColumns.filter((column) => !visible.has(column)));
 }
