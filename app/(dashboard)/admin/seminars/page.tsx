@@ -14,7 +14,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const rawQuery = await searchParams;
-  const query = Object.keys(rawQuery).length ? rawQuery : preferenceQuery(await getTablePreferences('seminars'));
+  const savedQuery = preferenceQuery(await getTablePreferences('seminars')); const query = Object.keys(rawQuery).length ? { ...savedQuery, ...rawQuery } : savedQuery;
   const scalar = (name: string) => Array.isArray(query[name]) ? query[name][0] : query[name];
   const hidden = parseHiddenColumns(query.column, COLUMNS);
   const scalarQuery = Object.fromEntries(Object.entries(query).flatMap(([key, value]) => {
