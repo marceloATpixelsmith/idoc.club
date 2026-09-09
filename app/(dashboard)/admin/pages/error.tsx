@@ -1,0 +1,1 @@
+'use client'; import { Button } from '@/components/ui/button'; export default function Error({reset}:{reset:()=>void}){return <main className="px-5 py-8"><h1 className="text-2xl font-semibold">Pages unavailable</h1><p className="my-4">The page list could not be loaded.</p><Button onClick={reset}>Try again</Button></main>}

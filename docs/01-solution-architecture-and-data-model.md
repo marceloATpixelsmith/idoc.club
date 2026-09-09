@@ -66,6 +66,7 @@ Release 1 implements these concepts in the `idoc` schema. Authentication users n
 | support_messages       | Immutable chronological plain-text support messages with retry identity.           | conversation_id, author_user_id, author_side, body, idempotency_key, created_at            |
 | support_category_defaults | Super-Admin-managed one-to-many default assignment for each support category. | category, administrator_user_id, updated_by, updated_at (composite category/administrator key) |
 | news_articles          | Administrator-authored public News/Blog articles.                                 | slug, title, subtitle, content_html, status, publication_date, published_at, archived_at, created_by_user_id, updated_by_user_id |
+| content_pages / audiences / revisions | Revisioned restricted CMS pages with explicit any/all audience policy. | slug, status, publish_at, audience_mode, sanitized content, SEO metadata, immutable snapshots |
 | seminars               | Administrator-authored seminars.                                                  | title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id |
 | seminar_registrations  | One durable row per member registration; reused (not re-inserted) across cancel/re-register. | seminar_id, profile_id, registration_status, payment_status, stripe_checkout_session_id, stripe_payment_intent_id, paid_at, marked_paid_by_user_id, registered_at, canceled_at |
 

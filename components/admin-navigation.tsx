@@ -3,6 +3,7 @@
 import {
   Bell,
   BookOpen,
+  Files,
   Building2,
   CreditCard,
   FileDown,
@@ -31,6 +32,7 @@ const SHARED_ITEMS = [
   { href: '/admin/notifications', icon: Bell, label: 'Notifications' },
   { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
   { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
+  { href: '/admin/pages', icon: Files, label: 'Pages' },
   { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars' },
 ] as const;
 

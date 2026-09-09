@@ -181,6 +181,9 @@ Release 1 security follow-up: live canonical TOTP enrollment, login challenge, a
 
 # 7. Release 4 - restricted CMS
 
+**Implemented:** The revisioned restricted-page CMS is available to Administrators at `/admin/pages`, with shared Tablecn search, status/audience filters, active chips, sorting, pagination, column visibility, loading/error boundaries, and empty states. Migration `0044` adds pages, explicit audiences, and immutable revision snapshots. Each page selects at least one of Public, Member, Judge, Steward, or Veterinarian and an explicit Match any/Match all rule. Public delivery at `/pages/[slug]` evaluates published/scheduled state, current entitlement, active professional roles, and Administrator override in one server-side query; restricted pages are marked no-index. All writes validate and sanitize rich text, require CSRF and Administrator authority, and create audit evidence. Published pages must be archived before permanent deletion.
+
+
 - Page fields: title, slug, structured/rich body, summary, status, author, revision, publish/schedule dates, featured media, SEO title/description and audit metadata.
 
 - Audiences: public plus a checklist of active member, Judge, Steward and Veterinarian. Each restricted CMS item must explicitly select either Match any selected audience (union) or Match all selected audiences (intersection). Administrators see all published content.
