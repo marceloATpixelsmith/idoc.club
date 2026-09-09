@@ -63,9 +63,40 @@ test('administrator assignment and unread state use per-administrator records', 
 
 test('the administrator queue provides Tablecn-style server controls', () => {
   const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
-  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
-  for (const control of ['ActiveFilterChips', 'ColumnVisibility', 'sort:', 'page']) assert.match(page, new RegExp(control));
-  assert.match(controls, /Clear all/);
+  const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+  const dataTable = readFileSync('components/data-table/data-table.tsx', 'utf8');
+  const toolbar = readFileSync('components/data-table/data-table-advanced-toolbar.tsx', 'utf8');
+  for (const control of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableFilterMenu', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
+  assert.match(page, /hasUrlState \? params/);
+  assert.match(page, /preferenceQuery\(saved\)/);
+  assert.match(table, /pageSizeOptions=\{\[10, 25, 50, 100\]\}/);
+  assert.match(table, /getAll\('column'\)/);
+  assert.match(table, /resetRowSelection/);
+  assert.match(dataTable, /DataTablePagination/);
+  assert.match(toolbar, /DataTableViewOptions/);
+});
+
+test('support queue applies advanced operators, multi-value filters, joins, and ordered sorting on the server', () => {
+  for (const operator of ['notILike', "operator === 'eq'", "operator === 'ne'", 'isEmpty', 'isNotEmpty', 'isBetween']) assert.match(source, new RegExp(operator));
+  assert.match(source, /join === 'or'/);
+  assert.match(source, /values\.filter/);
+  assert.match(source, /parsedSorts\.slice\(0, 6\)/);
+  assert.match(source, /item\.desc \? 'desc' : 'asc'/);
+  assert.match(source, /\[10, 25, 50, 100\]\.includes/);
+  assert.match(source, /date\.getFullYear\(\)/);
+});
+
+test('support queue exposes search, filtered-empty, persistence, pagination reset, loading, and error states', () => {
+  const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+  const loading = readFileSync('app/(dashboard)/admin/support/loading.tsx', 'utf8');
+  const error = readFileSync('app/(dashboard)/admin/support/error.tsx', 'utf8');
+  assert.match(table, /Search member, email, or subject/);
+  assert.match(table, /No conversations match this view/);
+  assert.match(table, /No support conversations exist/);
+  assert.match(table, /persistTablePreferences\('support'/);
+  assert.match(table, /params\.delete\('page'\)/);
+  assert.match(loading, /aria-busy="true"/);
+  assert.match(error, /role|unavailable/);
 });
 
 test('assignment and workflow audit events exclude support bodies', () => {
