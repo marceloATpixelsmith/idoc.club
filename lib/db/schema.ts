@@ -361,11 +361,11 @@ export const supportAdministratorReadCursors = idocSchema.table('support_adminis
 }, (table) => [primaryKey({ columns: [table.conversationId, table.administratorUserId] })]);
 
 export const supportCategoryDefaults = idocSchema.table('support_category_defaults', {
-  category: varchar('category', { length: 30 }).primaryKey(),
+  category: varchar('category', { length: 30 }).notNull(),
   administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
   updatedBy: integer('updated_by').notNull().references(() => users.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
+}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
 
 /** Administrator-authored News/Blog articles. `publicationDate` is the administrator-set target date
  * (also the displayed article date); `publishedAt` is the actual timestamp the article went live,

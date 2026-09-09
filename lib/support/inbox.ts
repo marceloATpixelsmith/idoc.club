@@ -64,14 +64,14 @@ export async function createConversation(input: { body: unknown; category: unkno
     const defaults = await sql<{ administrator_user_id: number }[]>`select d.administrator_user_id from idoc.support_category_defaults d
       join idoc.users u on u.id=d.administrator_user_id and u.account_state='active' where d.category=${category}
       and exists(select 1 from idoc.application_roles r where r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin'))`;
-    const assigned = defaults[0]?.administrator_user_id;
+    const assigned = defaults.map((row) => row.administrator_user_id);
     const rows = await sql<{ id: number; public_id: string }[]>`
       insert into idoc.support_conversations (member_user_id,category,subject,status,assigned_admin_user_id,member_read_at)
-      values (${actor.id},${category},${subject},'open',${assigned ?? null},now()) returning id,public_id`;
+      values (${actor.id},${category},${subject},'open',${assigned[0] ?? null},now()) returning id,public_id`;
     await sql`insert into idoc.support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'member',${body},${idempotencyKey}::uuid)`;
-    if (assigned) await sql`insert into idoc.support_conversation_administrators(conversation_id,administrator_user_id)
-      values(${rows[0].id},${assigned}) on conflict do nothing`;
+    for (const administratorId of assigned) await sql`insert into idoc.support_conversation_administrators(conversation_id,administrator_user_id)
+      values(${rows[0].id},${administratorId}) on conflict do nothing`;
     return rows[0].public_id;
   });
 }
@@ -217,7 +217,7 @@ export async function setConversationAssignment(publicIdValue: unknown, administ
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor); const publicId = parse(publicIdSchema, publicIdValue);
   const values = [...new Set(administratorValues.filter((value): value is string => typeof value === 'string' && value !== ''))];
   const administratorIds = await Promise.all(values.map(resolveEligibleAdministrator));
-  if (administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose eligible administrators.');
+  if (administratorIds.length === 0 || administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose at least one eligible administrator.');
   await client.begin(async (sql) => {
     const rows = await sql<{ id: number }[]>`select id from idoc.support_conversations where public_id=${publicId}::uuid for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
@@ -249,16 +249,19 @@ export async function listCategoryDefaults() {
   return client`select d.category,u.email assignment_key from idoc.support_category_defaults d join idoc.users u on u.id=d.administrator_user_id`;
 }
 
-export async function setCategoryDefault(categoryValue: unknown, administratorValue: unknown) {
+export async function setCategoryDefault(categoryValue: unknown, administratorValues: unknown[]) {
   const actor = await requireAccountAccess('administration'); requireSuperAdmin(actor); const category = parse(categorySchema, categoryValue);
-  const administratorId = await resolveEligibleAdministrator(administratorValue);
-  if (administratorId === null) throw new SupportValidationError('Choose an eligible administrator.');
+  const values = [...new Set(administratorValues.filter((value): value is string => typeof value === 'string' && value !== ''))];
+  const administratorIds = await Promise.all(values.map(resolveEligibleAdministrator));
+  if (administratorIds.some((id) => id === null)) throw new SupportValidationError('Choose eligible administrators.');
   await client.begin(async (sql) => {
     const current = await sql<{ administrator_user_id: number }[]>`select administrator_user_id from idoc.support_category_defaults where category=${category} for update`;
-    if (current[0]?.administrator_user_id === administratorId) return;
-    await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())
-      on conflict(category) do update set administrator_user_id=excluded.administrator_user_id,updated_by=excluded.updated_by,updated_at=now()`;
+    const currentIds = current.map((row) => row.administrator_user_id).sort((a, b) => a - b);
+    const nextIds = administratorIds.filter((id): id is number => id !== null).sort((a, b) => a - b);
+    if (currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index])) return;
+    await sql`delete from idoc.support_category_defaults where category=${category}`;
+    for (const administratorId of nextIds) await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by,updated_at) values(${category},${administratorId},${actor.id},now())`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
-      values(${actor.id},'support.category_default.changed','support_category_default',${category},${JSON.stringify({ administratorUserId: current[0]?.administrator_user_id ?? null })}::jsonb,${JSON.stringify({ administratorUserId: administratorId })}::jsonb)`;
+      values(${actor.id},'support.category_default.changed','support_category_default',${category},${JSON.stringify({ administratorIds: current.map((row) => row.administrator_user_id) })}::jsonb,${JSON.stringify({ administratorIds })}::jsonb)`;
   });
 }

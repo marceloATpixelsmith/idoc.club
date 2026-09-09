@@ -23,5 +23,5 @@ export async function changeSupportConversationStatus(_state: AdminSupportState,
   return run(formData, () => setConversationClosed(formData.get('publicId'), formData.get('operation') === 'close'), 'Status updated.');
 }
 export async function updateSupportCategoryDefault(_state: AdminSupportState, formData: FormData) {
-  return run(formData, () => setCategoryDefault(formData.get('category'), formData.get('administratorId')), 'Category default updated.');
+  return run(formData, () => setCategoryDefault(formData.get('category'), formData.getAll('administratorIds')), 'Category default updated.');
 }

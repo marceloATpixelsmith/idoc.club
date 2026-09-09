@@ -1,11 +1,11 @@
 import Link from 'next/link';
 
-export function ActiveFilterChips({ filters, pathname }: { filters: { label: string; name: string; value?: string }[]; pathname: string }) {
+export function ActiveFilterChips({ filters, pathname, query = {} }: { filters: { label: string; name: string; value?: string }[]; pathname: string; query?: Record<string, string | undefined> }) {
   const active = filters.filter((filter) => filter.value);
   if (active.length === 0) return null;
   return <div aria-label="Active filters" className="flex flex-wrap items-center gap-2">
     <span className="text-sm font-medium">Active filters:</span>
-    {active.map((filter) => <span className="rounded-full border bg-muted px-3 py-1 text-xs" key={filter.name}>{filter.label}: {filter.value}</span>)}
+    {active.map((filter) => { const params = new URLSearchParams(Object.entries(query).flatMap(([key, value]) => value ? [[key, value]] : [])); params.delete(filter.name); params.delete('page'); return <span className="rounded-full border bg-muted px-3 py-1 text-xs" key={filter.name}>{filter.label}: {filter.value} <Link className="ml-1" href={pathname + '?' + params.toString()} aria-label={'Remove ' + filter.label + ' filter'}>×</Link></span>; })}
     <Link className="text-sm font-medium underline" href={pathname}>Clear all</Link>
   </div>;
 }
