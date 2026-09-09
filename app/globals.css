@@ -141,13 +141,15 @@
    * Sitewide button casing: every native <button>, and every shared Button
    * component (data-slot="button", including its `asChild` <a> form), uses
    * the same uppercase, letter-spaced treatment as the marketing CTA links,
-   * in the body's default font. Excludes the whole auth shell -- every
-   * sign-in/sign-up/MFA/OTP control, primary or secondary -- which is
-   * governed by the pixelsmith-auth-reference design system and already
-   * has its own casing rules.
+   * in the body's default font. Excludes the canonical auth-flow controls
+   * (primary, link-styled, and bare secondary), which are governed by the
+   * pixelsmith-auth-reference design system and already have their own
+   * casing rules. Not ancestor-scoped to .idoc-auth-shell: the onboarding
+   * wizard reuses that same shell for its own ordinary app buttons, which
+   * should still get this treatment.
    */
-  button:not(.idoc-auth-shell *),
-  [data-slot='button']:not(.idoc-auth-shell *) {
+  button:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary),
+  [data-slot='button']:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary) {
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
