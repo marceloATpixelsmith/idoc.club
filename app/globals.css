@@ -138,12 +138,16 @@
   }
 
   /*
-   * Sitewide button casing: every native <button> uses the same uppercase,
-   * letter-spaced treatment as the marketing CTA links, in the body's
-   * default font. Excludes the canonical auth-reference buttons, which are
-   * governed by the pixelsmith-auth-reference design system.
+   * Sitewide button casing: every native <button>, and every shared Button
+   * component (data-slot="button", including its `asChild` <a> form), uses
+   * the same uppercase, letter-spaced treatment as the marketing CTA links,
+   * in the body's default font. Excludes the whole auth shell -- every
+   * sign-in/sign-up/MFA/OTP control, primary or secondary -- which is
+   * governed by the pixelsmith-auth-reference design system and already
+   * has its own casing rules.
    */
-  button:not(.idoc-auth-button):not(.idoc-auth-google-button) {
+  button:not(.idoc-auth-shell *),
+  [data-slot='button']:not(.idoc-auth-shell *) {
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
