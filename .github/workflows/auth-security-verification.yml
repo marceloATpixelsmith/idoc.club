@@ -69,7 +69,11 @@ jobs:
       # and its stale mirror index can cause a false Hash Sum mismatch failure.
       - name: Install Playwright Chromium dependencies
         run: |
-          sudo find /etc/apt -type f -name "*.list" -exec sed -i "/dl.google.com\/linux\/chrome/d" {} +
+          while IFS= read -r -d "" source_file; do
+            if sudo grep -qi "dl\\.google\\.com/linux/chrome" "$source_file"; then
+              sudo mv "$source_file" "$source_file.disabled"
+            fi
+          done < <(sudo find /etc/apt -type f \\( -name "*.list" -o -name "*.sources" \\) -print0)
           sudo apt-get clean
           pnpm exec playwright install --with-deps chromium
       - run: pnpm test:security
