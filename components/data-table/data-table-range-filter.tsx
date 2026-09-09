@@ -100,7 +100,7 @@ export function DataTableRangeFilter<TData>({
         min={min}
         max={max}
         className="h-8 w-full rounded"
-        defaultValue={value[0]}
+        value={value[0] ?? ""}
         onChange={(event) => onRangeValueChange(event.target.value, true)}
       />
       <span className="sr-only shrink-0 text-muted-foreground">to</span>
@@ -116,7 +116,7 @@ export function DataTableRangeFilter<TData>({
         min={min}
         max={max}
         className="h-8 w-full rounded"
-        defaultValue={value[1]}
+        value={value[1] ?? ""}
         onChange={(event) => onRangeValueChange(event.target.value)}
       />
     </div>

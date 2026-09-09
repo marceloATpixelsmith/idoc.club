@@ -10,17 +10,32 @@ const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.
 const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
 
 test('member pagination preserves every normalized active filter while replacing only page', () => {
-  assert.match(memberTable, /Object\.entries\(filters\)/);
-  assert.match(memberTable, /key !== 'page'/);
-  assert.match(memberTable, /params\.set\('page', String\(page\)\)/);
-  assert.match(memberTable, /pageHref\(Math\.max\(1, filters\.page - 1\)\)/);
-  assert.match(memberTable, /pageHref\(filters\.page \+ 1\)/);
+  assert.match(memberTable, /queryKeys: \{ filters: 'filters'.*page: 'page', perPage: 'pageSize', sort: 'sort' \}/);
+  assert.match(memberTable, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
+  assert.match(memberTable, /<DataTable table=\{table\}/);
 });
 
 test('membership roster presents the requested active, expired, and archived views', () => {
-  assert.match(memberQueries, /\['active', 'expired', 'archived'\]/);
+  assert.match(memberQueries, /\['active', 'expired', 'archived', 'without_active'/);
   assert.match(memberQueries, /m\.status = 'archived'/);
-  assert.match(memberTable, /\['active','expired','archived'\]/);
+  for (const status of ['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']) assert.match(memberTable, new RegExp(`value: '${status}'`));
+});
+
+test('membership roster composes the official Dice UI controls and a real selected-row action bar', () => {
+  for (const component of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableFilterMenu', 'DataTableSortList', 'ActionBar']) assert.match(memberTable, new RegExp(`<${component}`));
+  assert.match(memberTable, /useDataTable\(\{/);
+  assert.match(memberTable, /table\.resetRowSelection\(\)/);
+  assert.doesNotMatch(memberTable, /<table className=/);
+});
+
+test('URL/history-driven controls remain controlled and range zero is not discarded', () => {
+  assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
+  assert.match(memberTable, /value=\{search\}/);
+  const filterMenu = readFileSync(new URL('../components/data-table/data-table-filter-menu.tsx', import.meta.url), 'utf8');
+  const rangeFilter = readFileSync(new URL('../components/data-table/data-table-range-filter.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(filterMenu, /defaultValue=\{typeof filter\.value/);
+  assert.match(rangeFilter, /value=\{value\[0\] \?\? ""\}/);
+  assert.match(rangeFilter, /value=\{value\[1\] \?\? ""\}/);
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {

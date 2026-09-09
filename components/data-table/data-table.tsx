@@ -16,11 +16,13 @@ import { cn } from "@/lib/utils";
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
+  emptyState?: React.ReactNode;
 }
 
 export function DataTable<TData>({
   table,
   actionBar,
+  emptyState,
   children,
   className,
   ...props
@@ -83,7 +85,7 @@ export function DataTable<TData>({
                   colSpan={table.getAllColumns().length}
                   className="h-24 text-center"
                 >
-                  No results.
+                  {emptyState ?? "No results."}
                 </TableCell>
               </TableRow>
             )}
