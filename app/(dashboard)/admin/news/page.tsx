@@ -10,7 +10,7 @@ const COLUMNS = ['subtitle', 'slug', 'status', 'publication', 'updated'] as cons
 export default async function AdminNewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const rawQuery = await searchParams;
-  const query = Object.keys(rawQuery).length ? rawQuery : preferenceQuery(await getTablePreferences('news'));
+  const savedQuery = preferenceQuery(await getTablePreferences('news')); const query = Object.keys(rawQuery).length ? { ...savedQuery, ...rawQuery } : savedQuery;
   const scalar = (name: string) => Array.isArray(query[name]) ? query[name][0] : query[name];
   const scalarQuery = Object.fromEntries(Object.entries(query).flatMap(([key, value]) => key === 'column' ? [] : [[key, Array.isArray(value) ? value[0] : value ?? '']]));
   const hidden = parseHiddenColumns(query.column, COLUMNS);
