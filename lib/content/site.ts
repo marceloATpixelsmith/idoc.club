@@ -233,7 +233,7 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Agenda",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2025/09/2025-IDOC-General-Assembly-FEI-Maintenance-Course-Frankfurt-Preliminary-Program_v2.pdf",
+        href: "/documents/general-assembly/2025-IDOC-General-Assembly-FEI-Maintenance-Course-Frankfurt-Preliminary-Program_v2.pdf",
       },
     ],
   },
@@ -243,7 +243,7 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Final Program",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/11/General_Assembly_Final_Program_IDOC_2003.pdf",
+        href: "/documents/general-assembly/General_Assembly_Final_Program_IDOC_2003.pdf",
       },
     ],
   },
@@ -253,11 +253,11 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Final Program",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/01/IDOC-General-Assembly-Final-Program-1.pdf",
+        href: "/documents/general-assembly/IDOC-General-Assembly-Final-Program-1.pdf",
       },
       {
         label: "IDOC — President's end of the year message",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/02/IDOC_2022.pdf",
+        href: "/documents/general-assembly/IDOC_2022.pdf",
       },
     ],
   },
@@ -267,11 +267,11 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Final Program Judges",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2018/12/IDOC-General-Assembly-Final-Program-Judges.pdf",
+        href: "/documents/general-assembly/IDOC-General-Assembly-Final-Program-Judges.pdf",
       },
       {
         label: "Annual report, Frankfurt, December 2019, General Assembly",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2019/12/IDOC.pdf",
+        href: "/documents/general-assembly/IDOC.pdf",
       },
     ],
   },
@@ -281,11 +281,11 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Final Program Judges",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2018/12/IDOC-General-Assembly-Final-Program-Judges.pdf",
+        href: "/documents/general-assembly/IDOC-General-Assembly-Final-Program-Judges.pdf",
       },
       {
         label: "IDOC General Assembly — Final Program Stewards",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2018/12/IDOC-General-Assembly-Final-Program-Stewards_updated.pdf",
+        href: "/documents/general-assembly/IDOC-General-Assembly-Final-Program-Stewards_updated.pdf",
       },
       { label: "Proxy form" },
     ],
@@ -297,7 +297,7 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "IDOC General Assembly — Final Programme",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2017/12/IDOC-General-Assembly-Final-Programme-2017-12-04.pdf",
+        href: "/documents/general-assembly/IDOC-General-Assembly-Final-Programme-2017-12-04.pdf",
       },
       { label: "Proxy form" },
     ],
@@ -308,11 +308,11 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "2016 IDOC Schedule",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/01/2016-IDOC-SCHEDULE-2.pdf",
+        href: "/documents/general-assembly/2016-IDOC-SCHEDULE-2.pdf",
       },
       {
         label: "GA Agenda and meeting documents",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/01/GA-Agenda-and-meeting-documents-2.pdf",
+        href: "/documents/general-assembly/GA-Agenda-and-meeting-documents-2.pdf",
       },
     ],
   },
@@ -322,11 +322,11 @@ export const generalAssemblyEditions: GeneralAssemblyEdition[] = [
     docs: [
       {
         label: "2016 IDOC Schedule",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/01/2016-IDOC-SCHEDULE-2.pdf",
+        href: "/documents/general-assembly/2016-IDOC-SCHEDULE-2.pdf",
       },
       {
         label: "GA Agenda and meeting documents",
-        href: "https://idoc.club/wp-content/uploads/sites/58/2023/01/GA-Agenda-and-meeting-documents-2.pdf",
+        href: "/documents/general-assembly/GA-Agenda-and-meeting-documents-2.pdf",
       },
     ],
   },
@@ -345,15 +345,15 @@ export const aboutGoals: string[] = [
 export const aboutDocuments: { label: string; href: string }[] = [
   {
     label: "Statutes 2022 — Approved by the General Assembly",
-    href: "https://idoc.club/wp-content/uploads/sites/58/2024/07/Statutes-2022-approved-by-the-General-Assembly.pdf",
+    href: "/documents/governance/Statutes-2022-approved-by-the-General-Assembly.pdf",
   },
   {
     label: "2010 Statuten — Staatsblad 01.07.10",
-    href: "https://idoc.club/wp-content/uploads/sites/58/2017/03/2010.Statuten-staatsblad.01.07.10.pdf",
+    href: "/documents/governance/2010.Statuten-staatsblad.01.07.10.pdf",
   },
   {
     label: "Internal Regulations (2010-10-6)",
-    href: "https://idoc.club/wp-content/uploads/sites/58/2017/03/2010-10-6-Internal-Regulations.pdf",
+    href: "/documents/governance/2010-10-6-Internal-Regulations.pdf",
   },
 ];
 
