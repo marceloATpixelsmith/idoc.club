@@ -58,23 +58,19 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      # AUTH-OPERATIONS-010: "Pull-request CI MUST ... fail on contract validation ... or whitespace
-      # checks including contract documentation changes." Both scripts already existed in the
-      # repository (validate-auth-docs.mjs since Slice 3) but neither was ever actually wired into a
-      # CI workflow -- a PR could silently drift docs/22/23's own evidence claims out of sync with
-      # reality, or introduce whitespace hygiene issues, with nothing failing the build.
       - run: node scripts/validate-auth-docs.mjs
       - run: node scripts/validate-release-checklist.mjs
       - run: node scripts/check-whitespace.mjs
-      # Both runtime and development dependencies are audited. Any high or critical advisory blocks.
       - run: pnpm audit --audit-level=high
       - run: pnpm typecheck
-      # Unit-level auth/security tests (JWT/session-boundary tampering and exact idle/absolute
-      # timeout math, Turnstile fail-closed behavior, password policy/hashing, rate-limit hashing,
-      # runtime configuration fail-closed checks) run here too, so a green "security" check is a
-      # complete auth/security gate on its own rather than depending on a separate workflow.
       - run: pnpm test:ci
-      - run: pnpm exec playwright install --with-deps chromium
+      # Remove the preconfigured Google Chrome APT source before Playwright refreshes
+      # package indexes. Playwright's Chromium dependencies do not require that source,
+      # and its stale mirror index can cause a false Hash Sum mismatch failure.
+      - name: Install Playwright Chromium dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          pnpm exec playwright install --with-deps chromium
       - run: pnpm test:security
       - name: Upload failure evidence
         if: failure()
