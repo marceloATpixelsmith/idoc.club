@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "HEAD=$(git rev-parse HEAD 2>/dev/null); FILE=\".claude/.ci-guard-verified\"; if [ -f \"$FILE\" ] && [ \"$(cat \"$FILE\" 2>/dev/null)\" = \"$HEAD\" ]; then exit 0; fi; echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"deny\\\",\\\"permissionDecisionReason\\\":\\\"Run the ci-guard subagent (.claude/agents/ci-guard.md) against the current commit before pushing. It mirrors this repository CI checks locally and screens for the failure patterns that have repeatedly broken CI here. It records verification for the current commit when everything passes, after which this push is allowed through.\\\"}}\"",
+            "statusMessage": "Checking ci-guard verification for this commit..."
+          }
+        ]
+      }
+    ]
+  }
+}

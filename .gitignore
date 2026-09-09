@@ -43,5 +43,12 @@ next-env.d.ts
 postgres_data/
 .env*.local
 
-# Claude Code local agent worktrees/session scratch data (never project source)
-.claude/
+# Claude Code local agent worktrees/session scratch data (never project source).
+# Team-shared config is explicitly unignored below: the ci-guard subagent and the
+# project-wide hook that invokes it before `git push`. Everything else under .claude/
+# (settings.local.json personal overrides, worktrees, the ci-guard verification sentinel)
+# stays ignored.
+.claude/*
+!.claude/agents
+!.claude/agents/ci-guard.md
+!.claude/settings.json
