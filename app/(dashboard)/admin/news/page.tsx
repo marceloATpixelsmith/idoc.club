@@ -18,7 +18,7 @@ export default async function AdminNewsPage({ searchParams }: { searchParams: Pr
   const paramsFor = (changes: Record<string, string>) => new URLSearchParams({ ...scalarQuery, ...changes }).toString();
   const sortLink = (key: string) => `/admin/news?${paramsFor({ sort: key, direction: scalar('sort') === key && scalar('direction') !== 'asc' ? 'asc' : 'desc' })}`;
   return <main className="space-y-6 px-5 py-8 lg:px-8">
-    <header className="flex items-center justify-between"><div><h1 className="text-2xl font-semibold">News / Blog</h1><p className="text-muted-foreground">Create, schedule, preview, and publish public articles.</p></div><Link className="rounded bg-primary px-4 py-2 text-primary-foreground" href="/admin/news/new">New article</Link></header>
+    <header className="flex items-center justify-between"><div><h1 className="text-2xl font-semibold">News / Blog</h1><p className="text-muted-foreground">Create, schedule, preview, and publish public articles.</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href="/admin/news/new">New article</Link></header>
     <TablePreferenceSync table="news" /><form data-table-preferences="news" className="grid gap-3 rounded-lg border p-4 md:grid-cols-6" method="get">
       <label>Search<input className="block w-full border p-2" defaultValue={scalar('q')} name="q" /></label>
       <label>Status<select className="block w-full border p-2" defaultValue={scalar('status')} name="status"><option value="">All</option>{NEWS_STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABELS[value]}</option>)}</select></label>
