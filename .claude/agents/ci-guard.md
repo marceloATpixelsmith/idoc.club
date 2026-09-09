@@ -34,23 +34,37 @@ with a different flag set, and never skip a step because it "should" pass:
 
 ## Step 1 -- classify the diff
 
-Run `git diff --name-only <base>...HEAD` (or `git status --short` for uncommitted work) and read
-`docs/26-ci-risk-classification-and-agent-merge-policy.md` to decide which of the three real CI workflows
-this diff would trigger:
+Run `git diff --name-only <base>...HEAD` (or `git status --short` for uncommitted work), then classify
+**semantically first, path filters second** -- per AGENTS.md's own instruction to read and follow
+`docs/26-ci-risk-classification-and-agent-merge-policy.md`, docs/26's classification is the policy; a CI
+workflow's `paths:`/`paths-ignore:` list is only that workflow's own current implementation of it, and the
+two can drift out of sync (e.g. `.github/workflows/auth-security-verification.yml`'s path list currently
+covers `app/(dashboard)/admin/members/**` but not `app/api/admin/**` generally, even though both are
+equally "admin access" / "server-side data-access boundaries" under docs/26). Never let a workflow's path
+filter be the reason a semantically security-sensitive change skips security verification.
 
 - **Fast PR verification** -- always applies.
-- **Authentication security verification** (`.github/workflows/auth-security-verification.yml`) -- triggers
-  on `app/(login)/**`, `app/api/auth/**`, `lib/auth/**`, `lib/security/**`, `lib/membership/**`,
-  `lib/runtime/**`, `lib/db/**`, `middleware.ts`, `tests/*auth*`, `tests/*security*`, dashboard/admin/onboarding
-  layout and member paths, and dependency/lockfile changes. Check the full `paths:` list in that file rather
-  than trusting your memory of it.
+- **Authentication security verification** -- required whenever the diff matches docs/26's own listed
+  criteria, read directly from that file rather than from memory: login/signup/logout/password
+  reset/email verification/Google OAuth/MFA/TOTP/recovery codes/trusted devices/sessions/cookies/CSRF/
+  Turnstile/middleware/security headers; authorization/membership entitlement/onboarding gates/admin or
+  super-admin access/account state/payment access controls/server-side data-access boundaries; database
+  schema/migrations/authentication-related queries/security libraries/security e2e tests; or
+  dependencies/runtime config that can affect authentication, authorization, cryptography, HTTP handling,
+  or server rendering. "When in doubt, run this workflow" is docs/26's own rule -- treat it as binding.
+  Separately, also check whether `.github/workflows/auth-security-verification.yml`'s `paths:` list would
+  actually trigger this workflow in CI; if the diff is semantically sensitive per the above but the path
+  list would NOT trigger it, say so explicitly (the workflow's path list likely needs a follow-up fix) and
+  still run the full `pnpm test:ci` + `pnpm test:security` chain locally regardless -- a CI gap is never a
+  reason to skip your own verification.
 - **Release 1 Verification** -- triggers on any file NOT matching its `paths-ignore` (`**/*.md`, `docs/**`,
   `public/**`, `**/*.css`, images, `components/navigation-loading.tsx`, `components/navigation-menu.tsx`).
   A single touched `.tsx` file is enough to trigger it even if the only change inside is a class name --
   don't assume a "simple" change is exempt just because most of the diff is CSS.
 
-State plainly which workflows apply and why, then run only the matching command chains -- but run all of
-them if unsure, since a missed one is worse than a wasted minute.
+State plainly which workflows apply and why (semantic classification first, path-filter cross-check
+second), then run at least the matching command chains -- but run all of them if unsure, since a missed
+one is worse than a wasted minute.
 
 ## Step 2 -- targeted checks for this repo's known failure classes
 
@@ -121,18 +135,26 @@ docs section to write, an e2e assertion that needs rethinking, not just re-recor
 and stop -- hand it back rather than guessing.
 
 **Only if every check that applies to this diff passed** (or was explicitly and correctly marked N/A --
-never a check that failed, and never one you skipped without saying so), record verification for the
-exact commit about to be pushed:
+never a check that failed, and never one you skipped without saying so), record verification -- but the
+sentinel names a *commit*, and checks run against whatever is currently on disk, which are not the same
+thing unless the tree is clean. Before writing the sentinel:
+
+1. Run `git status --short`. If it reports anything (staged or unstaged, including edits you applied
+   yourself in Step 3), the working tree does not match `HEAD` -- the checks you just ran validated the
+   *working tree*, not the commit the hook is about to compare against. Commit those changes first (or
+   have the user do so), then re-run every check the changed files affect before proceeding. Never write
+   the sentinel while `git status --short` is non-empty.
+2. Only once the tree is clean and every applicable check has passed against that exact clean state, run:
 
 ```
 git rev-parse HEAD > .claude/.ci-guard-verified
 ```
 
-A `PreToolUse` hook on `git push` (`.claude/settings.local.json`) reads this file: it compares the recorded
-SHA against the current `HEAD` and only lets the push through on an exact match. Do not write this file
-if anything failed, was left unrun because a dependency (like a database) wasn't reachable, or if you
-applied a fix after the checks ran -- re-run the affected checks first, since the file must always name a
-commit that was actually verified clean, not one that merely exists.
+A `PreToolUse` hook on `git push` (`.claude/settings.json`) reads this file: it compares the recorded SHA
+against the current `HEAD` and only lets the push through on an exact match. Do not write this file if
+anything failed, was left unrun because a dependency (like a database) wasn't reachable, or if the tree
+was dirty when the checks ran -- the file must always name a commit that was itself, in isolation, verified
+clean, not a working-tree state that happened to include uncommitted fixes on top of an unverified commit.
 
 ## Diagnosing an already-red CI run
 
