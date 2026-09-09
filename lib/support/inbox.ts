@@ -200,7 +200,7 @@ export async function listAdminConversations(input: SupportSearchParams) {
       else if (filter.operator === 'lte' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date<=${dates[0]}::date`);
       else if (filter.operator === 'gt' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date>${dates[0]}::date`);
       else if (filter.operator === 'gte' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date>=${dates[0]}::date`);
-      else if (filter.operator === 'isBetween' && dates[0] && dates[1]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date between ${dates[0]}::date and ${dates[1]}::date`);
+      else if (filter.operator === 'isBetween' && dates[0] && dates[1]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date between ${dates[0]}::date and ${dates[1]}::date`);\n      else if (filter.operator === 'isRelativeToToday') advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date = current_date`);
       else if (filter.operator === 'isEmpty') advancedConditions.push(client`false`); else if (filter.operator === 'isNotEmpty') advancedConditions.push(client`true`);
     }
   }
