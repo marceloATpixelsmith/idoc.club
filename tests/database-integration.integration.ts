@@ -322,7 +322,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       ...Object.values<any>(expectedTable.foreignKeys).map((value) => ({ name: value.name.slice(0, 63), type: 'f', columns: value.columnsFrom, target_schema: value.schemaTo, target_table: value.tableTo, target_columns: value.columnsTo, update_action: actionCode(value.onUpdate), delete_action: actionCode(value.onDelete) })),
       ...Object.values<any>(expectedTable.uniqueConstraints).map((value) => ({ name: value.name, type: 'u', columns: value.columns })),
       ...Object.values<any>(expectedTable.checkConstraints).map((value) => ({ name: value.name, type: 'c' })),
-      ...Object.values<any>(expectedTable.compositePrimaryKeys),
+      ...Object.values<any>(expectedTable.compositePrimaryKeys).map((value) => ({ name: value.name.slice(0, 63), type: 'p', columns: value.columns })),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => ({ name: `${tableName}_pkey`, type: 'p' })),
       ...(tableName === 'seminar_payment_methods' ? [{ name: 'seminar_payment_methods_display_order_unique', type: 'u', columns: ['display_order'] }] : []),
     ];
