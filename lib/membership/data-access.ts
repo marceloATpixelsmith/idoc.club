@@ -37,16 +37,15 @@ function validatedConsent(value: OnboardingConsentInput | undefined): Onboarding
 
 async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const injectedActor = testBoundaryActor();
-  const user = injectedActor
-    ? (await db.select().from(users).where(eq(users.id, injectedActor.id)).limit(1))[0]
-    : await getUser();
-  if (!user) throw new AuthorizationError();
+  const session = injectedActor ? null : await getSession();
+  const userId = injectedActor?.id ?? session?.user.id;
+  if (!userId) throw new AuthorizationError();
   const [grants, profile] = await Promise.all([
     db.select({ role: applicationRoles.role }).from(applicationRoles)
-      .where(and(eq(applicationRoles.userId, user.id), isNull(applicationRoles.revokedAt))),
-    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, user.id)).limit(1),
+      .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))),
+    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
   ]);
-  const actor = { id: user.id, roles: grants.map(({ role }) => role) };
+  const actor = { id: userId, roles: grants.map(({ role }) => role) };
   const latest = profile[0]
     ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
       .from(memberships).where(eq(memberships.profileId, profile[0].id))
