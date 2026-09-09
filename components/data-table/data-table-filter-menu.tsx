@@ -1,6 +1,8 @@
 "use client";
 
 import type { Column, Table } from "@tanstack/react-table";
+
+function calendarDateValue(date: Date | undefined) { return date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : ''; }
 import { BadgeCheck, CalendarIcon, ListFilter, Text, X } from "lucide-react";
 import { useQueryState } from "nuqs";
 import * as React from "react";
@@ -550,7 +552,7 @@ function FilterValueSelector<TData>({
           captionLayout="dropdown"
           mode="single"
           selected={value ? new Date(value) : undefined}
-          onSelect={(date) => onSelect(date?.getTime().toString() ?? "")}
+          onSelect={(date) => onSelect(calendarDateValue(date))}
         />
       );
 
@@ -838,8 +840,8 @@ function onFilterInputRender<TData>({
                   onFilterUpdate(filter.filterId, {
                     value: date
                       ? [
-                          (date.from?.getTime() ?? "").toString(),
-                          (date.to?.getTime() ?? "").toString(),
+                          calendarDateValue(date.from),
+                          calendarDateValue(date.to),
                         ]
                       : [],
                   });
@@ -855,7 +857,7 @@ function onFilterInputRender<TData>({
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
-                    value: (date?.getTime() ?? "").toString(),
+                    value: calendarDateValue(date),
                   });
                 }}
               />
