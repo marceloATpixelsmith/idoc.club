@@ -53,7 +53,7 @@ export default function MembershipPage() {
               href={`/sign-up?membership=${t.param}`}
               className="mt-8 border border-gold/60 px-6 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground"
             >
-              Apply
+              Join
             </Link>
           </div>
         ))}

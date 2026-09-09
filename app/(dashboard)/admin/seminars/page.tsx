@@ -31,7 +31,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
           <h1 className="text-2xl font-semibold">Seminars</h1>
           <p className="text-muted-foreground">Create, publish, and manage seminar registrations.</p>
         </div>
-        <Link className="rounded bg-primary px-4 py-2 text-primary-foreground" href="/admin/seminars/new">New seminar</Link>
+        <Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href="/admin/seminars/new">New seminar</Link>
       </header>
       <TablePreferenceSync table="seminars" /><form data-table-preferences="seminars" className="grid gap-3 rounded-lg border p-4 md:grid-cols-7" method="get">
         <label>Search<input className="block w-full border p-2" defaultValue={scalarQuery.q} name="q" /></label>

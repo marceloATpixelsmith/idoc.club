@@ -73,7 +73,10 @@ export function AuthenticatedUserMenu({
   const accessibleName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    //modal=false: modal mode locks body scroll and shifts the sticky header by the
+    //scrollbar width, nudging this hover-opened trigger out from under the cursor and
+    //causing an open/close/open flicker loop while the mouse sits still.
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <div onPointerEnter={openForMouse} onPointerLeave={closeForMouse}>
         <DropdownMenuTrigger asChild>
           <button
