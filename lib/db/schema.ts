@@ -306,6 +306,20 @@ export const auditLog = idocSchema.table('audit_log', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Validated, per-administrator data-table state. Transient UI state (selection, open menus,
+ * confirmations, and loading indicators) is deliberately never stored here. */
+export const administratorTablePreferences = idocSchema.table('administrator_table_preferences', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tableIdentifier: varchar('table_identifier', { length: 40 }).notNull(),
+  preferences: jsonb('preferences').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('administrator_table_preferences_user_table_unique').on(table.userId, table.tableIdentifier),
+  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'content_pages')`),
+]);
+
 /** Member-owned, immutable threaded support. Public UUIDs keep internal sequence IDs out of URLs. */
 export const supportConversations = idocSchema.table('support_conversations', {
   id: serial('id').primaryKey(),

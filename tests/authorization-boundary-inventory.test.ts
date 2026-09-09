@@ -94,6 +94,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
   'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
+  'app/api/admin/table-preferences/[table]/route.ts': 'authenticated-admin-csrf-owner-boundary',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',
   'app/api/auth/google/link/start/route.ts': 'authenticated-fresh-verification-oauth-boundary',
   'app/api/auth/google/link/status/route.ts': 'authenticated-account-boundary',

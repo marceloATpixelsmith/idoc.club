@@ -13,6 +13,7 @@ import { RolesSection } from './roles-section';
 import { listAdminSeminarHistoryForMember } from '@/lib/seminars/registrations';
 import { MembersTable } from './members-table';
 import { ExtendExpirationForm } from './extend-expiration-form';
+import { getTablePreferences, preferenceQuery } from '@/lib/admin/table-preferences';
 
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   bank_transfer: 'Bank transfer', cash: 'Cash', complimentary: 'Complimentary grant',
@@ -28,11 +29,16 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
   const params = await searchParams;
+  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'sort', 'direction', 'pageSize'];
+  const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
+  const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
+  const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
+  const visibleColumns = params.column ? (Array.isArray(params.column) ? params.column : [params.column]) : Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
   const { profileId: profileIdParam } = params;
   let filterError: string | null = null;
   let listing: Awaited<ReturnType<typeof listAdminMembers>>;
   try {
-    listing = await listAdminMembers(params);
+    listing = await listAdminMembers(effectiveParams);
   } catch (error) {
     if (!(error instanceof MemberFilterRangeError)) throw error;
     filterError = error.message;
@@ -50,7 +56,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <h1 className="text-2xl font-semibold">Members</h1>
     <nav className="mt-4 flex gap-4 text-sm" aria-label="Membership views"><Link className="underline" href="/admin/members?status=active">Active</Link><Link className="underline" href="/admin/members?status=expired">Expired</Link><Link className="underline" href="/admin/members?status=archived">Archived</Link><Link className="underline" href="/admin/revenue">Revenue dashboard</Link></nav>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
-    <MembersTable filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
+    <MembersTable defaultActive={!hasUrlState && !savedPreferences} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (
       <>
         <section className="mt-8 max-w-2xl border rounded-lg p-4">

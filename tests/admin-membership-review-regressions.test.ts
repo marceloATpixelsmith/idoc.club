@@ -13,14 +13,14 @@ test('member pagination preserves every normalized active filter while replacing
   assert.match(memberTable, /Object\.entries\(filters\)/);
   assert.match(memberTable, /key !== 'page'/);
   assert.match(memberTable, /params\.set\('page', String\(page\)\)/);
-  assert.match(memberTable, /pageHref\(filters\.page - 1\)/);
+  assert.match(memberTable, /pageHref\(Math\.max\(1, filters\.page - 1\)\)/);
   assert.match(memberTable, /pageHref\(filters\.page \+ 1\)/);
 });
 
-test('membership status options and effective status preserve review-required records', () => {
-  assert.match(memberQueries, /'review_required'/);
-  assert.match(memberQueries, /m\.status = 'review_required' then 'review_required'/);
-  assert.match(memberTable, /'review_required'/);
+test('membership roster presents the requested active, expired, and archived views', () => {
+  assert.match(memberQueries, /\['active', 'expired', 'archived'\]/);
+  assert.match(memberQueries, /m\.status = 'archived'/);
+  assert.match(memberTable, /\['active','expired','archived'\]/);
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {

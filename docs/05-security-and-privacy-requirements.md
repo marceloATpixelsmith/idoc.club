@@ -278,3 +278,7 @@ Notification routing snapshots the intended address at mutation time. Content st
 ## Production authentication key gate
 
 Production authentication must use the complete server-only inventory and rotation rules in document 07. Runtime configuration fails closed for absent, malformed, undersized, non-canonical base64url, wrong-length AES, and incomplete active-key-ring inputs. Staging and production use different secrets while all instances within one environment receive compatible configuration. Repository readiness does not constitute deployed-secret or UAT signoff.
+
+## Administrator table preference boundary
+
+Table preferences are private administrative metadata. Reads and writes are always scoped to the authenticated actor's user ID; submitted owner IDs are not accepted. Stable table identifiers and every JSON key/value are allow-listed, unknown keys are rejected, columns cannot grant access to fields outside that table definition, and URL values pass through the table's normal query validation. CSRF validation applies to save and reset. Preferences contain no record selections, secrets, executable values, destructive confirmations, or authorization decisions and therefore do not replace server-side record authorization.
