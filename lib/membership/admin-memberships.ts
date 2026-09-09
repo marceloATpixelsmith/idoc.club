@@ -69,7 +69,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
   const status = firstValue(input.status);
   const rawPageSize = pageNumber(input.pageSize);
   const filters: NormalizedMemberFilters = {
-    direction: parsedSort?.desc || firstValue(input.direction) === 'desc' || legacyDirection === 'desc' ? 'desc' : 'asc',
+    direction: parsedSort?.desc === true ? 'desc' : parsedSort?.desc === false ? 'asc' : firstValue(input.direction) === 'desc' || legacyDirection === 'desc' ? 'desc' : 'asc',
     country: firstValue(input.country)?.trim().toUpperCase() || undefined,
     expiresFrom: firstValue(input.expiresFrom) || undefined,
     expiresTo: firstValue(input.expiresTo) || undefined,
@@ -96,7 +96,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
         else if (filter.id === 'region') filters.region = value.trim().slice(0, 40) || undefined;
         else if (filter.id === 'expires') {
           const values = Array.isArray(filter.value) ? filter.value : [filter.value];
-          const dates = values.map((item: unknown) => typeof item === 'string' && /^\d+$/.test(item) ? new Date(Number(item)).toISOString().slice(0, 10) : item);
+          const dates = values.map((item: unknown) => { if (typeof item !== 'string' || !/^\d+$/.test(item)) return item; const date = new Date(Number(item)); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
           if (filter.operator === 'isBetween') [filters.expiresFrom, filters.expiresTo] = dates as [string?, string?];
           else if (filter.operator === 'gt' || filter.operator === 'gte') filters.expiresFrom = dates[0] as string;
           else if (filter.operator === 'lt' || filter.operator === 'lte') filters.expiresTo = dates[0] as string;
