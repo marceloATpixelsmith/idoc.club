@@ -395,6 +395,45 @@ export const newsArticles = idocSchema.table('news_articles', {
   index('news_articles_publication_queue_idx').on(table.status, table.publicationDate),
 ]);
 
+/** Revisioned CMS pages with explicit union/intersection audience rules. */
+export const contentPages = idocSchema.table('content_pages', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: 160 }).notNull().unique(),
+  title: varchar('title', { length: 200 }).notNull(),
+  summary: varchar('summary', { length: 500 }),
+  contentHtml: text('content_html').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  audienceMode: varchar('audience_mode', { length: 10 }).notNull().default('any'),
+  publishAt: timestamp('publish_at', { withTimezone: true }),
+  seoTitle: varchar('seo_title', { length: 200 }),
+  seoDescription: varchar('seo_description', { length: 320 }),
+  createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
+  updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('content_pages_status_check', sql`${table.status} in ('draft', 'published', 'archived')`),
+  check('content_pages_audience_mode_check', sql`${table.audienceMode} in ('any', 'all')`),
+  check('content_pages_slug_format_check', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+  check('content_pages_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
+  check('content_pages_content_length_check', sql`char_length(${table.contentHtml}) between 1 and 20000`),
+  index('content_pages_publication_idx').on(table.status, table.publishAt),
+]);
+
+export const contentPageAudiences = idocSchema.table('content_page_audiences', {
+  pageId: integer('page_id').notNull().references(() => contentPages.id, { onDelete: 'cascade' }),
+  audience: varchar('audience', { length: 20 }).notNull(),
+}, (table) => [primaryKey({ columns: [table.pageId, table.audience] }), check('content_page_audiences_value_check', sql`${table.audience} in ('public', 'member', 'judge', 'steward', 'veterinarian')`)]);
+
+export const contentPageRevisions = idocSchema.table('content_page_revisions', {
+  id: serial('id').primaryKey(),
+  pageId: integer('page_id').notNull().references(() => contentPages.id, { onDelete: 'cascade' }),
+  revisionNumber: integer('revision_number').notNull(),
+  snapshotJson: jsonb('snapshot_json').notNull(),
+  createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('content_page_revisions_number_unique').on(table.pageId, table.revisionNumber)]);
+
 /** Administrator-authored seminars. `paymentMethodCanonicalId` references the same canonical
  * `seminar_payment_methods` identities Organization Settings owns (migration 0038) -- a seminar
  * never invents its own payment-method identity. `priceCents`/`paymentMethodCanonicalId` become

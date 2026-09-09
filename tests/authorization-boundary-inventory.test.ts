@@ -65,6 +65,10 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
     unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/pages/actions.ts': {
+    archivePage: 'delegates-to-data-access', createContentPage: 'delegates-to-data-access',
+    deletePage: 'delegates-to-data-access', updateContentPage: 'delegates-to-data-access',
+  },
   'app/(dashboard)/admin/seminars/actions.ts': {
     cancelSeminarAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', markSeminarRegistrationPaidAction: 'delegates-to-data-access',
     publishSeminarAction: 'delegates-to-data-access', revertSeminarToDraftAction: 'delegates-to-data-access', updateSeminarAction: 'delegates-to-data-access',
