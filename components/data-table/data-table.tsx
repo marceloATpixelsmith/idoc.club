@@ -17,12 +17,14 @@ interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
   emptyState?: React.ReactNode;
+  pageSizeOptions?: number[];
 }
 
 export function DataTable<TData>({
   table,
   actionBar,
   emptyState,
+  pageSizeOptions,
   children,
   className,
   ...props
@@ -93,7 +95,7 @@ export function DataTable<TData>({
         </Table>
       </div>
       <div className="flex flex-col gap-2.5">
-        <DataTablePagination table={table} />
+        <DataTablePagination table={table} pageSizeOptions={pageSizeOptions} />
         {actionBar &&
           table.getFilteredSelectedRowModel().rows.length > 0 &&
           actionBar}
