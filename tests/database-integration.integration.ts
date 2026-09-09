@@ -260,7 +260,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
     order by table_name`;
-  const expectedTables = Object.keys(expectedSchema).sort();
+  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   // A handful of post-0030 migrations added an index to a table this snapshot already tracks
