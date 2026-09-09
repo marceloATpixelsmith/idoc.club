@@ -248,16 +248,6 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // patches just those documented, deliberate differences rather than skipping mfa_factors' otherwise
   // still-applicable column/constraint/index checks below wholesale.
   const expectedSchema = structuredClone(snapshot.tables);
-  const supportSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0039_snapshot.json'), 'utf8'));
-  for (const tableName of ['idoc.support_category_defaults', 'idoc.support_conversations', 'idoc.support_messages']) {
-    expectedSchema[tableName] = supportSnapshot.tables[tableName];
-  }
-  const newsSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0040_snapshot.json'), 'utf8'));
-  expectedSchema['idoc.news_articles'] = newsSnapshot.tables['idoc.news_articles'];
-  const seminarsSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0041_snapshot.json'), 'utf8'));
-  for (const tableName of ['idoc.seminars', 'idoc.seminar_registrations']) {
-    expectedSchema[tableName] = seminarsSnapshot.tables[tableName];
-  }
   delete expectedSchema['idoc.webauthn_credentials'];
   delete expectedSchema['idoc.webauthn_ceremony_challenges'];
   const expectedMfaFactors = expectedSchema['idoc.mfa_factors'];
@@ -270,7 +260,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
     order by table_name`;
-  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox', 'idoc.organization_settings', 'idoc.seminar_payment_methods'].sort();
+  const expectedTables = Object.keys(expectedSchema).sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   // A handful of post-0030 migrations added an index to a table this snapshot already tracks
