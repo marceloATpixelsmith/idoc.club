@@ -21,7 +21,7 @@ test('preferences upsert independently by authenticated administrator and table'
 test('invalid saved JSON is ignored and reset affects only the authenticated owner and table', async () => {
   const first = await adminUser();
   const second = await adminUser();
-  await sql`insert into idoc.administrator_table_preferences(user_id,table_identifier,preferences) values(${first.id},'memberships',${sql.json({ status: 'forged', executable: 'alert(1)' })})`;
+  await sql`insert into idoc.administrator_table_preferences(user_id,table_identifier,preferences) values(${first.id},'memberships',${JSON.stringify({ status: 'forged', executable: 'alert(1)' })})`;
   await asAdmin(second.id, () => saveTablePreferences('memberships', { status: 'expired' }));
   assert.equal(await asAdmin(first.id, () => getTablePreferences('memberships')), null);
   await asAdmin(first.id, () => resetTablePreferences('memberships'));
