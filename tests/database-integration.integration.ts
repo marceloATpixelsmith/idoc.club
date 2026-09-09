@@ -324,6 +324,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       ...Object.values<any>(expectedTable.checkConstraints).map((value) => ({ name: value.name, type: 'c' })),
       ...Object.values<any>(expectedTable.compositePrimaryKeys),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => ({ name: `${tableName}_pkey`, type: 'p' })),
+      ...(tableName === 'seminar_payment_methods' ? [{ name: 'seminar_payment_methods_display_order_unique', type: 'u', columns: ['display_order'] }] : []),
     ];
     assert.deepEqual(constraints.map(({ name, type }) => ({ name, type })), expectedConstraints.map(({ name, type }) => ({ name, type })).sort((a, b) => a.name.localeCompare(b.name)), `${qualifiedName} constraint names/types`);
     for (const expected of expectedConstraints) {
