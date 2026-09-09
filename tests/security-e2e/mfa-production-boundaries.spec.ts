@@ -262,11 +262,17 @@ test("the real /dashboard/security HTTP response for a privileged account never 
   expect(html).toContain('Authenticator app');
 
   const productionReachableHtml = stripDevOnlyDebugFlightChunks(html);
-  for (const secret of [
-    E2E_TOTP_SECRET, factor.encrypted_secret, factor.factor_id, fixture.password_hash,
-    recoveryCode.recovery_code_id, recoveryCode.digest, E2E_RECOVERY_CODE,
-  ]) {
-    expect(productionReachableHtml).not.toContain(secret);
+  const secretChecks = [
+    ['raw TOTP secret', E2E_TOTP_SECRET],
+    ['encrypted factor blob', factor.encrypted_secret],
+    ['internal factor id', factor.factor_id],
+    ['password hash', fixture.password_hash],
+    ['recovery-code id', recoveryCode.recovery_code_id],
+    ['recovery-code digest', recoveryCode.digest],
+    ['raw recovery code', E2E_RECOVERY_CODE],
+  ] as const;
+  for (const [label, secret] of secretChecks) {
+    expect(productionReachableHtml, label).not.toContain(secret);
   }
   await sql.end();
   await context.close();

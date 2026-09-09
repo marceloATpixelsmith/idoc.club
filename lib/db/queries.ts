@@ -71,8 +71,8 @@ export async function getUser() {
 export async function getActivityLogs() {
   const { requireAccountAccess } = await import('@/lib/membership/data-access');
   await requireAccountAccess('member');
-  const user = await getUser();
-  if (!user) {
+  const session = await getSession();
+  if (!session) {
     throw new Error('User not authenticated');
   }
 
@@ -86,7 +86,7 @@ export async function getActivityLogs() {
     .from(activityLogs)
     .leftJoin(users, eq(activityLogs.userId, users.id))
     .leftJoin(profiles, eq(profiles.userId, users.id))
-    .where(eq(activityLogs.userId, user.id))
+    .where(eq(activityLogs.userId, session.user.id))
     .orderBy(desc(activityLogs.timestamp))
     .limit(10);
 }
