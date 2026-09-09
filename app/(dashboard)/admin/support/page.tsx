@@ -6,7 +6,7 @@ import { CATEGORY_LABELS, listAdminConversations, listEligibleAdministrators, ST
 
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<SupportSearchParams> }) {
   const rawQuery = await searchParams;
-  const query = Object.keys(rawQuery).length ? rawQuery : preferenceQuery(await getTablePreferences('support'));
+  const savedQuery = preferenceQuery(await getTablePreferences('support')); const query = Object.keys(rawQuery).length ? { ...savedQuery, ...rawQuery } : savedQuery;
   const columns = ['category', 'status', 'assigned', 'activity'] as const;
   const hidden = parseHiddenColumns(query.column, columns);
   const scalarQuery = Object.fromEntries(Object.entries(query).flatMap(([key, value]) => {
