@@ -41,6 +41,9 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const session = injectedActor ? null : await getSession();
   const userId = injectedActor?.id ?? session?.user.id;
   if (!userId) throw new AuthorizationError();
+  const [account] = await db.select({ accountState: users.accountState })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  if (!account) throw new AuthorizationError();
   const [grants, profile] = await Promise.all([
     db.select({ role: applicationRoles.role }).from(applicationRoles)
       .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))),
@@ -56,7 +59,7 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
     ? isEntitled(latest[0], new Date().toISOString().slice(0, 10))
     : false;
   if (!mayAccessAccountFunction({
-    accountState: user.accountState as AccountState,
+    accountState: account.accountState as AccountState,
     actor,
     entitled,
   }, operation)) throw new AuthorizationError();
