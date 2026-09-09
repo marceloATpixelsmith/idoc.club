@@ -16,7 +16,9 @@ import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSele
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDataTable } from '@/hooks/use-data-table';
-import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type AdminSupportRow } from '@/lib/support/inbox';
+import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
+
+type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
 
 const OPTIONAL_COLUMNS = ['member', 'subject', 'category', 'status', 'assigned', 'activity'] as const;
 const LABELS: Record<string, string> = { activity: 'Activity', assigned: 'Assigned', category: 'Category', member: 'Member', status: 'Status', subject: 'Subject' };
