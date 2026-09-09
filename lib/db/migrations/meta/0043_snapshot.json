@@ -4051,7 +4051,8 @@
           "value": "\"idoc\".\"support_category_defaults\".\"category\" in ('billing_membership', 'seminars', 'technical_support')"
         }
       },
-      "isRLSEnabled": false
+      "isRLSEnabled": false,
+      "uniqueConstraints": {}
     },
     "idoc.support_conversation_administrators": {
       "name": "support_conversation_administrators",
