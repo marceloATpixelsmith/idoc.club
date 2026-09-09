@@ -246,6 +246,20 @@ export const seminarPaymentMethods = idocSchema.table('seminar_payment_methods',
   uniqueIndex('seminar_payment_methods_display_order_unique').on(table.displayOrder),
 ]);
 
+/** The perk list shown on every membership-tier box on the public membership page and on the
+ * dashboard's payment box. A plain ordered list of labels -- superadmin-editable, not tied to any
+ * particular membership tier or classification. */
+export const membershipPerks = idocSchema.table('membership_perks', {
+  id: serial('id').primaryKey(),
+  label: varchar('label', { length: 200 }).notNull(),
+  displayOrder: integer('display_order').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('membership_perks_display_order_unique').on(table.displayOrder),
+  check('membership_perks_label_length_check', sql`char_length(${table.label}) between 1 and 200`),
+]);
+
 /** Evidence captured only when a member actually submits the onboarding form. */
 export const onboardingConsents = idocSchema.table('onboarding_consents', {
   profileId: integer('profile_id').primaryKey().references(() => profiles.id, { onDelete: 'cascade' }),
