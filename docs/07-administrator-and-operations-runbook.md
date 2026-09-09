@@ -95,10 +95,13 @@ Administrators and Super Admins manage public News/Blog articles at `/admin/news
 - **Deletion:** only Draft or Archived articles can be permanently deleted. Archive a Published or Scheduled article first — this preserves a retained record before an irreversible delete, matching the same "deactivate before delete" preference used elsewhere in this runbook (Organization Settings payment methods, §1).
 - **Preview:** the edit page's Preview link renders the article exactly as the public page would, for any status, without making it publicly reachable.
 - Every create, edit, publish, unpublish, schedule, archive, and delete action is audited under `news_article` entity type; the scheduled-publish Cron transition is audited with a null actor (a system action).
+- Legacy IDOC News and President's Blog content from the old `idoc.club` WordPress site is a one-time import via `scripts/data-import/legacy-idoc-club-content-import.sql`; see docs/03 § 10 for the source mapping, assumptions, and reconciliation.
 
 ## Seminar operations
 
 Administrators and Super Admins manage seminars at `/admin/seminars`: create, edit, publish, cancel, move back to draft, search/filter, review registrations, mark a manual payment received, and export registrations to CSV. Members register and cancel their own registrations at `/seminars`. Deploy migration `0041` before use.
+
+Legacy seminar announcements from the old `idoc.club` WordPress site are a one-time import via `scripts/data-import/legacy-idoc-club-content-import.sql`; see docs/03 § 10 for the source mapping and required administrator review (two imported seminars are left in Draft pending a currency correction).
 
 - **Fields:** title, description, date, start/end time, an IANA timezone (validated against the runtime's own timezone database), location or online meeting link, capacity, price (EUR), registration deadline (UTC), publication/registration status, and payment method (one of the three canonical Organization Settings methods above).
 - **Publication status:** Draft (never public), Published (open for registration subject to capacity/deadline), Canceled (never public; registrations already made are retained, not deleted).

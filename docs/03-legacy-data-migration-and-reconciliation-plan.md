@@ -132,3 +132,27 @@ The final migration must avoid destructive changes to existing Stripe subscripti
 ## Imported-account activation foundation
 
 The later repeatable importer may create an identity in `migrated_pending` state and issue a `migration_activation` token for that existing user. Activation verifies the purpose-scoped, expiring digest, establishes a password, verifies access, and changes only account authentication state. It requires the imported profile, at least one professional role, membership entitlement, and migration mapping to exist; a missing foundation produces auditable reconciliation evidence and leaves the identity pending. It does not insert or update the imported profile, professional-role history, membership term/status, billing account, Stripe identifiers, or migration map. A successfully delivered replacement invalidates earlier unconsumed activation links; delivery failure preserves the earlier usable link. Successful use consumes all outstanding account tokens for the identity.
+
+# 10. News/Blog/Seminar content migration
+
+Separately from member/billing migration above, `scripts/data-import/legacy-idoc-club-content-import.sql` is a one-time, hand-run data import of the legacy site's public content into the tables `docs/01-solution-architecture-and-data-model.md` already documents for it. It is not a numbered schema migration (`lib/db/migrations/`) and carries no ongoing sync -- it is a single snapshot import, run once per target database.
+
+**Source and mapping.** The legacy WordPress site exposes all public content as "posts" under `https://idoc.club/wp-json/wp/v2/posts`, distinguished only by category. The importer fetched every published post's full body (not just index/excerpt data) and split them by category into:
+
+| Legacy category | Count | Target table | Notes |
+|---|---|---|---|
+| `homepage-news` | 27 (26 imported) | `idoc.news_articles` | One post (`ga-assembly2024`) is excluded; see below. |
+| `president-blog` | 7 | `idoc.news_articles` | Same unified News/Blog table as News; see docs/01 and docs/08. |
+| `seminars` | 4 | `idoc.seminars` | See seminar caveats below. |
+
+Article `content_html` is passed through the same tag allowlist as `lib/news/sanitize.ts` before storage, so imported rows already match what the application itself would persist on save. `idoc.seminars.description` is a plain-text column; each seminar's legacy body was converted to plain text and prefixed with its source URL. Legacy titles that embedded a byline (`"<Title><br/>by <Author>"`) were split into `title`/`subtitle`; other articles fall back to the legacy WordPress excerpt for `subtitle`.
+
+**Administrator review required before use:**
+
+- **Excluded content.** `ga-assembly2024`'s legacy page body is a MemberPress "you are unauthorized to view this page" placeholder -- the real member-gated content was never exposed to the public REST API. It is intentionally omitted rather than imported as a broken article; someone with legacy site admin/member access should retrieve and add its real content separately.
+- **Seminar structured fields.** The legacy site only ever published narrative course announcements, not a structured registration record, so several `NOT NULL` `idoc.seminars` columns have no legacy source value and are filled with a documented assumption (start/end time defaulted to 09:00-17:00; a missing registration deadline defaulted to 14 days before the seminar; one canonical payment method chosen where the legacy post listed several or pointed to a third-party payment link; a multi-day event's `seminar_date` holds only its first day, with the full range preserved in `description`). Every such value is marked `ASSUMPTION` in the script and must be confirmed by an administrator before a seminar is relied on for real registrations.
+- **Currency mismatch.** Two Hartpury Para Dressage courses stated their legacy fee in GBP 150, not EUR. Since `idoc.seminars` has no currency column and both docs/07 and `lib/seminars/checkout.ts` treat every seminar price as EUR, importing that amount as `price_cents=15000` and publishing it would silently sell a GBP course at the wrong price and currency. Both rows are imported as `status='draft'` (never public) with the GBP amount preserved as-is, pending an administrator setting a correct EUR-equivalent price (and payment route) before publishing.
+
+**Idempotency and reconciliation.** `idoc.news_articles` inserts use `ON CONFLICT (slug) DO NOTHING`; `idoc.seminars` inserts use a `NOT EXISTS` guard on `(title, seminar_date)`, since that table has no natural unique key. Re-running the script is safe and a no-op on rows already imported. Every row the script actually inserts also gets one `idoc.audit_log` row (`admin.news_article.created` / `admin.seminar.created`, matching the shape `lib/news/articles.ts` / `lib/seminars/seminars.ts` themselves write on creation), attributed to an administrator resolved at run time -- so `select count(*) from idoc.audit_log where action in ('admin.news_article.created','admin.seminar.created') and after_json->>'title' is not null` after a run is the reconciliation count against the mapping table above.
+
+**Rollback.** This import only creates rows (no update/delete of existing data), so rollback is deleting the specific imported rows by slug/title if needed; it never touches Stripe or membership data and carries none of the billing-continuity risk in [Rollback rule](#9-rollback-rule) above.

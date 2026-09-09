@@ -6,7 +6,8 @@
 --
 -- The legacy site stores all three content types as WordPress "posts", distinguished only by
 -- category:
---   - category "homepage-news" (27 posts)   -> idoc.news_articles  (public IDOC News)
+--   - category "homepage-news" (27 posts, 26 imported -- see point 5) -> idoc.news_articles
+--         (public IDOC News)
 --   - category "president-blog" (7 posts)   -> idoc.news_articles  (President's Blog; the new
 --         schema has one unified News/Blog table -- see docs/01-solution-architecture-and-
 --         data-model.md and docs/08-product-roadmap-and-functional-requirements.md, "an
@@ -46,8 +47,6 @@
 --      - Two of the four seminars were multi-day events on the legacy site (e.g. "June 27th-28th,
 --        2026"); idoc.seminars has only a single `seminar_date` column, so `seminar_date` holds
 --        the first day and the full date range is preserved in the `description` text.
---      - Two Hartpury seminars listed their course fee in GBP, not EUR; `price_cents` stores the
---        numeric legacy amount as-is since this schema has no currency column.
 --
 -- 2. created_by_user_id / updated_by_user_id (idoc.news_articles and idoc.seminars) are NOT NULL
 --    foreign keys to idoc.users with no legacy equivalent (the legacy WordPress authorship isn't
@@ -59,14 +58,39 @@
 -- 3. This script is idempotent: idoc.news_articles rows use ON CONFLICT (slug) DO NOTHING (slugs
 --    are the legacy WordPress slugs, already unique on the source site), and idoc.seminars rows
 --    use a WHERE NOT EXISTS guard keyed on (title, seminar_date) since that table has no unique
---    business key. Re-running this script after a partial run will not create duplicates.
+--    business key. Re-running this script after a partial run will not create duplicates. Each
+--    insert is wrapped in a `WITH ins AS (INSERT ... RETURNING ...)` CTE so a row skipped by one
+--    of those guards also skips its idoc.audit_log entry (point 6) -- audit rows are written only
+--    for rows this run actually created.
 --
--- 4. All imported rows are inserted with status='published' (mirroring their live status on the
+-- 4. Most imported rows are inserted with status='published' (mirroring their live status on the
 --    legacy site) using the legacy post's original UTC publish timestamp
---    (publication_date/published_at for news_articles; registration_deadline for seminars is
---    computed as described above). This is a one-time data import, NOT a numbered schema
---    migration (see lib/db/migrations/ + tests/migration-immutability.test.ts) and should be run
---    by hand against the target database once, after migrations 0040 and 0041 are applied.
+--    (publication_date/published_at for news_articles). Two seminars are the exception -- see
+--    point 7. This is a one-time data import, NOT a numbered schema migration (see
+--    lib/db/migrations/ + tests/migration-immutability.test.ts) and should be run by hand against
+--    the target database once, after migrations 0040 and 0041 are applied.
+--
+-- 5. One homepage-news post, "ga-assembly2024" (IDOC/FEI Seminar Frankfurt + General Assembly
+--    Program 2024), is intentionally excluded. Its legacy page body is a MemberPress
+--    "you are unauthorized to view this page unless you are a member" placeholder -- the real,
+--    member-gated content was never exposed to the public REST API this import reads from, and
+--    publishing that placeholder as if it were the article would be actively misleading. Someone
+--    with legacy site admin/member access should pull that page's real body and add it separately.
+--
+-- 6. Every row this script actually inserts also gets one idoc.audit_log row, matching the
+--    'admin.news_article.created' / 'admin.seminar.created' actions and after_json shape that
+--    lib/news/articles.ts / lib/seminars/seminars.ts themselves write on creation, attributed to
+--    the same resolved administrator, so the import leaves the same evidence trail a normal
+--    admin-authored create would.
+--
+-- 7. Both Hartpury Para Dressage courses (wp post ids 3242, 3244) stated their legacy course fee
+--    in GBP 150, not EUR. idoc.seminars has no currency column -- docs/07-administrator-and-
+--    operations-runbook.md documents seminar price as EUR, and lib/seminars/checkout.ts hard-codes
+--    Stripe currency:'eur' -- so storing 150 as price_cents=15000 would silently sell a GBP 150
+--    course for EUR 150. Both rows are therefore imported with status='draft' (never public,
+--    never open for registration) rather than 'published', with the GBP amount preserved as-is in
+--    price_cents/description for an administrator to correct (and republish) once a real
+--    EUR-equivalent price and payment route are decided.
 --
 -- Usage: psql "$DATABASE_URL" -f scripts/data-import/legacy-idoc-club-content-import.sql
 
@@ -87,69 +111,91 @@ BEGIN
 END $$;
 
 
--- IDOC News (legacy category: homepage-news) (27 rows) -----------------------------------------------------------
+-- IDOC News (legacy category: homepage-news) (26 rows) -----------------------------------------------------------
 -- source: https://idoc.club/tips-for-both/ (wp post id 779)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'tips-for-both',
-  'Tips for both Judges and Stwewards',
-  'When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them.',
-  '<p>When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them. The IDOC works for all officials involved in dressage. We have the sport and discipline as a common interest, even though we work in different parts of “stage”.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'tips-for-both',
+    'Tips for both Judges and Stwewards',
+    'When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them.',
+    '<p>When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them. The IDOC works for all officials involved in dressage. We have the sport and discipline as a common interest, even though we work in different parts of “stage”.</p>
 <p>We have to work hard on communication and education, on all levels.</p>
 <p>We have to work together, not only with the FEI but also in close connection with the Judge General, to keep the line in judging and stay true to the good system we already have, but we are also obliged to look into other and new ways on how to improve the sport. I think for all officials the welfare of the horse is paramount and it will always be important to work close together with all involved parties to keep up with the highest standards in this regard.</p>
 <p><strong><em>Hans-Christian Matthiesen, <br>IDOC President</em></strong></p>',
-  'published',
-  '2017-02-06T22:32:00Z'::timestamptz,
-  '2017-02-06T22:32:00Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2017-02-06T22:32:00Z'::timestamptz,
+    '2017-02-06T22:32:00Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-importance-potential/ (wp post id 2384)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-importance-potential',
-  'IDOC Importance & Potential',
-  'When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them.',
-  '<p>When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them. The IDOC works for all officials involved in dressage. We have the sport and discipline as a common interest, even though we work in different parts of “stage”.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-importance-potential',
+    'IDOC Importance & Potential',
+    'When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them.',
+    '<p>When you look at our “colleagues” – the riders and the trainers club, they have shown that our dressage community needs something, which is not the FEI, to connect them. The IDOC works for all officials involved in dressage. We have the sport and discipline as a common interest, even though we work in different parts of “stage”.</p>
 <p>We have to work hard on communication and education, on all levels.</p>
 <p>We have to work together, not only with the FEI but also in close connection with the Judge General, to keep the line in judging and stay true to the good system we already have, but we are also obliged to look into other and new ways on how to improve the sport. I think for all officials the welfare of the horse is paramount and it will always be important to work close together with all involved parties to keep up with the highest standards in this regard.</p>
 <p><strong><em>Hans-Christian Matthiesen,<br>
 IDOC President</em></strong></p>',
-  'published',
-  '2023-07-10T21:38:58Z'::timestamptz,
-  '2023-07-10T21:38:58Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-07-10T21:38:58Z'::timestamptz,
+    '2023-07-10T21:38:58Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-seminar-for-judges-young-horses-in-ermelo/ (wp post id 2739)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-seminar-for-judges-young-horses-in-ermelo',
-  'IDOC seminar for Judges (Young Horses) in Ermelo',
-  'August 3-6, twenty eight FEI and National ‘S’ judges made their way from the Americas (North, Central, and South) to attend a continuing judges’ education seminar, graciously supported by IDOC,',
-  '<p>August 3-6, twenty eight FEI and National  ‘S’ judges made their way from the Americas (North, Central, and South) to attend a continuing judges’ education seminar, graciously supported by IDOC, at the World Longine’s FEI World Breeding Dressage Championships for Young Horses in Ermelo,  The Netherlands. Over the course of three long, action packed days, Dutch FEI 5*/Level 4 judge, Mariette Saunders, conducted a fantastic educational forum. Her enthusiasm, knowledge and experience, humor and honest evaluations of each horse and rider were greatly appreciated by the group. Her openness to discussion, and to answering all of our questions helped us see, and better discern the details in using the correct score range and to better give meaningful remarks in our own judging of Young Horses.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-seminar-for-judges-young-horses-in-ermelo',
+    'IDOC seminar for Judges (Young Horses) in Ermelo',
+    'August 3-6, twenty eight FEI and National ‘S’ judges made their way from the Americas (North, Central, and South) to attend a continuing judges’ education seminar, graciously supported by IDOC,',
+    '<p>August 3-6, twenty eight FEI and National  ‘S’ judges made their way from the Americas (North, Central, and South) to attend a continuing judges’ education seminar, graciously supported by IDOC, at the World Longine’s FEI World Breeding Dressage Championships for Young Horses in Ermelo,  The Netherlands. Over the course of three long, action packed days, Dutch FEI 5*/Level 4 judge, Mariette Saunders, conducted a fantastic educational forum. Her enthusiasm, knowledge and experience, humor and honest evaluations of each horse and rider were greatly appreciated by the group. Her openness to discussion, and to answering all of our questions helped us see, and better discern the details in using the correct score range and to better give meaningful remarks in our own judging of Young Horses.</p>
 <p>We looked not only in depth at the scores for each of the Gait boxes, but also at the scores for the Submission and the Perspective boxes. We were certainly exposed to the whole gamut of gaits, different conformations, temperaments and types of horses, as well as a good variety of the many things that can happen, good and bad, in the young horse tests! We got a lot of opportunities to use the 5-10 score range, but we especially enjoyed the opportunity to see <strong>so many</strong> quality horses which enabled us to practice seeing the nuances in the 8, 9, and 10 range. This, in particular, was very appreciated by our group who often, where we all live, see very few Young Horse Tests, let alone many of good to excellent quality.</p>
 <p>The facility, footing, and infrastructure at Ermelo made it a very enjoyable experience, despite Mother Nature being very moody, with an ever changing mix of rain, sun, downpours, lightning and thunder.  The covered spectators’ area kept us dry and afforded us an excellent view of the action in the main area. (A CDI and some of the small final classes were held in another arena on the facility.) Also of note was the fabulous DJ who mixed music on the spot for each horse throughout the weekend, greatly enhancing the performances, and experience; as well as the treat of having the start list as well as the score board and announcer giving the pedigree and breeder of each horse, as well as the rider, owner, and breed registry, and country it was representing.</p>
 <p>The First Qualification classes were huge, with 40-45 horses in them.  From that class at each age range, the horses placing 12th and above went on to directly compete in the Finals, and the remainder went on to show in the Small Finals (consolation test) where the top three placings there could earn their way back to join the top 12 from the original test in the finals.  It made for some very competitive and exciting competition!  We were able to watch the 4 year olds (which was offered by the show as not part of the FEI Championships, but rather a national class, with horses from many countries there competing), as well as the FEI World Championship’s Competitions for 5, 6, and 7 year old horses.</p>
 <p>Days were long, but somehow Mariette’s voice held out and her palpable enthusiasm didn’t wane. She stated that judging the final classes here was “like being in a candy shop”, and that it was! We enjoyed a constant stream of amazing horses representing countries across the globe, as well as a gathering of many of the dressage world’s elite, with not only top riders and horses, but trainiers, judges, and breeders in attendance. We were treated to some moments and performances that gave us goosebumps and even brought us, and our instructor, to tears–not easy to do with a group of people that has been judging for decades!</p>
 <p>We greatly appreciated seeing the competition emphasis being on rewarding not only top athletes with quality <em>natural</em> gaits, but also in recognizing correct training and development, harmony, and confidence in the horses.  Mechanical and manufactured gaits, rider induced tension, and training not reflecting the classical pyramid was clearly not earning high marks.</p>
 <p>The resounding feedback from the group was that they would return in a heartbeat should another opportunity for a forum at this championship happen in the future! Many thanks to Janet Foy, who not only envisioned this fabulous opportunity for those of us from the American continents, but who, along with her travel agent, Pam Chesnut, arranged it; to Mariette Sanders who went above and beyond in sharing her knowledge; and to Kristi Wysocki and Kari McClain who helped things run smoothly for the participants on site, as Janet was quite busy as part of the official judging panel for this event.  Thanks also to the following participants who took this opportunity  to expand their knowledge, at their own expense, and admirably for no credit of any kind. From the USA: Gary Rockwell, Jeanne McDonald, Kari McClain, Kristi Wysocki, Charlie Musco, Cindy Canace, David Schmutz, Lisa Schmidt, Nancy Benton, Sandy Hotz, Louise Koch, Sarah Geike, Debby Savage, Elizabeth Kane, Jodi Jones Lees, Sue Mandas, Christel Carlson, Agnes Billington; From Canada: Cara Whitham, Ali Buchanan, Joan McCartney, Brenda Minor, John MacPherson; From Columbia: Cesar Torrente; From Peru: Marian Cuningham; From Argentina: Sandra Smith, Gabriel Armando, Constanza Comaleras.</p>',
-  'published',
-  '2023-08-11T17:23:56Z'::timestamptz,
-  '2023-08-11T17:23:56Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-08-11T17:23:56Z'::timestamptz,
+    '2023-08-11T17:23:56Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/15-principles-for-horse-welfare/ (wp post id 2918)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  '15-principles-for-horse-welfare',
-  '15 Principles for Horse Welfare',
-  'Assure that essential individual indicators for animal welfare are met based on the 5 domains of 1. nutrition 2. physical environment 3. Health 4. interactions with environment, other animals,',
-  '<ol>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    '15-principles-for-horse-welfare',
+    '15 Principles for Horse Welfare',
+    'Assure that essential individual indicators for animal welfare are met based on the 5 domains of 1. nutrition 2. physical environment 3. Health 4. interactions with environment, other animals,',
+    '<ol>
 <li>Assure that essential individual indicators for animal welfare are met based on the 5 domains of  1. nutrition 2. physical environment 3. Health 4. interactions with environment, other animals, humans and Mental state. These factors should not be resource based or limited.</li>
 <li>Commit to respect every horse equally regardless of its use (breeding, recreation, or sport) and ensure that training and performance objectives are consistent with the individual’s genetic potential, temperament, and development.</li>
 <li>Commit to the need for ongoing training of the horse, its rider and all its handlers to achieve the best possible interaction between horse and man.</li>
@@ -166,20 +212,27 @@ VALUES (
 <li>Appreciate and disseminate the history of the horse and the role it plays in our cultural heritage.</li>
 <li>Enhance the positive contributions of equestrian sport to people and the environment.</li>
 </ol>',
-  'published',
-  '2023-10-10T22:42:55Z'::timestamptz,
-  '2023-10-10T22:42:55Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-10-10T22:42:55Z'::timestamptz,
+    '2023-10-10T22:42:55Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-general-assembly-fei-refresher-seminar/ (wp post id 2942)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-general-assembly-fei-refresher-seminar',
-  'IDOC General Assembly &  FEI Refresher Seminar',
-  'On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to the 2023 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will',
-  '<p>On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to the 2023 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will take place during the CDI 5* Frankfurt, 15-17 December 2023.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-general-assembly-fei-refresher-seminar',
+    'IDOC General Assembly &  FEI Refresher Seminar',
+    'On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to the 2023 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will',
+    '<p>On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to the 2023 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will take place during the CDI 5* Frankfurt, 15-17 December 2023.</p>
 <p><strong>GENERAL ASSEMBLY DETAILS</strong></p>
 <ul>
 <li><strong>Date and Time:</strong> The assembly will take place on Friday, December 15th, 2023, at 15:00.</li>
@@ -201,20 +254,27 @@ VALUES (
 FEI IN-PERSON MAINTENANCE COURSE DETAILS</strong></p>
 <p>The judges who need to take this course should apply through your National Federation directly via the FEI Database Course Calendar (<a href="https://club.us10.list-manage.com/track/click?u=90a83c0c39aeed03f1aa265cb&amp;id=653a8be9c5&amp;e=6e737bf937">download invitation</a>). If you have any questions regarding registration, please contact <a href="mailto:anna.milne@fei.org">anna.milne@fei.org</a>.  Be aware that the deadline to apply to the FEI Seminar was postponed to 15 November 2023.  For the video assessment &amp; theory session (Saturday afternoon at the showground), please bring your own devices (computers, tablets, smartphones should work too).</p>
 <p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/10/2023-IDOC-General-Assembly-Preliminary-Program.pdf">IDOC General Assembly 2023 – Preliminary Program </a></p>',
-  'published',
-  '2023-10-25T14:56:58Z'::timestamptz,
-  '2023-10-25T14:56:58Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-10-25T14:56:58Z'::timestamptz,
+    '2023-10-25T14:56:58Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/paris2024-olympic-games/ (wp post id 2948)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'paris2024-olympic-games',
-  'Paris2024 OLYMPIC GAMES',
-  'INTERNATIONAL TECHNICAL OFFICIALS DRESSAGE: Ground Jury President Raphaël Saleh (FRA) Member: Henning Lehrmann (GER) Member: Isobel Wessels (GBR) Member: Mariette Sanders (NED) Member: Magnus Ringmark (SWE) Member: Michael Osinski (USA)',
-  '<p><strong>INTERNATIONAL TECHNICAL OFFICIALS </strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'paris2024-olympic-games',
+    'Paris2024 OLYMPIC GAMES',
+    'INTERNATIONAL TECHNICAL OFFICIALS DRESSAGE: Ground Jury President Raphaël Saleh (FRA) Member: Henning Lehrmann (GER) Member: Isobel Wessels (GBR) Member: Mariette Sanders (NED) Member: Magnus Ringmark (SWE) Member: Michael Osinski (USA)',
+    '<p><strong>INTERNATIONAL TECHNICAL OFFICIALS </strong></p>
 
 
 
@@ -342,20 +402,27 @@ VALUES (
 
 
 <p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/10/Paris2024-ITOs-12-October2023-1.pdf">Paris2024 – ITOs- 12 October2023 (1)</a></p>',
-  'published',
-  '2023-10-25T15:37:48Z'::timestamptz,
-  '2023-10-25T15:37:48Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-10-25T15:37:48Z'::timestamptz,
+    '2023-10-25T15:37:48Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/2965-2/ (wp post id 2965)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  '2965-2',
-  'Young Horses Seminar (5 & 6 YO) With  Mariette Sanders- Van Gansewinkel',
-  'On the 28th of November 2023 we would like to invite you to our Young Horses Seminar. 19:00 CET Together we are discussing the requirements to judge Young Horse classes,',
-  '<p>On the 28th of November 2023 we would like to invite you to our Young Horses Seminar. 19:00 CET</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    '2965-2',
+    'Young Horses Seminar (5 & 6 YO) With  Mariette Sanders- Van Gansewinkel',
+    'On the 28th of November 2023 we would like to invite you to our Young Horses Seminar. 19:00 CET Together we are discussing the requirements to judge Young Horse classes,',
+    '<p>On the 28th of November 2023 we would like to invite you to our Young Horses Seminar. 19:00 CET</p>
 <p>Together we are discussing the requirements to judge Young Horse classes, which involves judging some videos of Young Horses followed by a detailed evaluation.</p>
 <p>Our partner Black Horse One offers the option to judge on <a href="https://equestrian-hub.com/">www.equestrian-hub.com</a>. For this your own device is required, which can be a phone, tablet or laptop with the recommended browser Google Chrome.</p>
 <p>After your Registration you will find a test/practice protocol in the to do list on the left of your Dashboard. The tutorial attached guides you through the process of of getting you set up and giving marks and comments.</p>
@@ -368,102 +435,144 @@ VALUES (
 </li>
 </ul>
 <p>Thank you and see you soon!</p>',
-  'published',
-  '2023-11-09T02:01:40Z'::timestamptz,
-  '2023-11-09T02:01:40Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-11-09T02:01:40Z'::timestamptz,
+    '2023-11-09T02:01:40Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/para-dressage-seminar-judges-stewards-with-marco-orsini-katarzyna-widalska/ (wp post id 2972)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'para-dressage-seminar-judges-stewards-with-marco-orsini-katarzyna-widalska',
-  'Para Dressage  Seminar Judges & Stewards with Marco Orsini & Katarzyna Widalska',
-  'The seminar is open to all national and international dressage and para dressage judges and stewards who wish to understand the differences between dressage and para dressage rules from the',
-  '<p>The seminar is open to all national and international dressage and para dressage judges and stewards who wish to understand the differences between dressage and para dressage rules from the perspective of an official. Participants will have the opportunity to discuss the requirements for judging para dressage classes and assess the quality of performance of movements,</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'para-dressage-seminar-judges-stewards-with-marco-orsini-katarzyna-widalska',
+    'Para Dressage  Seminar Judges & Stewards with Marco Orsini & Katarzyna Widalska',
+    'The seminar is open to all national and international dressage and para dressage judges and stewards who wish to understand the differences between dressage and para dressage rules from the',
+    '<p>The seminar is open to all national and international dressage and para dressage judges and stewards who wish to understand the differences between dressage and para dressage rules from the perspective of an official. Participants will have the opportunity to discuss the requirements for judging para dressage classes and assess the quality of performance of movements,</p>
 <p>with particular emphasis on grades I, II, and III.</p>
 <p>December 5, 2023</p>
 <p>13:00-17:30 CET ZOOM</p>
 <p>Info:  k.widalska@o2.pl</p>',
-  'published',
-  '2023-11-09T02:25:11Z'::timestamptz,
-  '2023-11-09T02:25:11Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-11-09T02:25:11Z'::timestamptz,
+    '2023-11-09T02:25:11Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-news/ (wp post id 3006)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-news',
-  'FEI News',
-  'In this edition of the FEI Newsletter: New Travel Insurance Partner, Key Event Requirements (KERs) System, FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in',
-  '<p><strong>In this edition of the FEI Newsletter:  </strong>New Travel Insurance Partner,  Key Event Requirements (KERs) System,  FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in FEI Events</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-news',
+    'FEI News',
+    'In this edition of the FEI Newsletter: New Travel Insurance Partner, Key Event Requirements (KERs) System, FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in',
+    '<p><strong>In this edition of the FEI Newsletter:  </strong>New Travel Insurance Partner,  Key Event Requirements (KERs) System,  FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in FEI Events</p>
 <p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/12/Federation-Equestre-Internationale.pdf">DOWNLOAD &gt;&gt;</a></p>',
-  'published',
-  '2023-12-30T19:31:32Z'::timestamptz,
-  '2023-12-30T19:31:32Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2023-12-30T19:31:32Z'::timestamptz,
+    '2023-12-30T19:31:32Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/joint-statement-from-stakeholders/ (wp post id 3032)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'joint-statement-from-stakeholders',
-  'Joint Statement From Stakeholders',
-  'Joint Statement by the IDTC, IDRC, and IDOC',
-  '<p>Joint Statement by the IDTC, IDRC, and IDOC</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'joint-statement-from-stakeholders',
+    'Joint Statement From Stakeholders',
+    'Joint Statement by the IDTC, IDRC, and IDOC',
+    '<p>Joint Statement by the IDTC, IDRC, and IDOC</p>
 <a href="https://idoc.club/wp-content/uploads/sites/58/2024/02/JOINT-STATEMENT-FROM-STAKEHOLDERS-Feb-2024.pdf">JOINT STATEMENT FROM STAKEHOLDERS Feb 2024</a>',
-  'published',
-  '2024-02-21T17:23:54Z'::timestamptz,
-  '2024-02-21T17:23:54Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-02-21T17:23:54Z'::timestamptz,
+    '2024-02-21T17:23:54Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-general-assembly-2024/ (wp post id 3091)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-general-assembly-2024',
-  'IDOC General Assembly 2024 – Save the Date',
-  'On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to save the date for this years assembly. DECEBMER 19th to 21st, 2024 Details',
-  '<p>On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to save the date for this years assembly.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-general-assembly-2024',
+    'IDOC General Assembly 2024 – Save the Date',
+    'On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to save the date for this years assembly. DECEBMER 19th to 21st, 2024 Details',
+    '<p>On behalf of IDOC President, Hans-Christian Matthiesen, it is a great pleasure to invite you all to save the date for this years assembly.</p>
 <p>DECEBMER 19th to 21st, 2024</p>
 <p><strong>Details to come!</strong></p>',
-  'published',
-  '2024-03-25T22:05:29Z'::timestamptz,
-  '2024-03-25T22:05:29Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-03-25T22:05:29Z'::timestamptz,
+    '2024-03-25T22:05:29Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-tack-update/ (wp post id 3108)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-tack-update',
-  'Update on the FEI TACK, Equipment & Dress Database',
-  'Please be informed that the next update of the FEI Tack, Equipment & Dress Database (FEI Tack App) will be released after the Easter holidays, on 8 April 2024. Further to',
-  '<p>Please be informed that the next update of the FEI Tack, Equipment &amp; Dress Database (FEI Tack App) will be released after the Easter holidays, <strong>on 8 April 2024.</strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-tack-update',
+    'Update on the FEI TACK, Equipment & Dress Database',
+    'Please be informed that the next update of the FEI Tack, Equipment & Dress Database (FEI Tack App) will be released after the Easter holidays, on 8 April 2024. Further to',
+    '<p>Please be informed that the next update of the FEI Tack, Equipment &amp; Dress Database (FEI Tack App) will be released after the Easter holidays, <strong>on 8 April 2024.</strong></p>
 <p>Further to feedback received from numerous Athletes and Officials, who are seeking clarity regarding the use of tack and equipment during the Olympic &amp; Paralympic Games in Paris 2024, the FEI agreed that this would be the last update of the FEI Tack App prior to the Games.</p>
 <p>The temporary pause of updates to the FEI Tack App will be applied to all FEI Disciplines, including non-Olympic Disciplines.</p>
 <p>Following the conclusion of the Olympic &amp; Paralympic Games in Paris 2024, the updates shall resume on every first Monday of the month, as per the usual process.</p>
 <p><em>FEI Press Release</em></p>',
-  'published',
-  '2024-04-09T18:41:26Z'::timestamptz,
-  '2024-04-09T18:41:26Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-04-09T18:41:26Z'::timestamptz,
+    '2024-04-09T18:41:26Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-update-official/ (wp post id 3111)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-update-official',
-  'FEI Update – Official',
-  'FEI President Ingmar De Vos elected unanimously as President of the Association of Summer Olympic International Federations The election – which was unanimous – took place at the Association of',
-  '<h2><strong>FEI President Ingmar De Vos elected unanimously as President of the Association of Summer Olympic International Federations</strong></h2>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-update-official',
+    'FEI Update – Official',
+    'FEI President Ingmar De Vos elected unanimously as President of the Association of Summer Olympic International Federations The election – which was unanimous – took place at the Association of',
+    '<h2><strong>FEI President Ingmar De Vos elected unanimously as President of the Association of Summer Olympic International Federations</strong></h2>
 <p>The election – which was unanimous – took place at the Association of Summer Olympic International Federations (ASOIF) 48th General Assembly at SportAccord World Sport &amp; Business Summit, the world’s most influential sport industry gathering, in Birmingham on 9 April 2024.</p>
 <p>“I hope to build on the legacy created by Francesco Ricci Bitti and I will make it my mission to continue strengthening the role of the Summer International Sports Federations in the Olympic Movement.” FEI President, Ingmar De Vos (BEL)</p>
 <p>Read the full press release <a href="https://fei.us2.list-manage.com/track/click?u=f3c033c6fc400852db8365079&amp;id=3957c291d7&amp;e=81d9588f38">here</a>.</p>
@@ -503,39 +612,53 @@ Mr Steven Cesar Gamboa VIRATA has been elected President of the NF.</p>
 The NF has a new postal address.</p>
 <p><strong><a href="https://fei.us2.list-manage.com/track/click?u=f3c033c6fc400852db8365079&amp;id=038e948a9f&amp;e=81d9588f38">UKR – UKRAINIAN EQUESTRIAN FEDERATION</a></strong><br>
 Ms Kseniia MARTYNOVA has been elected Secretary General of the NF</p>',
-  'published',
-  '2024-04-10T19:57:30Z'::timestamptz,
-  '2024-04-10T19:57:30Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-04-10T19:57:30Z'::timestamptz,
+    '2024-04-10T19:57:30Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/joint-stakeholder-club-meeting/ (wp post id 3115)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'joint-stakeholder-club-meeting',
-  'Save the Date – Joint Stakeholder Club Meeting',
-  'SAVE THE DATE Joint Stakeholder Club Meeting IDTC – IDRC – IDOC – DO 5-6 November 2024 Lier – Belgium The agenda will follow shortly',
-  '<p><strong>SAVE THE DATE</strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'joint-stakeholder-club-meeting',
+    'Save the Date – Joint Stakeholder Club Meeting',
+    'SAVE THE DATE Joint Stakeholder Club Meeting IDTC – IDRC – IDOC – DO 5-6 November 2024 Lier – Belgium The agenda will follow shortly',
+    '<p><strong>SAVE THE DATE</strong></p>
 <p>Joint Stakeholder Club Meeting<br>
 IDTC – IDRC – IDOC – DO<br>
 5-6 November 2024<br>
 Lier – Belgium</p>
 <p>The agenda will follow shortly</p>',
-  'published',
-  '2024-04-13T14:44:19Z'::timestamptz,
-  '2024-04-13T14:44:19Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-04-13T14:44:19Z'::timestamptz,
+    '2024-04-13T14:44:19Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-sports-forum/ (wp post id 3119)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-sports-forum',
-  'FEI Sports Forum',
-  'LATEST INFORMATION ON FEI SPORTS FORUM 2024 With only a few days to go until the FEI Sports Forum 2024, which will be held on 29 and 30 April at',
-  '<p><strong>LATEST INFORMATION ON FEI SPORTS FORUM 2024</strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-sports-forum',
+    'FEI Sports Forum',
+    'LATEST INFORMATION ON FEI SPORTS FORUM 2024 With only a few days to go until the FEI Sports Forum 2024, which will be held on 29 and 30 April at',
+    '<p><strong>LATEST INFORMATION ON FEI SPORTS FORUM 2024</strong></p>
 <p>With only a few days to go until the FEI Sports Forum 2024, which will be held on 29 and 30 April at the prestigious IMD Business School in the Olympic capital Lausanne (SUI), we are pleased to provide you with the latest information about this important event.</p>
 <p><strong>Timetable and logistical information</strong><br>
 The event will begin on Monday, 29 April at 09.00 CEST and will end on Tuesday, 30 April at 17.00 CEST. The timetable along comprehensive logistical information is available in the dedicated online hub here.</p>
@@ -550,20 +673,27 @@ The FEI Sports Forum will be broadcast live and will be available to watch here.
 <p><strong>Contact</strong><br>
 For any queries on the FEI Sports Forum 2024, please contact feisportsforum@fei.org.</p>
 <p>We encourage everyone to join us in person in Lausanne or follow online the proceedings and debates, which will be crucial for the future of equestrian sport.</p>',
-  'published',
-  '2024-04-26T17:02:56Z'::timestamptz,
-  '2024-04-26T17:02:56Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-04-26T17:02:56Z'::timestamptz,
+    '2024-04-26T17:02:56Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/have-the-scores-gone-down/ (wp post id 3122)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'have-the-scores-gone-down',
-  'Have the scores gone down?',
-  'Maybe they have. The FEI invited all the stakeholder clubs to a meeting in Riyadh. It was a good meeting where we had the chance to discuss certain proposals for',
-  '<p><strong>Maybe they have.</strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'have-the-scores-gone-down',
+    'Have the scores gone down?',
+    'Maybe they have. The FEI invited all the stakeholder clubs to a meeting in Riyadh. It was a good meeting where we had the chance to discuss certain proposals for',
+    '<p><strong>Maybe they have.</strong></p>
 <p>The FEI invited all the stakeholder clubs to a meeting in Riyadh. It was a good meeting where we had the chance to discuss certain proposals for changes in dressage. An overall discussion of the direction of the sport and a good opportunity to sit together and balance expectations. Besides the FEI and the stakeholder club representatives (IDOC was represented by two judges and one steward) there was athletes representatives, board members, veterinary committee members, the President of the FEI and the FEI Dressage director.</p>
 <p>In Hagen the IDRC called for a meeting with some riders and judges. Again a good opportunity to talk and discuss. The meeting was fruitful and we all agreed, that we would like to organize these meeting on a more regular basis. The idea is to come together as more united in the sport. Even if we sometimes have slightly different opinions, the discussions are important.</p>
 <p>The format for the meetings might change, but the most important thing is to keep the momentum and the discussion going.</p>
@@ -582,34 +712,48 @@ VALUES (
 <p>Best regards,</p>
 <p><strong>Hans Christian Matthiesen</strong><br>
 IDOC President</p>',
-  'published',
-  '2024-05-05T18:40:45Z'::timestamptz,
-  '2024-05-05T18:40:45Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-05-05T18:40:45Z'::timestamptz,
+    '2024-05-05T18:40:45Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idtc-meeting-save-the-date/ (wp post id 3176)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idtc-meeting-save-the-date',
-  'IDTC Meeting – Save the Date',
-  'November 5th 12.00 to November 6th 14:00 Location: KNHS De Beek 125 Ermelo, The Netherlands',
-  '<a href="https://idoc.club/wp-content/uploads/sites/58/2024/11/IDTC-Meeting-Save-the-Date.pdf">IDTC Meeting Save the Date</a>',
-  'published',
-  '2024-11-02T20:09:17Z'::timestamptz,
-  '2024-11-02T20:09:17Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idtc-meeting-save-the-date',
+    'IDTC Meeting – Save the Date',
+    'November 5th 12.00 to November 6th 14:00 Location: KNHS De Beek 125 Ermelo, The Netherlands',
+    '<a href="https://idoc.club/wp-content/uploads/sites/58/2024/11/IDTC-Meeting-Save-the-Date.pdf">IDTC Meeting Save the Date</a>',
+    'published',
+    '2024-11-02T20:09:17Z'::timestamptz,
+    '2024-11-02T20:09:17Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/importance-of-ce/ (wp post id 3181)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'importance-of-ce',
-  'The Importance of CE and In-Person Meetings',
-  'Matthiesen wites about the role of the International Dressage Official Club (IDOC) and the obligation that comes with it. He reflects on IDOC’s presence with judges and steward seminars and exams recently held at the championship for young horses in Poland and last weekend at the first CDI-W in M...',
-  '<p><em>Matthiesen wites about the role of the International Dressage Official Club (IDOC) and the obligation that comes with it. He reflects on IDOC’s presence with judges and steward seminars and exams recently held at the championship for young horses in Poland and last weekend at the first CDI-W in Mexico. </em></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'importance-of-ce',
+    'The Importance of CE and In-Person Meetings',
+    'Matthiesen wites about the role of the International Dressage Official Club (IDOC) and the obligation that comes with it. He reflects on IDOC’s presence with judges and steward seminars and exams recently held at the championship for young horses in Poland and last weekend at the first CDI-W in M...',
+    '<p><em>Matthiesen wites about the role of the International Dressage Official Club (IDOC) and the obligation that comes with it. He reflects on IDOC’s presence with judges and steward seminars and exams recently held at the championship for young horses in Poland and last weekend at the first CDI-W in Mexico. </em></p>
 <h3><strong>On the Importance of Continuing Education and In-Person Meetings for Officials</strong></h3>
 <p>As part of an official activity, there is <strong>a mandatory obligation to educate yourself at all times</strong>. As an international official, the training is determined by the FEI and the Education plan; all depending on level, function and discipline.</p>
 <p><strong>Adapt to Changing Times and Social Licence<br>
@@ -628,34 +772,27 @@ VALUES (
 <p><strong>Omar Zayrik </strong>(MEX) is a 3* FEI judge, show director of the CDI-W Mexico, and IDOC board member. He said, “as a representative and official from the Central and South American region I know how important it is to have an in-person meeting and seminar in our region. The distances are big, so even if you come from the same region, you still have to fly 8 hours to get to a seminar. They are important not only for the international officials, but also the national judges. I am proud that we, with the help from sponsors Arquitectura Ecuestre and IDOC, organized one for dressage judges (with Raphael Saleh and HC Matthiesen as course directors) and stewards (with Dianna Muennich and Lisa Goretta as course directors).”</p>
 <p><strong>Lukas Walter </strong>(POL) is a 3* FEI judge and IDOC member): “I have participated in many IDOC seminars, including the ones for my exams. IDOC has done a tremendous job, and for us it was a great pleasure and honor to organize, now for the second year in a row, the young horse seminar with exams in Radzionkow (course director: Raphael Saleh and HC Matthiesen) together with the Polish Equestrian Federation, the organizers of the YH championships, and IDOC. We had people attending from all parts of the world and we’ve got good feedback from the participants. It’s great to be able to give something back to the system, that has helped me a lot in my journey as an official.”</p>
 <p><strong>IDOC</strong> added, “over the last years we organized good and popular seminars with National Federations (eg the Polish and Italian NFs), but also with private organizers (such as Schafhof Connect/Linsenhoff/Rath family in Kronberg, GER). Without them it would not have been possible for us to reach out to so many officials in such a professional way. Other players, like the European Equestrian Federation, could also be in on a future joint venture.”</p>',
-  'published',
-  '2024-11-15T18:36:33Z'::timestamptz,
-  '2024-11-15T18:36:33Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2024-11-15T18:36:33Z'::timestamptz,
+    '2024-11-15T18:36:33Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
-
--- source: https://idoc.club/ga-assembly2024/ (wp post id 3188)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'ga-assembly2024',
-  'IDOC/FEI Seminar Frankfurt + General Assembly Program 2024',
-  'IDOC General Assembly FEI Refresher Seminar for Dressage Judges FEI Maintenance Course for Stewards Asia & Pacific Forum',
-  '<p>You are unauthorized to view this page unless you are a member.  If you are a member please log-in below.  If you are not a member but would like to become one, please sign-up.</p>',
-  'published',
-  '2024-12-11T03:59:31Z'::timestamptz,
-  '2024-12-11T03:59:31Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
-)
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-elections-2025/ (wp post id 3204)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-elections-2025',
-  'FEI Elections & Appointments process 2025',
-  'The process for candidatures for FEI Elections and Appointments 2025 is now officially open! There are 20 positions open to candidacies including Chairpersons for Regional Group V, Jumping, Dressage and Eventing Committees as well as open positions for Members of FEI Tribunal and for the followin...',
-  '<p>Dear National Federations,</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-elections-2025',
+    'FEI Elections & Appointments process 2025',
+    'The process for candidatures for FEI Elections and Appointments 2025 is now officially open! There are 20 positions open to candidacies including Chairpersons for Regional Group V, Jumping, Dressage and Eventing Committees as well as open positions for Members of FEI Tribunal and for the followin...',
+    '<p>Dear National Federations,</p>
 <p>The process for candidatures for FEI Elections and Appointments 2025 is now officially open!</p>
 <p>There are 20 positions open to candidacies including Chairpersons for Regional Group V, Jumping, Dressage and Eventing Committees as well as open positions for Members of FEI Tribunal and for the following committees: Jumping, Dressage, Para Equestrian, Eventing, Driving and Veterinary.</p>
 <p>The complete list of positions including details on job specifications and the relevant procedures in terms of deadlines, timelines and candidate requirements are now available <strong><a href="http://tracking.fei.org/tracking/click?d=RUQ5_cDWKiEmQsftlB11D6fvMqpb-DvSJrFtoZCKKYyoOgGgjU64z9yJwkKTx8_n__RY3pgU3TOQ2lMsJu0XLM37J6YjMJThfatJ343i__meAul5kcg67iOfRbWvRLyEVH4GSMsg4Ie5UzXw0XS3YgYEgWuK-xClzqW55Pa4A5ghrkkyQ5e9L_gaJIBbIqw2Lg2">here</a> </strong><strong>on </strong><a href="http://inside.fei.org">inside.fei.org</a><strong>.</strong></p>
@@ -681,20 +818,27 @@ VALUES (
 <p>If you have any questions do not hesitate to contact Francisco P. Lima, FEI Director Governance &amp; Institutional Affairs at <a href="mailto:francisco.lima@fei.org?subject=Rules%20Revision%20Process%202025"><strong>Francisco.lima@fei.org</strong></a><strong>.</strong></p>
 <p>Kind regards,</p>
 <p><strong>FEI Communications Department</strong></p>',
-  'published',
-  '2025-02-01T17:52:20Z'::timestamptz,
-  '2025-02-01T17:52:20Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2025-02-01T17:52:20Z'::timestamptz,
+    '2025-02-01T17:52:20Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-general-assembly-fei-refresher-seminar-2025/ (wp post id 3261)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-general-assembly-fei-refresher-seminar-2025',
-  'IDOC General Assembly 2025 & FEI Maintenance Course Program',
-  'It is a great pleasure to invite you all to the 2025 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will take place during the CDI 5* Frankfurt, 18 – 20 December 2025.',
-  '<p>Dear Members,</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-general-assembly-fei-refresher-seminar-2025',
+    'IDOC General Assembly 2025 & FEI Maintenance Course Program',
+    'It is a great pleasure to invite you all to the 2025 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will take place during the CDI 5* Frankfurt, 18 – 20 December 2025.',
+    '<p>Dear Members,</p>
 <p>It is a great pleasure to invite you all to the 2025 International Dressage Officials Club General Assembly + FEI/IDOC Seminar, which will take place during the CDI 5* Frankfurt, 18 – 20 December 2025.</p>
 <p><strong>IDOC GENERAL ASSEMBLY DETAILS</strong></p>
 <ul>
@@ -743,62 +887,90 @@ Van De Reydtlaan 83<br>
 2960 Brecht (Belgium)<br>
 M: <a>+ 1 617 769 2302</a><br>
 <a href="mailto:secretary@idoc.club?subject=&amp;body=">secretary@idoc.club</a></p>',
-  'published',
-  '2025-09-19T17:18:17Z'::timestamptz,
-  '2025-09-19T17:18:17Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2025-09-19T17:18:17Z'::timestamptz,
+    '2025-09-19T17:18:17Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-general-assembly-wrap-up-report/ (wp post id 3277)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-general-assembly-wrap-up-report',
-  'FEI General Assembly Wrap-Up Report',
-  'The main decisions taken by the General Assembly are summarised in this report.',
-  '<p><a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/2-GA25-wrap-up-report-GA-7Nov2025.pdf">2 - GA25 - wrap-up report GA-7Nov2025</a> <a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a></p>',
-  'published',
-  '2025-11-19T01:14:59Z'::timestamptz,
-  '2025-11-19T01:14:59Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-general-assembly-wrap-up-report',
+    'FEI General Assembly Wrap-Up Report',
+    'The main decisions taken by the General Assembly are summarised in this report.',
+    '<p><a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/2-GA25-wrap-up-report-GA-7Nov2025.pdf">2 - GA25 - wrap-up report GA-7Nov2025</a> <a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a></p>',
+    'published',
+    '2025-11-19T01:14:59Z'::timestamptz,
+    '2025-11-19T01:14:59Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/proposals-for-rule-changes-of-dressage-rules-2025/ (wp post id 3282)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'proposals-for-rule-changes-of-dressage-rules-2025',
-  'Proposals for Rule Changes of Dressage Rules 2025',
-  'Proposed changes to the Dressage Rules together with the corresponding explanations, the comments received as well as the reasoning for accepting or not accepting each proposal.',
-  '<a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a>',
-  'published',
-  '2025-11-19T01:19:09Z'::timestamptz,
-  '2025-11-19T01:19:09Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'proposals-for-rule-changes-of-dressage-rules-2025',
+    'Proposals for Rule Changes of Dressage Rules 2025',
+    'Proposed changes to the Dressage Rules together with the corresponding explanations, the comments received as well as the reasoning for accepting or not accepting each proposal.',
+    '<a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a>',
+    'published',
+    '2025-11-19T01:19:09Z'::timestamptz,
+    '2025-11-19T01:19:09Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/fei-rules-revision/ (wp post id 3312)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'fei-rules-revision',
-  'FEI Rules Revision',
-  'The Periodicial Rules Revision Policy, approved by the FEI Board during its in-person meeting in Lausanne (SUI) on 19, 20 and 21 June 2019 and endorsed by the General Assembly on 19 November 2019.',
-  'window.open("https://inside.fei.org/fei/about-fei/governance/rules-revision", "_blank");',
-  'published',
-  '2026-03-01T15:09:08Z'::timestamptz,
-  '2026-03-01T15:09:08Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'fei-rules-revision',
+    'FEI Rules Revision',
+    'The Periodicial Rules Revision Policy, approved by the FEI Board during its in-person meeting in Lausanne (SUI) on 19, 20 and 21 June 2019 and endorsed by the General Assembly on 19 November 2019.',
+    '<p>Read the FEI Periodical Rules Revision Policy: <a href="https://inside.fei.org/fei/about-fei/governance/rules-revision">inside.fei.org/fei/about-fei/governance/rules-revision</a></p>',
+    'published',
+    '2026-03-01T15:09:08Z'::timestamptz,
+    '2026-03-01T15:09:08Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/how-to-apply-the-fei-judging-guidelines-on-tension-submission-acceptance-of-the-contact-and-harmony/ (wp post id 3309)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'how-to-apply-the-fei-judging-guidelines-on-tension-submission-acceptance-of-the-contact-and-harmony',
-  'How to apply the FEI judging guidelines on tension, submission, acceptance of the contact, and harmony',
-  'by Hans Christian Matthiesen',
-  '<p>In our current climate, <em>how</em> we apply the FEI judging guidelines on <strong>tension, submission, acceptance of the contact, and harmony</strong> is more than technical accuracy—it’s the sport’s credibility. The FEI Dressage Judging Manual is explicit: quality of gaits and technical execution must be evaluated <strong>together with</strong> the overall picture of relaxation, confidence, and willingness. When <strong>stress and conflict signals</strong> are visible, they are not “stylistic choices”; they are <strong>relevant judging information</strong> that should influence our marks accordingly.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'how-to-apply-the-fei-judging-guidelines-on-tension-submission-acceptance-of-the-contact-and-harmony',
+    'How to apply the FEI judging guidelines on tension, submission, acceptance of the contact, and harmony',
+    'by Hans Christian Matthiesen',
+    '<p>In our current climate, <em>how</em> we apply the FEI judging guidelines on <strong>tension, submission, acceptance of the contact, and harmony</strong> is more than technical accuracy—it’s the sport’s credibility. The FEI Dressage Judging Manual is explicit: quality of gaits and technical execution must be evaluated <strong>together with</strong> the overall picture of relaxation, confidence, and willingness. When <strong>stress and conflict signals</strong> are visible, they are not “stylistic choices”; they are <strong>relevant judging information</strong> that should influence our marks accordingly.</p>
 <h3><strong>Stress &amp; conflict signs we already have in our framework</strong></h3>
 <p>The Manual (and the wider FEI framework) expects us to penalise what undermines the stated training scale outcomes—especially <strong>tension</strong> and loss of <strong>self-carriage</strong> and <strong>acceptance</strong>. That means consistently recognizing observable indicators such as:</p>
 <ul>
@@ -846,20 +1018,27 @@ Why this matters</strong></h3>
 <li>Ladewig, J., McLean, A. N., Wilkins, C. L., Fenner, K., Christensen, J. W., &amp; McGreevy, P. D. (2022). A review of the Ridden Horse Pain Ethogram and its potential to improve ridden horse welfare. <em>Journal of Veterinary Behavior, 54</em>, 54–61. https://doi.org/10.1016/j.jveb.2022.07.003</li>
 <li>Fédération Equestre Internationale (FEI). (2025). <em>FEI General and Discipline-Specific Protocols for Assessing the Tightness of Nosebands</em> (protocol document). FEI.</li>
 </ul>',
-  'published',
-  '2026-03-06T14:52:33Z'::timestamptz,
-  '2026-03-06T14:52:33Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-03-06T14:52:33Z'::timestamptz,
+    '2026-03-06T14:52:33Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/in-memoriam-stephen-clarke/ (wp post id 3353)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'in-memoriam-stephen-clarke',
-  'In Memoriam — Stephen Clarke 1952-2026',
-  'A tribute from the International Dressage Officials Club It is with profound sadness, and yet with an equally profound sense of gratitude, that we share the news of the passing',
-  '<p>A tribute from the International Dressage Officials Club</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'in-memoriam-stephen-clarke',
+    'In Memoriam — Stephen Clarke 1952-2026',
+    'A tribute from the International Dressage Officials Club It is with profound sadness, and yet with an equally profound sense of gratitude, that we share the news of the passing',
+    '<p>A tribute from the International Dressage Officials Club</p>
 <p>It is with profound sadness, and yet with an equally profound sense of gratitude, that we share the news of the passing of our dear friend, colleague and former IDOC President, Stephen Clarke.</p>
 <p>Stephen was, quite simply, one of the greatest gifts the sport of dressage has ever received. His passing leaves a stillness in our world that will take a long time to fill — and yet, if we listen carefully, we can still hear his voice: warm, measured, often wonderfully witty, and always pointing us toward what is right and good in this sport we all love.</p>
 <p>A life shaped by horses</p>
@@ -884,20 +1063,27 @@ VALUES (
 <p>On behalf of the International Dressage Officials Club</p>
 <p>Mariette Whittages Former President, IDOC</p>
 <p>Hans-Christian Matthiesen President, IDOC</p>',
-  'published',
-  '2026-06-14T15:35:14Z'::timestamptz,
-  '2026-06-14T15:35:14Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-06-14T15:35:14Z'::timestamptz,
+    '2026-06-14T15:35:14Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/in-memoriam-jacques-van-daele-1953-2026/ (wp post id 3358)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'in-memoriam-jacques-van-daele-1953-2026',
-  'In Memoriam — Jacques Van Daele 1953-2026',
-  'A tribute from the International Dressage Officials Club It is with deep sadness that we share the news of the passing of our dear colleague, Jacques van Daele, who left',
-  '<p>A tribute from the International Dressage Officials Club</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'in-memoriam-jacques-van-daele-1953-2026',
+    'In Memoriam — Jacques Van Daele 1953-2026',
+    'A tribute from the International Dressage Officials Club It is with deep sadness that we share the news of the passing of our dear colleague, Jacques van Daele, who left',
+    '<p>A tribute from the International Dressage Officials Club</p>
 <p>It is with deep sadness that we share the news of the passing of our dear colleague, Jacques van Daele, who left us this weekend after a period of illness, and longtime struggle with cancer.</p>
 <p>Jacques was a man of many roles in the equestrian world — international dressage judge, international chief steward, and a longstanding member of the IDOC board — but it was perhaps in the arena of steward education that his mark was felt most profoundly. He dedicated a big part of his professional life to training and mentoring stewards within the FEI framework, approaching that responsibility with the same rigour and dedication that characterised everything he did.<br>
 His commitment to the sport took him to some of the greatest stages equestrian sport has to offer. Among them, his many years of service at CHIO Aachen stand as a testament to the trust and respect he earned from the highest levels of our community. As a judge, he judged many Championships throughout the years.<br>
@@ -908,22 +1094,29 @@ Those who worked alongside Jacques will remember a man who was, in many ways, a 
 <p>The Board and Members of IDOC International Dressage Officials Club</p>
 <p>Hans Christian Matthiesen,<br>
 President</p>',
-  'published',
-  '2026-07-05T16:57:17Z'::timestamptz,
-  '2026-07-05T16:57:17Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-07-05T16:57:17Z'::timestamptz,
+    '2026-07-05T16:57:17Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 
 -- President's Blog (legacy category: president-blog) (7 rows) -----------------------------------------------------------
 -- source: https://idoc.club/the-perception-of-dressage-judging-happy-easter/ (wp post id 1606)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'the-perception-of-dressage-judging-happy-easter',
-  'The Perception of Dressage judging – Happy Easter',
-  'So between the Sports Forum meeting in Lausanne, work near Copenhagen and a CDI in Austria near Vienna and the annual trainers meeting, IDTC in Billund back in Denmark –',
-  '<p>So between the Sports Forum meeting in Lausanne, work near Copenhagen and a CDI in Austria near Vienna and the annual trainers meeting, IDTC in Billund back in Denmark – its time to reflect, look back and try to look into the future !<br>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'the-perception-of-dressage-judging-happy-easter',
+    'The Perception of Dressage judging – Happy Easter',
+    'So between the Sports Forum meeting in Lausanne, work near Copenhagen and a CDI in Austria near Vienna and the annual trainers meeting, IDTC in Billund back in Denmark –',
+    '<p>So between the Sports Forum meeting in Lausanne, work near Copenhagen and a CDI in Austria near Vienna and the annual trainers meeting, IDTC in Billund back in Denmark – its time to reflect, look back and try to look into the future !<br>
 The Sports Forum meeting in Lausanne went well – in the way, that the Judges Working group decided not to present a new Judging system (like proposed at the stakeholder meeting in Amsterdam). They did however state that the future of dressage will bring ”change” and lets hope that it will be based on concensus and compliance. Before the meeting there had been a lot of speculation and lobbying, but only because we didnt have the feeling that our (IDOC’s) opinion were taken serious in Amsterdam.<br>
 <br>
 I felt it was important to state that dressage officials/judges are ”open and positive” to change if it is based on evidence and will benefit the sport. The last years, all the judges have been open to changes in the judging system. Over the years, we have gained a lot of experience and good results with the current system. Never the less, we have been open to changes like: Freestyle, the new DoD system, 7 judges in championships, JSP, 5% rules and others because they were based on trials’s and statistic evidense. We have tried out many other judging systems, but even though some of them were interesting, we decided to keep the current system, because that made more sense. The judging is more transperant than ever – all marks and results are published on the internet, live and after. Everybody can analyse, comment and critisize – and the judges are used to that. We of all know the frustration behind differences in judging. No one like the judges, try so hard to get around this – and we have meetings and discussions to become better and more clear in our judging.</p>
@@ -945,20 +1138,27 @@ We have to work together with the other Clubs – but we will not be ”run over
 #NoToDrexit<br>
 Happy Easter<br>
 HC Matthiesen</p>',
-  'published',
-  '2017-04-16T18:38:44Z'::timestamptz,
-  '2017-04-16T18:38:44Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2017-04-16T18:38:44Z'::timestamptz,
+    '2017-04-16T18:38:44Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/new-year-message-from-idoc-president/ (wp post id 593)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'new-year-message-from-idoc-president',
-  'New year message from IDOC President',
-  'Dear Friends and Colleagues, First of all: Happy New Year, I hope you all had time to enjoy the holidays. In December we were so lucky to have our General',
-  '<p>Dear Friends and Colleagues,<br>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'new-year-message-from-idoc-president',
+    'New year message from IDOC President',
+    'Dear Friends and Colleagues, First of all: Happy New Year, I hope you all had time to enjoy the holidays. In December we were so lucky to have our General',
+    '<p>Dear Friends and Colleagues,<br>
 First of all: Happy New Year, I hope you all had time to enjoy the holidays.</p>
 <p>In December we were so lucky to have our General Assembly and Refresher Seminars for both judges and steward in Frankfurt, hosted by the Linsenhof/Rath family at Stud Schafhof. Thank you so much to Ann-Kathrin, Klaus-Martin and Mathias for their incredible support and thank you to everybody who made their way and invested their time in this year’s meeting and seminar in Frankfurt. It was truly great.<br>
 </p>
@@ -988,20 +1188,27 @@ In 2018, the FEI held its General assembly in Bahrain. IDOC would like to congra
 <p>Thank you.<br>
 Hans-Christian Matthiesen<br>
 President</p>',
-  'published',
-  '2019-01-19T13:20:39Z'::timestamptz,
-  '2019-01-19T13:20:39Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2019-01-19T13:20:39Z'::timestamptz,
+    '2019-01-19T13:20:39Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/hans-christian-matthiesen-the-president-of-the-idoc-about-on-line-judging/ (wp post id 944)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'hans-christian-matthiesen-the-president-of-the-idoc-about-on-line-judging',
-  'Hans-Christian Matthiesen, the president of the IDOC, about on-line judging',
-  'Dear Colleagues! We live in a world full of rules and sanctions due to Covid19, but everywhere we see new initiatives on the internet. Some of them who might employ',
-  '<p>Dear Colleagues! </p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'hans-christian-matthiesen-the-president-of-the-idoc-about-on-line-judging',
+    'Hans-Christian Matthiesen, the president of the IDOC, about on-line judging',
+    'Dear Colleagues! We live in a world full of rules and sanctions due to Covid19, but everywhere we see new initiatives on the internet. Some of them who might employ',
+    '<p>Dear Colleagues! </p>
 
 
 
@@ -1066,20 +1273,27 @@ VALUES (
 
 
 <p>Stay safe and healthy.</p>',
-  'published',
-  '2020-04-15T18:04:09Z'::timestamptz,
-  '2020-04-15T18:04:09Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2020-04-15T18:04:09Z'::timestamptz,
+    '2020-04-15T18:04:09Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/idoc-end-of-year-2022/ (wp post id 1354)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'idoc-end-of-year-2022',
-  'IDOC End Of Year 2022',
-  'Dear members, ​​​​​​Dear friends, Another year has come to an end, and the feeling that we still are in a post-Covid difficult situation is still dominant. Fortunately, many countries now',
-  '<p>Dear members, ​​​​​​<br>Dear friends, </p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'idoc-end-of-year-2022',
+    'IDOC End Of Year 2022',
+    'Dear members, ​​​​​​Dear friends, Another year has come to an end, and the feeling that we still are in a post-Covid difficult situation is still dominant. Fortunately, many countries now',
+    '<p>Dear members, ​​​​​​<br>Dear friends, </p>
 
 
 
@@ -1148,20 +1362,27 @@ VALUES (
 
 
 <p>President, IDOC</p>',
-  'published',
-  '2022-12-30T20:45:00Z'::timestamptz,
-  '2022-12-30T20:45:00Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2022-12-30T20:45:00Z'::timestamptz,
+    '2022-12-30T20:45:00Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/integrity-beyond-compliance/ (wp post id 3305)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'integrity-beyond-compliance',
-  'Integrity Beyond Compliance',
-  'by Hans Christian Matthiesen',
-  '<h2><strong>Code of Conduct and Conflict of Interest in FEI Dressage Judging</strong></h2>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'integrity-beyond-compliance',
+    'Integrity Beyond Compliance',
+    'by Hans Christian Matthiesen',
+    '<h2><strong>Code of Conduct and Conflict of Interest in FEI Dressage Judging</strong></h2>
 <p><em>For FEI International Dressage Officials</em></p>
 <p><strong>Introduction</strong></p>
 <p>As FEI International Dressage Official, we operate within one of the most technically demanding and publicly scrutinised disciplines in equestrian sport. Our legitimacy depends not only on technical competence, but on the <strong>trust</strong> placed in us by athletes, trainers, owners, organisers, sponsors, and the wider public.</p>
@@ -1286,20 +1507,27 @@ A perceived conflict is subjective—but no less powerful.</p>
 <p>For the credibility of our sport and the respect afforded to the officiating community, we must hold ourselves not only to regulatory standards—but to the higher standard of trust.</p>
 <p>Integrity is not only about being right.<br>
 It is about being seen to be right.</p>',
-  'published',
-  '2026-03-06T14:26:09Z'::timestamptz,
-  '2026-03-06T14:26:09Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-03-06T14:26:09Z'::timestamptz,
+    '2026-03-06T14:26:09Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/new-research-on-stress-in-dressage-horses/ (wp post id 3319)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'new-research-on-stress-in-dressage-horses',
-  'New Research on Stress in Dressage Horses',
-  'by Hans Christian Matthiesen',
-  '<p>A recent study published in <em>Animals</em> investigated stress-related behaviours in <strong>238 dressage horse-rider combinations</strong> competing at national levels, using objective measures and video analysis to quantify conflict behaviours such as mouth opening, tail swishing, and head-neck changes.</p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'new-research-on-stress-in-dressage-horses',
+    'New Research on Stress in Dressage Horses',
+    'by Hans Christian Matthiesen',
+    '<p>A recent study published in <em>Animals</em> investigated stress-related behaviours in <strong>238 dressage horse-rider combinations</strong> competing at national levels, using objective measures and video analysis to quantify conflict behaviours such as mouth opening, tail swishing, and head-neck changes.</p>
 <h3><strong>Key Findings</strong></h3>
 <ul>
 <li><strong>Noseband tightness was measured using the FEI Noseband Measuring Device</strong><br>
@@ -1331,20 +1559,27 @@ Factors to consider beyond technical execution:</strong></h3>
 <h3><em><br>
 Reference:</em></h3>
 <p>Simona Fialová et al., <em>Stress Responses in Dressage Horses: Insights from FEI Noseband Measurements Across National Competition Levels</em>, <em>Animals</em> 2026, 16(3), 518.</p>',
-  'published',
-  '2026-03-06T16:53:47Z'::timestamptz,
-  '2026-03-06T16:53:47Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-03-06T16:53:47Z'::timestamptz,
+    '2026-03-06T16:53:47Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen/ (wp post id 3332)
-INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
-VALUES (
-  'modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen',
-  'Modern Dressage Judging: Perception, Data, and the Evolving Role of Welfare: by Hans Christian Matthiesen',
-  'Recent public discussions have raised questions regarding judging standards and score distribution in international dressage. This article integrates professional reflection with quantitative data analysis provided by Daniel Göhlen (BlackHorseOne) to examine whether perceived changes in scoring r...',
-  '<p><strong>Abstract</strong></p>
+WITH ins AS (
+  INSERT INTO idoc.news_articles (slug, title, subtitle, content_html, status, publication_date, published_at, created_by_user_id, updated_by_user_id)
+  VALUES (
+    'modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen',
+    'Modern Dressage Judging: Perception, Data, and the Evolving Role of Welfare: by Hans Christian Matthiesen',
+    'Recent public discussions have raised questions regarding judging standards and score distribution in international dressage. This article integrates professional reflection with quantitative data analysis provided by Daniel Göhlen (BlackHorseOne) to examine whether perceived changes in scoring r...',
+    '<p><strong>Abstract</strong></p>
 <p>Recent public discussions have raised questions regarding judging standards and score distribution in international dressage. This article integrates professional reflection with quantitative data analysis provided by Daniel Göhlen (BlackHorseOne) to examine whether perceived changes in scoring reflect actual trends. The findings indicate that scoring levels have remained relatively stable over time, with only minor regional differences between Europe and North America. However, a clear shift is observed in judging emphasis, with increasing attention to welfare-related indicators such as contact quality, tension, and conflict behaviour. The article argues that modern dressage judging reflects an evolution toward welfare-oriented and training-based evaluation rather than inconsistency or undue strictness. It further highlights the shared responsibility among judges, riders, and trainers in shaping the future of the sport.</p>
 <p><strong>Introduction</strong></p>
 <p>In recent days, public discussion has emerged following posts on Social Media regarding judging standards and score distribution. The level of engagement reflects a strong collective commitment to the sport, which is both encouraging and necessary.</p>
@@ -1477,20 +1712,27 @@ VALUES (
 <li>FEI Dressage Rules (latest edition)</li>
 <li>FEI Guidelines for Judging Dressage</li>
 </ul>',
-  'published',
-  '2026-04-07T17:55:38Z'::timestamptz,
-  '2026-04-07T17:55:38Z'::timestamptz,
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+    'published',
+    '2026-04-07T17:55:38Z'::timestamptz,
+    '2026-04-07T17:55:38Z'::timestamptz,
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  )
+  ON CONFLICT (slug) DO NOTHING
+  RETURNING id, slug, title, status
 )
-ON CONFLICT (slug) DO NOTHING;
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.news_article.created', 'news_article', ins.id::text,
+  jsonb_build_object('slug', ins.slug, 'status', ins.status, 'title', ins.title)
+FROM ins;
 
 
 -- Seminars (legacy category: seminars) (4 rows) ----------------------------------
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/ (wp post id 3242)
-INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
-SELECT
-  'Para Dressage Transfer Up Course for L2 Judges',
-  'Source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/
+WITH ins AS (
+  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  SELECT
+    'Para Dressage Transfer Up Course for L2 Judges',
+    'Source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/
 
 Hartpury, Great Britain
 
@@ -1547,27 +1789,35 @@ ACCOMMODATION INFORMATION
 Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room prices : £80-£120 per night for double room Booking via premier inn website:
 
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
-  '2026-06-27'::date,
-  '09:00'::time,
-  '17:00'::time,
-  'Europe/London',
-  'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
-  10,
-  15000,
-  '2026-05-15T23:59:00Z'::timestamptz,
-  'published',
-  'online_stripe',
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
-WHERE NOT EXISTS (
-  SELECT 1 FROM idoc.seminars s
-  WHERE s.title = 'Para Dressage Transfer Up Course for L2 Judges' AND s.seminar_date = '2026-06-27'::date
-);
+    '2026-06-27'::date,
+    '09:00'::time,
+    '17:00'::time,
+    'Europe/London',
+    'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
+    10,
+    15000,
+    '2026-05-15T23:59:00Z'::timestamptz,
+    'draft',
+    'online_stripe',
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM idoc.seminars s
+    WHERE s.title = 'Para Dressage Transfer Up Course for L2 Judges' AND s.seminar_date = '2026-06-27'::date
+  )
+  RETURNING id, title, status, capacity, payment_method_canonical_id
+)
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
+  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
+    'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/ (wp post id 3244)
-INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
-SELECT
-  'Para Dressage Transfer Up Course for L3 Judges',
-  'Source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/
+WITH ins AS (
+  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  SELECT
+    'Para Dressage Transfer Up Course for L3 Judges',
+    'Source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/
 
 Hartpury, Great Britain
 
@@ -1622,27 +1872,35 @@ ACCOMMODATION INFORMATION
 Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room prices : £80-£120 per night for double room Booking via premier inn website:
 
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
-  '2026-06-27'::date,
-  '09:00'::time,
-  '17:00'::time,
-  'Europe/London',
-  'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
-  20,
-  15000,
-  '2026-05-15T23:59:00Z'::timestamptz,
-  'published',
-  'online_stripe',
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
-WHERE NOT EXISTS (
-  SELECT 1 FROM idoc.seminars s
-  WHERE s.title = 'Para Dressage Transfer Up Course for L3 Judges' AND s.seminar_date = '2026-06-27'::date
-);
+    '2026-06-27'::date,
+    '09:00'::time,
+    '17:00'::time,
+    'Europe/London',
+    'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
+    20,
+    15000,
+    '2026-05-15T23:59:00Z'::timestamptz,
+    'draft',
+    'online_stripe',
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM idoc.seminars s
+    WHERE s.title = 'Para Dressage Transfer Up Course for L3 Judges' AND s.seminar_date = '2026-06-27'::date
+  )
+  RETURNING id, title, status, capacity, payment_method_canonical_id
+)
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
+  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
+    'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/dress-judge-maintenance-course-falstervbo/ (wp post id 3346)
-INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
-SELECT
-  'Dressage Judge Maintenance Course',
-  'Source: https://idoc.club/dress-judge-maintenance-course-falstervbo/
+WITH ins AS (
+  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  SELECT
+    'Dressage Judge Maintenance Course',
+    'Source: https://idoc.club/dress-judge-maintenance-course-falstervbo/
 
 Falsterbo, Sweden
 
@@ -1709,27 +1967,35 @@ ACCOMMODATION INFORMATION
 TBD
 
 Nearest airports: Malmö SWE (50km) or Copenhagen DEN (48 km)',
-  '2026-07-10'::date,
-  '09:00'::time,
-  '17:00'::time,
-  'Europe/Stockholm',
-  'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
-  20,
-  30000,
-  '2026-06-02T23:59:00Z'::timestamptz,
-  'published',
-  'bank_transfer',
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
-WHERE NOT EXISTS (
-  SELECT 1 FROM idoc.seminars s
-  WHERE s.title = 'Dressage Judge Maintenance Course' AND s.seminar_date = '2026-07-10'::date
-);
+    '2026-07-10'::date,
+    '09:00'::time,
+    '17:00'::time,
+    'Europe/Stockholm',
+    'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
+    20,
+    30000,
+    '2026-06-02T23:59:00Z'::timestamptz,
+    'published',
+    'bank_transfer',
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM idoc.seminars s
+    WHERE s.title = 'Dressage Judge Maintenance Course' AND s.seminar_date = '2026-07-10'::date
+  )
+  RETURNING id, title, status, capacity, payment_method_canonical_id
+)
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
+  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
+    'status', ins.status, 'title', ins.title)
+FROM ins;
 
 -- source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/ (wp post id 3299)
-INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
-SELECT
-  'Young Horse Seminar, Verden 2026 – Save the Date!',
-  'Source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/
+WITH ins AS (
+  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  SELECT
+    'Young Horse Seminar, Verden 2026 – Save the Date!',
+    'Source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/
 
 Verden, Germany
 
@@ -1752,21 +2018,28 @@ Alexandre Lacerda Leão – secretary@idoc.club
 COURSE FEE
 
 EUR 350 (IDOC members)',
-  '2026-08-06'::date,
-  '09:00'::time,
-  '17:00'::time,
-  'Europe/Berlin',
-  'Verden, Germany',
-  30,
-  35000,
-  '2026-07-23T23:59:00Z'::timestamptz,
-  'published',
-  'online_stripe',
-  (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
-WHERE NOT EXISTS (
-  SELECT 1 FROM idoc.seminars s
-  WHERE s.title = 'Young Horse Seminar, Verden 2026 – Save the Date!' AND s.seminar_date = '2026-08-06'::date
-);
+    '2026-08-06'::date,
+    '09:00'::time,
+    '17:00'::time,
+    'Europe/Berlin',
+    'Verden, Germany',
+    30,
+    35000,
+    '2026-07-23T23:59:00Z'::timestamptz,
+    'published',
+    'online_stripe',
+    (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM idoc.seminars s
+    WHERE s.title = 'Young Horse Seminar, Verden 2026 – Save the Date!' AND s.seminar_date = '2026-08-06'::date
+  )
+  RETURNING id, title, status, capacity, payment_method_canonical_id
+)
+INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
+SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
+  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
+    'status', ins.status, 'title', ins.title)
+FROM ins;
 
 
 COMMIT;
