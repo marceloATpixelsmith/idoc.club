@@ -98,7 +98,7 @@ export function OtpEntryStep({
           ) : (
             <form action={resendFormAction} className="inline">
               <CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} />
-              <button disabled={resendPending} type="submit">Resend</button>
+              <button className="idoc-auth-secondary" disabled={resendPending} type="submit">Resend</button>
             </form>
           )}
         </div>
