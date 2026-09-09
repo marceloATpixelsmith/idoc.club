@@ -22,7 +22,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="mb-6 text-2xl font-medium">My Profile</h1>
         {confirmDetails ? (
-          <p className="mb-6 rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
+          <p className="mb-6 rounded-md border border-gold/30 bg-gold/10 p-4 text-sm text-gold">
             Welcome back! Please confirm your details below are still correct before continuing.
           </p>
         ) : null}

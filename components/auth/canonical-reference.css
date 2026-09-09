@@ -166,7 +166,7 @@
 
 .idoc-auth-input:focus {
   border-color: var(--auth-primary-color);
-  box-shadow: 0 0 0 3px oklch(0.83 0.13 87 / 20%);
+  box-shadow: 0 0 0 3px rgb(211 175 55 / 20%);
 }
 
 .idoc-auth-totp-enrollment {
@@ -249,7 +249,7 @@
 .idoc-auth-recovery-codes__copy-button:focus-visible {
   outline: none;
   border-color: var(--auth-primary-color);
-  box-shadow: 0 0 0 3px oklch(0.83 0.13 87 / 20%);
+  box-shadow: 0 0 0 3px rgb(211 175 55 / 20%);
 }
 
 .idoc-auth-recovery-codes__copy-button svg {
