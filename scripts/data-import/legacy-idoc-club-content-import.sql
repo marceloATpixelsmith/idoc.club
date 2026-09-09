@@ -253,7 +253,7 @@ WITH ins AS (
 <p><strong><br>
 FEI IN-PERSON MAINTENANCE COURSE DETAILS</strong></p>
 <p>The judges who need to take this course should apply through your National Federation directly via the FEI Database Course Calendar (<a href="https://club.us10.list-manage.com/track/click?u=90a83c0c39aeed03f1aa265cb&amp;id=653a8be9c5&amp;e=6e737bf937">download invitation</a>). If you have any questions regarding registration, please contact <a href="mailto:anna.milne@fei.org">anna.milne@fei.org</a>.  Be aware that the deadline to apply to the FEI Seminar was postponed to 15 November 2023.  For the video assessment &amp; theory session (Saturday afternoon at the showground), please bring your own devices (computers, tablets, smartphones should work too).</p>
-<p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/10/2023-IDOC-General-Assembly-Preliminary-Program.pdf">IDOC General Assembly 2023 – Preliminary Program </a></p>',
+<p><a href="https://idoc.club/documents/general-assembly/2023-IDOC-General-Assembly-Preliminary-Program.pdf">IDOC General Assembly 2023 – Preliminary Program </a></p>',
     'published',
     '2023-10-25T14:56:58Z'::timestamptz,
     '2023-10-25T14:56:58Z'::timestamptz,
@@ -401,7 +401,7 @@ WITH ins AS (
 
 
 
-<p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/10/Paris2024-ITOs-12-October2023-1.pdf">Paris2024 – ITOs- 12 October2023 (1)</a></p>',
+<p><a href="https://idoc.club/documents/news/Paris2024-ITOs-12-October2023-1.pdf">Paris2024 – ITOs- 12 October2023 (1)</a></p>',
     'published',
     '2023-10-25T15:37:48Z'::timestamptz,
     '2023-10-25T15:37:48Z'::timestamptz,
@@ -481,7 +481,7 @@ WITH ins AS (
     'FEI News',
     'In this edition of the FEI Newsletter: New Travel Insurance Partner, Key Event Requirements (KERs) System, FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in',
     '<p><strong>In this edition of the FEI Newsletter:  </strong>New Travel Insurance Partner,  Key Event Requirements (KERs) System,  FEI sets criteria for participation of Russian and Belarusian Athletes, Horses and Officials in FEI Events</p>
-<p><a href="https://idoc.club/wp-content/uploads/sites/58/2023/12/Federation-Equestre-Internationale.pdf">DOWNLOAD &gt;&gt;</a></p>',
+<p><a href="https://idoc.club/documents/news/Federation-Equestre-Internationale.pdf">DOWNLOAD &gt;&gt;</a></p>',
     'published',
     '2023-12-30T19:31:32Z'::timestamptz,
     '2023-12-30T19:31:32Z'::timestamptz,
@@ -503,7 +503,7 @@ WITH ins AS (
     'Joint Statement From Stakeholders',
     'Joint Statement by the IDTC, IDRC, and IDOC',
     '<p>Joint Statement by the IDTC, IDRC, and IDOC</p>
-<a href="https://idoc.club/wp-content/uploads/sites/58/2024/02/JOINT-STATEMENT-FROM-STAKEHOLDERS-Feb-2024.pdf">JOINT STATEMENT FROM STAKEHOLDERS Feb 2024</a>',
+<a href="https://idoc.club/documents/news/JOINT-STATEMENT-FROM-STAKEHOLDERS-Feb-2024.pdf">JOINT STATEMENT FROM STAKEHOLDERS Feb 2024</a>',
     'published',
     '2024-02-21T17:23:54Z'::timestamptz,
     '2024-02-21T17:23:54Z'::timestamptz,
@@ -732,7 +732,7 @@ WITH ins AS (
     'idtc-meeting-save-the-date',
     'IDTC Meeting – Save the Date',
     'November 5th 12.00 to November 6th 14:00 Location: KNHS De Beek 125 Ermelo, The Netherlands',
-    '<a href="https://idoc.club/wp-content/uploads/sites/58/2024/11/IDTC-Meeting-Save-the-Date.pdf">IDTC Meeting Save the Date</a>',
+    '<a href="https://idoc.club/documents/news/IDTC-Meeting-Save-the-Date.pdf">IDTC Meeting Save the Date</a>',
     'published',
     '2024-11-02T20:09:17Z'::timestamptz,
     '2024-11-02T20:09:17Z'::timestamptz,
@@ -853,7 +853,7 @@ SEMINAR FOR DRESSAGE JUDGES</strong></p>
 <p><strong>December 18th to 20th</strong></p>
 <p>In keeping with tradition, IDOC will be hosting a seminar and a FEI Maintenance Course during the CDI 5* Frankfurt.</p>
 <p>The tickets to access the showground (Festhalle) will be distributed on Wednesday, December 17th, at the lobby of the Marriott Hotel, from 16h to 18h. The official schedule of the Seminar ends on Saturday by 13h00.</p>
-<p>Download the <a href="https://idoc.club/wp-content/uploads/sites/58/2025/09/2025-IDOC-General-Assembly-FEI-Maintenance-Course-Frankfurt-Preliminary-Program_v2.pdf">event agenda</a> for more details.</p>
+<p>Download the <a href="https://idoc.club/documents/general-assembly/2025-IDOC-General-Assembly-FEI-Maintenance-Course-Frankfurt-Preliminary-Program_v2.pdf">event agenda</a> for more details.</p>
 <p>IDOC won’t provide tickets for the Freestyle on Sunday morning. If you are interested in watching it, please find more information and purchase details directly in the <a href="https://festhallenreitturnier-frankfurt.com/">competition site</a></p>
 <p><strong>FEI MAINTENANCE COURSE DETAILS</strong></p>
 <p>The judges who would like to take this course should apply through your National Federation directly via the <a href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx">FEI Database Course Calendar</a>. If you have any questions regarding registration, please contact <a href="mailto:anna.milne@fei.org?subject=&amp;body=">anna.milne@fei.org</a>.</p>
@@ -907,7 +907,7 @@ WITH ins AS (
     'fei-general-assembly-wrap-up-report',
     'FEI General Assembly Wrap-Up Report',
     'The main decisions taken by the General Assembly are summarised in this report.',
-    '<p><a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/2-GA25-wrap-up-report-GA-7Nov2025.pdf">2 - GA25 - wrap-up report GA-7Nov2025</a> <a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a></p>',
+    '<p><a href="https://idoc.club/documents/general-assembly/2-GA25-wrap-up-report-GA-7Nov2025.pdf">2 - GA25 - wrap-up report GA-7Nov2025</a> <a href="https://idoc.club/documents/general-assembly/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a></p>',
     'published',
     '2025-11-19T01:14:59Z'::timestamptz,
     '2025-11-19T01:14:59Z'::timestamptz,
@@ -928,7 +928,7 @@ WITH ins AS (
     'proposals-for-rule-changes-of-dressage-rules-2025',
     'Proposals for Rule Changes of Dressage Rules 2025',
     'Proposed changes to the Dressage Rules together with the corresponding explanations, the comments received as well as the reasoning for accepting or not accepting each proposal.',
-    '<a href="https://idoc.club/wp-content/uploads/sites/58/2025/11/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a>',
+    '<a href="https://idoc.club/documents/general-assembly/15.2_GA25_Dressage-Rules-Memo.pdf">15.2_GA25_Dressage Rules Memo</a>',
     'published',
     '2025-11-19T01:19:09Z'::timestamptz,
     '2025-11-19T01:19:09Z'::timestamptz,
