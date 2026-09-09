@@ -43,6 +43,8 @@ function visibleState(searchParams: URLSearchParams, initial?: string[]): Visibi
   return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, selected.includes(column)]));
 }
 
+function memberHref(searchParams: URLSearchParams, profileId: number) { const params = new URLSearchParams(searchParams.toString()); params.set('profileId', String(profileId)); return params.toString(); }
+
 function header(id: string) {
   return ({ column }: HeaderContext<AdminMemberRow, unknown>) => <DataTableColumnHeader column={column} label={COLUMN_LABELS[id] ?? id} />;
 }
@@ -55,7 +57,7 @@ export function MembersTable({ filters, initialVisibleColumns, pageSize, rows, t
   const initialVisibility = useMemo(() => visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
   const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, header: ({ table }) => <input aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected()} onChange={table.getToggleAllPageRowsSelectedHandler()} type="checkbox" />, cell: ({ row }) => <input aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} type="checkbox" /> },
-    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?${new URLSearchParams({ ...Object.fromEntries(searchParams), profileId: String(row.original.profileId) })}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
     { accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
     { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.membershipType ?? '—' },
     { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member status', options: STATUS_OPTIONS, variant: 'multiSelect' } },
@@ -65,12 +67,18 @@ export function MembersTable({ filters, initialVisibleColumns, pageSize, rows, t
     { id: 'expires', accessorKey: 'validUntil', enableColumnFilter: true, header: header('expires'), meta: { label: 'Expiration date', variant: 'dateRange' }, cell: ({ row }) => row.original.validUntil ?? '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, header: 'Actions', cell: ({ row }) => <div className="flex flex-wrap gap-2">{row.original.profileId && <><Link className="underline" href={`${pathname}?${new URLSearchParams({ ...Object.fromEntries(searchParams), profileId: String(row.original.profileId) })}`}>Edit</Link><Link className="underline" href={`/admin/payments?profileId=${row.original.profileId}`}>Payment</Link></>}<a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>Email</a></div> },
+    { id: 'actions', enableHiding: true, enableSorting: false, header: 'Actions', cell: ({ row }) => <div className="flex flex-wrap gap-2">{row.original.profileId && <><Link className="underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>Edit</Link><Link className="underline" href={`/admin/payments?profileId=${row.original.profileId}`}>Payment</Link></>}<a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>Email</a></div> },
   ], [pathname, searchParams]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   const { table, shallow, debounceMs, throttleMs } = useDataTable({ columns, data: rows, enableAdvancedFilter: true, getRowId: (row) => row.profileId ? `profile-${row.profileId}` : `user-${row.userId}`, initialState: { columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize }, sorting: initialSorting }, pageCount: Math.max(1, Math.ceil(total / pageSize)), queryKeys: { filters: 'filters', joinOperator: 'joinOperator', page: 'page', perPage: 'pageSize', sort: 'sort' }, shallow: false });
 
   useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
+  useEffect(() => {
+    if (!searchParams.get('filters') || filters.page === 1) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('page');
+    router.replace(`${pathname}?${params}`, { scroll: false });
+  }, [filters.page, pathname, router, searchParams]);
   useEffect(() => {
     table.setColumnVisibility(visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns));
     table.resetRowSelection();
@@ -107,7 +115,7 @@ export function MembersTable({ filters, initialVisibleColumns, pageSize, rows, t
 
   return <>
     <TablePreferenceSync table="memberships" />
-    <DataTable table={table} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableAdvancedToolbar table={table} className="mt-5 rounded-xl border bg-background p-3">
         <div className="flex min-w-64 flex-1 gap-2"><Input aria-label="Search member name or email" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applySearch(); }} placeholder="Search name or email…" type="search" value={search} /><Button onClick={applySearch} type="button">Search</Button></div>
         <DataTableFilterMenu table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
