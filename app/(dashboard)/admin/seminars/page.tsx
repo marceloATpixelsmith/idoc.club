@@ -3,6 +3,8 @@ import { ActiveFilterChips, ColumnVisibility, parseHiddenColumns } from '@/compo
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listAdminSeminars } from '@/lib/seminars/seminars';
+import { getTablePreferences, preferenceQuery } from '@/lib/admin/table-preferences';
+import { TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { SEMINAR_STATUSES } from '@/lib/seminars/status';
 
 const COLUMNS = ['date', 'status', 'payment', 'registrations'] as const;
@@ -11,7 +13,8 @@ const STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', draft: 'Dr
 export default async function AdminSeminarsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const query = await searchParams;
+  const rawQuery = await searchParams;
+  const query = Object.keys(rawQuery).length ? rawQuery : preferenceQuery(await getTablePreferences('seminars'));
   const scalar = (name: string) => Array.isArray(query[name]) ? query[name][0] : query[name];
   const hidden = parseHiddenColumns(query.column, COLUMNS);
   const scalarQuery = Object.fromEntries(Object.entries(query).flatMap(([key, value]) => {
@@ -30,7 +33,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
         </div>
         <Link className="rounded bg-primary px-4 py-2 text-primary-foreground" href="/admin/seminars/new">New seminar</Link>
       </header>
-      <form className="grid gap-3 rounded-lg border p-4 md:grid-cols-7" method="get">
+      <TablePreferenceSync table="seminars" /><form data-table-preferences="seminars" className="grid gap-3 rounded-lg border p-4 md:grid-cols-7" method="get">
         <label>Search<input className="block w-full border p-2" defaultValue={scalarQuery.q} name="q" /></label>
         <label>Status<select className="block w-full border p-2" defaultValue={scalarQuery.status} name="status">
           <option value="">All</option>

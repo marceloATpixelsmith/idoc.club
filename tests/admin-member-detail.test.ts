@@ -17,11 +17,11 @@ test('selected-member actions use canonical links and real seminar history', () 
   assert.doesNotMatch(page, /not implemented yet/);
 });
 
-test('table exposes selection without unsupported mutations', () => {
+test('table exposes integrated selection and safely explains deferred external mutations', () => {
   assert.match(table, /Select all members on this page/);
   assert.match(table, /Clear selection/);
-  assert.match(table, /Bulk actions unavailable pending policy decisions/);
-  assert.doesNotMatch(table, /Bulk Revoke|Archive Membership|Pause Membership/);
+  assert.match(table, /Bulk actions/);
+  assert.match(table, /external billing, retention, and step-up workflows/);
 });
 
 test('revenue UI refuses to attribute historical payments from current classifications', () => {
