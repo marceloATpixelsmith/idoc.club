@@ -64,13 +64,15 @@ export function DataTableRangeFilter<TData>({
       const otherValue = isMin
         ? (currentValues[1] ?? "")
         : (currentValues[0] ?? "");
+      const otherNumber = Number(otherValue);
+      const hasOtherValue = otherValue !== "" && !Number.isNaN(otherNumber);
 
       if (
         value === "" ||
         (!Number.isNaN(numValue) &&
           (isMin
-            ? numValue >= min && numValue <= (Number(otherValue) || max)
-            : numValue <= max && numValue >= (Number(otherValue) || min)))
+            ? numValue >= min && numValue <= (hasOtherValue ? otherNumber : max)
+            : numValue <= max && numValue >= (hasOtherValue ? otherNumber : min)))
       ) {
         onFilterUpdate(filter.filterId, {
           value: isMin ? [value, otherValue] : [otherValue, value],
