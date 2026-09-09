@@ -8,6 +8,7 @@ import {
   reconciliationFindings, reconciliationRuns, subscriptions, users,
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getSession } from '@/lib/auth/session';
 import { subscribeToMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
