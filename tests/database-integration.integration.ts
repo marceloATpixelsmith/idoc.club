@@ -352,6 +352,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     const expectedIndexNames = new Set([
       ...Object.keys(expectedTable.indexes), ...Object.keys(expectedTable.uniqueConstraints),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => `${tableName}_pkey`),
+      ...Object.values<any>(expectedTable.compositePrimaryKeys).map((value) => value.name.slice(0, 63)),
       ...(extraIndexNamesByTable[tableName] ?? []),
     ]);
     assert.deepEqual(indexes.map(({ name }) => name), [...expectedIndexNames].sort(), `${qualifiedName} complete index set`);
