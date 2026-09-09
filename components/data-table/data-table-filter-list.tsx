@@ -618,9 +618,7 @@ function onFilterInputRender<TData>({
           inputMode={isNumber ? "numeric" : undefined}
           placeholder={columnMeta?.placeholder ?? "Enter a value..."}
           className="h-8 w-full rounded"
-          defaultValue={
-            typeof filter.value === "string" ? filter.value : undefined
-          }
+          value={typeof filter.value === "string" ? filter.value : ""}
           onChange={(event) =>
             onFilterUpdate(filter.filterId, {
               value: event.target.value,
