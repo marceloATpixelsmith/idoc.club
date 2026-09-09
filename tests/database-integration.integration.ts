@@ -135,7 +135,7 @@ test('migration 0035 removes passkey/WebAuthn support without a foreign-key viol
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43]);
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -238,7 +238,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0030_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0043_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
