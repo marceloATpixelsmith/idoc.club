@@ -1,65 +1,130 @@
 'use client';
 
+import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
+import { Download, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
+import { useEffect, useMemo, useState } from 'react';
+import { DataTable } from '@/components/data-table/data-table';
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar';
+import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
+import { DataTableFilterList } from '@/components/data-table/data-table-filter-list';
+import { DataTableFilterMenu } from '@/components/data-table/data-table-filter-menu';
+import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
+import { useDataTable } from '@/hooks/use-data-table';
+import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
 
 type Filters = {
-  country?: string; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federation?: string; membershipType?: string;
-  page: number; pageSize: number; q?: string; region?: string; sort: string; status: string;
+  country?: string; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federation?: string; filters?: string;
+  membershipType?: string; page: number; pageSize: number; q?: string; region?: string; sort: string; status: string;
 };
-const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
-type Column = typeof OPTIONAL_COLUMNS[number];
-const LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', expiresFrom: 'Expires from', expiresTo: 'Expires through', federation: 'National federation', lastPayment: 'Last payment', membershipType: 'Membership type', q: 'Search', region: 'IDOC region', status: 'Status', type: 'Membership type', updated: 'Updated' };
 
-function paramsWithoutPage(filters: Filters) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) if (key !== 'page' && value) params.set(key, String(value));
-  return params;
+const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
+const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National federation', lastPayment: 'Last payment', name: 'Member name', region: 'IDOC region', status: 'Status', type: 'Membership type', updated: 'Updated' };
+const STATUS_OPTIONS = [
+  { label: 'Active members', value: 'active' }, { label: 'Expired members', value: 'expired' },
+  { label: 'Archived members', value: 'archived' }, { label: 'Without active membership', value: 'without_active' },
+  { label: 'Administrators', value: 'administrator' }, { label: 'Superadmins', value: 'super_admin' },
+  { label: 'Onboarding users', value: 'onboarding' }, { label: 'Test members', value: 'test' },
+];
+const TYPE_OPTIONS = [
+  { label: 'Judge', value: 'judge' }, { label: 'Steward', value: 'steward' },
+  { label: 'Judge & Steward', value: 'combo' }, { label: 'Veterinarian', value: 'veterinarian' },
+];
+
+function visibleState(searchParams: URLSearchParams, initial?: string[]): VisibilityState {
+  const explicit = searchParams.getAll('column');
+  const selected = explicit.length > 0 ? explicit : initial;
+  if (!selected) return {};
+  return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, selected.includes(column)]));
 }
 
-export function MembersTable({ defaultActive, filters, initialVisibleColumns, pageSize, rows, total }: { defaultActive: boolean; filters: Filters; initialVisibleColumns?: string[]; pageSize: number; rows: AdminMemberRow[]; total: number }) {
-  const router = useRouter();
+function memberHref(searchParams: URLSearchParams, profileId: number) { const params = new URLSearchParams(searchParams.toString()); params.set('profileId', String(profileId)); return params.toString(); }
+
+function header(id: string) {
+  return ({ column }: HeaderContext<AdminMemberRow, unknown>) => <DataTableColumnHeader column={column} label={COLUMN_LABELS[id] ?? id} />;
+}
+
+export function MembersTable({ filters, initialVisibleColumns, pageSize, rows, total }: { defaultActive: boolean; filters: Filters; initialVisibleColumns?: string[]; pageSize: number; rows: AdminMemberRow[]; total: number }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const hasExplicitColumns = searchParams.has('column') || initialVisibleColumns !== undefined;
-  const initialColumns = [...searchParams.getAll('column'), ...(initialVisibleColumns ?? [])].filter((column): column is Column => OPTIONAL_COLUMNS.includes(column as Column));
-  const [visible, setVisible] = useState<Set<Column>>(new Set(hasExplicitColumns ? initialColumns : OPTIONAL_COLUMNS));
-  const ids = rows.map((row) => row.profileId);
-  const allSelected = ids.length > 0 && ids.every((id) => selected.has(id));
-  const activeFilters = Object.entries(filters).filter(([key, value]) => !['page', 'pageSize', 'sort', 'direction'].includes(key) && value);
-  const base = useMemo(() => { const params = paramsWithoutPage(filters); for (const column of visible) params.append('column', column); return params; }, [filters, visible]);
-  const navigate = (params: URLSearchParams, nextVisible = visible) => { params.delete('column'); for (const column of nextVisible) params.append('column', column); const state = Object.fromEntries(params); delete state.column; void persistTablePreferences('memberships', { ...state, columns: [...nextVisible], pageSize: Number(state.pageSize ?? pageSize) }); router.push(`${pathname}?${params}`); };
-  const removeFilter = (key: string) => { const params = new URLSearchParams(searchParams); params.delete(key); params.delete('page'); navigate(params); };
-  const pageHref = (page: number) => { const params = new URLSearchParams(base); params.set('page', String(page)); return `${pathname}?${params}`; };
-  const start = total === 0 ? 0 : (filters.page - 1) * pageSize + 1;
-  const end = Math.min(filters.page * pageSize, total);
-  const detailHref = (id: number) => { const params = new URLSearchParams(base); params.set('page', String(filters.page)); params.set('profileId', String(id)); return `${pathname}?${params}`; };
+  const [search, setSearch] = useState(filters.q ?? '');
+  const initialVisibility = useMemo(() => visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
+  const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
+    { id: 'select', enableHiding: false, enableSorting: false, header: ({ table }) => <input aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected()} onChange={table.getToggleAllPageRowsSelectedHandler()} type="checkbox" />, cell: ({ row }) => <input aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} type="checkbox" /> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
+    { accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
+    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.membershipType ?? '—' },
+    { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member status', options: STATUS_OPTIONS, variant: 'multiSelect' } },
+    { accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National federation', placeholder: 'e.g. DE', variant: 'text' }, cell: ({ row }) => row.original.federation ?? '—' },
+    { accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address country', placeholder: 'e.g. DE', variant: 'text' } },
+    { accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC region', variant: 'text' }, cell: ({ row }) => row.original.region ?? '—' },
+    { id: 'expires', accessorKey: 'validUntil', enableColumnFilter: true, header: header('expires'), meta: { label: 'Expiration date', variant: 'dateRange' }, cell: ({ row }) => row.original.validUntil ?? '—' },
+    { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
+    { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
+    { id: 'actions', enableHiding: true, enableSorting: false, header: 'Actions', cell: ({ row }) => <div className="flex flex-wrap gap-2">{row.original.profileId && <><Link className="underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>Edit</Link><Link className="underline" href={`/admin/payments?profileId=${row.original.profileId}`}>Payment</Link></>}<a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>Email</a></div> },
+  ], [pathname, searchParams]);
+  const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
+  const { table, shallow, debounceMs, throttleMs } = useDataTable({ columns, data: rows, enableAdvancedFilter: true, getRowId: (row) => row.profileId ? `profile-${row.profileId}` : `user-${row.userId}`, initialState: { columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize }, sorting: initialSorting }, pageCount: Math.max(1, Math.ceil(total / pageSize)), queryKeys: { filters: 'filters', joinOperator: 'joinOperator', page: 'page', perPage: 'pageSize', sort: 'sort' }, shallow: false });
+
+  useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
+  useEffect(() => {
+    if (!searchParams.get('filters') || filters.page === 1) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('page');
+    router.replace(`${pathname}?${params}`, { scroll: false });
+  }, [filters.page, pathname, router, searchParams]);
+  useEffect(() => {
+    table.setColumnVisibility(visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns));
+    table.resetRowSelection();
+  }, [searchParams, initialVisibleColumns, table]);
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const preferences = {
+      columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false),
+      filters: params.get('filters') ?? undefined,
+      pageSize: Number(params.get('pageSize') ?? pageSize),
+      q: params.get('q') ?? undefined,
+      sort: params.get('sort') ?? undefined,
+      status: params.get('status') ?? undefined,
+    };
+    void persistTablePreferences('memberships', preferences);
+  }, [pageSize, searchParams, table]);
+  useEffect(() => {
+    const state = table.getState();
+    const columns = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false);
+    const params = new URLSearchParams(searchParams.toString());
+    const current = params.getAll('column');
+    if (current.length === columns.length && current.every((value, index) => value === columns[index])) return;
+    params.delete('column');
+    for (const column of columns) params.append('column', column);
+    void persistTablePreferences('memberships', { columns, filters: params.get('filters') ?? undefined, pageSize: state.pagination.pageSize, q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined, status: params.get('status') ?? undefined });
+    router.replace(`${pathname}?${params}`, { scroll: false });
+  }, [table.getState().columnVisibility]);
+
+  const applySearch = () => { const params = new URLSearchParams(searchParams.toString()); search.trim() ? params.set('q', search.trim()) : params.delete('q'); params.delete('page'); router.push(`${pathname}?${params}`); };
+  const reset = async () => { await fetch('/api/admin/table-preferences/memberships', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); table.resetRowSelection(); router.push(`${pathname}?status=active`); };
+  const exportParams = new URLSearchParams(searchParams.toString()); exportParams.delete('page'); exportParams.delete('profileId'); exportParams.delete('column');
+  const selected = table.getSelectedRowModel().rows.length;
+  const hasActiveView = [...searchParams.keys()].some((key) => !['column', 'page', 'pageSize', 'profileId'].includes(key));
 
   return <>
     <TablePreferenceSync table="memberships" />
-    <form className="mt-5 rounded-xl border bg-background p-4" data-table-preferences="memberships" method="get">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="min-w-64 flex-1 text-sm">Name or email<input className="mt-1 block w-full rounded-md border px-3 py-2" defaultValue={filters.q} name="q" type="search" /></label>
-        <label className="text-sm">Status<select className="mt-1 block rounded-md border px-3 py-2" defaultValue={filters.status} name="status">{['active','expired','archived'].map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
-        <details className="relative"><summary className="cursor-pointer list-none rounded-md border px-4 py-2 text-sm">Filters</summary><div className="absolute right-0 z-10 mt-2 grid w-[min(38rem,85vw)] gap-3 rounded-lg border bg-background p-4 shadow-lg sm:grid-cols-2">
-          <fieldset className="contents"><legend className="col-span-full font-medium">Expiration date range</legend><label className="text-sm">From<input className="mt-1 block w-full rounded-md border px-2 py-1.5" defaultValue={filters.expiresFrom} name="expiresFrom" type="date" /></label><label className="text-sm">Through<input className="mt-1 block w-full rounded-md border px-2 py-1.5" defaultValue={filters.expiresTo} name="expiresTo" type="date" /></label></fieldset>
-          {['federation','country','region'].map((name) => <label className="text-sm capitalize" key={name}>{name}<input className="mt-1 block w-full rounded-md border px-2 py-1.5" defaultValue={filters[name as keyof Filters]} list={`${name}-values`} maxLength={name === 'region' ? 40 : 2} name={name} /></label>)}
-          <label className="text-sm">Member type<select className="mt-1 block w-full rounded-md border px-2 py-1.5" defaultValue={filters.membershipType ?? ''} name="membershipType"><option value="">All</option><option value="judge">Judge</option><option value="steward">Steward</option><option value="combo">Judge &amp; Steward</option><option value="veterinarian">Veterinarian</option></select></label>
-        </div></details>
-        <label className="text-sm">Sort<select className="mt-1 block rounded-md border px-3 py-2" defaultValue={filters.sort} name="sort">{['name','email','type','status','federation','country','region','expires','lastPayment','updated'].map((value) => <option key={value} value={value}>{LABELS[value] ?? value}</option>)}</select></label>
-        <label className="text-sm">Direction<select className="mt-1 block rounded-md border px-3 py-2" defaultValue={filters.direction} name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
-        <input name="pageSize" type="hidden" value={pageSize} />{[...visible].map((column) => <input key={column} name="column" type="hidden" value={column} />)}
-        <button className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" type="submit">Apply</button>
-      </div>
-    </form>
-    <div className="mt-3 flex min-h-9 flex-wrap items-center gap-2" aria-label="Active filters">{activeFilters.map(([key, value]) => <button className={`rounded-full border px-3 py-1 text-xs ${key === 'status' && defaultActive ? 'border-primary bg-primary/10' : ''}`} key={key} onClick={() => removeFilter(key)} type="button">{LABELS[key] ?? key}: {String(value)}{key === 'status' && defaultActive ? ' (default)' : ''} <span aria-hidden="true">×</span><span className="sr-only">Remove</span></button>)}<button className="text-sm underline" onClick={() => { const params = new URLSearchParams(); params.set('status', 'active'); navigate(params); }} type="button">Clear all filters</button><button className="ml-auto text-sm underline" onClick={async () => { await fetch('/api/admin/table-preferences/memberships', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); router.push(`${pathname}?status=active`); }} type="button">Reset to default</button></div>
-    <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-t-lg border border-b-0 bg-muted/30 p-3 text-sm"><span>{start}–{end} of {total} members · {selected.size} selected</span><div className="flex gap-3"><details className="relative"><summary className="cursor-pointer list-none rounded-md border bg-background px-3 py-2">Columns</summary><fieldset className="absolute right-0 z-10 mt-2 w-56 rounded-lg border bg-background p-3 shadow-lg"><legend className="font-medium">Visible columns</legend>{OPTIONAL_COLUMNS.map((column) => <label className="mt-2 flex gap-2" key={column}><input checked={visible.has(column)} onChange={() => { const next = new Set(visible); next.has(column) ? next.delete(column) : next.add(column); setVisible(next); const params = new URLSearchParams(base); params.delete('column'); for (const item of next) params.append('column', item); navigate(params, next); }} type="checkbox" />{LABELS[column]}</label>)}</fieldset></details><Link className="rounded-md border bg-background px-3 py-2 uppercase tracking-wide" download href={`/api/admin/export/members?${base}`}>Export filtered CSV</Link></div></div>
-    {selected.size > 0 && <div className="flex flex-wrap items-center gap-3 border border-b-0 border-gold bg-surface p-3 text-sm" role="status"><strong>{selected.size} selected</strong><button className="underline" onClick={() => setSelected(new Set())} type="button">Clear selection</button><details><summary className="cursor-pointer rounded border px-3 py-1">Bulk actions</summary><p className="mt-2 max-w-md text-xs text-muted-foreground">Archive, pause, and security revocation remain unavailable until their external billing, retention, and step-up workflows can be completed atomically; row-level audited controls remain available.</p></details></div>}
-    <div className="overflow-x-auto border"><table className="min-w-full text-sm"><thead className="bg-muted/30"><tr><th className="p-3 text-left"><input aria-label="Select all members on this page" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(ids))} type="checkbox" /></th><th className="p-3 text-left">Member name</th>{OPTIONAL_COLUMNS.map((column) => visible.has(column) && <th className="p-3 text-left" key={column}>{LABELS[column]}</th>)}</tr></thead><tbody>{rows.length === 0 ? <tr><td className="p-10 text-center" colSpan={OPTIONAL_COLUMNS.length + 2}><strong>{activeFilters.length ? 'No members match this view' : 'No members exist'}</strong><span className="mt-1 block text-muted-foreground">{activeFilters.length ? 'Remove a filter or clear all filters to broaden the result set.' : 'Members will appear here after profiles are created.'}</span></td></tr> : rows.map((member) => <tr className="border-t align-top hover:bg-muted/20" key={member.profileId}><td className="p-3"><input aria-label={`Select ${member.firstName} ${member.lastName}`} checked={selected.has(member.profileId)} onChange={() => setSelected((current) => { const next = new Set(current); next.has(member.profileId) ? next.delete(member.profileId) : next.add(member.profileId); return next; })} type="checkbox" /></td><td className="p-3 font-medium"><Link className="underline" href={detailHref(member.profileId)}>{member.firstName} {member.lastName}</Link></td>{visible.has('email') && <td className="p-3"><a className="underline" href={`mailto:${encodeURIComponent(member.email)}`}>{member.email}</a></td>}{visible.has('type') && <td className="p-3">{member.membershipType ?? '—'}</td>}{visible.has('status') && <td className="p-3 capitalize">{member.status}</td>}{visible.has('federation') && <td className="p-3">{member.federation ?? '—'}</td>}{visible.has('country') && <td className="p-3">{member.country}</td>}{visible.has('region') && <td className="p-3">{member.region ?? '—'}</td>}{visible.has('expires') && <td className="p-3">{member.validUntil ?? '—'}</td>}{visible.has('lastPayment') && <td className="p-3">{member.lastPaymentAt ? new Date(member.lastPaymentAt).toLocaleDateString() : '—'}</td>}{visible.has('updated') && <td className="p-3">{new Date(member.updatedAt).toLocaleDateString()}</td>}{visible.has('actions') && <td className="p-3"><details className="relative"><summary className="cursor-pointer list-none rounded border px-2 py-1">Actions</summary><div className="absolute right-0 z-10 mt-1 grid w-52 rounded border bg-background p-2 shadow-lg"><Link className="p-1 underline" href={detailHref(member.profileId)}>Edit information</Link><Link className="p-1 underline" href={`${detailHref(member.profileId)}#payment-history`}>Payment history</Link><Link className="p-1 underline" href={`/admin/payments?profileId=${member.profileId}`}>Add manual payment</Link><Link className="p-1 underline" href={`${detailHref(member.profileId)}#extend-expiration`}>Extend expiration</Link><Link className="p-1 underline" href={`${detailHref(member.profileId)}#edit-member`}>Move membership type</Link><a className="p-1 underline" href={`mailto:${encodeURIComponent(member.email)}`}>Email member</a><Link className="p-1 underline" href={`${detailHref(member.profileId)}#seminar-history`}>Seminar registrations</Link></div></details></td>}</tr>)}</tbody></table></div>
-    <nav aria-label="Member pagination" className="flex flex-wrap items-center justify-between gap-3 rounded-b-lg border border-t-0 p-3 text-sm"><label>Rows per page <select className="ml-2 rounded border p-1" value={pageSize} onChange={(event) => { const params = new URLSearchParams(base); params.set('pageSize', event.target.value); navigate(params); }}>{[10,25,50,100].map((size) => <option key={size}>{size}</option>)}</select></label><span aria-live="polite">Showing {start}–{end} of {total}</span><span className="flex gap-3"><Link aria-disabled={filters.page <= 1} className={`rounded border px-3 py-2 ${filters.page <= 1 ? 'pointer-events-none opacity-50' : ''}`} href={pageHref(Math.max(1, filters.page - 1))}>Previous</Link><Link aria-disabled={end >= total} className={`rounded border px-3 py-2 ${end >= total ? 'pointer-events-none opacity-50' : ''}`} href={pageHref(filters.page + 1)}>Next</Link></span></nav>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+      <DataTableAdvancedToolbar table={table} className="mt-5 rounded-xl border bg-background p-3">
+        <div className="flex min-w-64 flex-1 gap-2"><Input aria-label="Search member name or email" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applySearch(); }} placeholder="Search name or email…" type="search" value={search} /><Button onClick={applySearch} type="button">Search</Button></div>
+        <DataTableFilterMenu table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
+        <DataTableFilterList table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
+        <DataTableSortList table={table} />
+        <Button asChild size="sm" variant="outline"><Link download href={`/api/admin/export/members?${exportParams}`}><Download />Export filtered CSV</Link></Button>
+        <Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button>
+      </DataTableAdvancedToolbar>
+      <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching members</p>
+    </DataTable>
   </>;
 }
