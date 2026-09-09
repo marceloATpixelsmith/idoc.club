@@ -137,6 +137,17 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /*
+   * Sitewide button casing: every native <button> uses the same uppercase,
+   * letter-spaced treatment as the marketing CTA links, in the body's
+   * default font. Excludes the canonical auth-reference buttons, which are
+   * governed by the pixelsmith-auth-reference design system.
+   */
+  button:not(.idoc-auth-button):not(.idoc-auth-google-button) {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
   h1,
   h2,
   h3,

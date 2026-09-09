@@ -50,7 +50,7 @@ test('the menu supports mouse hover plus keyboard, click, and touch operation', 
   assert.match(menu, /onPointerEnter=\{openForMouse\}/);
   assert.match(menu, /onPointerLeave=\{closeForMouse\}/);
   assert.match(menu, /event\.pointerType !== 'mouse'/);
-  assert.match(menu, /<DropdownMenu open=\{open\} onOpenChange=\{setOpen\}>/);
+  assert.match(menu, /<DropdownMenu open=\{open\} onOpenChange=\{setOpen\} modal=\{false\}>/);
   assert.match(menu, /<DropdownMenuTrigger asChild>/);
   assert.match(menu, /type="button"/);
   assert.match(menu, /aria-label=\{`Open \$\{accessibleName\} menu`\}/);
