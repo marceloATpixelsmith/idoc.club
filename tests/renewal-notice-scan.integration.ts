@@ -7,7 +7,7 @@ import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_E
 import { processStripeEvent } from '../lib/payments/webhook-handlers.ts';
 import { closeHarness, concurrently, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
-beforeEach(resetIdoc);
+beforeEach(async () => { process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership_fixture'; await resetIdoc(); });
 after(closeHarness);
 
 function isoDate(offsetDays: number): string {
