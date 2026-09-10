@@ -110,10 +110,7 @@ async function grantRealFreshStepUp(cookies: TestCookies, user: { id: number; se
   assert.equal(started.required, true);
   const pending = await withTestRequestCookies(cookies, getPendingStepUp);
   assert.ok(pending);
-  assert.deepEqual(
-    await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form({ code: totp(secret), csrf_token: csrfTokenFrom(cookies) }))),
-    { verified: true },
-  );
+  await redirected(() => withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form({ code: totp(secret), csrf_token: csrfTokenFrom(cookies) }))));
   assert.ok(cookies.get('idoc_fresh_step_up'));
 }
 
@@ -260,19 +257,8 @@ test('AUTH-PASSWORD-005: a privileged (administrator) account cannot change its 
   const cookies = new TestCookies();
   await withTestRequestCookies(cookies, () => setSession(admin));
 
-  assert.deepEqual(
-    await withTestRequestCookies(
-      cookies,
-      () => withTestMembershipBoundary(
-        { actor: { id: admin.id, roles: ['administrator'] } },
-        () => updatePassword({}, form({
-          confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies),
-          currentPassword: password, newPassword: 'A New Correct Battery 77!',
-        })),
-      ),
-    ),
-    { stepUpRequired: true },
-  );
+  await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () =>
+    redirected(() => updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies), currentPassword: password, newPassword: 'A New Correct Battery 77!' })))));
   const [beforeStepUp] = await sql`select password_hash, session_version from idoc.users where id=${admin.id}`;
   assert.equal(beforeStepUp.password_hash, admin.passwordHash);
   assert.equal(beforeStepUp.session_version, admin.sessionVersion);

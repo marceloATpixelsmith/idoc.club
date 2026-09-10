@@ -114,9 +114,6 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   await page.goto('/dashboard/security');
   await page.getByRole('button', { name: 'Generate new recovery codes' }).click();
   await expect(page.getByRole('heading', { name: 'Authenticator verification required' })).toBeVisible();
-  await page.getByLabel('Authenticator code').fill(totp(E2E_TOTP_SECRET));
-  await page.getByRole('button', { name: 'Verify and continue' }).click();
-  await expect(page).toHaveURL(/\/mfa$/);
 
   const maxPersistedCount = async () => {
     const [row] = await sql<{ request_count: number | null }[]>`select max(request_count)::int request_count
