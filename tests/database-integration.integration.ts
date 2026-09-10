@@ -403,7 +403,7 @@ function normalizeSql(value: unknown) {
     .replaceAll('"', '')
     .replaceAll(/idoc\.[a-z0-9_]+\./g, '')
     .replaceAll(/::(?:character varying|text|timestamp without time zone)(?:\[\])?/g, '')
-    .replaceAll(/=\s*any\s*\(?\s*array\[([^\]]+)\]\s*\)?/g, 'in ($1)')
+    .replaceAll(/=\s*any[\s(]*array\[([^\]]+)\][^a-z]*/g, 'in ($1)')
     .replaceAll(/\bin\s*\(([^()]*)\)/g, 'in $1')
     .replaceAll(/[()\s]+/g, ' ')
     .trim();
