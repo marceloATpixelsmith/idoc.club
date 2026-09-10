@@ -32,7 +32,7 @@ export default defineConfig({
     env: {
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes',
       BASE_URL: 'http://127.0.0.1:3100',
-      POSTGRES_URL: databaseUrl,
+      POSTGRES_URL: 'postgres://security-e2e-production-placeholder.invalid/idoc_production',
       TEST_DATABASE_URL: databaseUrl,
       RATE_LIMIT_HASH_KEY: process.env.RATE_LIMIT_HASH_KEY ?? 'security-e2e-rate-limit-key-32-bytes',
       TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY ?? 'security-e2e-turnstile-not-contacted',
