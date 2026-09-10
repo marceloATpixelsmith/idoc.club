@@ -144,7 +144,7 @@ function queryParts(raw: MemberFilters) {
 }
 
 const from = sql`from idoc.users u left join idoc.profiles p on p.user_id = u.id
-  left join lateral (select status, valid_until, updated_at from idoc.memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
+  left join lateral (select status, valid_until, grace_ends_on, updated_at from idoc.memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
   left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from idoc.professional_roles where profile_id=p.id and effective_to is null) roles on true
   left join lateral (select max(paid_at) last_payment_at from idoc.payments where profile_id=p.id) payment on true
   left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from idoc.application_roles where user_id=u.id and revoked_at is null) app_roles on true`;
