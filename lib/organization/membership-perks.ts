@@ -1,4 +1,4 @@
-import { asc } from 'drizzle-orm';
+import { asc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, membershipPerks } from '@/lib/db/schema';
 import { requireSuperAdmin, type Actor } from '@/lib/membership/authorization';
@@ -22,10 +22,13 @@ export async function getMembershipPerksForAdmin(actor: Actor): Promise<Membersh
  * row ids the client never needs to track. */
 export async function updateMembershipPerks(actor: Actor, labels: string[]): Promise<void> {
   requireSuperAdmin(actor);
-  const cleaned = labels.map((label) => label.trim()).filter(Boolean).slice(0, 50).map((label) => label.slice(0, 200));
+  if (labels.length > 50) throw new Error('A maximum of 50 membership perks is allowed.');
+  const cleaned = labels.map((label) => label.trim()).filter(Boolean).map((label) => label.slice(0, 200));
   if (cleaned.length === 0) throw new Error('At least one perk is required.');
 
   await db.transaction(async (tx) => {
+    // SERIALIZE FULL-LIST REPLACEMENTS ON A STABLE TRANSACTION-LEVEL LOCK.
+    await tx.execute(sql`select pg_advisory_xact_lock(2147483647, 45)`);
     const before = await tx.select({ label: membershipPerks.label }).from(membershipPerks).orderBy(asc(membershipPerks.displayOrder)).for('update');
     await tx.delete(membershipPerks);
     await tx.insert(membershipPerks).values(cleaned.map((label, index) => ({ label, displayOrder: (index + 1) * 10 })));
