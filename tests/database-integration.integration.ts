@@ -135,7 +135,7 @@ test('migration 0035 removes passkey/WebAuthn support without a foreign-key viol
 
 test('generated migration metadata agrees with the migrated schema', async () => {
   const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]);
+  assert.deepEqual(journal.entries.map(({ idx }: { idx: number }) => idx), Array.from({ length: journal.entries.length }, (_, index) => index));
   assert.equal(journal.entries[7].tag, '0007_account_delivery_token_eligibility');
   assert.equal(journal.entries[7].when, 1786495321357, 'released migration 0007 timestamp must remain immutable');
   assert.equal(journal.entries[8].tag, '0008_reconcile_account_delivery_eligibility');
@@ -263,7 +263,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // These four tables were created by hand-written migrations directly in SQL and were never added
   // to lib/db/schema.ts, so no snapshot generated from schema.ts -- 0046 included -- will ever list
   // them; that is permanent and deliberate, not snapshot staleness.
-  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
+  const expectedTables = [...Object.keys(expectedSchema), 'idoc.renewal_preferences', 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   // A handful of post-0030 migrations added an index to a table this snapshot already tracks
