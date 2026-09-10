@@ -40,7 +40,7 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
   const output = `${result.stdout}\n${result.stderr}`.replaceAll(/\u001b\[[0-9;]*m/g, '');
   try {
     assert.equal(result.status, 0, `Production build failed without privileged configuration:\n${output.slice(-4000)}`);
-    assert.equal(existsSync(marker), false, 'Production build attempted network access.');
+    assert.equal(existsSync(marker), false, `Production build attempted network access:\\n${existsSync(marker) ? readFileSync(marker, 'utf8') : '(marker unavailable)'}`);
     assert.match(output, /Generating static pages/);
     // Every React page route renders through the single root layout (app/layout.tsx), which
     // synchronously awaits the per-request CSRF cookie (AUTH-CSRF-003) before producing any JSX --
