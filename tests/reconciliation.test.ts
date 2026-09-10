@@ -18,7 +18,7 @@ test('a matching local subscription with a different Stripe status is a status_c
   assert.deepEqual(findings, [{ externalSubscriptionId: 'sub_1', kind: 'status_conflict', localStatus: 'active', profileId: 7, stripeStatus: 'canceled' }]);
 });
 
-for (const stripeStatus of ['active', 'trialing', 'past_due']) {
+for (const stripeStatus of ['active', 'trialing', 'past_due', 'incomplete']) {
   test(`an untracked Stripe subscription with status '${stripeStatus}' is an orphaned_subscription`, () => {
     const findings = computeReconciliationFindings(
       { billingAccounts: [], subscriptions: [] },
@@ -28,7 +28,7 @@ for (const stripeStatus of ['active', 'trialing', 'past_due']) {
   });
 }
 
-for (const stripeStatus of ['canceled', 'incomplete', 'incomplete_expired', 'unpaid']) {
+for (const stripeStatus of ['canceled', 'incomplete_expired', 'unpaid']) {
   test(`an untracked Stripe subscription with status '${stripeStatus}' is not an orphan — it's not open billing`, () => {
     const findings = computeReconciliationFindings(
       { billingAccounts: [], subscriptions: [] },
