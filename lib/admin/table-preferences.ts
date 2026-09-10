@@ -19,11 +19,11 @@ const pageSize = z.coerce.number().int().pipe(z.union([z.literal(10), z.literal(
 const schemas = {
   memberships: z.object({
     columns: columns(['name', 'email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions']),
-    country: text(2), direction, expiresFrom: date, expiresTo: date, federation: text(2), membershipType: z.enum(['judge', 'steward', 'combo', 'veterinarian']).optional(),
-    pageSize, q: text(), region: text(40), sort: z.enum(['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated']).optional(),
-    status: z.enum(['active', 'expired', 'archived']).optional(),
+    country: text(2), direction, expiresFrom: date, expiresTo: date, federation: text(2), filters: text(4000), membershipType: z.enum(['judge', 'steward', 'combo', 'veterinarian']).optional(),
+    pageSize, q: text(), region: text(40), sort: text(1000),
+    status: z.enum(['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']).optional(),
   }).strict(),
-  support: z.object({ columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), category: text(30), direction, pageSize, q: text(), assigned: text(40), sort: z.enum(['member', 'activity', 'status']).optional(), status: text(30) }).strict(),
+  support: z.object({ columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), category: text(30), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(255), sort: text(1000), status: text(30) }).strict(),
   news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), direction, from: date, pageSize, q: text(), sort: z.enum(['title', 'status', 'publication', 'updated']).optional(), status: text(30), to: date }).strict(),
   seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), direction, from: date, membershipRequirement: text(30), pageSize, q: text(), sort: z.enum(['title', 'date', 'status', 'registrations']).optional(), status: text(30), to: date }).strict(),
   content_pages: z.object({ audience: text(30), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), direction, pageSize, publicationState: text(30), q: text(), sort: z.enum(['title', 'status', 'updated']).optional(), status: text(30) }).strict(),

@@ -1,24 +1,15 @@
-import Link from 'next/link';
-import { ActiveFilterChips, ColumnVisibility, parseHiddenColumns } from '@/components/admin/table-controls';
 import { getTablePreferences, preferenceQuery } from '@/lib/admin/table-preferences';
-import { TablePreferenceSync } from '@/components/admin/table-preference-sync';
-import { CATEGORY_LABELS, listAdminConversations, listEligibleAdministrators, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportSearchParams } from '@/lib/support/inbox';
+import { listAdminConversations, listEligibleAdministrators, type SupportSearchParams } from '@/lib/support/inbox';
+import { SupportInboxTable } from './support-inbox-table';
+
+const TABLE_KEYS = ['q', 'category', 'status', 'assigned', 'filters', 'joinOperator', 'sort', 'direction', 'page', 'pageSize', 'column'];
 
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<SupportSearchParams> }) {
-  const rawQuery = await searchParams;
-  const savedQuery = preferenceQuery(await getTablePreferences('support')); const query = Object.keys(rawQuery).length ? { ...savedQuery, ...rawQuery } : savedQuery;
-  const columns = ['category', 'status', 'assigned', 'activity'] as const;
-  const hidden = parseHiddenColumns(query.column, columns);
-  const scalarQuery = Object.fromEntries(Object.entries(query).flatMap(([key, value]) => {
-    const scalar = Array.isArray(value) ? value[0] : value;
-    return scalar && key !== 'column' ? [[key, scalar]] : [];
-  }));
-  const [{ rows, page, hasNext }, administrators] = await Promise.all([listAdminConversations(query), listEligibleAdministrators()]);
-  const href = (next: number) => `/admin/support?${new URLSearchParams({ ...scalarQuery, page: String(next) }).toString()}`;
-  return <main className="space-y-6 py-8 px-5 lg:px-8"><header><h1 className="text-2xl font-semibold">Support Inbox</h1><p className="text-muted-foreground">Member conversations and assignment queue.</p></header>
-    <TablePreferenceSync table="support" /><form data-table-preferences="support" className="grid gap-3 rounded-lg border p-4 md:grid-cols-6" method="get"><label>Search<input className="block w-full border p-2" defaultValue={scalarQuery.q} name="q" /></label><label>Category<select className="block w-full border p-2" defaultValue={scalarQuery.category} name="category"><option value="">All</option>{SUPPORT_CATEGORIES.map((value) => <option key={value} value={value}>{CATEGORY_LABELS[value]}</option>)}</select></label><label>Status<select className="block w-full border p-2" defaultValue={scalarQuery.status} name="status"><option value="">All</option>{SUPPORT_STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABELS[value]}</option>)}</select></label><label>Assigned<select className="block w-full border p-2" defaultValue={scalarQuery.assigned} name="assigned"><option value="">Anyone</option><option value="unassigned">Unassigned</option>{administrators.map((admin) => <option key={String(admin.assignment_key)} value={String(admin.assignment_key)}>{String(admin.display_name)}</option>)}</select></label><ColumnVisibility columns={columns.map((value) => ({ label: value[0].toUpperCase() + value.slice(1), value }))} hidden={hidden} /><button className="self-end rounded bg-primary p-2 text-primary-foreground" type="submit">Apply</button></form>
-    <ActiveFilterChips filters={[{ label: 'Search', name: 'q', value: scalarQuery.q }, { label: 'Category', name: 'category', value: scalarQuery.category }, { label: 'Status', name: 'status', value: scalarQuery.status }, { label: 'Assigned', name: 'assigned', value: scalarQuery.assigned }]} pathname="/admin/support" query={scalarQuery} />
-    {rows.length === 0 ? <div className="rounded-lg border border-dashed p-10 text-center"><h2 className="font-semibold">No conversations found</h2><p className="text-sm text-muted-foreground">Clear filters to return to the shared queue.</p></div> : <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><th className="p-2"><Link href={`/admin/support?${new URLSearchParams({ ...scalarQuery, sort: 'member', direction: scalarQuery.direction === 'asc' ? 'desc' : 'asc' })}`}>Member</Link></th><th>Subject</th>{!hidden.has('category') && <th>Category</th>}{!hidden.has('status') && <th>Status</th>}{!hidden.has('assigned') && <th>Assigned</th>}{!hidden.has('activity') && <th><Link href={`/admin/support?${new URLSearchParams({ ...scalarQuery, sort: 'activity', direction: scalarQuery.direction === 'asc' ? 'desc' : 'asc' })}`}>Activity</Link></th>}</tr></thead><tbody>{rows.map((row) => <tr className="border-t" key={String(row.public_id)}><td className="p-2">{String(row.member_name)}<br /><span className="text-sm text-muted-foreground">{String(row.member_email)}</span></td><td><Link className="font-medium underline" href={`/admin/support/${row.public_id}?returnTo=${encodeURIComponent(`/admin/support?${new URLSearchParams(scalarQuery)}`)}`}>{String(row.subject)}{row.unread ? ' · New' : ''}</Link></td>{!hidden.has('category') && <td>{CATEGORY_LABELS[row.category as keyof typeof CATEGORY_LABELS]}</td>}{!hidden.has('status') && <td>{STATUS_LABELS[String(row.status)]}</td>}{!hidden.has('assigned') && <td>{row.assignee_name ? String(row.assignee_name) : 'Unassigned'}</td>}{!hidden.has('activity') && <td>{new Date(String(row.updated_at)).toLocaleString()}</td>}</tr>)}</tbody></table></div>}
-    <nav className="flex gap-4">{page > 1 ? <Link href={href(page - 1)}>← Previous</Link> : null}{hasNext ? <Link href={href(page + 1)}>Next →</Link> : null}</nav>
-  </main>;
+  const params = await searchParams;
+  const hasUrlState = TABLE_KEYS.some((key) => params[key] !== undefined);
+  const saved = hasUrlState ? null : await getTablePreferences('support');
+  const query = hasUrlState ? params : { ...preferenceQuery(saved), ...params };
+  const visibleColumns = query.column ? (Array.isArray(query.column) ? query.column : [query.column]) : Array.isArray(saved?.columns) ? saved.columns : undefined;
+  const [listing, administrators] = await Promise.all([listAdminConversations(query), listEligibleAdministrators()]);
+  return <main className="space-y-6 px-5 py-8 lg:px-8"><header><h1 className="text-2xl font-semibold">Support Inbox</h1><p className="text-muted-foreground">Member conversations and assignment queue.</p></header><SupportInboxTable administrators={administrators.map((admin) => ({ label: String(admin.display_name), value: String(admin.assignment_key) }))} filters={{ page: listing.page, pageSize: listing.pageSize, q: Array.isArray(query.q) ? query.q[0] : query.q, category: query.category, status: query.status, assigned: query.assigned, filters: query.filters, joinOperator: query.joinOperator, sort: query.sort, direction: query.direction }} initialVisibleColumns={visibleColumns} rows={listing.rows} total={listing.total} /></main>;
 }
