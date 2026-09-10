@@ -131,7 +131,7 @@ test('a grace-expiry scan racing a same-day invoice.paid converges to active wit
 
   const paidEvent = {
     api_version: '2025-04-30.basil', created: Math.floor(Date.now() / 1000),
-    data: { object: { amount_paid: 8000, currency: 'eur', customer: customerId, id: 'in_grace_race_fixture', status_transitions: { paid_at: Math.floor(Date.now() / 1000) } } },
+    data: { object: { amount_paid: 8000, currency: 'eur', customer: customerId, id: 'in_grace_race_fixture', lines: { data: [{ pricing: { price_details: { price: 'price_fixture', product: 'prod_membership_fixture' } } }] }, status_transitions: { paid_at: Math.floor(Date.now() / 1000) } } },
     id: `evt_${randomUUID()}`, livemode: false, object: 'event', pending_webhooks: 0, request: { id: null, idempotency_key: null }, type: 'invoice.paid',
   };
   const fakeStripe = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
