@@ -3821,8 +3821,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "renewal_preferences_profile_id_profiles_id_fk": {
-          "name": "renewal_preferences_profile_id_profiles_id_fk",
+        "renewal_preferences_profile_id_fkey": {
+          "name": "renewal_preferences_profile_id_fkey",
           "tableFrom": "renewal_preferences",
           "tableTo": "profiles",
           "schemaTo": "idoc",
@@ -3865,6 +3865,10 @@
         "renewal_preferences_current_mode_check": {
           "name": "renewal_preferences_current_mode_check",
           "value": "\"idoc\".\"renewal_preferences\".\"current_mode\" in ('recurring', 'non_recurring')"
+        },
+        "renewal_preferences_expected_charge_check": {
+          "name": "renewal_preferences_expected_charge_check",
+          "value": "\"idoc\".\"renewal_preferences\".\"expected_charge_cents\" is null or (\"idoc\".\"renewal_preferences\".\"expected_charge_cents\" = 8000 and \"idoc\".\"renewal_preferences\".\"currency\" = 'EUR')"
         },
         "renewal_preferences_pending_mode_check": {
           "name": "renewal_preferences_pending_mode_check",
