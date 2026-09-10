@@ -152,7 +152,7 @@ test('a non-recurring term receives exactly five calendar grace days based on pa
     values(${profile.id},'active','2025-01-01',${paidThrough},'manual')`;
   const result = await enqueueRenewalNotices();
   assert.equal(result.nonRecurringGrace, 1);
-  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
   const expected = new Date(`${paidThrough}T00:00:00Z`); expected.setUTCDate(expected.getUTCDate() + 5);
   assert.equal(membership.status, 'grace');
   assert.equal(membership.valid_until, paidThrough);
