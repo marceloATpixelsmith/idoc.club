@@ -37,6 +37,9 @@ test('live recovery remains constrained through replacement and acknowledgement'
 
   await page.goto('/dashboard/security');
   await page.getByRole('button', { name: 'Replace authenticator' }).click();
+  await expect(page.getByRole('heading', { name: 'Authenticator verification required' })).toBeVisible();
+  await page.getByLabel('Authenticator code').fill(totp(E2E_TOTP_SECRET));
+  await page.getByRole('button', { name: 'Verify and continue' }).click();
   await expect(page).toHaveURL(/\/mfa$/);
   await page.getByLabel('Recovery code').fill(E2E_RECOVERY_CODE);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -110,6 +113,9 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   const page = await context.newPage();
   await page.goto('/dashboard/security');
   await page.getByRole('button', { name: 'Generate new recovery codes' }).click();
+  await expect(page.getByRole('heading', { name: 'Authenticator verification required' })).toBeVisible();
+  await page.getByLabel('Authenticator code').fill(totp(E2E_TOTP_SECRET));
+  await page.getByRole('button', { name: 'Verify and continue' }).click();
   await expect(page).toHaveURL(/\/mfa$/);
 
   const maxPersistedCount = async () => {
