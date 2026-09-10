@@ -125,14 +125,14 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   // industry-typical code-verification tolerance).
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     await page.getByLabel('Authenticator code').fill('000000');
-    await page.getByRole('button', { name: 'Verify' }).click();
+    await page.getByRole('button', { name: 'Verify and continue' }).click();
     await expect.poll(maxPersistedCount).toBe(attempt);
-    await expect(page.locator('.idoc-auth-error')).toContainText('incorrect');
+    await expect(page.getByRole('alert')).toContainText('incorrect');
   }
   await page.getByLabel('Authenticator code').fill('000000');
-  await page.getByRole('button', { name: 'Verify' }).click();
+  await page.getByRole('button', { name: 'Verify and continue' }).click();
   await expect.poll(maxPersistedCount).toBe(6);
-  await expect(page.locator('.idoc-auth-error')).toContainText('Too many attempts');
+  await expect(page.getByRole('alert')).toContainText('Too many attempts');
 
   const rows = await sql<{ purpose: string; request_count: number }[]>`select purpose,request_count from idoc.account_request_limits
     where purpose like 'mfa_%' order by purpose,request_count desc`;
