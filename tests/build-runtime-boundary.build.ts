@@ -34,6 +34,7 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
   const environment: NodeJS.ProcessEnv = { ...process.env, IDOC_ALLOW_BUILD_IPC: '1', NEXT_TELEMETRY_DISABLED: '1', NODE_ENV: 'production', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${preloader}`.trim(), IDOC_NETWORK_ATTEMPT_FILE: marker };
   sensitiveNames.forEach((name, index) => { environment[name] = sentinelValues[index]; });
   delete environment.POSTGRES_URL;
+  delete environment.TEST_DATABASE_URL;
   delete environment.STRIPE_SECRET_KEY;
   delete environment.AUTH_SECRET;
   const result = spawnSync('pnpm', ['exec', 'next', 'build'], { cwd: root, encoding: 'utf8', env: environment, timeout: 170_000 });
