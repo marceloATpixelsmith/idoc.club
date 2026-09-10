@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Check } from 'lucide-react';
+import { MembershipPerksList } from '@/components/membership/membership-perks-list';
 import { PageHeader } from '@/components/site/PageHeader';
+import { getMembershipPerks } from '@/lib/organization/membership-perks';
 
 export const metadata: Metadata = {
   title: 'Become a Member — IDOC',
@@ -13,13 +14,6 @@ export const metadata: Metadata = {
   },
 };
 
-const perks = [
-  'Member area access',
-  'Seminar priority information',
-  'IDOC documents & GA papers',
-  "Officials' directory",
-];
-
 const tiers = [
   { name: 'Judges', for: 'FEI and national dressage judges', param: 'judge' },
   { name: 'Judge & Steward', for: 'Combined membership for judges who also steward', param: 'judge_steward' },
@@ -27,7 +21,8 @@ const tiers = [
   { name: 'Veterinarians', for: 'FEI and national dressage veterinarians', param: 'veterinarian' },
 ];
 
-export default function MembershipPage() {
+export default async function MembershipPage() {
+  const perks = await getMembershipPerks();
   return (
     <>
       <PageHeader
@@ -42,13 +37,7 @@ export default function MembershipPage() {
             <h2 className="text-3xl">{t.name}</h2>
             <p className="mt-2 text-sm uppercase tracking-[0.16em] text-gold">€80 / year</p>
             <p className="mt-5 text-sm leading-relaxed text-muted-foreground">{t.for}</p>
-            <ul className="mt-7 flex-1 space-y-3 text-sm">
-              {perks.map((p) => (
-                <li key={p} className="flex items-start gap-3 text-muted-foreground">
-                  <Check className="mt-0.5 size-4 shrink-0 text-gold" /> {p}
-                </li>
-              ))}
-            </ul>
+            <MembershipPerksList className="mt-7 flex-1 space-y-3 text-sm" perks={perks} />
             <Link
               href={`/sign-up?membership=${t.param}`}
               className="mt-8 border border-gold/60 px-6 py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground"

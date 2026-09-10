@@ -84,7 +84,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     suspendUserAccountForm: 'delegates-to-data-access', reinstateUserAccountForm: 'delegates-to-data-access',
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
-  'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access', saveMembershipPerks: 'delegates-to-data-access' },
 };
 
 const routeHandlers: Record<string, string> = {
