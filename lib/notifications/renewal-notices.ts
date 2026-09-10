@@ -47,6 +47,17 @@ async function enqueueRenewalReminders(today: string): Promise<number> {
     join idoc.users u on u.id = p.user_id
     where s.status = 'active' and s.cancel_at_period_end = false
       and s.current_period_end between ${today}::date and (${today}::date + ${AUTO_RENEWAL_NOTICE_DAYS}::int)
+    union all
+    select r.profile_id, 'membership.renewal_reminder',
+      jsonb_build_object('to', u2.email, 'firstName', p2.first_name, 'renewalDate', r.effective_on),
+      'membership.renewal_reminder:' || r.profile_id || ':' || r.effective_on
+    from idoc.renewal_preferences r
+    join idoc.profiles p2 on p2.id = r.profile_id
+    join idoc.users u2 on u2.id = p2.user_id
+    where r.pending_mode = 'recurring'
+      and r.transition_state = 'pending_activation'
+      and r.external_subscription_schedule_id is not null
+      and r.effective_on between ${today}::date and (${today}::date + ${AUTO_RENEWAL_NOTICE_DAYS}::int)
     on conflict (dedupe_key) do nothing
     returning id
   `);
