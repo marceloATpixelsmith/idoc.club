@@ -138,7 +138,7 @@ test('a grace-expiry scan racing a same-day invoice.paid converges to active wit
 
   await concurrently(() => enqueueRenewalNotices(), () => processStripeEvent(paidEvent as any, fakeStripe));
 
-  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
   assert.equal(membership.status, 'active');
   const expected = new Date(graceEnd);
   expected.setUTCFullYear(expected.getUTCFullYear() + 1);
