@@ -153,7 +153,7 @@ test('a member-supplied firstName is HTML-escaped before it reaches the rendered
 test('the scan Cron route authenticates then returns the enqueue summary', async () => {
   const response = await scanRoute(new Request('https://idoc.club/api/cron/renewal-notice-scan', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { expirationReminders: 0, graceExpired: 0, graceReminders: 0, renewalReminders: 0 });
+  assert.deepEqual(await response.json(), { expirationReminders: 0, graceExpired: 0, graceReminders: 0, nonRecurringGrace: 0, renewalReminders: 0 });
 });
 
 test('the delivery Cron route delivers a bounded batch, leaving the remainder for the next invocation', async () => {
