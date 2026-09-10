@@ -49,8 +49,8 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
             </Link>
           </nav>
         ) : null}
-        {showMySeminars ? (
-          <MemberRegistrations tab={tab} />
+        {user ? (
+          <MemberRegistrations tab={tab} view={showMySeminars ? 'my' : 'available'} />
         ) : (
           <ul className="grid gap-6 py-12 sm:grid-cols-2">
             {seminars.map((s) => (
