@@ -13,8 +13,7 @@ const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
 beforeEach(async () => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_fixture0000000000000000';
   process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
-  process.env.STRIPE_ONE_TIME_PRODUCT_ID = 'prod_one_time_fixture';
-  process.env.STRIPE_RECURRING_PRODUCT_ID = 'prod_recurring_fixture';
+  process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership_fixture';
   await resetIdoc();
 });
 after(closeHarness);
@@ -114,7 +113,7 @@ test('invoice.paid records a payment and extends an early renewal by 12 months f
   const [before] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
   const paidAtSeconds = Math.floor(Date.now() / 1000);
   const response = await postWebhook(fixtureEvent('invoice.paid', {
-    amount_paid: 8000, currency: 'eur', customer: 'cus_invoice_early', id: 'in_early_fixture',
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_invoice_early', id: 'in_early_fixture',
     status_transitions: { paid_at: paidAtSeconds },
   }));
   assert.equal(response.status, 200);
@@ -135,7 +134,7 @@ test('invoice.paid starts a fresh 12-month term from the payment date when the p
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source) values(${profile.id}, 'expired', '2024-01-01', '2025-01-01', 'migration')`;
   const paidAt = new Date();
   const response = await postWebhook(fixtureEvent('invoice.paid', {
-    amount_paid: 8000, currency: 'eur', customer: 'cus_invoice_expired', id: 'in_expired_fixture',
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_invoice_expired', id: 'in_expired_fixture',
     status_transitions: { paid_at: Math.floor(paidAt.getTime() / 1000) },
   }));
   assert.equal(response.status, 200);
@@ -152,11 +151,11 @@ test('invoice.payment_failed puts the membership into a five-day grace period an
   const response = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed', id: 'in_failed_fixture' }));
   assert.equal(response.status, 200);
   assert.equal((await sql`select count(*)::int as count from idoc.payments`)[0].count, 0);
-  const [after] = await sql`select status, valid_until from idoc.memberships where id=${membership.id}`;
+  const [after] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where id=${membership.id}`;
   assert.equal(after.status, 'grace');
   const expected = new Date();
-  expected.setUTCDate(expected.getUTCDate() + 5);
-  assert.equal(after.valid_until, expected.toISOString().slice(0, 10));
+  expected.setUTCDate(expected.getUTCDate() + 4);
+  assert.equal(after.grace_ends_on, expected.toISOString().slice(0, 10));
 });
 
 test('invoice.payment_failed enqueues a payment-failed notice with the right payload and a stable dedupe key', async () => {
@@ -166,25 +165,26 @@ test('invoice.payment_failed enqueues a payment-failed notice with the right pay
   const membership = await createMembership(profile.id);
   const response = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_notice', id: 'in_failed_notice_fixture' }));
   assert.equal(response.status, 200);
-  const [after] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  const [after] = await sql`select valid_until, grace_ends_on from idoc.memberships where id=${membership.id}`;
   const [notice] = await sql`select kind, profile_id, payload, dedupe_key from idoc.notification_outbox where kind='membership.payment_failed'`;
   assert.equal(notice.profile_id, profile.id);
   assert.equal(notice.payload.to, user.email);
-  assert.equal(notice.payload.graceEndDate, after.valid_until);
-  assert.equal(notice.dedupe_key, `membership.payment_failed:${profile.id}:${after.valid_until}`);
+  assert.equal(notice.payload.graceEndDate, after.grace_ends_on);
+  assert.equal(notice.dedupe_key, `membership.payment_failed:${profile.id}:${after.grace_ends_on}`);
 });
 
 test('a second invoice.payment_failed event while already in grace does not move validUntil or enqueue a second notice', async () => {
   const profile = await billedProfile('cus_invoice_failed_retry');
   const membership = await createMembership(profile.id);
   await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_retry', id: 'in_failed_retry_fixture' }));
-  const [afterFirst] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  const [afterFirst] = await sql`select valid_until, grace_ends_on from idoc.memberships where id=${membership.id}`;
   // Stripe's Smart Retries fire a distinct event (distinct event.id) for each retry attempt against
   // the same unpaid invoice; fixtureEvent's default `id` parameter already mints a fresh evt_ id per
   // call, so this is a faithful simulation of a real retry, not a replayed/duplicate event.
   await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_retry', id: 'in_failed_retry_fixture' }));
-  const [afterSecond] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
+  const [afterSecond] = await sql`select valid_until, grace_ends_on from idoc.memberships where id=${membership.id}`;
   assert.equal(afterSecond.valid_until, afterFirst.valid_until);
+  assert.equal(afterSecond.grace_ends_on, afterFirst.grace_ends_on);
   assert.equal((await sql`select count(*)::int as count from idoc.notification_outbox where kind='membership.payment_failed' and profile_id=${profile.id}`)[0].count, 1);
   assert.equal((await sql`select count(*)::int as count from idoc.stripe_events where event_type='invoice.payment_failed'`)[0].count, 2);
 });
@@ -206,7 +206,7 @@ test('checkout.session.completed in payment mode records a one-time payment and 
     amount_total: 8000, currency: 'eur', customer: 'cus_checkout_fixture', id: 'cs_fixture',
     metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_fixture', payment_status: 'paid',
   });
-  const outcome = await processStripeEvent(event as any, fakeLineItemsClient('prod_one_time_fixture'));
+  const outcome = await processStripeEvent(event as any, fakeLineItemsClient('prod_membership_fixture'));
   assert.equal(outcome, 'processed');
   const [payment] = await sql`select source, amount_cents, profile_id, reference from idoc.payments where external_payment_id='pi_fixture'`;
   assert.equal(payment.source, 'stripe_one_time');
@@ -315,7 +315,7 @@ test('a replayed event id is a no-op the second time, never double-crediting a p
   const membership = await createMembership(profile.id);
   const [before] = await sql`select valid_until from idoc.memberships where id=${membership.id}`;
   const event = fixtureEvent('invoice.paid', {
-    amount_paid: 8000, currency: 'eur', customer: 'cus_replay_fixture', id: 'in_replay_fixture',
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_replay_fixture', id: 'in_replay_fixture',
     status_transitions: { paid_at: Math.floor(Date.now() / 1000) },
   }, 'evt_replay_fixture');
   const first = await postWebhook(event);
@@ -328,4 +328,33 @@ test('a replayed event id is a no-op the second time, never double-crediting a p
   expected.setUTCFullYear(expected.getUTCFullYear() + 1);
   assert.equal(afterFirst.valid_until, expected.toISOString().slice(0, 10));
   assert.equal((await sql`select count(*)::int as count from idoc.stripe_events where external_event_id='evt_replay_fixture'`)[0].count, 1);
+});
+
+test('verified setup Checkout creates one future €80 schedule without changing entitlement and replay is idempotent', async () => {
+  const profile = await billedProfile('cus_setup_fixture');
+  const membership = await createMembership(profile.id);
+  const [before] = await sql`select status, valid_until from idoc.memberships where id=${membership.id}`;
+  await sql`insert into idoc.renewal_preferences(profile_id,current_mode,pending_mode,effective_on,external_checkout_session_id,transition_state)
+    values(${profile.id},'non_recurring','recurring',${before.valid_until},'cs_setup_fixture','awaiting_setup')`;
+  const calls = { prices: 0, schedules: 0 };
+  const stripe = {
+    checkout: { sessions: { listLineItems: async () => ({ data: [] }) } },
+    paymentMethods: { retrieve: async () => ({ customer: 'cus_setup_fixture', id: 'pm_setup_fixture' }) },
+    prices: { create: async (params: any, options: any) => { calls.prices += 1; assert.equal(params.unit_amount, 8000); assert.equal(params.currency, 'eur'); assert.equal(params.product, 'prod_membership_fixture'); assert.ok(options.idempotencyKey.includes(String(profile.id))); return { id: 'price_setup_fixture' }; } },
+    setupIntents: { retrieve: async () => ({ customer: 'cus_setup_fixture', id: 'seti_setup_fixture', payment_method: 'pm_setup_fixture', status: 'succeeded', usage: 'off_session' }) },
+    subscriptionSchedules: { create: async (params: any, options: any) => { calls.schedules += 1; assert.equal(params.customer, 'cus_setup_fixture'); assert.equal(params.default_settings.default_payment_method, 'pm_setup_fixture'); assert.equal(params.start_date, Math.floor(new Date(`${before.valid_until}T00:00:00.000Z`).getTime() / 1000)); assert.ok(options.idempotencyKey.includes(String(profile.id))); return { id: 'sub_sched_setup_fixture' }; } },
+  };
+  const event = fixtureEvent('checkout.session.completed', { customer: 'cus_setup_fixture', id: 'cs_setup_fixture',
+    metadata: { kind: 'membership_renewal_setup', profileId: String(profile.id) }, mode: 'setup', setup_intent: 'seti_setup_fixture' }, 'evt_setup_fixture');
+  assert.equal(await processStripeEvent(event as any, stripe as any), 'processed');
+  assert.equal(await processStripeEvent(event as any, stripe as any), 'duplicate');
+  assert.deepEqual(await sql`select status, valid_until from idoc.memberships where id=${membership.id}`, [before]);
+  const [preference] = await sql`select transition_state, expected_charge_cents, external_setup_intent_id,
+    external_payment_method_id, external_subscription_schedule_id from idoc.renewal_preferences where profile_id=${profile.id}`;
+  assert.equal(preference.transition_state, 'pending_activation');
+  assert.equal(preference.expected_charge_cents, 8000);
+  assert.equal(preference.external_setup_intent_id, 'seti_setup_fixture');
+  assert.equal(preference.external_payment_method_id, 'pm_setup_fixture');
+  assert.equal(preference.external_subscription_schedule_id, 'sub_sched_setup_fixture');
+  assert.deepEqual(calls, { prices: 1, schedules: 1 });
 });

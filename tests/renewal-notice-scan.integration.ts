@@ -99,7 +99,7 @@ test('grace-expired transitions the membership to expired, enqueues exactly one 
 
   const first = await enqueueRenewalNotices();
   assert.equal(first.graceExpired, 1);
-  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
   assert.equal(membership.status, 'expired');
   assert.equal(isEntitled({ status: membership.status, validUntil: membership.valid_until }, isoDate(0)), false);
   const [notice] = await sql`select payload, dedupe_key from idoc.notification_outbox where kind='membership.grace_expired' and profile_id=${profile.id}`;
@@ -143,4 +143,21 @@ test('a grace-expiry scan racing a same-day invoice.paid converges to active wit
   const expected = new Date(graceEnd);
   expected.setUTCFullYear(expected.getUTCFullYear() + 1);
   assert.equal(membership.valid_until, expected.toISOString().slice(0, 10));
+});
+
+test('a non-recurring term receives exactly five calendar grace days based on paid-through, not scan time', async () => {
+  const { profile } = await fixtureProfile();
+  const paidThrough = isoDate(-1);
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
+    values(${profile.id},'active','2025-01-01',${paidThrough},'manual')`;
+  const result = await enqueueRenewalNotices();
+  assert.equal(result.nonRecurringGrace, 1);
+  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const expected = new Date(`${paidThrough}T00:00:00Z`); expected.setUTCDate(expected.getUTCDate() + 5);
+  assert.equal(membership.status, 'grace');
+  assert.equal(membership.valid_until, paidThrough);
+  assert.equal(membership.grace_ends_on, expected.toISOString().slice(0, 10));
+  assert.equal(isEntitled({ graceEndsOn: membership.grace_ends_on, status: membership.status, validUntil: membership.valid_until }, isoDate(0)), true);
+  const replay = await enqueueRenewalNotices();
+  assert.equal(replay.nonRecurringGrace, 0);
 });

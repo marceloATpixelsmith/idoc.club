@@ -62,6 +62,8 @@ The Release 1 automated suite covers cross-account denial, administrator and Sup
 | Non-recurring member turns automatic renewal on | Payment authorization is collected without an immediate charge; annual billing begins no earlier than paid-through; duplicate requests create no duplicate billing object. |
 | Member reverses pending renewal change        | Pending transition is safely canceled/replaced before its effective date without duplicate charge or lost entitlement. |
 | Stripe webhook delivered twice                | No duplicate payment or duplicate extension.                                   |
+| One-time member enables automatic renewal     | Checkout Setup charges nothing; the verified webhook creates one future schedule at `valid_until`, and replay/concurrency creates no duplicate objects. |
+| Pending automatic-renewal change is canceled  | The future Schedule is canceled, paid time is unchanged, and a late Checkout return cannot reinstate it. |
 | Stripe payment fails                          | Configured grace/notification behavior occurs.                                 |
 | Automatic renewal fails                       | Stripe retries; the member retains full access for five days, then becomes payment-only if unpaid. |
 | Non-recurring term reaches paid-through       | Paid-through remains entitled; member then retains full access for the five complete calendar days beginning the following day, and receives only payment/logout after that if still unpaid. |

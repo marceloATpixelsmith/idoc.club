@@ -79,14 +79,14 @@ async function enqueueGraceReminders(today: string): Promise<number> {
   const inserted = await db.execute(sql`
     insert into idoc.notification_outbox (profile_id, kind, payload, dedupe_key)
     select m.profile_id, 'membership.grace_reminder',
-      jsonb_build_object('to', u.email, 'firstName', p.first_name, 'graceEndDate', m.valid_until),
-      'membership.grace_reminder:' || m.profile_id || ':' || m.valid_until
+      jsonb_build_object('to', u.email, 'firstName', p.first_name, 'graceEndDate', coalesce(m.grace_ends_on,m.valid_until)),
+      'membership.grace_reminder:' || m.profile_id || ':' || coalesce(m.grace_ends_on,m.valid_until)
     from idoc.memberships m
     join idoc.profiles p on p.id = m.profile_id
     join idoc.users u on u.id = p.user_id
     where m.status = 'grace'
-      and (m.valid_until - ${GRACE_REMINDER_DAYS_BEFORE_END}::int) <= ${today}::date
-      and m.valid_until > ${today}::date
+      and (coalesce(m.grace_ends_on,m.valid_until) - ${GRACE_REMINDER_DAYS_BEFORE_END}::int) <= ${today}::date
+      and coalesce(m.grace_ends_on,m.valid_until) > ${today}::date
     on conflict (dedupe_key) do nothing
     returning id
   `);
@@ -104,10 +104,10 @@ async function transitionExpiredGraceMemberships(today: string): Promise<number>
     const [expired] = await db.execute<{ id: number; profileId: number; validUntil: string }>(sql`
       with candidate as (
         select id from idoc.memberships
-        where status = 'grace' and valid_until <= ${today}::date
+        where status = 'grace' and coalesce(grace_ends_on,valid_until) < ${today}::date
         order by id for update skip locked limit 1
       )
-      update idoc.memberships m set status = 'expired', updated_at = now()
+      update idoc.memberships m set status = 'expired', grace_ends_on = null, updated_at = now()
       from candidate where m.id = candidate.id
       returning m.id, m.profile_id as "profileId", m.valid_until as "validUntil"
     `);
@@ -125,14 +125,30 @@ async function transitionExpiredGraceMemberships(today: string): Promise<number>
   return count;
 }
 
+/** Starts non-recurring grace from the day after the paid-through date, never from scan time. */
+async function transitionNonRecurringTerms(today: string): Promise<number> {
+  const changed = await db.execute(sql`
+    update idoc.memberships m set
+      status = case when m.valid_until + 5 < ${today}::date then 'expired' else 'grace' end,
+      grace_ends_on = case when m.valid_until + 5 < ${today}::date then null else m.valid_until + 5 end,
+      updated_at = now()
+    where m.status in ('active', 'canceled', 'complimentary') and m.valid_until < ${today}::date
+      and not exists (select 1 from idoc.subscriptions s where s.profile_id=m.profile_id
+        and s.status in ('active','trialing','past_due','incomplete') and s.cancel_at_period_end=false)
+    returning m.id
+  `);
+  return changed.length;
+}
+
 export async function enqueueRenewalNotices(today: string = todayIso()) {
+  const nonRecurringGrace = await transitionNonRecurringTerms(today);
   const [renewalReminders, expirationReminders, graceReminders, graceExpired] = await Promise.all([
     enqueueRenewalReminders(today),
     enqueueExpirationReminders(today),
     enqueueGraceReminders(today),
     transitionExpiredGraceMemberships(today),
   ]);
-  return { expirationReminders, graceExpired, graceReminders, renewalReminders };
+  return { expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
 function renderNotice(kind: string, payload: NoticePayload): { html: string; subject: string } {

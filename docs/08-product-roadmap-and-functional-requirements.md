@@ -17,7 +17,7 @@ From the deployed raw starter to membership launch, restricted content, seminars
 | Organization      | International Dressage Officials Club (IDOC)                                                                      |
 | Current platform  | WordPress Multisite + MemberPress                                                                                 |
 | Target platform   | Next.js on Vercel + Render PostgreSQL (dedicated idoc schema) + Stripe + Brevo Transactional                 |
-| Current state     | Membership/auth/billing foundations implemented; Release 2 billing presentation, renewal switching, grace, and unpaid-access remediation reopened in docs/25 |
+| Current state     | Membership/auth/billing lifecycle implemented, including future-effective renewal switching and both grace paths; real Stripe test-mode signoff remains gated in docs/25 |
 | Annual membership | €80; one club membership regardless of professional classification                                                |
 | Document status   | Authoritative delivery map updated 2 September 2026; approved remediation must pass before Stripe production setup or migration rehearsal |
 

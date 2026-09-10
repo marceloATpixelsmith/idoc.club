@@ -77,7 +77,7 @@ function queryParts(raw: MemberDirectoryFilters) {
   const conditions = [
     // Scope to currently-entitled members only -- the same test as lib/membership/entitlement.ts's
     // isEntitled -- so the directory reflects current members, not every account ever created.
-    sql`m.status in ('active', 'grace', 'complimentary', 'canceled') and m.valid_until >= current_date`,
+    sql`((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;

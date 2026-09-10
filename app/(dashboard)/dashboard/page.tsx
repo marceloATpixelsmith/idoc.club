@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { getUser } from '@/lib/db/queries';
 import { parseMemberClassification } from '@/lib/membership/classification';
 import { OnboardingWizard } from '@/app/(dashboard)/onboarding/onboarding-wizard';
+import { BillingSettings } from './billing-settings';
+import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -90,7 +92,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const mode = renewalMode(subscription, entitlement);
   const message = renewalMessage(mode, subscription?.currentPeriodEnd, entitlement?.validUntil);
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
-  const history = await listOwnPaymentHistory();
+  const [history, renewalPreference] = await Promise.all([listOwnPaymentHistory(), getOwnRenewalPreference()]);
 
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
@@ -123,6 +125,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </form>
         )}
       </section>
+      {entitlement ? <BillingSettings paidThrough={entitlement.validUntil} preference={renewalPreference}
+        recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'} /> : null}
 
       <section className="mt-6 max-w-2xl">
         <h2 className="font-medium text-foreground">Payment history</h2>

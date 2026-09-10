@@ -6,8 +6,7 @@ import { closeHarness, createMembership, createProfile, createUser, resetIdoc, s
 
 beforeEach(async () => {
   process.env.BASE_URL = 'https://idoc.club';
-  process.env.STRIPE_ONE_TIME_PRODUCT_ID = 'prod_one_time_fixture';
-  process.env.STRIPE_RECURRING_PRODUCT_ID = 'prod_recurring_fixture';
+  process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership_fixture';
   await resetIdoc();
 });
 after(closeHarness);
@@ -41,7 +40,7 @@ test('a first-time checkout creates a Stripe Customer, persists billing_accounts
   assert.equal((second.calls.sessionsCreate[0] as any).customer, 'cus_fixture_created');
 });
 
-test('subscription mode requests a recurring annual price against the recurring product; payment mode requests a one-time price against the one-time product', async () => {
+test('both checkout modes use the canonical membership Product with mode-appropriate Price data', async () => {
   const user = await createUser();
   const profile = await createProfile(user.id);
   await createMembership(profile.id);
@@ -50,7 +49,7 @@ test('subscription mode requests a recurring annual price against the recurring 
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('subscription', subscription.client));
   const subscriptionParams = subscription.calls.sessionsCreate[0] as any;
   assert.equal(subscriptionParams.mode, 'subscription');
-  assert.equal(subscriptionParams.line_items[0].price_data.product, 'prod_recurring_fixture');
+  assert.equal(subscriptionParams.line_items[0].price_data.product, 'prod_membership_fixture');
   assert.deepEqual(subscriptionParams.line_items[0].price_data.recurring, { interval: 'year' });
   assert.equal(subscriptionParams.line_items[0].price_data.unit_amount, 8000);
   assert.equal(subscriptionParams.line_items[0].price_data.currency, 'eur');
@@ -64,7 +63,7 @@ test('subscription mode requests a recurring annual price against the recurring 
   await withTestMembershipBoundary({ actor: { id: user2.id, roles: [] } }, () => createMembershipCheckoutSession('payment', payment.client));
   const paymentParams = payment.calls.sessionsCreate[0] as any;
   assert.equal(paymentParams.mode, 'payment');
-  assert.equal(paymentParams.line_items[0].price_data.product, 'prod_one_time_fixture');
+  assert.equal(paymentParams.line_items[0].price_data.product, 'prod_membership_fixture');
   assert.equal(paymentParams.line_items[0].price_data.recurring, undefined);
 });
 
@@ -100,11 +99,11 @@ test('a missing product configuration fails closed rather than silently starting
   const user = await createUser();
   const profile = await createProfile(user.id);
   await createMembership(profile.id);
-  delete process.env.STRIPE_RECURRING_PRODUCT_ID;
+  delete process.env.STRIPE_MEMBERSHIP_PRODUCT_ID;
   const { client } = fakeStripeClient();
   await assert.rejects(
     withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('subscription', client)),
-    /STRIPE_RECURRING_PRODUCT_ID/,
+    /STRIPE_MEMBERSHIP_PRODUCT_ID/,
   );
   assert.equal((await sql`select count(*)::int as count from idoc.billing_accounts where profile_id=${profile.id}`)[0].count, 0);
 });

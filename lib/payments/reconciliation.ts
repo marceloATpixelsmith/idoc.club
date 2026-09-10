@@ -4,17 +4,20 @@ export type ReconciliationFinding =
   | { attemptCount: number; externalSubscriptionId: string; kind: 'repeated_failure'; profileId: number | null }
   | { externalCustomerId: string; externalSubscriptionId: string; kind: 'orphaned_subscription'; stripeStatus: string }
   | { externalCustomerId: string; kind: 'unlinked_customer' }
+  | { externalSubscriptionId: string; kind: 'pending_schedule_conflict'; profileId: number; stripeStatus: string }
   | { externalSubscriptionId: string; kind: 'status_conflict'; localStatus: string; profileId: number; stripeStatus: string };
 
 type LocalSnapshot = {
   billingAccounts: Array<{ externalCustomerId: string; profileId: number }>;
   subscriptions: Array<{ externalSubscriptionId: string; profileId: number; status: string }>;
+  renewalPreferences?: Array<{ externalSubscriptionScheduleId: string | null; profileId: number; transitionState: string }>;
 };
 
 type StripeSnapshot = {
   customers: Array<{ id: string }>;
   openInvoices: Array<{ attemptCount: number; subscription: string | null }>;
   subscriptions: Array<{ customer: string; id: string; status: string }>;
+  schedules?: Array<{ id: string; status: string }>;
 };
 
 const OPEN_STRIPE_STATUSES = new Set<string>(OPEN_SUBSCRIPTION_STATUSES);
@@ -54,6 +57,16 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
     });
   }
 
+  const schedules = new Map((stripe.schedules ?? []).map((schedule) => [schedule.id, schedule.status]));
+  for (const preference of local.renewalPreferences ?? []) {
+    if (preference.transitionState !== 'pending_activation' || !preference.externalSubscriptionScheduleId) continue;
+    const status = schedules.get(preference.externalSubscriptionScheduleId);
+    if (!status || !['not_started', 'active'].includes(status)) findings.push({
+      externalSubscriptionId: preference.externalSubscriptionScheduleId, kind: 'pending_schedule_conflict',
+      profileId: preference.profileId, stripeStatus: status ?? 'missing',
+    });
+  }
+
   return findings;
 }
 
@@ -67,5 +80,7 @@ export function summarizeFinding(finding: ReconciliationFinding): string {
       return `Subscription ${finding.externalSubscriptionId} has an open invoice with ${finding.attemptCount} failed payment attempts.`;
     case 'unlinked_customer':
       return `Stripe Customer ${finding.externalCustomerId} has no matching local billing account.`;
+    case 'pending_schedule_conflict':
+      return `Pending renewal schedule ${finding.externalSubscriptionId} is '${finding.stripeStatus}' in Stripe; inspect before changing local billing state.`;
   }
 }

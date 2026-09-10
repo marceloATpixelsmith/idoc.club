@@ -41,7 +41,7 @@ The first membership-payment page shows one €80 membership and an automatic-re
 
 The server must carry the authenticated profile identifier and intended billing mode in server-created Checkout metadata. It grants entitlement only after a verified, idempotent successful-payment webhook validates the expected membership Product, amount, currency, and mode; a completed browser redirect is not sufficient.
 
-Implementation target: replace `STRIPE_RECURRING_PRODUCT_ID` and `STRIPE_ONE_TIME_PRODUCT_ID` with one `STRIPE_MEMBERSHIP_PRODUCT_ID`. Historical subscriptions keep their original Product and Price identifiers.
+Implemented: new enrollment and renewal schedules use `STRIPE_MEMBERSHIP_PRODUCT_ID`; historical subscriptions keep their original Product and Price identifiers.
 
 # 4. Legacy Price IDs
 
@@ -55,6 +55,14 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
 
 - Recurring to non-recurring: set the current subscription to cancel at period end. Do not terminate current entitlement or charge again.
 - Non-recurring to recurring: collect reusable payment authorization without an immediate charge and arrange annual billing to start on the existing paid-through date.
+- **Approved mechanism (10 September 2026):** use Stripe Checkout `setup` mode. Only a verified
+  `checkout.session.completed` webhook may retrieve and validate the succeeded, `off_session`
+  SetupIntent and its Customer-owned PaymentMethod. The handler idempotently creates a recurring
+  EUR 80 Price under `STRIPE_MEMBERSHIP_PRODUCT_ID`, then one Subscription Schedule whose
+  `start_date` is midnight UTC on the existing `valid_until` date and whose default payment method
+  is that authorization. Local state retains the Checkout Session, SetupIntent, PaymentMethod,
+  Price, and Schedule identifiers. Neither Checkout return nor setup completion changes entitlement;
+  the schedule's resulting subscription and paid invoice remain webhook-authoritative.
 - Reversal before effective date: cancel or replace the pending transition without creating a duplicate subscription or charge.
 - Every transition: persist the current preference, pending preference, effective date, Stripe schedule/subscription references as applicable, and an audit record. Confirmation messaging must state the effective date and next expected €80 charge.
 - IDOC owns this preference and transition workflow. Customer Portal remains available for payment-method updates and invoice history but must not be treated as the source of IDOC renewal preference.

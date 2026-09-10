@@ -50,7 +50,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     forgetThisDevice: 'session-boundary', logOutOtherSessions: 'session-boundary', logOutSession: 'session-boundary',
     regenerateRecoveryCodes: 'session-boundary',
   },
-  'lib/payments/actions.ts': { checkoutAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
+  'lib/payments/actions.ts': { cancelPendingRenewalAction: 'delegates-to-data-access', checkoutAction: 'delegates-to-data-access', disableAutomaticRenewalAction: 'delegates-to-data-access', enableAutomaticRenewalAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/security/actions.ts': { recordGoogleOauthRotationEvidenceForm: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/support/actions.ts': {

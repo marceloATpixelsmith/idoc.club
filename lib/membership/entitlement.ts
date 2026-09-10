@@ -1,12 +1,15 @@
 import { OPEN_SUBSCRIPTION_STATUSES } from '../payments/pricing.ts';
 
 export type EntitlementRecord = {
+  graceEndsOn?: string | null;
   status: string;
   validUntil: string;
 };
 
 export function isEntitled(record: EntitlementRecord | null, today: string): boolean {
-  if (!record || record.validUntil < today) return false;
+  if (!record) return false;
+  if (record.status === 'grace') return (record.graceEndsOn ?? record.validUntil) >= today;
+  if (record.validUntil < today) return false;
   return ['active', 'grace', 'complimentary', 'canceled'].includes(record.status);
 }
 

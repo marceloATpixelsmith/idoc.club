@@ -43,7 +43,7 @@ export async function getPublicMemberConcentration(): Promise<ConcentrationResul
         select status, valid_until from idoc.memberships
         where profile_id = p.id order by valid_until desc, id desc limit 1
       ) m on true
-      where m.status in ('active', 'grace', 'complimentary', 'canceled') and m.valid_until >= current_date
+      where ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
       group by p.country_code
       having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
       order by count(*) desc, p.country_code asc

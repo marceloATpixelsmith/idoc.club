@@ -205,6 +205,10 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - On an automatic-renewal failure, Stripe retries automatically and the five-calendar-day grace window begins on the failed scheduled-renewal date. For a non-recurring term, `valid_until` remains fully entitled through that date and the five full calendar days of grace begin on the following calendar day. In either case, the previously paid person remains a full member throughout the applicable grace window. If no eligible payment is received by its end, membership becomes expired and the account is restricted to payment and logout.
 
+`valid_until` remains the paid-through date. The separate `grace_ends_on` is the inclusive last day
+of grace: an automatic failure on D is entitled D through D+4, while a non-recurring term ending on
+D is entitled in grace D+1 through D+5. A failure therefore never appears to extend paid time.
+
 - An expired member retains the account and its history but, after grace ends, receives only the membership-payment gate and logout after login. Payment reactivates access only after the verified/idempotent payment path updates membership entitlement. Administrator and Super Admin access remains governed by application-role policy rather than a self-service member-payment gate.
 
 # 6. Stripe subscription status mapping

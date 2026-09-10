@@ -299,8 +299,10 @@ export async function hasCurrentMemberEntitlement(profileId: number): Promise<bo
   const today = new Date().toISOString().slice(0, 10);
   const [record] = await db.select({ id: memberships.id }).from(memberships).where(and(
     eq(memberships.profileId, profileId),
-    inArray(memberships.status, ['active', 'grace', 'complimentary', 'canceled']),
-    or(gt(memberships.validUntil, today), eq(memberships.validUntil, today)),
+    or(
+      and(inArray(memberships.status, ['active', 'complimentary', 'canceled']), or(gt(memberships.validUntil, today), eq(memberships.validUntil, today))),
+      and(eq(memberships.status, 'grace'), sql`coalesce(${memberships.graceEndsOn},${memberships.validUntil}) >= ${today}`),
+    ),
   )).limit(1);
   return Boolean(record);
 }

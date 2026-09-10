@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, reconciliationFindings, reconciliationRuns, subscriptions } from '@/lib/db/schema';
+import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
 
@@ -16,6 +16,7 @@ export type ReconciliationStripeClient = {
   // regress this back to reading a field that no longer exists.
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ customer: string; id: string; status: string }>; has_more: boolean }> };
+  subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
 };
 
 const PAGE_SIZE = 100;
@@ -65,21 +66,25 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     // one. Constructing the real client (which validates STRIPE_SECRET_KEY) stays inside this try
     // block so a misconfigured key is recorded as a failed run like any other scan failure.
     const stripe: ReconciliationStripeClient = testStripeClient ?? (getStripeServerClient() as unknown as ReconciliationStripeClient);
-    const [localBillingAccounts, localSubscriptions] = await Promise.all([
+    const [localBillingAccounts, localSubscriptions, localPreferences] = await Promise.all([
       db.select({ externalCustomerId: billingAccounts.externalCustomerId, profileId: billingAccounts.profileId }).from(billingAccounts),
       db.select({ externalSubscriptionId: subscriptions.externalSubscriptionId, profileId: subscriptions.profileId, status: subscriptions.status }).from(subscriptions),
+      db.select({ externalSubscriptionScheduleId: renewalPreferences.externalSubscriptionScheduleId,
+        profileId: renewalPreferences.profileId, transitionState: renewalPreferences.transitionState }).from(renewalPreferences),
     ]);
-    const [stripeCustomers, stripeSubscriptions, stripeOpenInvoices] = await Promise.all([
+    const [stripeCustomers, stripeSubscriptions, stripeOpenInvoices, stripeSchedules] = await Promise.all([
       paginate((params) => stripe.customers.list(params)),
       paginate((params) => stripe.subscriptions.list({ ...params, status: 'all' })),
       paginate((params) => stripe.invoices.list({ ...params, status: 'open' })),
+      stripe.subscriptionSchedules ? paginate((params) => stripe.subscriptionSchedules!.list(params)) : Promise.resolve([]),
     ]);
 
     const findings = computeReconciliationFindings(
-      { billingAccounts: localBillingAccounts, subscriptions: localSubscriptions },
+      { billingAccounts: localBillingAccounts, renewalPreferences: localPreferences, subscriptions: localSubscriptions },
       {
         customers: stripeCustomers,
         openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
+        schedules: stripeSchedules,
         subscriptions: stripeSubscriptions,
       },
     );

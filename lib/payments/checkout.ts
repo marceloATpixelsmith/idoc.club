@@ -5,7 +5,7 @@ import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
 import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { baseUrlForServer, stripeOneTimeProductIdForServer, stripeRecurringProductIdForServer } from '@/lib/runtime/configuration';
+import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
 import { getStripeServerClient } from './stripe-client';
 
@@ -15,13 +15,9 @@ export type CheckoutMode = 'payment' | 'subscription';
 // inject a fake without satisfying the entire (very large) real Stripe SDK surface. The real
 // client structurally satisfies this already.
 export type CheckoutStripeClient = {
-  checkout: { sessions: { create: (params: Stripe.Checkout.SessionCreateParams) => Promise<{ url: string | null }> } };
-  customers: { create: (params: Stripe.CustomerCreateParams) => Promise<{ id: string }> };
+  checkout: { sessions: { create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ url: string | null }> } };
+  customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
-
-function requiredProductId(mode: CheckoutMode) {
-  return mode === 'subscription' ? stripeRecurringProductIdForServer() : stripeOneTimeProductIdForServer();
-}
 
 async function hasOpenSubscription(profileId: number): Promise<boolean> {
   const [existing] = await db.select({ id: subscriptions.id }).from(subscriptions)
@@ -29,15 +25,15 @@ async function hasOpenSubscription(profileId: number): Promise<boolean> {
   return Boolean(existing);
 }
 
-// A concurrent first-ever checkout from the same member could race here and create two Stripe
-// Customers before either insert commits; the losing one is simply never referenced again (an
-// orphaned test/live Customer, not a correctness issue) since billing_accounts.profile_id is unique.
-async function resolveOrCreateBillingAccount(stripe: CheckoutStripeClient, userId: number, profileId: number): Promise<string> {
+// The stable Stripe idempotency key and local profile uniqueness jointly make concurrent first
+// checkout attempts converge on one Customer and one billing-account link.
+export async function resolveOrCreateBillingAccount(stripe: CheckoutStripeClient, userId: number, profileId: number): Promise<string> {
   const [existing] = await db.select({ externalCustomerId: billingAccounts.externalCustomerId })
     .from(billingAccounts).where(eq(billingAccounts.profileId, profileId)).limit(1);
   if (existing) return existing.externalCustomerId;
   const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-  const customer = await stripe.customers.create({ email: user?.email, metadata: { profileId: String(profileId) } });
+  const customer = await stripe.customers.create({ email: user?.email, metadata: { profileId: String(profileId) } },
+    { idempotencyKey: `idoc-membership-customer-${profileId}` });
   const [inserted] = await db.insert(billingAccounts).values({ externalCustomerId: customer.id, profileId })
     .onConflictDoNothing({ target: billingAccounts.profileId }).returning({ externalCustomerId: billingAccounts.externalCustomerId });
   if (inserted) return inserted.externalCustomerId;
@@ -56,7 +52,7 @@ async function resolveOrCreateBillingAccount(stripe: CheckoutStripeClient, userI
  */
 export async function createMembershipCheckoutSession(mode: CheckoutMode, testStripeClient?: CheckoutStripeClient): Promise<string> {
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
-  const productId = requiredProductId(mode);
+  const productId = stripeMembershipProductIdForServer();
   const stripe = testStripeClient ?? getStripeServerClient();
   const actor = await requireAccountAccess('billing_boundary');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
@@ -81,6 +77,7 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     }],
     metadata: { mode, profileId: String(profile.id) },
     mode,
+    subscription_data: mode === 'subscription' ? { metadata: { kind: 'idoc_membership', profileId: String(profile.id) } } : undefined,
     success_url: `${baseUrl}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');

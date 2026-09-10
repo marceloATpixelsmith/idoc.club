@@ -118,7 +118,7 @@ function queryParts(raw: MemberFilters) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
   }
-  const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when m.status in ('active','complimentary','canceled','grace') and m.valid_until >= current_date and u.account_state <> 'suspended' then 'active' else 'expired' end`;
+  const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when ((m.status in ('active','complimentary','canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date)) and u.account_state <> 'suspended' then 'active' else 'expired' end`;
   if (filters.status === 'administrator') conditions.push(sql`app_roles.is_administrator`);
   else if (filters.status === 'super_admin') conditions.push(sql`app_roles.is_super_admin`);
   else if (filters.status === 'onboarding') conditions.push(sql`u.account_state in ('unverified','onboarding','migrated_pending')`);
