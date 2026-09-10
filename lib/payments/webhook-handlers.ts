@@ -198,6 +198,10 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
       eq(renewalPreferences.profileId, profileId), eq(renewalPreferences.externalCheckoutSessionId, session.id),
     )).limit(1);
     if (!preference || preference.pendingMode !== 'recurring' || preference.transitionState !== 'awaiting_setup' || !preference.effectiveOn) return;
+    // Lock and reread the authoritative paid-through membership before creating any future Stripe charge schedule.
+    // A one-time renewal or administrative extension may have changed valid_until after Setup Checkout began.
+    const membership = await lockLatestMembership(tx, profileId);
+    if (!membership || membership.validUntil !== preference.effectiveOn) return;
     if (!stripe.setupIntents || !stripe.paymentMethods || !stripe.prices || !stripe.subscriptionSchedules) {
       throw new Error('Stripe renewal APIs are unavailable.');
     }
