@@ -126,6 +126,7 @@ test('a grace-expiry scan racing a same-day invoice.paid converges to active wit
   const { profile } = await fixtureProfile();
   const customerId = 'cus_grace_race_fixture';
   await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values(${profile.id}, ${customerId})`;
+  await sql`insert into idoc.subscriptions(profile_id, external_subscription_id, price_id, status, current_period_end, cancel_at_period_end) values(${profile.id}, 'sub_grace_race_fixture', 'price_fixture', 'active', ${isoDate(365)}, false)`;
   const graceEnd = isoDate(0);
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source) values(${profile.id}, 'grace', '2025-01-01', ${graceEnd}, 'stripe')`;
 
