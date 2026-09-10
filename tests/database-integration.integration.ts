@@ -263,7 +263,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // These four tables were created by hand-written migrations directly in SQL and were never added
   // to lib/db/schema.ts, so no snapshot generated from schema.ts -- 0046 included -- will ever list
   // them; that is permanent and deliberate, not snapshot staleness.
-  const expectedTables = [...Object.keys(expectedSchema), 'idoc.renewal_preferences', 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
+  const expectedTables = [...Object.keys(expectedSchema), 'idoc.auth_security_notification_outbox', 'idoc.external_identities', 'idoc.google_oauth_transactions', 'idoc.operational_alert_outbox'].sort();
   assert.deepEqual(tables.map(({ table_name }) => `idoc.${table_name}`), expectedTables);
 
   // A handful of post-0030 migrations added an index to a table this snapshot already tracks
