@@ -13,7 +13,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   if (!hasUrlState && Object.keys(savedQuery).length > 0) {
     const savedParams = new URLSearchParams();
     for (const [key, value] of Object.entries(savedQuery)) {
-      if (Array.isArray(value)) for (const item of value) savedParams.append(key, item);
+      if (Array.isArray(value)) { if (value.length === 0 && key === 'column') savedParams.append(key, ''); else for (const item of value) savedParams.append(key, item); }
       else savedParams.set(key, value);
     }
     redirect(`/admin/support?${savedParams.toString()}`);
