@@ -261,8 +261,16 @@ test('AUTH-PASSWORD-005: a privileged (administrator) account cannot change its 
   await withTestRequestCookies(cookies, () => setSession(admin));
 
   assert.deepEqual(
-    await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () =>
-      updatePassword({}, form({ confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies), currentPassword: password, newPassword: 'A New Correct Battery 77!' }))),
+    await withTestRequestCookies(
+      cookies,
+      () => withTestMembershipBoundary(
+        { actor: { id: admin.id, roles: ['administrator'] } },
+        () => updatePassword({}, form({
+          confirmPassword: 'A New Correct Battery 77!', csrf_token: csrfTokenFrom(cookies),
+          currentPassword: password, newPassword: 'A New Correct Battery 77!',
+        })),
+      ),
+    ),
     { stepUpRequired: true },
   );
   const [beforeStepUp] = await sql`select password_hash, session_version from idoc.users where id=${admin.id}`;
