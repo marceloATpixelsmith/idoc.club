@@ -348,7 +348,7 @@ test('verified setup Checkout creates one future €80 schedule without changing
     metadata: { kind: 'membership_renewal_setup', profileId: String(profile.id) }, mode: 'setup', setup_intent: 'seti_setup_fixture' }, 'evt_setup_fixture');
   assert.equal(await processStripeEvent(event as any, stripe as any), 'processed');
   assert.equal(await processStripeEvent(event as any, stripe as any), 'duplicate');
-  assert.deepEqual(await sql`select status, valid_until from idoc.memberships where id=${membership.id}`, [before]);
+  assert.deepEqual([...await sql`select status, valid_until from idoc.memberships where id=${membership.id}`], [before]);
   const [preference] = await sql`select transition_state, expected_charge_cents, external_setup_intent_id,
     external_payment_method_id, external_subscription_schedule_id from idoc.renewal_preferences where profile_id=${profile.id}`;
   assert.equal(preference.transition_state, 'pending_activation');
