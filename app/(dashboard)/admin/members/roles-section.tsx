@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { grantRoleForm, revokeRoleForm } from './actions';
 
@@ -8,9 +8,9 @@ type FormState = { error?: string; success?: string };
 type Role = { id: number; role: string };
 
 export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; userId: number }) {
-  const [grantState, grantAction, grantPending] = useActionState(grantRoleForm, {} as FormState);
-  const [revokeState, revokeAction, revokePending] = useActionState(revokeRoleForm, {} as FormState);
-  return <div className="mt-2 max-w-md space-y-4">
+  const [grantState, grantAction, grantPending, grantDialog] = useFreshStepUpAction(grantRoleForm, {});
+  const [revokeState, revokeAction, revokePending, revokeDialog] = useFreshStepUpAction(revokeRoleForm, {});
+  return <><div className="mt-2 max-w-md space-y-4">
     <div>
       <p className="text-sm font-medium">Currently active roles</p>
       {activeRoles.length === 0 && <p className="text-sm text-muted-foreground">None.</p>}
@@ -41,5 +41,5 @@ export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; use
       {grantState.error && <p className="text-sm text-red-400">{grantState.error}</p>}
       {grantState.success && <p className="text-sm text-green-400">{grantState.success}</p>}
     </form>
-  </div>;
+  </div>{grantDialog}{revokeDialog}</>;
 }

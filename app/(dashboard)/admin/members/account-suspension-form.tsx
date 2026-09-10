@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { forceRevokeAllAuthorityForm, reinstateUserAccountForm, suspendUserAccountForm } from './actions';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 
 type FormState = { error?: string; success?: string };
 
@@ -46,8 +47,8 @@ export function ReinstateAccountForm({ userId }: { userId: number }) {
  * (unlike suspending the account) leaves the account itself sign-in-eligible so its rightful owner
  * can regain control and re-enroll MFA once they have. */
 export function ForceRevokeAllAuthorityForm({ userId }: { userId: number }) {
-  const [state, action, pending] = useActionState(forceRevokeAllAuthorityForm, {} as FormState);
-  return <form action={action} className="mt-2 max-w-md space-y-2">
+  const [state, action, pending, stepUpDialog] = useFreshStepUpAction(forceRevokeAllAuthorityForm, {});
+  return <><form action={action} className="mt-2 max-w-md space-y-2">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
     <p className="text-sm text-foreground">Immediately revokes every session, remembered device, and MFA factor for this user (incident response). The account itself remains sign-in-eligible.</p>
@@ -56,5 +57,5 @@ export function ForceRevokeAllAuthorityForm({ userId }: { userId: number }) {
     <button className="rounded bg-red-800 px-3 py-1 text-sm text-white" disabled={pending} type="submit">Force-revoke all authority</button>
     {state.error && <p className="text-sm text-red-400">{state.error}</p>}
     {state.success && <p className="text-sm text-green-400">{state.success}</p>}
-  </form>;
+  </form>{stepUpDialog}</>;
 }

@@ -247,3 +247,7 @@ with real behavioral evidence in place of source-inspection-only proof:
 `docs/22` and `docs/23` were updated to match (`node scripts/validate-auth-docs.mjs` passes: 145
 verified, 3 partial). The application is still not production-ready; the same reference-commit-freshness
 and GitHub ruleset/review-gate caveats from the passes above still apply.
+
+## Fresh-step-up continuation handoff
+
+The repository-wide invariant is implemented: every authenticated Administrator or Super Admin action requiring fresh TOTP automatically resumes and completes after successful TOTP; no second submission is required. Reviewers should verify the protected-action inventory in docs/08 and the acceptance matrix in docs/20, then run both full workflows for the exact PR head. Production deployment parity and a real privileged-account/TOTP exercise cannot be self-certified by repository tests and remain mandatory handoff gates.

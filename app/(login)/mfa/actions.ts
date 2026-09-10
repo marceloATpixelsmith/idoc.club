@@ -20,8 +20,7 @@ import { finalizeInitialAuthenticatorEnrollment } from '@/lib/auth/mfa/enrollmen
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { CompromisedMfaKeyError, beginTotpEnrollment, decryptTotpSecret, prepareTotpEnrollment, resolveMfaEncryptionKey, verifyActiveTotp, verifyTotpCode } from '@/lib/auth/mfa/totp';
 import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
-import { getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
-import { resumeStepUpAction } from '@/lib/auth/mfa/step-up-resume';
+import { clearStepUpEvidence, getPendingStepUp, grantFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 import { issueRememberedDevice } from '@/lib/auth/mfa/remembered-device';
 import { logError } from '@/lib/observability/logger';
@@ -29,6 +28,11 @@ import { setRememberedTotpDeviceCookie } from '@/lib/auth/mfa/remembered-device-
 
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
 const loginCodeSchema = codeSchema.extend({ remember: z.string().optional() });
+
+export const cancelStepUp = validatedAction(z.object({}), async () => {
+  await clearStepUpEvidence();
+  return { cancelled: true };
+});
 
 export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
   const context = await getPendingStepUp();
@@ -49,7 +53,7 @@ export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => 
   if (result.status !== 'accepted') return { error: result.status === 'attempts-exhausted'
     ? 'Too many incorrect codes. Try the action again.' : 'Your verification session expired. Try the action again.' };
   await grantFreshStepUp(context.pending, { factorId: context.pending.factorId, method: 'totp' });
-  redirect(await resumeStepUpAction(context.pending));
+  return { verified: true };
 });
 
 async function pendingAccount(expected: 'challenge' | 'enrollment' | 'recovery-entry' | 'replacement' | 'recovery-ack') {

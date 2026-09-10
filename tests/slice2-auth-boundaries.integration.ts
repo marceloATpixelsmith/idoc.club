@@ -129,9 +129,10 @@ async function fulfilledStepUp(cookies: TestCookies, user: any, secret: string, 
   assert.equal(started.required, true);
   const pending = await withTestRequestCookies(cookies, getPendingStepUp);
   assert.ok(pending);
-  await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret), csrfTokenFrom(cookies))))
-    .then(() => assert.fail('successful step-up verification should redirect'),
-      (error) => assert.match(String(error), /NEXT_REDIRECT/));
+  assert.deepEqual(
+    await withTestRequestCookies(cookies, () => verifyStepUpTotp({}, form('code', totp(secret), csrfTokenFrom(cookies)))),
+    { verified: true },
+  );
   assert.ok(cookies.get('idoc_fresh_step_up'));
 }
 

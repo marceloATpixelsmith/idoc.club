@@ -197,7 +197,7 @@ export const updatePassword = validatedActionWithUser(
   async (data, _, user) => {
     const { currentPassword, newPassword } = data;
 
-    if ((await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) redirect('/mfa');
+    if ((await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) return { stepUpRequired: true };
 
     const isPasswordValid = await comparePasswords(currentPassword, user.passwordHash);
     if (!isPasswordValid) return { error: 'Current password is incorrect.' };
@@ -232,7 +232,7 @@ const deleteAccountSchema = z.object({ password: passwordEntrySchema });
 export const deleteAccount = validatedActionWithUser(
   deleteAccountSchema,
   async (data, _, user) => {
-    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) redirect('/mfa');
+    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) return { stepUpRequired: true };
     const isPasswordValid = await comparePasswords(data.password, user.passwordHash);
     if (!isPasswordValid) return { error: 'Incorrect password. Account deletion failed.' };
     // deleteOwnAccount performs its own authenticated authorization lookup, so the canonical
@@ -255,8 +255,7 @@ export const updateAccount = validatedActionWithUser(
   async (data, _, user) => {
     const email = normalizeEmail(data.email);
     if (email !== user.email) {
-      if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account',
-        { kind: 'update-account-email', payload: { email: data.email } })).required) redirect('/mfa');
+      if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account')).required) return { stepUpRequired: true };
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (duplicate) return { error: 'That email address is unavailable.' };
       await issueEmailVerification(user.id, data.email);

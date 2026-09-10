@@ -38,7 +38,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     acknowledgeRecoveryCodes: 'pre-authentication', authorizeAuthenticatorRecovery: 'pre-authentication',
     beginAuthenticatorRecovery: 'pre-authentication', cancelMfa: 'pre-authentication',
     confirmTotpEnrollment: 'pre-authentication', verifyLoginTotp: 'pre-authentication',
-    verifyStepUpTotp: 'authenticated-continuation',
+    cancelStepUp: 'authenticated-continuation', verifyStepUpTotp: 'authenticated-continuation',
   },
   'app/(dashboard)/account/actions.ts': {
     saveOwnMemberProfileForm: 'delegates-to-data-access',

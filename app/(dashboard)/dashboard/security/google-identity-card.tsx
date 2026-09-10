@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CsrfField } from '@/components/security/csrf-field';
 import { beginGoogleIdentityLink, disconnectGoogleIdentity } from './actions';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 
 const fetcher = (url: string) => fetch(url).then((response) => response.json());
 type State = { error?: string; success?: string };
@@ -24,19 +25,19 @@ const GOOGLE_RESULT_MESSAGES: Record<string, { error?: string; success?: string 
 export function GoogleIdentityCard() {
   const searchParams = useSearchParams();
   const { data, mutate } = useSWR<{ linked: boolean }>('/api/auth/google/link/status', fetcher);
-  const [linkState, linkAction, linkPending] = useActionState<State, FormData>(beginGoogleIdentityLink, {});
-  const [unlinkState, unlinkAction, unlinkPending] = useActionState<State, FormData>(async (state, formData) => {
+  const [linkState, linkAction, linkPending, linkDialog] = useFreshStepUpAction(beginGoogleIdentityLink, {} as State);
+  const [unlinkState, unlinkAction, unlinkPending, unlinkDialog] = useFreshStepUpAction(async (state, formData) => {
     const result = await disconnectGoogleIdentity(state, formData);
     await mutate();
     return result;
-  }, {});
+  }, {} as State);
   const linked = data?.linked === true;
   const callbackState = GOOGLE_RESULT_MESSAGES[searchParams.get('google') ?? ''];
   const error = linkState.error || unlinkState.error || callbackState?.error;
   const success = linkState.success || unlinkState.success || callbackState?.success;
 
   return (
-    <Card className="mb-8">
+    <><Card className="mb-8">
       <CardHeader>
         <CardTitle>Google Sign-In</CardTitle>
       </CardHeader>
@@ -65,6 +66,6 @@ export function GoogleIdentityCard() {
           </Button>
         </form>
       </CardContent>
-    </Card>
+    </Card>{linkDialog}{unlinkDialog}</>
   );
 }
