@@ -2,7 +2,7 @@ import { databaseUrlForServer } from '@/lib/runtime/configuration';
 import { validateTestDatabaseUrl } from './test-database-url';
 
 export function getPostgresConnectionUrl(): string {
-  const connectionUrl = process.env.NODE_ENV === 'test'
+  const connectionUrl = (process.env.NODE_ENV === 'test' || Boolean(process.env.TEST_DATABASE_URL))
     ? validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString()
     : databaseUrlForServer();
 

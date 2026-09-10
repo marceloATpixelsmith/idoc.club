@@ -41,8 +41,7 @@ function productId(environment: Environment, name: string) {
   return value;
 }
 
-export function stripeRecurringProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_RECURRING_PRODUCT_ID'); }
-export function stripeOneTimeProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_ONE_TIME_PRODUCT_ID'); }
+export function stripeMembershipProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_MEMBERSHIP_PRODUCT_ID'); }
 
 export function authSecretForServer(environment: Environment = process.env) { return secret(environment, 'AUTH_SECRET'); }
 
@@ -254,8 +253,7 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     loginDeviceTrustDigestKey: loginDeviceTrustDigestKeyForServer(environment),
     brevoApiKey: brevoApiKeyForServer(environment), brevoFromEmail: brevoFromEmailForServer(environment),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
-    stripeOneTimeProductId: stripeOneTimeProductIdForServer(environment),
-    stripeRecurringProductId: stripeRecurringProductIdForServer(environment),
+    stripeMembershipProductId: stripeMembershipProductIdForServer(environment),
     stripeWebhookSecret: secret(environment, 'STRIPE_WEBHOOK_SECRET'),
     turnstileSecretKey: turnstileSecretKeyForServer(environment),
   };

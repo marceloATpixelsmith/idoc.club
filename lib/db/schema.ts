@@ -289,6 +289,7 @@ export const memberships = idocSchema.table('memberships', {
   status: varchar('status', { length: 30 }).notNull(),
   startsOn: date('starts_on').notNull(),
   validUntil: date('valid_until').notNull(),
+  graceEndsOn: date('grace_ends_on'),
   membershipType: varchar('membership_type', { length: 30 }).notNull().default('standard'),
   source: varchar('source', { length: 30 }).notNull(),
   notes: text('notes'),
@@ -645,6 +646,31 @@ export const subscriptions = idocSchema.table('subscriptions', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check('subscriptions_status_check', sql`${table.status} in ('active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired')`),
+  uniqueIndex('subscriptions_one_open_path_per_profile').on(table.profileId)
+    .where(sql`${table.status} in ('active', 'trialing', 'past_due', 'incomplete')`),
+]);
+
+/** Server-owned renewal intent. This never grants entitlement: memberships remains authoritative. */
+export const renewalPreferences = idocSchema.table('renewal_preferences', {
+  profileId: integer('profile_id').primaryKey().references(() => profiles.id),
+  currentMode: varchar('current_mode', { length: 20 }).notNull(),
+  pendingMode: varchar('pending_mode', { length: 20 }),
+  effectiveOn: date('effective_on'),
+  expectedChargeCents: integer('expected_charge_cents'),
+  currency: varchar('currency', { length: 3 }).notNull().default('EUR'),
+  externalCheckoutSessionId: varchar('external_checkout_session_id', { length: 255 }).unique(),
+  externalSetupIntentId: varchar('external_setup_intent_id', { length: 255 }).unique(),
+  externalPaymentMethodId: varchar('external_payment_method_id', { length: 255 }),
+  externalRecurringPriceId: varchar('external_recurring_price_id', { length: 255 }),
+  externalSubscriptionScheduleId: varchar('external_subscription_schedule_id', { length: 255 }).unique(),
+  transitionState: varchar('transition_state', { length: 30 }).notNull().default('current'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('renewal_preferences_current_mode_check', sql`${table.currentMode} in ('recurring', 'non_recurring')`),
+  check('renewal_preferences_pending_mode_check', sql`${table.pendingMode} is null or ${table.pendingMode} in ('recurring', 'non_recurring')`),
+  check('renewal_preferences_transition_state_check', sql`${table.transitionState} in ('current', 'awaiting_setup', 'pending_activation', 'cancel_pending', 'failed')`),
+  check('renewal_preferences_pending_shape_check', sql`(${table.pendingMode} is null and ${table.effectiveOn} is null) or (${table.pendingMode} is not null and ${table.effectiveOn} is not null)`),
 ]);
 
 /** One row per payment event, Stripe-verified or administrator-entered manually. */
@@ -681,7 +707,7 @@ export const reconciliationFindings = idocSchema.table('reconciliation_findings'
   details: jsonb('details'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer')`),
+  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict')`),
 ]);
 
 /** Append-only heartbeat log, one row per cron execution, so a failed run doesn't read as a silent "all clear." */

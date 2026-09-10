@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { computeReconciliationFindings } from '../lib/payments/reconciliation.ts';
+import { computeReconciliationFindings, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
   const findings = computeReconciliationFindings(
@@ -18,7 +18,7 @@ test('a matching local subscription with a different Stripe status is a status_c
   assert.deepEqual(findings, [{ externalSubscriptionId: 'sub_1', kind: 'status_conflict', localStatus: 'active', profileId: 7, stripeStatus: 'canceled' }]);
 });
 
-for (const stripeStatus of ['active', 'trialing', 'past_due']) {
+for (const stripeStatus of ['active', 'trialing', 'past_due', 'incomplete']) {
   test(`an untracked Stripe subscription with status '${stripeStatus}' is an orphaned_subscription`, () => {
     const findings = computeReconciliationFindings(
       { billingAccounts: [], subscriptions: [] },
@@ -28,7 +28,7 @@ for (const stripeStatus of ['active', 'trialing', 'past_due']) {
   });
 }
 
-for (const stripeStatus of ['canceled', 'incomplete', 'incomplete_expired', 'unpaid']) {
+for (const stripeStatus of ['canceled', 'incomplete_expired', 'unpaid']) {
   test(`an untracked Stripe subscription with status '${stripeStatus}' is not an orphan — it's not open billing`, () => {
     const findings = computeReconciliationFindings(
       { billingAccounts: [], subscriptions: [] },
@@ -112,4 +112,13 @@ test('all four categories can be found in the same run, independently', () => {
   );
   const kinds = findings.map((finding) => finding.kind).sort();
   assert.deepEqual(kinds, ['orphaned_subscription', 'repeated_failure', 'status_conflict', 'unlinked_customer']);
+});
+
+test('a missing or canceled pending Subscription Schedule is actionable and never silently repaired', () => {
+  const missing = computeReconciliationFindings(
+    { billingAccounts: [], renewalPreferences: [{ externalSubscriptionScheduleId: 'sub_sched_missing', profileId: 41, transitionState: 'pending_activation' }], subscriptions: [] },
+    { customers: [], openInvoices: [], schedules: [], subscriptions: [] },
+  );
+  assert.deepEqual(missing, [{ externalSubscriptionId: 'sub_sched_missing', kind: 'pending_schedule_conflict', profileId: 41, stripeStatus: 'missing' }]);
+  assert.match(summarizeFinding(missing[0]), /inspect before changing local billing state/);
 });

@@ -23,9 +23,9 @@ test('adding 12 months across a leap day rolls Feb 29 forward to Mar 1 in a non-
 });
 
 test('the five-day grace period rolls over a month boundary correctly', () => {
-  assert.equal(gracePeriodEnd('2026-01-29'), '2026-02-03');
+  assert.equal(gracePeriodEnd('2026-01-29'), '2026-02-02');
 });
 
 test('the five-day grace period rolls over a year boundary correctly', () => {
-  assert.equal(gracePeriodEnd('2026-12-29'), '2027-01-03');
+  assert.equal(gracePeriodEnd('2026-12-29'), '2027-01-02');
 });

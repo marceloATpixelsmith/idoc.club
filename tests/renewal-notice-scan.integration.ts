@@ -7,7 +7,7 @@ import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_E
 import { processStripeEvent } from '../lib/payments/webhook-handlers.ts';
 import { closeHarness, concurrently, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
-beforeEach(resetIdoc);
+beforeEach(async () => { process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership_fixture'; await resetIdoc(); });
 after(closeHarness);
 
 function isoDate(offsetDays: number): string {
@@ -99,7 +99,7 @@ test('grace-expired transitions the membership to expired, enqueues exactly one 
 
   const first = await enqueueRenewalNotices();
   assert.equal(first.graceExpired, 1);
-  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
   assert.equal(membership.status, 'expired');
   assert.equal(isEntitled({ status: membership.status, validUntil: membership.valid_until }, isoDate(0)), false);
   const [notice] = await sql`select payload, dedupe_key from idoc.notification_outbox where kind='membership.grace_expired' and profile_id=${profile.id}`;
@@ -126,21 +126,39 @@ test('a grace-expiry scan racing a same-day invoice.paid converges to active wit
   const { profile } = await fixtureProfile();
   const customerId = 'cus_grace_race_fixture';
   await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values(${profile.id}, ${customerId})`;
+  await sql`insert into idoc.subscriptions(profile_id, external_subscription_id, price_id, status, current_period_end, cancel_at_period_end) values(${profile.id}, 'sub_grace_race_fixture', 'price_fixture', 'active', ${isoDate(365)}, false)`;
   const graceEnd = isoDate(0);
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source) values(${profile.id}, 'grace', '2025-01-01', ${graceEnd}, 'stripe')`;
 
   const paidEvent = {
     api_version: '2025-04-30.basil', created: Math.floor(Date.now() / 1000),
-    data: { object: { amount_paid: 8000, currency: 'eur', customer: customerId, id: 'in_grace_race_fixture', status_transitions: { paid_at: Math.floor(Date.now() / 1000) } } },
+    data: { object: { amount_paid: 8000, currency: 'eur', customer: customerId, id: 'in_grace_race_fixture', lines: { data: [{ pricing: { price_details: { price: 'price_fixture', product: 'prod_membership_fixture' }, type: 'price_details' } }] }, status_transitions: { paid_at: Math.floor(Date.now() / 1000) } } },
     id: `evt_${randomUUID()}`, livemode: false, object: 'event', pending_webhooks: 0, request: { id: null, idempotency_key: null }, type: 'invoice.paid',
   };
   const fakeStripe = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
 
   await concurrently(() => enqueueRenewalNotices(), () => processStripeEvent(paidEvent as any, fakeStripe));
 
-  const [membership] = await sql`select status, valid_until from idoc.memberships where profile_id=${profile.id}`;
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
   assert.equal(membership.status, 'active');
   const expected = new Date(graceEnd);
   expected.setUTCFullYear(expected.getUTCFullYear() + 1);
   assert.equal(membership.valid_until, expected.toISOString().slice(0, 10));
+});
+
+test('a non-recurring term receives exactly five calendar grace days based on paid-through, not scan time', async () => {
+  const { profile } = await fixtureProfile();
+  const paidThrough = isoDate(-1);
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source)
+    values(${profile.id},'active','2025-01-01',${paidThrough},'manual')`;
+  const result = await enqueueRenewalNotices();
+  assert.equal(result.nonRecurringGrace, 1);
+  const [membership] = await sql`select status, valid_until, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
+  const expected = new Date(`${paidThrough}T00:00:00Z`); expected.setUTCDate(expected.getUTCDate() + 5);
+  assert.equal(membership.status, 'grace');
+  assert.equal(membership.valid_until, paidThrough);
+  assert.equal(membership.grace_ends_on, expected.toISOString().slice(0, 10));
+  assert.equal(isEntitled({ graceEndsOn: membership.grace_ends_on, status: membership.status, validUntil: membership.valid_until }, isoDate(0)), true);
+  const replay = await enqueueRenewalNotices();
+  assert.equal(replay.nonRecurringGrace, 0);
 });

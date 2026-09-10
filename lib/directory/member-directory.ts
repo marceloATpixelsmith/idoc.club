@@ -77,7 +77,7 @@ function queryParts(raw: MemberDirectoryFilters) {
   const conditions = [
     // Scope to currently-entitled members only -- the same test as lib/membership/entitlement.ts's
     // isEntitled -- so the directory reflects current members, not every account ever created.
-    sql`m.status in ('active', 'grace', 'complimentary', 'canceled') and m.valid_until >= current_date`,
+    sql`((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
@@ -93,7 +93,7 @@ function queryParts(raw: MemberDirectoryFilters) {
 }
 
 const from = sql`from idoc.profiles p
-  join lateral (select status, valid_until from idoc.memberships where profile_id = p.id order by valid_until desc, id desc limit 1) m on true
+  join lateral (select status, valid_until, grace_ends_on from idoc.memberships where profile_id = p.id order by valid_until desc, id desc limit 1) m on true
   left join lateral (
     select array_agg(distinct role_type)::text[] role_types, bool_or(role_type = 'judge') has_judge, bool_or(role_type = 'steward') has_steward,
       min(national_federation_country_code) federation, min(idoc_region) region,

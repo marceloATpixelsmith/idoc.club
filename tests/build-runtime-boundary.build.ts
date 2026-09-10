@@ -34,13 +34,14 @@ test('real production build prerenders without DNS, TCP, HTTP, database, Stripe,
   const environment: NodeJS.ProcessEnv = { ...process.env, IDOC_ALLOW_BUILD_IPC: '1', NEXT_TELEMETRY_DISABLED: '1', NODE_ENV: 'production', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${preloader}`.trim(), IDOC_NETWORK_ATTEMPT_FILE: marker };
   sensitiveNames.forEach((name, index) => { environment[name] = sentinelValues[index]; });
   delete environment.POSTGRES_URL;
+  delete environment.TEST_DATABASE_URL;
   delete environment.STRIPE_SECRET_KEY;
   delete environment.AUTH_SECRET;
   const result = spawnSync('pnpm', ['exec', 'next', 'build'], { cwd: root, encoding: 'utf8', env: environment, timeout: 170_000 });
   const output = `${result.stdout}\n${result.stderr}`.replaceAll(/\u001b\[[0-9;]*m/g, '');
   try {
     assert.equal(result.status, 0, `Production build failed without privileged configuration:\n${output.slice(-4000)}`);
-    assert.equal(existsSync(marker), false, 'Production build attempted network access.');
+    assert.equal(existsSync(marker), false, `Production build attempted network access:\\n${existsSync(marker) ? readFileSync(marker, 'utf8') : '(marker unavailable)'}`);
     assert.match(output, /Generating static pages/);
     // Every React page route renders through the single root layout (app/layout.tsx), which
     // synchronously awaits the per-request CSRF cookie (AUTH-CSRF-003) before producing any JSX --

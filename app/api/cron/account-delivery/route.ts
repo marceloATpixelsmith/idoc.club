@@ -6,6 +6,7 @@ import { processOperationalAlertBatch } from '@/lib/notifications/operational-al
 import { handleAccountDeliveryCron } from '@/lib/notifications/account-delivery-worker-core';
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { logError } from '@/lib/observability/logger';
+import { processStripeCustomerEmailSyncBatch } from '@/lib/payments/customer-email';
 
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
@@ -23,6 +24,11 @@ export async function GET(request: Request) {
         await processOperationalAlertBatch();
       } catch {
         await logError('operational_alert_delivery_worker_failed');
+      }
+      try {
+        await processStripeCustomerEmailSyncBatch();
+      } catch {
+        await logError('account_delivery_worker_failed');
       }
       return account;
     },

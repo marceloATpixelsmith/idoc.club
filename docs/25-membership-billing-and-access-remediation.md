@@ -49,18 +49,21 @@ This document is the actionable implementation and acceptance source for the Rel
 | Renewal choice exists only at Checkout | `lib/payments/actions.ts`, `lib/payments/checkout.ts` | Add owned Billing Settings and future-effective switching in both directions. |
 | Portal creates only payment/invoice/cancel features | `lib/payments/stripe.ts` | Keep Portal narrow; add IDOC-owned renewal preference rather than exposing plan selection. |
 | Grace begins on recurring payment failure only | `handleInvoicePaymentFailed` and renewal-notice scan | Add non-recurring paid-through expiration entry into the same five-day full-access grace state. |
-| Stripe email-sync failure is queued but not retried | `lib/membership/email-verification.ts` inserts `stripe.customer_email_sync`; no consumer exists | Implement a leased, retrying, dead-lettering worker and operational visibility. |
+| Stripe email-sync failure | `stripe.customer_email_sync` is consumed by the five-minute account-delivery Cron with leases, bounded backoff and dead-letter evidence; each attempt re-resolves Customer ownership and current email server-side. | Monitor dead letters in notification history. |
 
-### 2.3 Not implemented
+### 2.3 Selected implementation
 
-- Persisted current renewal mode, pending mode, effective date, and relevant Stripe schedule/subscription/payment-method references.
-- A member Billing Settings switch with current state, paid-through date, pending state, effective date, and next expected €80 charge.
-- Non-recurring-to-recurring payment authorization without an immediate charge.
-- Future recurring activation exactly at the existing paid-through date.
-- Reversal/replacement of a pending renewal-mode transition.
-- Transition confirmation and immutable audit evidence.
-- Non-recurring expiration-to-grace transition.
-- Automated tests and real Stripe test-mode proof for the revised contract.
+The owner approved Checkout Setup plus a future-starting Stripe Subscription Schedule. Migration
+`0047` adds the normalized, one-row-per-profile renewal state and unique external identifiers. It
+also separates `memberships.grace_ends_on` from the unchanged paid-through `valid_until`, so both
+five-day calendars are exact without presenting grace as paid time.
+Setup authorization and schedule creation are webhook-authoritative and use stable Stripe
+idempotency keys; the member can cancel the pending schedule before its effective date.
+
+### 2.4 Remaining production signoff
+
+- Real Stripe test-mode proof for the revised contract remains a deployment signoff gate; injected
+  automated clients do not replace it.
 
 ## 3. Required data and state model
 
@@ -160,7 +163,7 @@ MAILCHIMP_TRANSACTIONAL_API_KEY
 IDOC_ADMIN_NOTIFICATION_EMAIL
 ```
 
-The implementation currently still consumes `STRIPE_RECURRING_PRODUCT_ID` and `STRIPE_ONE_TIME_PRODUCT_ID`; replace them in code, runtime validation, tests, `.env.example`, build-boundary inventories, and operations documentation as one coordinated deployment. Do not remove current deployed values until replacement code is live.
+The implementation consumes `STRIPE_MEMBERSHIP_PRODUCT_ID` for both technical Price modes. Keep the former deployed variables only during the rollback window for the preceding revision; they are no longer read by current code.
 
 The production Stripe webhook must deliver every event consumed by current payment/subscription handling plus any Subscription Schedule or SetupIntent events selected by the final transition design. The exact event list and restricted-key permissions must be documented from the implemented calls before production signoff.
 

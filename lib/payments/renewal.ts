@@ -21,7 +21,7 @@ export function nextValidUntil({ currentValidUntil, paidAt }: { currentValidUnti
   return addToIsoDate(base, { years: 1 });
 }
 
-/** Five calendar days of continued access from a failed automatic-renewal date (docs/02 §5.1). */
+/** Five calendar days inclusive of the failed automatic-renewal date (D through D+4). */
 export function gracePeriodEnd(failedRenewalDate: string): string {
-  return addToIsoDate(failedRenewalDate, { days: GRACE_PERIOD_DAYS });
+  return addToIsoDate(failedRenewalDate, { days: GRACE_PERIOD_DAYS - 1 });
 }

@@ -1,10 +1,10 @@
 import 'server-only';
 
 import type Stripe from 'stripe';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, billingAccounts, memberships, notificationOutbox, payments, profiles, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
-import { stripeOneTimeProductIdForServer } from '@/lib/runtime/configuration';
+import { auditLog, billingAccounts, memberships, notificationOutbox, payments, profiles, renewalPreferences, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
+import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
@@ -18,6 +18,10 @@ export type WebhookStripeClient = {
       listLineItems: (sessionId: string) => Promise<{ data: Array<{ price: { id: string; product: string | { id: string } } | null }> }>;
     };
   };
+  setupIntents?: { retrieve: (id: string) => Promise<Stripe.SetupIntent> };
+  paymentMethods?: { retrieve: (id: string) => Promise<Stripe.PaymentMethod> };
+  prices?: { create: (params: Stripe.PriceCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.Price> };
+  subscriptionSchedules?: { create: (params: Stripe.SubscriptionScheduleCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.SubscriptionSchedule> };
 };
 
 function resolvedCustomerId(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
@@ -45,10 +49,18 @@ async function handleSubscriptionCreated(tx: Transaction, event: Stripe.Event, _
     profileId,
     status: subscription.status,
   }).onConflictDoNothing({ target: subscriptions.externalSubscriptionId });
+  await tx.insert(renewalPreferences).values({ currentMode: 'recurring', profileId })
+    .onConflictDoNothing({ target: renewalPreferences.profileId });
+  const scheduleId = typeof subscription.schedule === 'string' ? subscription.schedule : subscription.schedule?.id;
+  if (scheduleId) await tx.update(renewalPreferences).set({ currentMode: 'recurring', effectiveOn: null,
+    pendingMode: null, transitionState: 'current', updatedAt: new Date() })
+    .where(and(eq(renewalPreferences.profileId, profileId), eq(renewalPreferences.externalSubscriptionScheduleId, scheduleId)));
 }
 
 async function handleSubscriptionUpdated(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const subscription = event.data.object as Stripe.Subscription;
+  const profileId = await resolveProfileId(tx, resolvedCustomerId(subscription.customer));
+  if (!profileId) return;
   const item = subscription.items.data[0];
   await tx.update(subscriptions).set({
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -56,21 +68,38 @@ async function handleSubscriptionUpdated(tx: Transaction, event: Stripe.Event, _
     priceId: item.price.id,
     status: subscription.status,
     updatedAt: new Date(),
-  }).where(eq(subscriptions.externalSubscriptionId, subscription.id));
+  }).where(and(eq(subscriptions.externalSubscriptionId, subscription.id), eq(subscriptions.profileId, profileId)));
+  if (subscription.cancel_at_period_end) await tx.insert(renewalPreferences).values({ currentMode: 'recurring',
+    effectiveOn: new Date(item.current_period_end * 1000).toISOString().slice(0, 10), pendingMode: 'non_recurring',
+    profileId, transitionState: 'cancel_pending' }).onConflictDoUpdate({ target: renewalPreferences.profileId,
+    set: { currentMode: 'recurring', effectiveOn: new Date(item.current_period_end * 1000).toISOString().slice(0, 10),
+      pendingMode: 'non_recurring', transitionState: 'cancel_pending', updatedAt: new Date() } });
 }
 
 async function handleSubscriptionDeleted(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const subscription = event.data.object as Stripe.Subscription;
+  const profileId = await resolveProfileId(tx, resolvedCustomerId(subscription.customer));
+  if (!profileId) return;
   // Recurring billing has ended, but membership access continues through the already-paid
   // valid_until date (docs/02 §3) — nothing in `memberships` changes here.
   await tx.update(subscriptions).set({ status: subscription.status, updatedAt: new Date() })
-    .where(eq(subscriptions.externalSubscriptionId, subscription.id));
+    .where(and(eq(subscriptions.externalSubscriptionId, subscription.id), eq(subscriptions.profileId, profileId)));
+  await tx.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId })
+    .onConflictDoUpdate({ target: renewalPreferences.profileId, set: { currentMode: 'non_recurring',
+      effectiveOn: null, pendingMode: null, transitionState: 'current', updatedAt: new Date() } });
 }
 
 async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const invoice = event.data.object as Stripe.Invoice;
+  if (invoice.amount_paid !== MEMBERSHIP_FEE_CENTS || invoice.currency.toLowerCase() !== MEMBERSHIP_CURRENCY) return;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
+  const expectedProduct = stripeMembershipProductIdForServer();
+  const invoicePrices = invoice.lines.data.flatMap((line) => line.pricing?.price_details?.price ? [line.pricing.price_details.price] : []);
+  const hasExpectedProduct = invoice.lines.data.some((line) => line.pricing?.price_details?.product === expectedProduct);
+  const [legacySubscription] = invoicePrices.length > 0 ? await tx.select({ id: subscriptions.id }).from(subscriptions)
+    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.priceId, invoicePrices))).limit(1) : [];
+  if (!hasExpectedProduct && !legacySubscription) return;
   const paidAt = invoice.status_transitions.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : new Date();
   const [inserted] = await tx.insert(payments).values({
     amountCents: invoice.amount_paid,
@@ -81,10 +110,12 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: 
     source: 'stripe_recurring',
   }).onConflictDoNothing({ target: payments.externalPaymentId }).returning({ id: payments.id });
   if (!inserted) return;
+  await tx.insert(renewalPreferences).values({ currentMode: 'recurring', profileId })
+    .onConflictDoNothing({ target: renewalPreferences.profileId });
   const membership = await lockLatestMembership(tx, profileId);
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
-    await tx.update(memberships).set({ status: 'active', updatedAt: new Date(), validUntil })
+    await tx.update(memberships).set({ graceEndsOn: null, status: 'active', updatedAt: new Date(), validUntil })
       .where(eq(memberships.id, membership.id));
   } else {
     await tx.insert(memberships).values({
@@ -104,11 +135,13 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   // the transition into grace should move validUntil/send a notice — an already-'grace' membership
   // means this is a later retry, not a new failure, and must be a no-op.
   if (!membership || membership.status === 'grace') return;
-  // The failed-renewal date is approximated as today (when Stripe reports the failure), which
-  // tracks closely with the actual scheduled-renewal attempt date in practice.
-  const failedRenewalDate = new Date().toISOString().slice(0, 10);
+  // Stripe's invoice period start is the authoritative scheduled-renewal date. The fallback is
+  // retained only for legacy/test invoices that predate that field.
+  const failedRenewalDate = invoice.period_start
+    ? new Date(invoice.period_start * 1000).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
   const graceEnd = gracePeriodEnd(failedRenewalDate);
-  await tx.update(memberships).set({ status: 'grace', updatedAt: new Date(), validUntil: graceEnd })
+  await tx.update(memberships).set({ graceEndsOn: graceEnd, status: 'grace', updatedAt: new Date() })
     .where(eq(memberships.id, membership.id));
   const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName })
     .from(profiles).innerJoin(users, eq(profiles.userId, users.id)).where(eq(profiles.id, profileId)).limit(1);
@@ -156,10 +189,52 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: S
 
 async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
   const session = event.data.object as Stripe.Checkout.Session;
+  if (session.mode === 'setup' && session.metadata?.kind === 'membership_renewal_setup') {
+    const customerId = resolvedCustomerId(session.customer);
+    const profileId = await resolveProfileId(tx, customerId);
+    const metadataProfileId = Number(session.metadata.profileId);
+    if (!profileId || profileId !== metadataProfileId || !customerId || typeof session.setup_intent !== 'string') return;
+    const [preference] = await tx.select().from(renewalPreferences).where(and(
+      eq(renewalPreferences.profileId, profileId), eq(renewalPreferences.externalCheckoutSessionId, session.id),
+    )).limit(1);
+    if (!preference || preference.pendingMode !== 'recurring' || preference.transitionState !== 'awaiting_setup' || !preference.effectiveOn) return;
+    // Lock and reread the authoritative paid-through membership before creating any future Stripe charge schedule.
+    // A one-time renewal or administrative extension may have changed valid_until after Setup Checkout began.
+    const membership = await lockLatestMembership(tx, profileId);
+    if (!membership || membership.validUntil !== preference.effectiveOn) return;
+    if (!stripe.setupIntents || !stripe.paymentMethods || !stripe.prices || !stripe.subscriptionSchedules) {
+      throw new Error('Stripe renewal APIs are unavailable.');
+    }
+    const setupIntent = await stripe.setupIntents.retrieve(session.setup_intent);
+    const setupCustomerId = resolvedCustomerId(setupIntent.customer);
+    const paymentMethodId = typeof setupIntent.payment_method === 'string' ? setupIntent.payment_method : setupIntent.payment_method?.id;
+    if (setupIntent.status !== 'succeeded' || setupIntent.usage !== 'off_session' || setupCustomerId !== customerId || !paymentMethodId) return;
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    if (resolvedCustomerId(paymentMethod.customer) !== customerId) return;
+    const price = await stripe.prices.create({ currency: MEMBERSHIP_CURRENCY, product: stripeMembershipProductIdForServer(),
+      recurring: { interval: 'year' }, unit_amount: MEMBERSHIP_FEE_CENTS },
+    { idempotencyKey: `idoc-renewal-price-${profileId}-${preference.effectiveOn}` });
+    const startDate = Math.floor(new Date(`${preference.effectiveOn}T00:00:00.000Z`).getTime() / 1000);
+    const schedule = await stripe.subscriptionSchedules.create({ customer: customerId,
+      default_settings: { collection_method: 'charge_automatically', default_payment_method: paymentMethodId },
+      end_behavior: 'release', metadata: { kind: 'idoc_membership', profileId: String(profileId) },
+      phases: [{ items: [{ price: price.id, quantity: 1 }], metadata: { kind: 'idoc_membership', profileId: String(profileId) } }],
+      start_date: startDate }, { idempotencyKey: `idoc-renewal-schedule-${profileId}-${preference.effectiveOn}` });
+    await tx.update(renewalPreferences).set({ expectedChargeCents: MEMBERSHIP_FEE_CENTS,
+      externalPaymentMethodId: paymentMethodId, externalRecurringPriceId: price.id,
+      externalSetupIntentId: setupIntent.id, externalSubscriptionScheduleId: schedule.id,
+      transitionState: 'pending_activation', updatedAt: new Date() }).where(eq(renewalPreferences.profileId, profileId));
+    await tx.insert(auditLog).values({ action: 'membership.renewal_change_authorized',
+      afterJson: { effectiveOn: preference.effectiveOn, pendingMode: 'recurring' },
+      entityId: String(profileId), entityType: 'renewal_preference' });
+    return;
+  }
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
   if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session);
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;
+  const ownedProfileId = await resolveProfileId(tx, resolvedCustomerId(session.customer));
+  if (ownedProfileId !== profileId) return;
   const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
   if (!paymentIntentId) return;
   // docs/04 §3: grant entitlement only against the expected one-time fee, not whatever amount the
@@ -172,7 +247,7 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
   const price = lineItems.data[0]?.price;
   const productId = price ? (typeof price.product === 'string' ? price.product : price.product.id) : undefined;
-  if (!price || productId !== stripeOneTimeProductIdForServer()) return;
+  if (!price || productId !== stripeMembershipProductIdForServer()) return;
   const paidAt = new Date();
   const [inserted] = await tx.insert(payments).values({
     amountCents: session.amount_total,
@@ -184,10 +259,12 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     source: 'stripe_one_time',
   }).onConflictDoNothing({ target: payments.externalPaymentId }).returning({ id: payments.id });
   if (!inserted) return;
+  await tx.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId })
+    .onConflictDoNothing({ target: renewalPreferences.profileId });
   const membership = await lockLatestMembership(tx, profileId);
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
-    await tx.update(memberships).set({ status: 'active', updatedAt: new Date(), validUntil })
+    await tx.update(memberships).set({ graceEndsOn: null, status: 'active', updatedAt: new Date(), validUntil })
       .where(eq(memberships.id, membership.id));
   } else {
     await tx.insert(memberships).values({

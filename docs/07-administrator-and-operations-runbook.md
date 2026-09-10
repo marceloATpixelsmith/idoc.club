@@ -337,7 +337,7 @@ Any administrator can view `/admin/reconciliation`, a read-only report refreshed
 
 ## Production runtime configuration boundary
 
-Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `BREVO_API_KEY`, `BREVO_FROM_EMAIL`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_MEMBERSHIP_PRODUCT_ID`, `TURNSTILE_SECRET_KEY`, `MFA_PENDING_AUTH_SIGNING_KEY`, `MFA_TOTP_ACTIVE_KEY_ID`, `MFA_TOTP_ENCRYPTION_KEYS`, and `MFA_RECOVERY_CODE_DIGEST_KEY`. Secrets must be at least 32 characters where applicable, the Stripe membership Product ID must match Stripe's `prod_...` identifier shape, and each active key/version must resolve to material in its corresponding key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists. Until the code migration in docs/25 is complete, the deployed implementation still expects the legacy pair `STRIPE_RECURRING_PRODUCT_ID` and `STRIPE_ONE_TIME_PRODUCT_ID`; do not remove them from an existing environment before the replacement code is deployed.
+Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `BREVO_API_KEY`, `BREVO_FROM_EMAIL`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_MEMBERSHIP_PRODUCT_ID`, `TURNSTILE_SECRET_KEY`, `MFA_PENDING_AUTH_SIGNING_KEY`, `MFA_TOTP_ACTIVE_KEY_ID`, `MFA_TOTP_ENCRYPTION_KEYS`, and `MFA_RECOVERY_CODE_DIGEST_KEY`. Secrets must be at least 32 characters where applicable, the Stripe membership Product ID must match Stripe's `prod_...` identifier shape, and each active key/version must resolve to material in its corresponding key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists. The former recurring/one-time Product variables are obsolete after migration `0047` deploys; retain them only for rollback until the new revision is healthy.
 
 The live privileged-MFA variables use these formats:
 
@@ -351,6 +351,21 @@ Store all four as sensitive server-only Vercel environment variables in every en
 The signup/login/password-reset Turnstile challenge additionally requires `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (client-visible by design — it identifies the Turnstile widget, not a secret) alongside the server-only `TURNSTILE_SECRET_KEY` above. Without the public key the widget renders nothing and the signup submit button stays permanently disabled; without the secret key every server-side verification fails closed.
 
 `STRIPE_MEMBERSHIP_PRODUCT_ID` identifies the one IDOC Annual Membership Product against which Checkout builds recurring or non-recurring €80 Price configurations. Stripe requires different Price configurations for the two billing modes, not separate Products. The Product and both technical Price modes represent the same membership entitlement and are never shown as competing plans.
+
+The Stripe restricted key must permit Customer, Checkout Session, SetupIntent, PaymentMethod and
+Price reads/creation plus Subscription, Subscription Schedule and Billing Portal operations used by
+the application. Configure webhook delivery for `checkout.session.completed`, `invoice.paid`,
+`invoice.payment_failed`, `invoice.payment_action_required`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`, and
+`payment_intent.succeeded`. Unknown signed events are retained as processed evidence and never alter
+entitlement. A pending automatic-renewal schedule may be canceled from Billing Settings; operators
+must investigate any local pending state whose Schedule is missing or disagrees with Stripe rather
+than silently repairing ownership or billing identifiers.
+
+The five-minute account-delivery Cron also retries `stripe.customer_email_sync` jobs. It ignores
+the queued payload's identifiers and re-resolves the profile-owned Customer and current verified
+email on every leased attempt, applies bounded exponential backoff, and dead-letters after eight
+failed attempts for administrator follow-up.
 
 
 ## Ordinary login trusted-device operations
