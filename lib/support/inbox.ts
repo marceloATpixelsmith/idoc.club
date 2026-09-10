@@ -10,6 +10,10 @@ export const SUPPORT_STATUSES = ['open', 'admin_responded', 'member_replied', 'c
 export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
 type ConversationRow = { category: SupportCategory; public_id: string; status: string; subject: string; updated_at: Date };
 type AdminConversationRow = ConversationRow & { assigned_admin_keys: string[]; id: number; member_email: string; member_name: string };
+export type AdminSupportRow = {
+  assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null;
+  public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date;
+};
 
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing_membership: 'Billing/Membership',
@@ -142,15 +146,74 @@ export async function listAdminConversations(input: SupportSearchParams) {
   const searchValue = firstSearchValue(input.q);
   const sortValue = firstSearchValue(input.sort);
   const directionValue = firstSearchValue(input.direction);
-  const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1); const limit = 20; const offset = (page - 1) * limit;
+  const rawPageSize = Number.parseInt(firstSearchValue(input.pageSize) ?? '', 10);
+  const pageSize = [10, 25, 50, 100].includes(rawPageSize) ? rawPageSize : 25;
+  const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1); const offset = (page - 1) * pageSize;
   const category: string | null = SUPPORT_CATEGORIES.includes(categoryValue as SupportCategory) ? categoryValue ?? null : null;
   const status: string | null = SUPPORT_STATUSES.includes(statusValue as never) ? statusValue ?? null : null;
   const assigned = assignedValue === 'unassigned' ? -1 : (assignedValue ? await resolveEligibleAdministrator(assignedValue) : null);
   const search = (searchValue ?? '').trim().slice(0, 100);
-  const sortCandidate = sortValue ?? '';
-  const sort = ['activity', 'member', 'status'].includes(sortCandidate) ? sortCandidate : 'activity';
-  const direction = directionValue === 'asc' ? 'asc' : 'desc';
-  const rows = await client`select c.public_id,c.subject,c.category,c.status,c.updated_at,c.assigned_admin_user_id,
+  type AdvancedFilter = { id?: string; operator?: string; value?: string | string[] };
+  let advancedFilters: AdvancedFilter[] = [];
+  try { const parsed = JSON.parse(firstSearchValue(input.filters) ?? '[]'); if (Array.isArray(parsed)) advancedFilters = parsed.slice(0, 20); } catch { /* Invalid URL state is ignored. */ }
+  const join = firstSearchValue(input.joinOperator) === 'or' ? 'or' : 'and';
+  const escapeLike = (value: string) => value.replaceAll('%', '\\%').replaceAll('_', '\\_');
+  // postgres.js query fragments carry their selected-row generic even though fragments are never
+  // executed independently; `any` is required here so heterogeneous safe fragments can compose.
+  // biome-ignore lint/suspicious/noExplicitAny: postgres.js fragment generics are invariant
+  const textCondition = (expression: any, filter: AdvancedFilter) => {
+    const value = String(Array.isArray(filter.value) ? filter.value[0] ?? '' : filter.value ?? '').slice(0, 200);
+    const pattern = `%${escapeLike(value)}%`;
+    if (filter.operator === 'notILike') return client`${expression} not ilike ${pattern} escape '\\'`;
+    if (filter.operator === 'eq') return client`lower(${expression})=lower(${value})`;
+    if (filter.operator === 'ne') return client`lower(${expression})<>lower(${value})`;
+    if (filter.operator === 'isEmpty') return client`coalesce(${expression},'')=''`;
+    if (filter.operator === 'isNotEmpty') return client`coalesce(${expression},'')<>''`;
+    return client`${expression} ilike ${pattern} escape '\\'`;
+  };
+  // biome-ignore lint/suspicious/noExplicitAny: heterogeneous postgres.js query fragments
+  const advancedConditions: any[] = [];
+  for (const filter of advancedFilters) {
+    const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).filter((value): value is string => typeof value === 'string');
+    const positive = filter.operator !== 'ne' && filter.operator !== 'notInArray';
+    if (filter.id === 'member') advancedConditions.push(textCondition(client`concat_ws(' ',p.first_name,p.last_name,u.email_display,u.email)`, filter));
+    else if (filter.id === 'subject') advancedConditions.push(textCondition(client`c.subject`, filter));
+    else if (filter.id === 'category') {
+      const valid = values.filter((value): value is SupportCategory => SUPPORT_CATEGORIES.includes(value as SupportCategory));
+      if (valid.length) advancedConditions.push(positive ? client`c.category in ${client(valid)}` : client`c.category not in ${client(valid)}`);
+      else if (filter.operator === 'isEmpty') advancedConditions.push(client`false`); else if (filter.operator === 'isNotEmpty') advancedConditions.push(client`true`);
+    } else if (filter.id === 'status') {
+      const valid = values.filter((value) => SUPPORT_STATUSES.includes(value as never));
+      if (valid.length) advancedConditions.push(positive ? client`c.status in ${client(valid)}` : client`c.status not in ${client(valid)}`);
+      else if (filter.operator === 'isEmpty') advancedConditions.push(client`false`); else if (filter.operator === 'isNotEmpty') advancedConditions.push(client`true`);
+    } else if (filter.id === 'assigned') {
+      const ids = (await Promise.all(values.map(resolveEligibleAdministrator))).filter((id): id is number => id !== null);
+      const exists = ids.length ? client`exists(select 1 from idoc.support_conversation_administrators x where x.conversation_id=c.id and x.administrator_user_id in ${client(ids)})` : client`false`;
+      if (filter.operator === 'isEmpty') advancedConditions.push(client`not exists(select 1 from idoc.support_conversation_administrators x where x.conversation_id=c.id)`);
+      else if (filter.operator === 'isNotEmpty') advancedConditions.push(client`exists(select 1 from idoc.support_conversation_administrators x where x.conversation_id=c.id)`);
+      else advancedConditions.push(positive ? exists : client`not (${exists})`);
+    } else if (filter.id === 'activity') {
+      const dates = values.map((value) => { if (!/^\d+$/.test(value)) return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null; const date = new Date(Number(value)); return Number.isNaN(date.valueOf()) ? null : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }).filter((value): value is string => value !== null);
+      if (filter.operator === 'eq' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date=${dates[0]}::date`);
+      else if (filter.operator === 'ne' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date<>${dates[0]}::date`);
+      else if (filter.operator === 'lt' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date<${dates[0]}::date`);
+      else if (filter.operator === 'lte' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date<=${dates[0]}::date`);
+      else if (filter.operator === 'gt' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date>${dates[0]}::date`);
+      else if (filter.operator === 'gte' && dates[0]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date>=${dates[0]}::date`);
+      else if (filter.operator === 'isBetween' && dates[0] && dates[1]) advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date between ${dates[0]}::date and ${dates[1]}::date`);
+      else if (filter.operator === 'isRelativeToToday') advancedConditions.push(client`(c.updated_at at time zone 'UTC')::date = current_date`);
+      else if (filter.operator === 'isEmpty') advancedConditions.push(client`false`); else if (filter.operator === 'isNotEmpty') advancedConditions.push(client`true`);
+    }
+  }
+  const advancedWhere = advancedConditions.length ? advancedConditions.slice(1).reduce((result, condition) => join === 'or' ? client`${result} or ${condition}` : client`${result} and ${condition}`, advancedConditions[0]) : client`true`;
+  type SortClause = { desc?: boolean; id?: string };
+  let parsedSorts: SortClause[] = [];
+  try { const parsed = JSON.parse(sortValue ?? '[]'); if (Array.isArray(parsed)) parsedSorts = parsed; } catch { /* Legacy sort state is handled below. */ }
+  if (!parsedSorts.length) parsedSorts = [{ desc: directionValue !== 'asc', id: ['activity', 'member', 'status'].includes(sortValue ?? '') ? sortValue : 'activity' }];
+  const sortExpressions: Record<string, string> = { activity: 'c.updated_at', assigned: 'assignee_name', category: 'c.category', member: "concat_ws(' ',p.first_name,p.last_name)", status: 'c.status', subject: 'c.subject' };
+  const order = parsedSorts.slice(0, 6).flatMap((item) => sortExpressions[item.id ?? ''] ? [`${sortExpressions[item.id ?? '']} ${item.desc ? 'desc' : 'asc'} nulls last`] : []);
+  order.push('c.id desc');
+  const rows = await client<AdminSupportRow[]>`select c.public_id,c.subject,c.category,c.status,c.updated_at,p.id profile_id,count(*) over()::int total_count,
     coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
     coalesce((select string_agg(coalesce(nullif(trim(ap.first_name||' '||ap.last_name),''),au.email_display,au.email),', ' order by au.email)
       from idoc.support_conversation_administrators ca join idoc.users au on au.id=ca.administrator_user_id left join idoc.profiles ap on ap.user_id=au.id
@@ -161,15 +224,9 @@ export async function listAdminConversations(input: SupportSearchParams) {
     where (${category}::text is null or c.category=${category}) and (${status}::text is null or c.status=${status})
     and (${assigned}::int is null or (${assigned}=-1 and not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id))
       or exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id=${assigned}))
-    and (${search}='' or c.subject ilike ${`%${search}%`} or u.email ilike ${`%${search}%`} or concat_ws(' ',p.first_name,p.last_name) ilike ${`%${search}%`})
-    order by
-      case when ${sort}='member' and ${direction}='asc' then concat_ws(' ',p.first_name,p.last_name) end asc,
-      case when ${sort}='member' and ${direction}='desc' then concat_ws(' ',p.first_name,p.last_name) end desc,
-      case when ${sort}='status' and ${direction}='asc' then c.status end asc,
-      case when ${sort}='status' and ${direction}='desc' then c.status end desc,
-      case when ${sort}='activity' and ${direction}='asc' then c.updated_at end asc,
-      c.updated_at desc,c.id desc limit ${limit + 1} offset ${offset}`;
-  return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
+    and (${search}='' or c.subject ilike ${`%${escapeLike(search)}%`} escape '\\' or u.email ilike ${`%${escapeLike(search)}%`} escape '\\' or concat_ws(' ',p.first_name,p.last_name) ilike ${`%${escapeLike(search)}%`} escape '\\')
+    and (${advancedWhere}) order by ${client.unsafe(order.join(', '))} limit ${pageSize + 1} offset ${offset}`;
+  return { page, pageSize, rows: rows.slice(0, pageSize), total: rows[0]?.total_count ?? 0, hasNext: rows.length > pageSize };
 }
 
 export async function adminUnreadCount() {
