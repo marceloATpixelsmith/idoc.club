@@ -206,7 +206,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[40].when > journal.entries[39].when, 'the news-articles migration must follow migration 0039');
   assert.equal(journal.entries[41].tag, '0041_seminars');
   assert.ok(journal.entries[41].when > journal.entries[40].when, 'the seminars migration must follow migration 0040');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0046_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0048_snapshot.json'), 'utf8'));
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
@@ -238,7 +238,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0046_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0048_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
