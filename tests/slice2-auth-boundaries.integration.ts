@@ -256,8 +256,8 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       const before = await recoveryCodeCount(fixture.user.id);
       await actorBoundary(fixture.user.id, async () => {
         const blocked = await regenerateRecoveryCodes({}, emptyForm(cookies));
-        assert.equal(blocked, undefined);
-      }).then(() => assert.fail('missing fresh proof should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+        assert.deepEqual(blocked, { stepUpRequired: true });
+      });
       assert.equal(await recoveryCodeCount(fixture.user.id), before);
       await fulfilledStepUp(cookies, fixture.user, fixture.secret);
       const savedAuthority = cookies.get('idoc_fresh_step_up')!.value;
@@ -268,8 +268,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       assert.equal(cookies.get('idoc_fresh_step_up'), undefined);
 
       cookies.set('idoc_fresh_step_up', savedAuthority);
-      await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(cookies)))
-        .then(() => assert.fail('replayed fresh authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(fixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(cookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(fixture.user.id), after);
     }, 'step-up-use.example.test');
   });
@@ -283,8 +285,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await setSession(actionFixture.user);
       await fulfilledStepUp(actionCookies, actionFixture.user, actionFixture.secret, 'change-security-settings');
       const before = await recoveryCodeCount(actionFixture.user.id);
-      await actorBoundary(actionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(actionCookies)))
-        .then(() => assert.fail('wrong-action authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(actionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(actionCookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(actionFixture.user.id), before);
     }, 'step-up-action-binding.example.test');
 
@@ -295,8 +299,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       await fulfilledStepUp(sessionCookies, sessionFixture.user, sessionFixture.secret);
       const before = await recoveryCodeCount(sessionFixture.user.id);
       await setSession(sessionFixture.user);
-      await actorBoundary(sessionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(sessionCookies)))
-        .then(() => assert.fail('different-session authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(sessionFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(sessionCookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(sessionFixture.user.id), before);
     }, 'step-up-session-binding.example.test');
   });
@@ -316,8 +322,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
         .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
       staleCookies.set('idoc_fresh_step_up', mismatchedVersion);
       const before = await recoveryCodeCount(first.user.id);
-      await actorBoundary(first.user.id, () => regenerateRecoveryCodes({}, emptyForm(staleCookies)))
-        .then(() => assert.fail('mismatched evidence sessionVersion must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(first.user.id, () => regenerateRecoveryCodes({}, emptyForm(staleCookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(first.user.id), before);
     }, 'step-up-version.example.test');
 
@@ -333,8 +341,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
         .setProtectedHeader({ alg: 'HS256' }).sign(continuationKey);
       roleCookies.set('idoc_fresh_step_up', mismatchedRole);
       const before = await recoveryCodeCount(roleFixture.user.id);
-      await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(roleCookies)))
-        .then(() => assert.fail('mismatched evidence role must fail'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(roleFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(roleCookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(roleFixture.user.id), before);
     }, 'step-up-role.example.test');
 
@@ -352,8 +362,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       expiryCookies.set('idoc_fresh_step_up', expired);
       expiryCookies.set(REMEMBERED_TOTP_DEVICE_COOKIE, 'remembered-device-alone');
       const before = await recoveryCodeCount(expiryFixture.user.id);
-      await actorBoundary(expiryFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(expiryCookies)))
-        .then(() => assert.fail('expired/remembered-only authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(expiryFixture.user.id, () => regenerateRecoveryCodes({}, emptyForm(expiryCookies))),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(expiryFixture.user.id), before);
     }, 'step-up-expiry.example.test');
 
@@ -375,8 +387,10 @@ test('AUTH-STEPUP-003 binds fresh authority to user, session, version, role, act
       forged.set('role', 'super-admin');
       const ownerBefore = await recoveryCodeCount(owner.user.id);
       const attackerBefore = await recoveryCodeCount(attacker.user.id);
-      await actorBoundary(attacker.user.id, () => regenerateRecoveryCodes({}, forged))
-        .then(() => assert.fail('cross-user authority should redirect'), (error) => assert.match(String(error), /NEXT_REDIRECT/));
+      assert.deepEqual(
+        await actorBoundary(attacker.user.id, () => regenerateRecoveryCodes({}, forged)),
+        { stepUpRequired: true },
+      );
       assert.equal(await recoveryCodeCount(owner.user.id), ownerBefore);
       assert.equal(await recoveryCodeCount(attacker.user.id), attackerBefore);
     }, 'step-up-cross-user.example.test');
