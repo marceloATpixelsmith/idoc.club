@@ -122,8 +122,8 @@ export function MfaForm({ mode, pendingCsrfNonce, provisioningUri, qrCodeDataUrl
       {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
       <button className="idoc-auth-button" disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Verifying" /> : 'Verify'}</button>
     </form>
-    {mode === 'challenge' ? <form action={recover}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="recover" type="hidden" value="yes" />
-      <button className="idoc-auth-secondary" disabled={recovering} type="submit">Use a recovery code</button></form> : null}
+    {mode === 'challenge' ? <form action={recover} className="mt-4 flex justify-center"><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="recover" type="hidden" value="yes" />
+      <button className="idoc-auth-link border-0 bg-transparent p-0" disabled={recovering} type="submit">Use a recovery code</button></form> : null}
     {mode === 'replacement' ? <form action={cancel}><CsrfEvidence pendingCsrfNonce={pendingCsrfNonce} /><input name="cancel" type="hidden" value="yes" />
       <button className="idoc-auth-secondary" type="submit">Cancel and sign in again</button></form> : null}
     </>
