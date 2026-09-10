@@ -18,9 +18,9 @@ CREATE TABLE "idoc"."renewal_preferences" (
   CONSTRAINT "renewal_preferences_transition_state_check" CHECK ("transition_state" in ('current','awaiting_setup','pending_activation','cancel_pending','failed')),
   CONSTRAINT "renewal_preferences_pending_shape_check" CHECK (("pending_mode" is null and "effective_on" is null) or ("pending_mode" is not null and "effective_on" is not null)),
   CONSTRAINT "renewal_preferences_expected_charge_check" CHECK ("expected_charge_cents" is null or ("expected_charge_cents" = 8000 and "currency" = 'EUR')),
-  CONSTRAINT "renewal_preferences_checkout_unique" UNIQUE("external_checkout_session_id"),
-  CONSTRAINT "renewal_preferences_setup_intent_unique" UNIQUE("external_setup_intent_id"),
-  CONSTRAINT "renewal_preferences_schedule_unique" UNIQUE("external_subscription_schedule_id")
+  CONSTRAINT "renewal_preferences_external_checkout_session_id_unique" UNIQUE("external_checkout_session_id"),
+  CONSTRAINT "renewal_preferences_external_setup_intent_id_unique" UNIQUE("external_setup_intent_id"),
+  CONSTRAINT "renewal_preferences_external_subscription_schedule_id_unique" UNIQUE("external_subscription_schedule_id")
 );
 --> statement-breakpoint
 ALTER TABLE "idoc"."reconciliation_findings" DROP CONSTRAINT "reconciliation_findings_kind_check";
