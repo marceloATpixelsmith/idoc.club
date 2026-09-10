@@ -1,6 +1,5 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
@@ -16,7 +15,7 @@ async function requireCsrf(formData: FormData): Promise<void> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
 }
 
-type FormState = { error?: string; success?: string };
+type FormState = { error?: string; stepUpRequired?: boolean; success?: string };
 
 function friendlyError(error: unknown, fallback: string): FormState {
   if (error instanceof Error && error.name === 'ZodError') return { error: 'Review the highlighted fields.' };
@@ -25,22 +24,21 @@ function friendlyError(error: unknown, fallback: string): FormState {
   return { error: fallback };
 }
 
-async function roleMutationNeedsStepUp(kind: 'grant-role' | 'revoke-role', payload: Record<string, string>): Promise<FormState | boolean> {
+async function roleMutationNeedsStepUp(): Promise<FormState | boolean> {
   try {
     const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-    return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members', { kind, payload })).required;
+    return (await requireFreshStepUp(actor, 'change-privileged-permissions', '/admin/members')).required;
   } catch (error) {
     return friendlyError(error, 'The role change could not be authorized safely.');
   }
 }
 
-async function forceRevokeAllAuthorityNeedsStepUp(payload: Record<string, string>): Promise<FormState | boolean> {
+async function forceRevokeAllAuthorityNeedsStepUp(): Promise<FormState | boolean> {
   try {
     const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members',
-      { kind: 'force-revoke-authority', payload })).required;
+    return (await requireFreshStepUp(actor, 'force-revoke-authority', '/admin/members')).required;
   } catch (error) {
     return friendlyError(error, 'Authority could not be revoked safely.');
   }
@@ -140,9 +138,9 @@ export async function forceRevokeAllAuthorityForm(_state: FormState, formData: F
   const userId = Number(formData.get('userId'));
   const incidentReference = String(formData.get('incidentReference') ?? '');
   const reason = String(formData.get('reason') ?? '');
-  const stepUp = await forceRevokeAllAuthorityNeedsStepUp({ incidentReference, reason, userId: String(userId) });
+  const stepUp = await forceRevokeAllAuthorityNeedsStepUp();
   if (typeof stepUp !== 'boolean') return stepUp;
-  if (stepUp) redirect('/mfa');
+  if (stepUp) return { stepUpRequired: true };
   try {
     await forceRevokeAllAuthority(userId, { incidentReference, reason });
     return { success: 'Every session, remembered device, and MFA factor for this user has been revoked.' };
@@ -156,9 +154,9 @@ export async function grantRoleForm(_state: FormState, formData: FormData): Prom
   const userId = Number(formData.get('userId'));
   const role = String(formData.get('role') ?? '');
   const reason = String(formData.get('reason') ?? '');
-  const stepUp = await roleMutationNeedsStepUp('grant-role', { reason, role, userId: String(userId) });
+  const stepUp = await roleMutationNeedsStepUp();
   if (typeof stepUp !== 'boolean') return stepUp;
-  if (stepUp) redirect('/mfa');
+  if (stepUp) return { stepUpRequired: true };
   try {
     await grantApplicationRole(userId, { reason, role });
     return { success: 'Role granted.' };
@@ -172,9 +170,9 @@ export async function revokeRoleForm(_state: FormState, formData: FormData): Pro
   const userId = Number(formData.get('userId'));
   const role = String(formData.get('role') ?? '');
   const reason = String(formData.get('reason') ?? '');
-  const stepUp = await roleMutationNeedsStepUp('revoke-role', { reason, role, userId: String(userId) });
+  const stepUp = await roleMutationNeedsStepUp();
   if (typeof stepUp !== 'boolean') return stepUp;
-  if (stepUp) redirect('/mfa');
+  if (stepUp) return { stepUpRequired: true };
   try {
     await revokeApplicationRole(userId, { reason, role });
     return { success: 'Role revoked.' };

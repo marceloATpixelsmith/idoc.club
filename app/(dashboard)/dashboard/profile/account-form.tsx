@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useActionState } from 'react';
+import { Suspense } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { updateAccount } from '@/app/(login)/actions';
 import type { PublicUser } from '@/lib/db/queries';
 import { CsrfField } from '@/components/security/csrf-field';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -38,9 +39,9 @@ function AccountFieldsWithData({ state }: { state: ActionState }) {
 }
 
 export function AccountForm() {
-  const [state, formAction, isPending] = useActionState<ActionState, FormData>(updateAccount, {});
+  const [state, formAction, isPending, stepUpDialog] = useFreshStepUpAction(updateAccount, {});
   return (
-    <Card>
+    <><Card>
       <CardHeader><CardTitle>Account email</CardTitle></CardHeader>
       <CardContent>
         <form className="space-y-4" action={formAction}>
@@ -55,6 +56,6 @@ export function AccountForm() {
           </Button>
         </form>
       </CardContent>
-    </Card>
+    </Card>{stepUpDialog}</>
   );
 }

@@ -67,7 +67,7 @@ test('every session-mutating form on the My Security page disables its submit bu
     forgetThisDevice: 'isForgetCurrentPending', logOutOtherSessions: 'isLogoutOthersPending', logOutSession: 'isLogoutOnePending',
   };
   for (const [action, flag] of Object.entries(pendingFlags)) {
-    assert.match(client, new RegExp(`\\[\\w+, \\w+, ${flag}\\] = useActionState<\\w+State, FormData>\\(${action}, \\{\\}\\)`), `${action} must destructure its pending flag (${flag})`);
+    assert.match(client, new RegExp(`\\[\\w+, \\w+, ${flag}(?:, \\w+)?\\] = (?:useActionState(?:<\\w+State, FormData>)?|useFreshStepUpAction)\\(${action}, \\{\\}(?: as \\w+State)?\\)`), `${action} must destructure its pending flag (${flag})`);
     assert.match(client, new RegExp(`disabled=\\{[^}]*${flag}[^}]*\\}`), `${flag} must gate a submit button's disabled prop`);
   }
 });

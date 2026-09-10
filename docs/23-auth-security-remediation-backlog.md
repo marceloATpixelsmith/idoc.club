@@ -202,3 +202,7 @@ assert that `verified + implemented-but-unverified + partial + missing + not-app
 this backlog contains exactly the same canonical IDs and classifications as the applicable
 `implemented-but-unverified + partial + missing` rows in document 22. Historical changelog prose may
 remain only when explicitly labeled historical.
+
+## Fresh-step-up automatic continuation
+
+The previous redirect-and-resubmit UX is closed in implementation. Every authenticated Administrator or Super Admin action requiring fresh TOTP now automatically resumes through its original production Server Action, with no second submission and no persisted credential input. Remaining work is evidence-only: execute the full authentication, Release 1, deployed-revision, and real-account TOTP UAT gates before release.

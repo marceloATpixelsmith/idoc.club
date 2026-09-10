@@ -9,6 +9,7 @@ import { updatePassword, deleteAccount } from '@/app/(login)/actions';
 import { CsrfField } from '@/components/security/csrf-field';
 import { GoogleIdentityCard } from './google-identity-card';
 import { PasswordField } from './password-field';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 
 type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
@@ -31,14 +32,14 @@ const ACTIVITY_LABELS: Record<string, string> = {
 };
 
 export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
-  const [passwordState, passwordAction, isPasswordPending] = useActionState<PasswordState, FormData>(updatePassword, {});
-  const [deleteState, deleteAction, isDeletePending] = useActionState<DeleteState, FormData>(deleteAccount, {});
-  const [replaceState, replaceAction, isReplacePending] = useActionState<PasswordState, FormData>(beginAuthenticatorReplacement, {});
-  const [recoveryState, recoveryAction, isRecoveryPending] = useActionState<RecoveryState, FormData>(regenerateRecoveryCodes, {});
+  const [passwordState, passwordAction, isPasswordPending, passwordDialog] = useFreshStepUpAction(updatePassword, {} as PasswordState);
+  const [deleteState, deleteAction, isDeletePending, deleteDialog] = useFreshStepUpAction(deleteAccount, {} as DeleteState);
+  const [replaceState, replaceAction, isReplacePending, replaceDialog] = useFreshStepUpAction(beginAuthenticatorReplacement, {});
+  const [recoveryState, recoveryAction, isRecoveryPending, recoveryDialog] = useFreshStepUpAction(regenerateRecoveryCodes, {} as RecoveryState);
   const [forgetCurrentState, forgetCurrentAction, isForgetCurrentPending] = useActionState<PasswordState, FormData>(forgetThisDevice, {});
   const [forgetAllState, forgetAllAction, isForgetAllPending] = useActionState<PasswordState, FormData>(forgetAllRememberedDevices, {});
-  const [logoutOneState, logoutOneAction, isLogoutOnePending] = useActionState<PasswordState, FormData>(logOutSession, {});
-  const [logoutOthersState, logoutOthersAction, isLogoutOthersPending] = useActionState<PasswordState, FormData>(logOutOtherSessions, {});
+  const [logoutOneState, logoutOneAction, isLogoutOnePending, logoutOneDialog] = useFreshStepUpAction(logOutSession, {});
+  const [logoutOthersState, logoutOthersAction, isLogoutOthersPending, logoutOthersDialog] = useFreshStepUpAction(logOutOtherSessions, {});
 
   return (
     <section className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
@@ -71,7 +72,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
         {replaceState.error ? <p className="text-sm text-red-400">{replaceState.error}</p> : null}
         {recoveryState.error ? <p className="text-sm text-red-400">{recoveryState.error}</p> : null}
         {recoveryState.recoveryCodes ? <><p className="text-sm font-medium">Save these codes now. They will not be shown again.</p>
-          <ul aria-label="New recovery codes">{recoveryState.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
+          <ul aria-label="New recovery codes">{(recoveryState.recoveryCodes as string[]).map((code: string) => <li key={code}><code>{code}</code></li>)}</ul></> : null}
         {totpConfigured ? <div className="flex flex-wrap gap-3"><form action={replaceAction}><CsrfField /><Button type="submit" variant="outline" disabled={isReplacePending}>{isReplacePending ? 'Starting…' : 'Replace authenticator'}</Button></form>
           <form action={recoveryAction}><CsrfField /><Button type="submit" variant="outline" disabled={isRecoveryPending}>{isRecoveryPending ? 'Generating…' : 'Generate new recovery codes'}</Button></form></div> : null}
       </CardContent></Card>
@@ -135,6 +136,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
           </form>
         </CardContent>
       </Card>
+      {passwordDialog}{deleteDialog}{recoveryDialog}{replaceDialog}{logoutOneDialog}{logoutOthersDialog}
     </section>
   );
 }

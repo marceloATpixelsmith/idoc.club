@@ -283,3 +283,7 @@ The bulk menu is an interaction foundation only in this slice. Production bulk a
 ## Membership perks capability
 
 The Organization Settings membership-perks capability is implemented for Super Admins and the public/member payment surfaces. It maintains one ordered, complete replacement list in `idoc.membership_perks`, accepts at most 50 non-empty labels of up to 200 characters, serializes concurrent saves, and records administrative changes in the audit log.
+
+### Privileged fresh-TOTP continuation invariant
+
+Every authenticated Administrator or Super Admin action requiring fresh TOTP automatically resumes and completes the original action after successful TOTP. No second submission is required. The implemented inline challenge applies to password and email changes, account deletion, recovery-code regeneration, authenticator replacement, Google identity linking/unlinking, session revocation, privileged role grants/revocations, force-revoke-authority incident response, and Google OAuth rotation evidence. Credential-bearing form data remains only in transient browser memory and the authoritative Server Action is re-entered after verification.

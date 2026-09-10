@@ -6,7 +6,7 @@ import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { getPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
-import { getPendingStepUp } from '@/lib/auth/mfa/step-up';
+import { clearStepUpEvidence, getPendingStepUp } from '@/lib/auth/mfa/step-up';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { decryptTotpSecret, totpProvisioningUri } from '@/lib/auth/mfa/totp';
 import { MfaForm } from './mfa-form';
@@ -16,8 +16,12 @@ export default async function MfaPage() {
   if (!pending) {
     const stepUp = await getPendingStepUp();
     if (!stepUp) redirect('/sign-in');
-    return <AuthShell description="Enter the current 6-digit code from your authenticator app to continue."
-      title="Verify it's you"><MfaForm mode="step-up" /></AuthShell>;
+    // Authenticated step-up challenges are completed by the inline client continuation, which
+    // retains the original FormData in browser memory and invokes the original Server Action after
+    // TOTP. A direct visit to this legacy route has no original FormData available, so never render
+    // a verifier that could accept TOTP and strand the user without executing the action.
+    await clearStepUpEvidence();
+    redirect(stepUp.pending.returnTo);
   }
   let provisioningUri: string | undefined;
   let qrCodeDataUrl: string | undefined;

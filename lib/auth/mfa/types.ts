@@ -9,6 +9,7 @@ export type SensitiveAction =
   | 'change-mfa'
   | 'replace-authenticator'
   | 'generate-recovery-codes'
+  | 'revoke-sessions'
   | 'invite-privileged-user'
   | 'change-privileged-permissions'
   | 'change-security-settings'

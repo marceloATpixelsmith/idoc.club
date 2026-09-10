@@ -46,6 +46,7 @@ function refreshSecurityPage() {
 }
 
 export const logOutSession = validatedActionWithUser(sessionSchema, async ({ sessionId }, _, user) => {
+  if ((await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
   const current = await canonicalSession(user.id);
   if (sessionId === current.sessionId) return { error: 'Use the normal sign-out action to log out this browser.' };
   await revokeSession(sessionId, user.id, 'member-security-session-signout');
@@ -55,6 +56,7 @@ export const logOutSession = validatedActionWithUser(sessionSchema, async ({ ses
 }, { allowWithoutEntitlement: true });
 
 export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_, __, user) => {
+  if ((await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
   const current = await canonicalSession(user.id);
   await revokeOtherUserSessionsWithEvidence({
     currentSessionId: current.sessionId,
@@ -88,6 +90,7 @@ export const beginAuthenticatorReplacement = validatedActionWithUser(emptySchema
   if (role !== 'admin' && role !== 'super-admin') return { error: 'Authenticator management is not available for this account.' };
   const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
   if (!factor) return { error: 'No configured authenticator was found.' };
+  if ((await requireFreshStepUp(user, 'replace-authenticator', '/dashboard/security')).required) return { stepUpRequired: true };
   const transactionId = randomUUID();
   await setPendingPrimaryAuth({ applicationId: MFA_APPLICATION_ID, csrfNonce: generatePendingCsrfNonce(), factorId: factor.factorId,
     method: 'password', returnTo: '/dashboard/security', sessionVersion: user.sessionVersion,
@@ -103,7 +106,7 @@ export const regenerateRecoveryCodes = validatedActionWithUser(emptySchema, asyn
   if (role !== 'admin' && role !== 'super-admin') {
     return { error: 'Recovery-code management is not available for this account.' };
   }
-  if ((await requireFreshStepUp(user, 'generate-recovery-codes', '/dashboard/security')).required) redirect('/mfa');
+  if ((await requireFreshStepUp(user, 'generate-recovery-codes', '/dashboard/security')).required) return { stepUpRequired: true };
   const config = mfaConfiguration();
   const prepared = prepareRecoveryCodes({ applicationId: MFA_APPLICATION_ID,
     digestSecret: config.recoveryDigestKey, subjectId: String(user.id) });
@@ -119,7 +122,7 @@ export const regenerateRecoveryCodes = validatedActionWithUser(emptySchema, asyn
 export const beginGoogleIdentityLink = validatedActionWithUser(
   currentPasswordSchema,
   async ({ currentPassword }, _, user) => {
-    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) redirect('/mfa');
+    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) return { stepUpRequired: true };
     if (!(await comparePasswords(currentPassword, user.passwordHash))) {
       return { error: 'Current password is incorrect.' };
     }
@@ -132,7 +135,7 @@ export const beginGoogleIdentityLink = validatedActionWithUser(
 export const disconnectGoogleIdentity = validatedActionWithUser(
   currentPasswordSchema,
   async ({ currentPassword }, _, user) => {
-    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) redirect('/mfa');
+    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) return { stepUpRequired: true };
     if (!(await comparePasswords(currentPassword, user.passwordHash))) {
       return { error: 'Current password is incorrect.' };
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,12 +9,9 @@ import {
 } from './actions';
 
 export function GoogleOauthRotationForm({ activeVersion }: { activeVersion: string }) {
-  const [state, formAction, isPending] = useActionState<RotationEvidenceFormState, FormData>(
-    recordGoogleOauthRotationEvidenceForm,
-    {},
-  );
+  const [state, formAction, isPending, stepUpDialog] = useFreshStepUpAction(recordGoogleOauthRotationEvidenceForm, {});
   return (
-    <form action={formAction} className="mt-4 max-w-xl space-y-3">
+    <><form action={formAction} className="mt-4 max-w-xl space-y-3">
       <CsrfField />
       <p className="text-sm text-foreground">
         The server currently reports active version <strong>{activeVersion}</strong>. This button does not rotate or
@@ -25,6 +22,6 @@ export function GoogleOauthRotationForm({ activeVersion }: { activeVersion: stri
       </Button>
       {state.error && <p className="text-sm text-red-400">{state.error}</p>}
       {state.success && <p className="text-sm text-green-400">{state.success}</p>}
-    </form>
+    </form>{stepUpDialog}</>
   );
 }
