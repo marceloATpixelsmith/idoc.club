@@ -287,3 +287,7 @@ The Organization Settings membership-perks capability is implemented for Super A
 ### Privileged fresh-TOTP continuation invariant
 
 Every authenticated Administrator or Super Admin action requiring fresh TOTP automatically resumes and completes the original action after successful TOTP. No second submission is required. The implemented inline challenge applies to password and email changes, account deletion, recovery-code regeneration, authenticator replacement, Google identity linking/unlinking, session revocation, privileged role grants/revocations, force-revoke-authority incident response, and Google OAuth rotation evidence. Credential-bearing form data remains only in transient browser memory and the authoritative Server Action is re-entered after verification.
+
+### Completed payment-lifecycle slice
+
+Migration `0049` completes dynamic seminar Checkout concurrency, verified/idempotent webhook confirmation, distinct registration/payment/refund/dispute states, protected administrator full refunds, durable provider evidence, notifications, exports, and reconciliation. It also supplies the same protected full-refund initiation for eligible Stripe membership payments without changing prospective member cancellation. [10 Refund Policy](10-refund-policy.md) is authoritative; partial and automatic refunds remain out of scope.

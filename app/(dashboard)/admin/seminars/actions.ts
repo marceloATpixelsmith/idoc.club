@@ -6,8 +6,11 @@ import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { createSeminar, setSeminarStatus, updateSeminar } from '@/lib/seminars/seminars';
 import { markRegistrationPaymentReceived } from '@/lib/seminars/registrations';
+import { refundSeminarRegistration } from '@/lib/payments/refunds';
+import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { requireAccountAccess } from '@/lib/membership/data-access';
 
-export type AdminSeminarState = { error?: string; success?: string };
+export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; success?: string };
 
 function seminarFields(formData: FormData) {
   return {
@@ -66,4 +69,19 @@ export async function revertSeminarToDraftAction(_state: AdminSeminarState, form
 export async function markSeminarRegistrationPaidAction(_state: AdminSeminarState, formData: FormData) {
   const seminarId = formData.get('seminarId');
   return run(formData, () => markRegistrationPaymentReceived(formData.get('registrationId')), 'Payment recorded.', `/admin/seminars/${seminarId}`);
+}
+
+export async function refundSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
+  const seminarId = formData.get('seminarId');
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    if ((await requireFreshStepUp(actor, 'change-security-settings', `/admin/seminars/${seminarId}`)).required) return { stepUpRequired: true };
+    await refundSeminarRegistration(formData.get('registrationId'), formData.get('reason'));
+    revalidatePath(`/admin/seminars/${seminarId}`);
+    return { success: 'Stripe completed the approved full refund.' };
+  } catch (error) {
+    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'RefundError'].includes(error.name)) return { error: error.message };
+    return { error: 'The refund could not be completed. Review reconciliation before retrying.' };
+  }
 }

@@ -6,7 +6,7 @@ export type SeminarStatus = (typeof SEMINAR_STATUSES)[number];
 export const REGISTRATION_STATUSES = ['registered', 'canceled'] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
 
-export const PAYMENT_STATUSES = ['unpaid', 'bank_transfer_pending', 'cash_pending', 'paid'] as const;
+export const PAYMENT_STATUSES = ['unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 /** The member/public-facing availability of a seminar, derived at read time -- never stored. Distinct
@@ -21,7 +21,7 @@ export const AVAILABILITY_LABELS: Record<SeminarAvailability, string> = {
 };
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  bank_transfer_pending: 'Bank transfer pending', cash_pending: 'Cash pending', paid: 'Paid', unpaid: 'Unpaid',
+  bank_transfer_pending: 'Bank transfer pending', cash_pending: 'Cash pending', chargeback: 'Chargeback', disputed: 'Disputed', paid: 'Paid', partially_refunded: 'Partially refunded', pending: 'Payment pending', refund_failed: 'Refund failed', refunded: 'Refunded', unpaid: 'Unpaid',
 };
 
 /** Combines the seminar's own date/end-time/timezone into the UTC instant the seminar ends. */

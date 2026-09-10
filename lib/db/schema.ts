@@ -510,6 +510,13 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
   stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }).unique(),
+  expectedAmountCents: integer('expected_amount_cents'),
+  currency: varchar('currency', { length: 3 }).notNull().default('EUR'),
+  checkoutStatus: varchar('checkout_status', { length: 20 }),
+  checkoutCreatedAt: timestamp('checkout_created_at', { withTimezone: true }),
+  paymentStatusUpdatedAt: timestamp('payment_status_updated_at', { withTimezone: true }),
+  disputedAt: timestamp('disputed_at', { withTimezone: true }),
+  chargebackAt: timestamp('chargeback_at', { withTimezone: true }),
   paidAt: timestamp('paid_at', { withTimezone: true }),
   markedPaidByUserId: integer('marked_paid_by_user_id').references(() => users.id),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
@@ -517,7 +524,10 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled')`),
-  check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'bank_transfer_pending', 'cash_pending', 'paid')`),
+  check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback')`),
+  check('seminar_registrations_expected_amount_check', sql`${table.expectedAmountCents} is null or ${table.expectedAmountCents} >= 0`),
+  check('seminar_registrations_currency_check', sql`${table.currency} = 'EUR'`),
+  check('seminar_registrations_checkout_status_check', sql`${table.checkoutStatus} is null or ${table.checkoutStatus} in ('open', 'complete', 'expired', 'superseded')`),
   uniqueIndex('seminar_registrations_seminar_profile_unique').on(table.seminarId, table.profileId),
   index('seminar_registrations_seminar_status_idx').on(table.seminarId, table.registrationStatus),
   index('seminar_registrations_profile_idx').on(table.profileId),
@@ -696,6 +706,33 @@ export const payments = idocSchema.table('payments', {
   ),
 ]);
 
+
+/** Immutable links from a Stripe refund to its original seminar or membership payment. */
+export const paymentRefunds = idocSchema.table('payment_refunds', {
+  id: serial('id').primaryKey(),
+  seminarRegistrationId: integer('seminar_registration_id').references(() => seminarRegistrations.id),
+  membershipPaymentId: integer('membership_payment_id').references(() => payments.id),
+  externalRefundId: varchar('external_refund_id', { length: 255 }).unique(),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
+  amountCents: integer('amount_cents').notNull(),
+  currency: varchar('currency', { length: 3 }).notNull().default('EUR'),
+  status: varchar('status', { length: 30 }).notNull(),
+  reason: text('reason').notNull(),
+  administratorId: integer('administrator_id').references(() => users.id),
+  failureCode: varchar('failure_code', { length: 100 }),
+  providerEvidence: jsonb('provider_evidence'),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  refundedAt: timestamp('refunded_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('payment_refunds_owner_check', sql`num_nonnulls(${table.seminarRegistrationId}, ${table.membershipPaymentId}) = 1`),
+  check('payment_refunds_amount_check', sql`${table.amountCents} > 0`),
+  check('payment_refunds_currency_check', sql`${table.currency} = 'EUR'`),
+  check('payment_refunds_status_check', sql`${table.status} in ('pending', 'succeeded', 'failed', 'canceled')`),
+  uniqueIndex('payment_refunds_one_pending_seminar').on(table.seminarRegistrationId).where(sql`${table.status} = 'pending'`),
+  uniqueIndex('payment_refunds_one_pending_membership').on(table.membershipPaymentId).where(sql`${table.status} = 'pending'`),
+]);
+
 /** Current reconciliation snapshot only — wiped and rewritten on every successful cron run, not accumulated history. */
 export const reconciliationFindings = idocSchema.table('reconciliation_findings', {
   id: serial('id').primaryKey(),
@@ -707,7 +744,7 @@ export const reconciliationFindings = idocSchema.table('reconciliation_findings'
   details: jsonb('details'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict')`),
+  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
 ]);
 
 /** Append-only heartbeat log, one row per cron execution, so a failed run doesn't read as a silent "all clear." */

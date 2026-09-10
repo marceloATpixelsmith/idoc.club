@@ -288,3 +288,7 @@ Existing migrated users should encounter an account-access/activation flow, not 
 - Each seminar has an administrator-defined cancellation/refund policy that is shown before registration/payment.
 
 - Administrators may publish news and blog posts; the president is an administrator.
+
+## Refund policy implementation
+
+[10 Refund Policy](10-refund-policy.md) governs membership and seminar refunds. Refunds are administrator-authorized, reasoned, full-only, explicit actions; cancellation never automatically refunds. Original payments remain immutable evidence. Seminar refunds do not change membership entitlement, dates, subscriptions, or membership payment history. Provider-side partial refunds, disputes, chargebacks, and unmatched state produce reconciliation findings.

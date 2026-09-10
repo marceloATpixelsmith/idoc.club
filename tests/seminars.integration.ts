@@ -221,9 +221,11 @@ test('a Stripe Checkout Session completion marks the exact registration paid, ve
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId));
 
   const fakeListLineItems = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
+  const checkoutSessionId = `cs_${randomUUID()}`;
+  await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${checkoutSessionId},checkout_status='open',expected_amount_cents=8000,payment_status='pending' where id=${registrationId}`;
   const sessionCompleted = {
-    amount_total: 8000, currency: 'eur', id: `cs_${randomUUID()}`,
-    metadata: { kind: 'seminar_registration', profileId: String(profile.id), registrationId: String(registrationId) },
+    amount_total: 8000, currency: 'eur', id: checkoutSessionId,
+    metadata: { amountCents: '8000', currency: 'EUR', kind: 'seminar_registration', profileId: String(profile.id), registrationId: String(registrationId), seminarId: String(seminarId) },
     mode: 'payment', payment_intent: `pi_${randomUUID()}`, payment_status: 'paid',
   };
   const event = {
@@ -244,10 +246,10 @@ test('a Stripe Checkout Session completion marks the exact registration paid, ve
 
   // A replayed event id is a no-op (stripeEvents dedup); processing the exact same event id twice
   // must not somehow un-pay or re-audit the registration.
-  const [{ count: beforeAuditCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log where entity_id=${String(registrationId)} and action='admin.seminar_registration.payment_marked_paid'`;
+  const [{ count: beforeAuditCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log where entity_id=${String(registrationId)} and action='seminar.payment_confirmed'`;
   const replay = await processStripeEvent(event as never, fakeListLineItems as never);
   assert.equal(replay, 'duplicate');
-  const [{ count: afterAuditCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log where entity_id=${String(registrationId)} and action='admin.seminar_registration.payment_marked_paid'`;
+  const [{ count: afterAuditCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.audit_log where entity_id=${String(registrationId)} and action='seminar.payment_confirmed'`;
   assert.equal(afterAuditCount, beforeAuditCount);
 });
 
@@ -257,12 +259,14 @@ test('a Checkout Session priced against a different amount than this seminar\'s 
   const seminarId = await publishedSeminar(admin.id, { price: '80.00' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId));
   const fakeListLineItems = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
+  const checkoutSessionId = `cs_${randomUUID()}`;
+  await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${checkoutSessionId},checkout_status='open',expected_amount_cents=8000,payment_status='pending' where id=${registrationId}`;
   const event = {
     api_version: '2025-08-27.basil', created: Math.floor(Date.now() / 1000),
     data: {
       object: {
-        amount_total: 100, currency: 'eur', id: `cs_${randomUUID()}`,
-        metadata: { kind: 'seminar_registration', profileId: String(profile.id), registrationId: String(registrationId) },
+        amount_total: 100, currency: 'eur', id: checkoutSessionId,
+        metadata: { amountCents: '8000', currency: 'EUR', kind: 'seminar_registration', profileId: String(profile.id), registrationId: String(registrationId), seminarId: String(seminarId) },
         mode: 'payment', payment_intent: `pi_${randomUUID()}`, payment_status: 'paid',
       },
     },
@@ -271,7 +275,7 @@ test('a Checkout Session priced against a different amount than this seminar\'s 
   };
   await processStripeEvent(event as never, fakeListLineItems as never);
   const [row] = await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.payment_status, 'unpaid', 'a tampered/mismatched amount must never grant payment credit');
+  assert.equal(row.payment_status, 'pending', 'a tampered/mismatched amount must never grant payment credit');
 });
 
 test('createSeminarCheckoutSession prices the session against the seminar\'s current fee and records the session id', async () => {
@@ -280,7 +284,7 @@ test('createSeminarCheckoutSession prices the session against the seminar\'s cur
   const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId));
   const calls: unknown[] = [];
-  const fakeClient = { checkout: { sessions: { create: async (params: unknown) => { calls.push(params); return { id: 'cs_fixture', url: 'https://checkout.stripe.com/session/fixture' }; } } } };
+  const fakeClient = { checkout: { sessions: { create: async (params: unknown) => { calls.push(params); return { id: 'cs_fixture', url: 'https://checkout.stripe.com/session/fixture' }; } } }, customers: { create: async () => ({ id: 'cus_seminar_fixture' }) } };
   const url = await asMember(user.id, () => createSeminarCheckoutSession(registrationId, fakeClient));
   assert.equal(url, 'https://checkout.stripe.com/session/fixture');
   const params = calls[0] as { line_items: Array<{ price_data: { currency: string; unit_amount: number } }>; metadata: Record<string, string> };
@@ -301,7 +305,7 @@ test('admin registration search/filter finds a member by name or email and CSV e
 
   const exported = await asAdmin(admin.id, () => exportSeminarRegistrationsCsvRows(seminarId));
   assert.equal(exported.length, 1);
-  assert.ok(Object.keys(exported[0]).every((key) => ['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'registered_at', 'canceled_at', 'paid_at'].includes(key)),
+  assert.ok(Object.keys(exported[0]).every((key) => ['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'].includes(key)),
     'export rows must expose only the documented columns');
   const [auditRow] = await sql<{ after_json: { resultCount: number } }[]>`select after_json from idoc.audit_log where action='admin.seminar_registrations.exported' and entity_id=${String(seminarId)}`;
   assert.equal(auditRow.after_json.resultCount, 1);

@@ -92,7 +92,7 @@ test('seminar payments are classified separately from membership billing: the ch
 });
 
 test('the CSV export route exposes only the documented columns and is BOM-prefixed for spreadsheet compatibility', () => {
-  assert.match(exportRoute, /toCsv\(rows, \['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'registered_at', 'canceled_at', 'paid_at'\]\)/);
+  assert.match(exportRoute, /toCsv\(rows, \['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'\]\)/);
   // Either source spelling of the BOM (a literal embedded character, or a six-character JS unicode
   // escape sequence spelling out code point 0xfeff -- the convention the other four admin CSV
   // export routes use) is correct: both produce the same runtime character before Excel ever sees

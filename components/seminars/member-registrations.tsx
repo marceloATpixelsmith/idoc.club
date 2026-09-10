@@ -40,7 +40,7 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
 async function MySeminars({ profileId, tab }: { profileId: number; tab?: string }) {
   const past = tab === 'past';
   const seminars = past ? await listPastSeminarsForMember(profileId) : await listCurrentSeminarsForMember(profileId);
-  const registered = seminars.filter((seminar) => seminar.registration_status === 'registered');
+  const registered = seminars.filter((seminar) => seminar.registration_status !== null);
   const needsBankInstructions = registered.some((seminar) => seminar.payment_method_canonical_id === 'bank_transfer' && seminar.payment_status === 'bank_transfer_pending');
   const bankInstructionsHtml = needsBankInstructions ? sanitizeBankInstructions((await getSeminarPaymentMethodInstructions('bank_transfer')) ?? '') : null;
   const card = (seminar: (typeof seminars)[number]) => <li className="card-midnight p-6" key={seminar.id}>
@@ -50,7 +50,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
       <p className="text-sm">Your registration: <strong>{registrationDisplayLabel(seminar.registration_status as RegistrationStatus, (seminar.payment_status ?? 'unpaid') as PaymentStatus)}</strong></p>
       {seminar.payment_status === 'bank_transfer_pending' && bankInstructionsHtml ? <div className="mt-2 rounded border p-3 text-sm" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} /> : null}
       {seminar.payment_status === 'cash_pending' ? <p className="mt-2 text-sm">Pay in cash at the event.</p> : null}
-      {!past ? <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm> : null}
+      {!past && seminar.registration_status === 'registered' ? <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm> : null}
     </div>
   </li>;
 
