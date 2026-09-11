@@ -273,8 +273,8 @@ async function handleChargeRefunded(tx: Transaction, event: Stripe.Event, stripe
   for (const refund of charge.refunds?.data ?? []) await handleRefundChanged(tx, refund, stripe);
 }
 
-async function handleRefundEvent(tx: Transaction, event: Stripe.Event) {
-  await handleRefundChanged(tx, event.data.object as Stripe.Refund);
+async function handleRefundEvent(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
+  await handleRefundChanged(tx, event.data.object as Stripe.Refund, stripe);
 }
 
 async function handleDispute(tx: Transaction, event: Stripe.Event) {
