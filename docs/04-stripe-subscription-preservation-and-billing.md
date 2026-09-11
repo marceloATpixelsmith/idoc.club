@@ -79,6 +79,9 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
 | invoice.payment_action_required or equivalent payment-action signal | Notify/admin flag as appropriate without granting unverified payment.                  |
 | checkout.session.completed (payment mode)                            | Validate authenticated-profile metadata, expected membership Product/Price configuration, amount, currency, and paid status; record idempotently. |
 | payment_intent.succeeded                                             | Confirm the one-time payment record where applicable; never create a subscription.     |
+| refund.created / refund.updated / refund.failed                      | Preserve refund attempts/provider evidence and project only verified matched state.    |
+| charge.refunded                                                      | Match direct refunds to their original payment or create a retained finding.            |
+| charge.dispute.created / charge.dispute.closed                       | Preserve actionable dispute/chargeback evidence without unrelated entitlement changes. |
 
 # 6. Webhook security and reliability
 
@@ -137,20 +140,10 @@ Already implemented and retained:
 - recurring and one-time successful-payment projection into local payments/membership records;
 - existing-subscription preservation, Customer Portal ownership checks, cancellation support, reconciliation, and payment/grace notifications.
 
-Implemented but must be changed:
-
-- the current two-card `/pricing` presentation must become one membership-payment gate with one automatic-renewal control;
-- the current two configured Stripe Products must become one configured membership Product for new enrollment;
-- dashboard authorization currently permits profile-level access before payment and after expiration; it must enforce the payment-only state defined in docs/02;
-- the current five-day grace transition is triggered by recurring payment failure but not by non-recurring term expiration; both cases must use the approved rule;
-- Customer email-sync failures are persisted as `stripe.customer_email_sync` outbox rows, but no retry worker currently consumes those rows.
-
-Not yet implemented:
-
-- persisted current/pending renewal preference and effective date;
-- non-recurring-to-recurring payment-method authorization and future activation;
-- cancel/reverse pending renewal-mode transitions;
-- the member Billing Settings control and confirmation/audit workflow;
-- server-boundary tests for the payment-only state and transition tests listed in docs/25;
-- real Stripe test-mode lifecycle and restricted-key-permission verification;
-- production Product, webhook, environment-variable, migration, and reconciliation signoff.
+The payment gate, one-Product model, both grace paths, post-grace authorization, durable renewal
+preference/transition state, Setup Checkout, future schedule, reversal, Billing Settings, email-sync
+retry, and automated server-boundary coverage are implemented. The remaining gate is operational:
+the complete real Stripe test-mode evidence and the production configuration/migration checklist in
+docs/07 must be completed by an operator. Fake-client tests are necessary regression evidence but are
+not a substitute for provider evidence, and no live-payment test may be claimed without supplied,
+verified live evidence.

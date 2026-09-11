@@ -85,9 +85,11 @@ When you're ready to deploy your SaaS application to production, follow these st
 
 ### Set up a production Stripe webhook
 
-1. Go to the Stripe Dashboard and create a new webhook for your production environment.
-2. Set the endpoint URL to your production API route (e.g., `https://yourdomain.com/api/stripe/webhook`).
-3. Select the events you want to listen for (e.g., `checkout.session.completed`, `customer.subscription.updated`).
+Follow the authoritative Stripe production checklist in
+[`docs/07-administrator-and-operations-runbook.md`](docs/07-administrator-and-operations-runbook.md#stripe-payment-production-readiness).
+It defines the exact endpoint, complete event list, environment isolation, least-privilege key scope,
+rotation, replay, migration, reconciliation, and evidence requirements. Do not enable live payments
+from this abbreviated README alone.
 
 ### Deploy to Vercel
 

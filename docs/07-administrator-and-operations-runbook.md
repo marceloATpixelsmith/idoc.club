@@ -353,11 +353,10 @@ The signup/login/password-reset Turnstile challenge additionally requires `NEXT_
 `STRIPE_MEMBERSHIP_PRODUCT_ID` identifies the one IDOC Annual Membership Product against which Checkout builds recurring or non-recurring €80 Price configurations. Stripe requires different Price configurations for the two billing modes, not separate Products. The Product and both technical Price modes represent the same membership entitlement and are never shown as competing plans.
 
 The Stripe restricted key must permit Customer, Checkout Session, SetupIntent, PaymentMethod and
-Price reads/creation plus Subscription, Subscription Schedule and Billing Portal operations used by
-the application. Configure webhook delivery for `checkout.session.completed`, `invoice.paid`,
-`invoice.payment_failed`, `invoice.payment_action_required`, `customer.subscription.created`,
-`customer.subscription.updated`, `customer.subscription.deleted`, and
-`payment_intent.succeeded`. Unknown signed events are retained as processed evidence and never alter
+Price reads/creation plus Subscription, Subscription Schedule, Invoice, Refund, reconciliation-list,
+and Billing Portal operations used by the application. Configure the complete webhook list in
+“Stripe payment production readiness” below; do not use an abbreviated subset. Unknown signed events
+are retained as processed evidence and never alter
 entitlement. A pending automatic-renewal schedule may be canceled from Billing Settings; operators
 must investigate any local pending state whose Schedule is missing or disagrees with Stripe rather
 than silently repairing ownership or billing identifiers.
@@ -573,3 +572,119 @@ Manual membership payments continue through the existing administrator payment f
 The governing policy is [10 Refund Policy](10-refund-policy.md). Cancellation and payment are separate facts: a member cancellation never refunds automatically, and a paid canceled registration remains Paid. An administrator may approve only a full Stripe refund from the seminar registration screen, must provide a reason, and must complete fresh TOTP step-up. The action returns success only after Stripe responds. Pending, failed, directly-created, partial, disputed, and chargeback provider states remain visible evidence and create reconciliation findings; partial refunds are outside current policy. Never delete or relabel the original payment.
 
 Administrators can likewise approve a full refund of a Stripe membership payment from the protected Payments screen for the two policy cases (an accidental recurring renewal, or a recurring charge after an approved manual payment). Record the exact reason and, for the latter, first record the alternative payment and disable automatic renewal. Canceling renewal before the next charge remains a prospective billing change and must not create a refund. Refund processing never silently rewrites membership entitlement or payment history.
+
+## Stripe payment production readiness
+
+### Environment and provider objects
+
+- Set server-only `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
+  `STRIPE_MEMBERSHIP_PRODUCT_ID` in every payment-capable environment. Production must use a live
+  `sk_live_` or preferably least-privilege `rk_live_` key. Vercel Preview/Development must use a
+  test key; runtime validation rejects a live key there and a test key in Production. Never copy
+  Customers, webhook secrets, Products, Prices, SetupIntents, PaymentMethods, schedules, or
+  subscriptions between modes. Product IDs are opaque, so the Stripe API's account/mode ownership
+  check is authoritative: verify the configured Product using the configured key before signoff.
+- In each mode create one active **IDOC Annual Membership** Product. The application creates EUR
+  80.00 inline one-time/recurring Prices and future-transition recurring Prices under that Product;
+  no browser amount, currency, Product, Price, Customer, profile, ownership, date, or refund value is
+  authoritative. Seminars deliberately use server-locked title and dynamic EUR price data and do
+  not use the membership Product or membership payment ledger.
+- Restrict the runtime key to the Checkout Sessions, Customers, Billing Portal, PaymentMethods,
+  SetupIntents, Prices, Subscriptions, Subscription Schedules, Invoices, Refunds, and read-only
+  reconciliation list operations used by the application. Validate the exact restricted-key
+  permission set in test mode: required calls succeed and an unrelated write is denied. Keep the
+  Stripe Dashboard restricted to separately controlled administrator accounts.
+
+### Webhook and Portal configuration
+
+Create exactly one endpoint per environment at `https://<origin>/api/stripe/webhook`, with its own
+signing secret, raw request delivery, and these events:
+
+`checkout.session.completed`, `payment_intent.succeeded`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+`invoice.payment_failed`, `invoice.payment_action_required`, `refund.created`, `refund.updated`,
+`refund.failed`, `charge.refunded`, `charge.dispute.created`, and `charge.dispute.closed`.
+
+The route verifies the signature against the raw body before database work. It records the Stripe
+event ID transactionally; handler failure rolls back that marker and returns an error so Stripe can
+retry, while successful replay is a no-op. Unknown verified events are acknowledged and retained as
+processed evidence. Never log payloads, headers, secrets, full payment details, provider responses,
+or unnecessary personal data. Use server-generated correlation IDs and categorical safe events.
+
+Configure Customer Portal in both modes for payment-method management and invoice history. Permit
+subscription cancellation at period end, not plan/product switching or immediate cancellation.
+IDOC Billing Settings remains the renewal-preference authority and ownership is checked server-side.
+
+### Test-mode acceptance and browser checkpoints
+
+Run against a disposable migrated PostgreSQL database, a dedicated Stripe test account, the normal
+authentication fixtures, and real webhook signatures. Retain redacted event/object IDs, timestamps,
+screenshots, and database assertions for:
+
+1. One-time €80 Checkout, submitting animation, return-without-entitlement, verified webhook,
+   rolling dates/history, refresh/back/double-click, expiry/stale form, and cross-member denial.
+2. Recurring Checkout, invoice webhook, subscription/paid-through/next-period display, Portal
+   payment-method management, cancel-at-period-end, and access retained through paid-through.
+3. One-time to recurring Setup Checkout: no immediate charge or entitlement change; exact
+   paid-through schedule start; expected €80 plus Checkout, SetupIntent, PaymentMethod, Price and
+   Schedule references; cancellation; replay/concurrent double-click without duplicate objects.
+4. Supported failed renewal: exact five-calendar-day grace and deduplicated notice; repeated failure
+   cannot reset grace; after grace only payment/logout remain accessible.
+5. Two published seminars with different names/prices: separate successful registrations and no
+   change to membership entitlement, dates, subscription, or membership payment history.
+6. Member cancellation without refund; then administrator full refund with normal sign-in, CSRF,
+   fresh TOTP, reason/confirmation, ownership, ledger/audit/notification/reconciliation evidence.
+   Exercise a terminal failure (fresh attempt/key), uncertain transport outcome (same attempt/key),
+   direct refund matching, recurring-membership cancellation, partial/unmatched refund, dispute,
+   and lost chargeback without changing unrelated entitlement.
+
+Automation must not bypass authentication, inbox verification, TOTP, authorization, Stripe-hosted
+Checkout/Portal, or provider challenges. A challenge that cannot be safely automated is a genuine
+manual checkpoint and its operator evidence must be recorded. Repository fakes and Playwright
+security tests do not satisfy this real-provider gate. **Do not claim live payment testing unless
+IDOC supplied the live credentials/account and the resulting live evidence was independently
+verified.** Use only minimal controlled amounts if a separately approved live test is performed.
+
+### Deployment, replay, reconciliation, and incident procedures
+
+1. Back up PostgreSQL; verify `idoc` schema ownership and migration checksum history; apply every
+   migration through `0049`; run the disposable-database integration/migration checks; then verify
+   tables, constraints, indexes, and generated Drizzle snapshot/journal match the committed schema.
+   Do not enable refund UI or webhook traffic on a revision whose schema migration is incomplete.
+2. Deploy with payment traffic disabled, validate `/api/health`, Cron `CRON_SECRET`, provider mode,
+   Product, Portal, webhook destination/events, and notification delivery. Run reconciliation and
+   preserve its run row before enabling Checkout. Roll back application traffic—not financial
+   history—if signatures, migrations, ownership, notifications, or reconciliation fail.
+3. For webhook replay, locate the event in the correct Stripe mode, record its ID and reason, confirm
+   the endpoint revision/configuration, use Stripe's resend operation, and verify one processed
+   `stripe_events` row plus the expected projection. Never edit the event ID or manually manufacture
+   payment success. A failed local transaction remains retryable because its event marker rolled back.
+4. For a failed payment, confirm the original renewal date and immutable grace end, notification
+   delivery/retry state, access during grace, and payment-only access afterward. A later successful
+   verified payment restores/extends access; repeated failures never move either date.
+5. Run scheduled reconciliation with authenticated Cron and inspect its append-only run history.
+   Successful scans refresh only subscription/schedule findings. Event-sourced refund, missing-refund,
+   dispute, chargeback, and seminar-payment-conflict findings survive later scans until explicitly
+   resolved or superseded; a failed scan retains the last known snapshot and records failure.
+6. For refunds, preserve every attempt and provider evidence. A provider-confirmed terminal failure
+   permits a fresh attempt and idempotency key. An uncertain transport/local outcome retries the
+   original attempt/key. Never downgrade provider-confirmed success because later local work failed.
+   Match direct refunds by immutable payment relationship; investigate unmatched/partial cases,
+   disputes, and chargebacks in Stripe and the reconciliation screen. A successful recurring
+   membership refund must also disable renewal; failure to do so is an operational finding.
+7. Notification delivery failure never reverses financial state. Inspect the durable outbox's
+   retry/dead-letter evidence, correct provider configuration, and retry delivery without replaying
+   the payment/refund mutation. Escalate dead letters and Cron failures through the operations channel.
+
+Rotate a Stripe API key by creating a same-mode restricted key, validating it in the protected
+environment, updating the environment variable, deploying, exercising read-only reconciliation plus
+a controlled test-mode transaction, then revoking the old key. Rotate a webhook secret by creating a
+replacement endpoint (or provider-supported overlap), deploying its secret, sending a signed test
+event, and only then disabling the old endpoint/secret. Never overwrite Production with test values
+or rotate Product IDs as if they were secrets; changing the Product is a reviewed billing migration.
+
+Production enablement evidence must include the exact deployed commit, migration/checksum output,
+mode and redacted key prefix, Product/Portal/webhook configuration, complete subscribed-event list,
+successful signed delivery/replay/idempotency, test-mode browser matrix, restricted-key denial,
+reconciliation run, Cron authentication, notification delivery, database backup/restore readiness,
+and named operator approval. Missing evidence is a release blocker, not permission to infer success.
