@@ -41,6 +41,8 @@ Where practical, administrators should initiate refunds from the IDOC admin inte
 
 Refund processing must be administrator-authorized, idempotent, auditable, and safe against duplicate requests, retries, webhook replay, and partial Stripe failures.
 
+For a seminar refund in `refund_failed`, an administrator may retry from the IDOC admin interface. If the prior Stripe attempt has a terminal provider failure with a recorded Stripe refund object and no transport uncertainty, IDOC creates a new refund attempt and a fresh Stripe idempotency key while retaining the prior attempt as historical evidence. If the prior attempt's outcome is uncertain because the request failed before provider confirmation, IDOC reuses the original idempotency key so a retry cannot create a duplicate refund. Administrators must not retry a refund marked `succeeded`; provider-side disputes, partial refunds, and unmatched refunds remain reconciliation cases requiring review.
+
 A refunded seminar payment must never change membership entitlement, membership dates, subscriptions, or membership payment history.
 
 If Stripe reports a refund, dispute, or chargeback that does not match the local record, IDOC must preserve the evidence and create an actionable reconciliation finding. Disputes and chargebacks remain operationally handled through Stripe unless the application later adds dedicated workflows.
