@@ -26,7 +26,15 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
   if (row.payment_status === 'refunded') return;
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
-  const key = `idoc-seminar-refund-${registrationId}-${row.stripe_payment_intent_id}`;
+  const baseKey = `idoc-seminar-refund-${registrationId}-${row.stripe_payment_intent_id}`;
+  const [priorAttempt] = await client<{ id: number; status: string; external_refund_id: string | null; failure_code: string | null }[]>`select id,status,external_refund_id,failure_code
+    from idoc.payment_refunds where seminar_registration_id=${registrationId} order by requested_at desc,id desc limit 1`;
+  // Preserve the original idempotency key when Stripe's outcome is uncertain. A terminal Stripe
+  // failure is different: Stripe has confirmed that no refund was created, so the administrator's
+  // retry must create a new durable attempt and use a fresh provider idempotency key.
+  const terminalFailure = priorAttempt?.status === 'failed' && priorAttempt.external_refund_id !== null &&
+    priorAttempt.failure_code === null;
+  const key = terminalFailure ? `${baseKey}-retry-${Date.now()}` : baseKey;
   const [request] = await client<{ id: number }[]>`insert into idoc.payment_refunds(seminar_registration_id,idempotency_key,amount_cents,status,reason,administrator_id)
     values(${registrationId},${key},${row.price_cents},'pending',${explanation},${actor.id}) on conflict(idempotency_key) do update set updated_at=now() returning id`;
   const stripe = testStripe ?? getStripeServerClient();
