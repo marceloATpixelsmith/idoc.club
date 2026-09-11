@@ -21,6 +21,7 @@ export type WebhookStripeClient = {
   setupIntents?: { retrieve: (id: string) => Promise<Stripe.SetupIntent> };
   paymentMethods?: { retrieve: (id: string) => Promise<Stripe.PaymentMethod> };
   prices?: { create: (params: Stripe.PriceCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.Price> };
+  subscriptions?: { cancel: (id: string, params?: Stripe.SubscriptionCancelParams, options?: Stripe.RequestOptions) => Promise<unknown> };
   subscriptionSchedules?: { create: (params: Stripe.SubscriptionScheduleCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.SubscriptionSchedule> };
 };
 
@@ -210,13 +211,26 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: S
     .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
 }
 
-async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund) {
+async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, stripe: WebhookStripeClient) {
   const status = refund.status === 'succeeded' ? 'succeeded' : refund.status === 'failed' ? 'failed' : refund.status === 'canceled' ? 'canceled' : 'pending';
   const [knownRefund] = await tx.select({ id: paymentRefunds.id, membershipPaymentId: paymentRefunds.membershipPaymentId })
     .from(paymentRefunds).where(eq(paymentRefunds.externalRefundId, refund.id)).limit(1);
   if (knownRefund?.membershipPaymentId) {
     await tx.update(paymentRefunds).set({ providerEvidence: { id: refund.id, status: refund.status }, status, updatedAt: new Date(),
       refundedAt: status === 'succeeded' ? new Date() : null }).where(eq(paymentRefunds.id, knownRefund.id));
+    if (status === 'succeeded') {
+      const [payment] = await tx.select({ profileId: payments.profileId, source: payments.source }).from(payments).where(eq(payments.id, knownRefund.membershipPaymentId)).limit(1);
+      if (payment?.source === 'stripe_recurring') {
+        const [subscription] = await tx.select({ externalSubscriptionId: subscriptions.externalSubscriptionId }).from(subscriptions)
+          .where(and(eq(subscriptions.profileId, payment.profileId), inArray(subscriptions.status, ['active', 'trialing', 'past_due', 'incomplete'])))
+          .orderBy(desc(subscriptions.updatedAt)).limit(1);
+        if (subscription && stripe.subscriptions) {
+          await stripe.subscriptions.cancel(subscription.externalSubscriptionId, {}, { idempotencyKey: `idoc-membership-refund-${refund.id}-cancel-renewal` });
+          await tx.update(subscriptions).set({ status: 'canceled', cancelAtPeriodEnd: false, updatedAt: new Date() }).where(eq(subscriptions.externalSubscriptionId, subscription.externalSubscriptionId));
+        }
+        await tx.update(renewalPreferences).set({ currentMode: 'non_recurring', pendingMode: null, effectiveOn: null, transitionState: 'current', updatedAt: new Date() }).where(eq(renewalPreferences.profileId, payment.profileId));
+      }
+    }
     return;
   }
   const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id;
@@ -254,13 +268,13 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund) {
   }
 }
 
-async function handleChargeRefunded(tx: Transaction, event: Stripe.Event) {
+async function handleChargeRefunded(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
   const charge = event.data.object as Stripe.Charge;
-  for (const refund of charge.refunds?.data ?? []) await handleRefundChanged(tx, refund);
+  for (const refund of charge.refunds?.data ?? []) await handleRefundChanged(tx, refund, stripe);
 }
 
-async function handleRefundEvent(tx: Transaction, event: Stripe.Event) {
-  await handleRefundChanged(tx, event.data.object as Stripe.Refund);
+async function handleRefundEvent(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
+  await handleRefundChanged(tx, event.data.object as Stripe.Refund, stripe);
 }
 
 async function handleDispute(tx: Transaction, event: Stripe.Event) {
