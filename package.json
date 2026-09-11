@@ -22,7 +22,8 @@
     "db:generate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs migrate",
     "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio",
-    "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts"
+    "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts",
+    "validate:stripe-readiness": "node scripts/validate-stripe-readiness.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
