@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
+import { sql } from 'drizzle-orm';
 import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
@@ -90,7 +91,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     );
 
     await db.transaction(async (tx) => {
-      await tx.delete(reconciliationFindings);
+      await tx.delete(reconciliationFindings).where(sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length, status: 'completed' });
     });
