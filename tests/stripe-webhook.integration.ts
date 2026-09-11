@@ -10,6 +10,11 @@ import {
 
 const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
 
+function setTestStripeEnvironment() {
+  process.env.NODE_ENV = 'test';
+  setTestStripeEnvironment();
+}
+
 beforeEach(async () => {
   process.env.VERCEL_ENV = 'development';
   process.env.STRIPE_SECRET_KEY = 'sk_test_fixture0000000000000000';
@@ -36,6 +41,7 @@ function fixtureEvent(type: string, object: Record<string, unknown>, id = `evt_$
 }
 
 async function postWebhook(event: object, secret = WEBHOOK_SECRET) {
+  setTestStripeEnvironment();
   const payload = JSON.stringify(event);
   const signature = getStripeServerClient().webhooks.generateTestHeaderString({ payload, secret });
   return POST(new Request('https://idoc.club/api/stripe/webhook', {
@@ -65,6 +71,7 @@ test('a signature that does not match the configured secret is rejected before a
 });
 
 test('a missing signature is rejected before any database access', async () => {
+  setTestStripeEnvironment();
   const response = await POST(new Request('https://idoc.club/api/stripe/webhook', {
     body: JSON.stringify(fixtureEvent('customer.subscription.created', subscriptionObject())),
     headers: { 'content-type': 'application/json' }, method: 'POST',
