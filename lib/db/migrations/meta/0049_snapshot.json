@@ -4091,6 +4091,10 @@
         "renewal_preferences_pending_shape_check": {
           "name": "renewal_preferences_pending_shape_check",
           "value": "(\"idoc\".\"renewal_preferences\".\"pending_mode\" is null and \"idoc\".\"renewal_preferences\".\"effective_on\" is null) or (\"idoc\".\"renewal_preferences\".\"pending_mode\" is not null and \"idoc\".\"renewal_preferences\".\"effective_on\" is not null)"
+        },
+        "renewal_preferences_expected_charge_check": {
+          "name": "renewal_preferences_expected_charge_check",
+          "value": "\"idoc\".\"renewal_preferences\".\"expected_charge_cents\" is null or (\"idoc\".\"renewal_preferences\".\"expected_charge_cents\" = 8000 and \"idoc\".\"renewal_preferences\".\"currency\" = 'EUR')"
         }
       },
       "isRLSEnabled": false
