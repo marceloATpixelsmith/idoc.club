@@ -103,7 +103,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
                           <input name="seminarId" type="hidden" value={id} />
                           <input name="registrationId" type="hidden" value={String(row.id)} />
                         </SeminarForm>
-                      ) : row.payment_status === 'paid' ? <><span>{PAYMENT_STATUS_LABELS.paid}</span><SeminarRefundForm registrationId={String(row.id)} seminarId={id} /></> : null}
+                      ) : ['paid', 'refund_failed'].includes(String(row.payment_status)) ? <><span>{PAYMENT_STATUS_LABELS[row.payment_status as keyof typeof PAYMENT_STATUS_LABELS]}</span><SeminarRefundForm registrationId={String(row.id)} seminarId={id} /></> : null}
                     </td>
                   </tr>
                 ))}
