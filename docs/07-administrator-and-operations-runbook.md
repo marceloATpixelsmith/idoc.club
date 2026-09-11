@@ -537,6 +537,7 @@ Use Node 24 and pnpm 10.28.1 exactly. `package.json` is the canonical package-ma
 - [x] Ordinary password+OTP and remembered-device behavior are verified: __________
 - [x] Password reset and authenticator recovery/replacement are verified: __________
 - [ ] Fresh step-up, session management, and role-change invalidation are verified: __________
+- [ ] Stripe test-mode browser matrix and Dashboard/operational evidence are complete: __________
 - [ ] Production smoke test passed; operator/date/deployment SHA: __________
 
 ### Security-log ingestion boundary
