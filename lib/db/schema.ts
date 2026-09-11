@@ -681,6 +681,7 @@ export const renewalPreferences = idocSchema.table('renewal_preferences', {
   check('renewal_preferences_pending_mode_check', sql`${table.pendingMode} is null or ${table.pendingMode} in ('recurring', 'non_recurring')`),
   check('renewal_preferences_transition_state_check', sql`${table.transitionState} in ('current', 'awaiting_setup', 'pending_activation', 'cancel_pending', 'failed')`),
   check('renewal_preferences_pending_shape_check', sql`(${table.pendingMode} is null and ${table.effectiveOn} is null) or (${table.pendingMode} is not null and ${table.effectiveOn} is not null)`),
+  check('renewal_preferences_expected_charge_check', sql`${table.expectedChargeCents} is null or (${table.expectedChargeCents} = 8000 and ${table.currency} = 'EUR')`),
 ]);
 
 /** One row per payment event, Stripe-verified or administrator-entered manually. */
