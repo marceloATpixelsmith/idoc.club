@@ -19,6 +19,10 @@ const RENEWAL_NOTICE_KINDS = [
   'membership.payment_failed',
   'membership.grace_reminder',
   'membership.grace_expired',
+  'seminar.registration_created',
+  'seminar.registration_canceled',
+  'seminar.payment_confirmed',
+  'seminar.refund_confirmed',
 ] as const;
 
 type NoticePayload = {
@@ -26,6 +30,7 @@ type NoticePayload = {
   firstName?: string | null;
   graceEndDate?: string;
   renewalDate?: string;
+  amountCents?: number;
   to?: string | null;
 };
 
@@ -194,6 +199,14 @@ function renderNotice(kind: string, payload: NoticePayload): { html: string; sub
           heading: 'Action needed: update your payment method',
           subject: 'Action needed: update your IDOC payment method',
         };
+      case 'seminar.registration_created':
+        return { bodyHtml: 'Your seminar registration was recorded. If a fee is due, payment is confirmed separately.', heading: 'Seminar registration received', subject: 'Your IDOC seminar registration' };
+      case 'seminar.registration_canceled':
+        return { bodyHtml: 'Your seminar registration was canceled. Cancellation does not automatically refund a payment.', heading: 'Seminar registration canceled', subject: 'Your IDOC seminar cancellation' };
+      case 'seminar.payment_confirmed':
+        return { bodyHtml: `Your seminar payment of €${((payload.amountCents ?? 0) / 100).toFixed(2)} was confirmed.`, heading: 'Seminar payment confirmed', subject: 'Your IDOC seminar payment' };
+      case 'seminar.refund_confirmed':
+        return { bodyHtml: `Your approved full seminar refund of €${((payload.amountCents ?? 0) / 100).toFixed(2)} was confirmed.`, heading: 'Seminar refund confirmed', subject: 'Your IDOC seminar refund' };
       case 'membership.grace_expired':
       default:
         return {

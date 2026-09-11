@@ -118,15 +118,19 @@ export async function registerForSeminar(seminarIdValue: unknown): Promise<{ pay
     }
     const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations
       where seminar_id=${seminarId.data} and registration_status='registered'`;
-    const [existing] = await sql<{ id: number; registration_status: string }[]>`select id,registration_status from idoc.seminar_registrations
+    const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
       where seminar_id=${seminarId.data} and profile_id=${profileId} for update`;
     if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('You are already registered for this seminar.');
+    if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
+      throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
+    }
     if (activeCount >= seminar.capacity) throw new SeminarRegistrationError('This seminar is full.');
     const paymentStatus = initialPaymentStatusForMethod(seminar.payment_method_canonical_id);
     let registrationId: number;
     if (existing) {
       await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
-        stripe_checkout_session_id=null,stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,
+        stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,expected_amount_cents=null,
+        stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),
         registered_at=now(),canceled_at=null,updated_at=now() where id=${existing.id}`;
       registrationId = existing.id;
     } else {
@@ -136,6 +140,9 @@ export async function registerForSeminar(seminarIdValue: unknown): Promise<{ pay
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'member.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ profileId, seminarId: seminarId.data })}::jsonb)`;
+    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',u.email::text,'firstName',p.first_name::text)
+        from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     return { paymentMethod: seminar.payment_method_canonical_id, registrationId };
   });
 }
@@ -151,6 +158,9 @@ export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<vo
     await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where id=${existing.id}`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values
       (null,'member.seminar_registration.canceled','seminar_registration',${String(existing.id)})`;
+    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+      (${profileId},'seminar.registration_canceled',(select jsonb_build_object('registrationId',${existing.id}::int,'seminarId',${seminarId.data}::int,'to',u.email::text,'firstName',p.first_name::text)
+        from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_canceled:${existing.id}:${Date.now()}`})`;
   });
 }
 
@@ -194,7 +204,10 @@ export async function exportSeminarRegistrationsCsvRows(seminarIdValue: unknown)
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
   const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,'') member_name,
-    coalesce(u.email_display,u.email) member_email,r.registration_status,r.payment_status,r.registered_at,r.canceled_at,r.paid_at
+    coalesce(u.email_display,u.email) member_email,r.registration_status,r.payment_status,r.expected_amount_cents,r.currency,
+    r.registered_at,r.canceled_at,r.paid_at,
+    (select string_agg(pr.external_refund_id, ';' order by pr.requested_at) from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refund_ids,
+    (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
     join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
     where r.seminar_id=${seminarId.data} order by r.registered_at limit ${REGISTRATION_EXPORT_LIMIT + 1}`;

@@ -1,5 +1,5 @@
 CREATE TABLE "idoc"."renewal_preferences" (
-  "profile_id" integer PRIMARY KEY NOT NULL REFERENCES "idoc"."profiles"("id"),
+  "profile_id" integer PRIMARY KEY NOT NULL,
   "current_mode" varchar(20) NOT NULL,
   "pending_mode" varchar(20),
   "effective_on" date,
@@ -13,6 +13,7 @@ CREATE TABLE "idoc"."renewal_preferences" (
   "transition_state" varchar(30) DEFAULT 'current' NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT "renewal_preferences_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "idoc"."profiles"("id"),
   CONSTRAINT "renewal_preferences_current_mode_check" CHECK ("current_mode" in ('recurring','non_recurring')),
   CONSTRAINT "renewal_preferences_pending_mode_check" CHECK ("pending_mode" is null or "pending_mode" in ('recurring','non_recurring')),
   CONSTRAINT "renewal_preferences_transition_state_check" CHECK ("transition_state" in ('current','awaiting_setup','pending_activation','cancel_pending','failed')),

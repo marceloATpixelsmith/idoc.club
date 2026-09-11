@@ -1,5 +1,5 @@
 {
-  "id": "5281d400-ee31-4efb-a734-df7abf4733c1",
+  "id": "3aa6e256-c999-412c-83e0-a7cc15796234",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3160,6 +3160,220 @@
       },
       "isRLSEnabled": false
     },
+    "idoc.payment_refunds": {
+      "name": "payment_refunds",
+      "schema": "idoc",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "seminar_registration_id": {
+          "name": "seminar_registration_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "membership_payment_id": {
+          "name": "membership_payment_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_refund_id": {
+          "name": "external_refund_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EUR'"
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "administrator_id": {
+          "name": "administrator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_evidence": {
+          "name": "provider_evidence",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "payment_refunds_one_pending_seminar": {
+          "name": "payment_refunds_one_pending_seminar",
+          "columns": [
+            {
+              "expression": "seminar_registration_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"idoc\".\"payment_refunds\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_refunds_one_pending_membership": {
+          "name": "payment_refunds_one_pending_membership",
+          "columns": [
+            {
+              "expression": "membership_payment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"idoc\".\"payment_refunds\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_refunds_seminar_registration_id_seminar_registrations_id_fk": {
+          "name": "payment_refunds_seminar_registration_id_seminar_registrations_id_fk",
+          "tableFrom": "payment_refunds",
+          "tableTo": "seminar_registrations",
+          "schemaTo": "idoc",
+          "columnsFrom": [
+            "seminar_registration_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_refunds_membership_payment_id_payments_id_fk": {
+          "name": "payment_refunds_membership_payment_id_payments_id_fk",
+          "tableFrom": "payment_refunds",
+          "tableTo": "payments",
+          "schemaTo": "idoc",
+          "columnsFrom": [
+            "membership_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_refunds_administrator_id_users_id_fk": {
+          "name": "payment_refunds_administrator_id_users_id_fk",
+          "tableFrom": "payment_refunds",
+          "tableTo": "users",
+          "schemaTo": "idoc",
+          "columnsFrom": [
+            "administrator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "payment_refunds_external_refund_id_unique": {
+          "name": "payment_refunds_external_refund_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "external_refund_id"
+          ]
+        },
+        "payment_refunds_idempotency_key_unique": {
+          "name": "payment_refunds_idempotency_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "idempotency_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "payment_refunds_owner_check": {
+          "name": "payment_refunds_owner_check",
+          "value": "num_nonnulls(\"idoc\".\"payment_refunds\".\"seminar_registration_id\", \"idoc\".\"payment_refunds\".\"membership_payment_id\") = 1"
+        },
+        "payment_refunds_amount_check": {
+          "name": "payment_refunds_amount_check",
+          "value": "\"idoc\".\"payment_refunds\".\"amount_cents\" > 0"
+        },
+        "payment_refunds_currency_check": {
+          "name": "payment_refunds_currency_check",
+          "value": "\"idoc\".\"payment_refunds\".\"currency\" = 'EUR'"
+        },
+        "payment_refunds_status_check": {
+          "name": "payment_refunds_status_check",
+          "value": "\"idoc\".\"payment_refunds\".\"status\" in ('pending', 'succeeded', 'failed', 'canceled')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "idoc.payments": {
       "name": "payments",
       "schema": "idoc",
@@ -3671,7 +3885,7 @@
       "checkConstraints": {
         "reconciliation_findings_kind_check": {
           "name": "reconciliation_findings_kind_check",
-          "value": "\"idoc\".\"reconciliation_findings\".\"kind\" in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict')"
+          "value": "\"idoc\".\"reconciliation_findings\".\"kind\" in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback', 'seminar_payment_conflict')"
         }
       },
       "isRLSEnabled": false
@@ -4036,6 +4250,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "expected_amount_cents": {
+          "name": "expected_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EUR'"
+        },
+        "checkout_status": {
+          "name": "checkout_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkout_created_at": {
+          "name": "checkout_created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_status_updated_at": {
+          "name": "payment_status_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disputed_at": {
+          "name": "disputed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chargeback_at": {
+          "name": "chargeback_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "paid_at": {
           "name": "paid_at",
           "type": "timestamp with time zone",
@@ -4197,7 +4454,19 @@
         },
         "seminar_registrations_payment_status_check": {
           "name": "seminar_registrations_payment_status_check",
-          "value": "\"idoc\".\"seminar_registrations\".\"payment_status\" in ('unpaid', 'bank_transfer_pending', 'cash_pending', 'paid')"
+          "value": "\"idoc\".\"seminar_registrations\".\"payment_status\" in ('unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback')"
+        },
+        "seminar_registrations_expected_amount_check": {
+          "name": "seminar_registrations_expected_amount_check",
+          "value": "\"idoc\".\"seminar_registrations\".\"expected_amount_cents\" is null or \"idoc\".\"seminar_registrations\".\"expected_amount_cents\" >= 0"
+        },
+        "seminar_registrations_currency_check": {
+          "name": "seminar_registrations_currency_check",
+          "value": "\"idoc\".\"seminar_registrations\".\"currency\" = 'EUR'"
+        },
+        "seminar_registrations_checkout_status_check": {
+          "name": "seminar_registrations_checkout_status_check",
+          "value": "\"idoc\".\"seminar_registrations\".\"checkout_status\" is null or \"idoc\".\"seminar_registrations\".\"checkout_status\" in ('open', 'complete', 'expired', 'superseded')"
         }
       },
       "isRLSEnabled": false

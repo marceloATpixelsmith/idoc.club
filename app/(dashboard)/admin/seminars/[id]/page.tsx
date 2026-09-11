@@ -4,9 +4,10 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { SeminarFieldset } from '@/components/seminars/seminar-fieldset';
 import { SeminarForm } from '@/components/seminars/seminar-form';
+import { SeminarRefundForm } from '@/components/seminars/refund-form';
 import { getAdminSeminar, listEnabledSeminarPaymentMethods, seminarEndsAtUtc } from '@/lib/seminars/seminars';
 import { listAdminSeminarRegistrations } from '@/lib/seminars/registrations';
-import { AVAILABILITY_LABELS, computeSeminarAvailability, PAYMENT_STATUS_LABELS, registrationDisplayLabel } from '@/lib/seminars/status';
+import { AVAILABILITY_LABELS, computeSeminarAvailability, PAYMENT_STATUS_LABELS } from '@/lib/seminars/status';
 import {
   cancelSeminarAction, markSeminarRegistrationPaidAction,
   publishSeminarAction, revertSeminarToDraftAction, updateSeminarAction,
@@ -71,33 +72,38 @@ export default async function EditSeminarPage({ params, searchParams }: {
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Registrations</h2>
-        <form className="mb-3 grid gap-3 md:grid-cols-3" method="get">
+        <form className="mb-3 grid gap-3 md:grid-cols-4" method="get">
           <input className="border p-2" defaultValue={Array.isArray(query.q) ? query.q[0] : query.q} name="q" placeholder="Search member name or email" />
           <select className="border p-2" defaultValue={Array.isArray(query.registrationStatus) ? query.registrationStatus[0] : query.registrationStatus} name="registrationStatus">
             <option value="">Any registration status</option>
             <option value="registered">Registered</option>
             <option value="canceled">Canceled</option>
           </select>
+          <select className="border p-2" defaultValue={Array.isArray(query.paymentStatus) ? query.paymentStatus[0] : query.paymentStatus} name="paymentStatus">
+            <option value="">Any payment status</option>
+            {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
           <button className="rounded bg-primary p-2 text-primary-foreground" type="submit">Filter</button>
         </form>
         {registrations.length === 0 ? <p>No registrations match these filters.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead><tr><th className="p-2">Member</th><th>Email</th><th>Status</th><th>Registered</th><th /></tr></thead>
+              <thead><tr><th className="p-2">Member</th><th>Email</th><th>Registration</th><th>Payment</th><th>Registered</th><th /></tr></thead>
               <tbody>
                 {registrations.map((row) => (
                   <tr className="border-t" key={String(row.id)}>
                     <td className="p-2">{String(row.member_name)}</td>
                     <td>{String(row.member_email)}</td>
-                    <td>{registrationDisplayLabel(row.registration_status as never, row.payment_status as never)}</td>
+                    <td>{row.registration_status === 'canceled' ? 'Canceled' : 'Registered'}</td>
+                    <td>{PAYMENT_STATUS_LABELS[row.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? String(row.payment_status)}</td>
                     <td>{new Date(String(row.registered_at)).toLocaleString()}</td>
                     <td>
-                      {row.payment_status !== 'paid' ? (
+                      {['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(String(row.payment_status)) ? (
                         <SeminarForm action={markSeminarRegistrationPaidAction} pendingLabel="Saving" submitLabel="Mark paid">
                           <input name="seminarId" type="hidden" value={id} />
                           <input name="registrationId" type="hidden" value={String(row.id)} />
                         </SeminarForm>
-                      ) : PAYMENT_STATUS_LABELS.paid}
+                      ) : row.payment_status === 'paid' ? <><span>{PAYMENT_STATUS_LABELS.paid}</span><SeminarRefundForm registrationId={String(row.id)} seminarId={id} /></> : null}
                     </td>
                   </tr>
                 ))}
