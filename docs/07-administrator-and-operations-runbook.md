@@ -542,6 +542,7 @@ ordering, and checkbox status are validated in CI.
 - [ ] `stripe-webhook-idempotency` — Webhook signature, rollback, replay, ordering, and concurrency tests pass: __________
 - [ ] `stripe-configuration-validation` — Canonical Stripe configuration validation passes: __________
 - [ ] `migration-schema-checks` — Migration, schema, snapshot, and checksum checks pass: __________
+- [ ] `production-migrations-applied` — Production database migrations are applied and migration/checksum evidence is recorded: __________
 - [ ] `build-release-checks` — Release build and required workflows pass on the final revision: __________
 - [ ] `secret-log-safety-checks` — Secret-free logging and safe-correlation checks pass: __________
 
@@ -559,6 +560,7 @@ ordering, and checkbox status are validated in CI.
 - [ ] `step-up-session-role-invalidation-verified` — Fresh step-up, session management, and role-change invalidation are verified: __________
 - [ ] `production-vercel-environment` — Production Vercel environment confirmed: __________
 - [ ] `production-deployment-confirmed` — Production deployment and exact SHA confirmed: __________
+- [ ] `production-smoke-test-passed` — Production smoke test passed against the deployed revision: __________
 - [ ] `production-backup-restore` — Production backup and restore confirmed: __________
 - [ ] `named-operator-approval` — Named operator approved production release: __________
 - [ ] `live-mode-payment-test` — Separately approved live-mode payment test evidence recorded, if required: __________
