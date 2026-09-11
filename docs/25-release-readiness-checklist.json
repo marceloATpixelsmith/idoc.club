@@ -81,14 +81,14 @@
       "evidence": null
     },
     {
-      "id": "production-smoke-test-passed",
-      "description": "Production smoke test passed; operator/date/deployment SHA",
+      "id": "stripe-test-mode-browser-and-dashboard-evidence",
+      "description": "Stripe test-mode browser matrix and Dashboard/operational evidence are complete",
       "status": "unchecked",
       "evidence": null
     },
     {
-      "id": "stripe-test-mode-browser-and-dashboard-evidence",
-      "description": "Stripe test-mode browser matrix and Dashboard/operational evidence are complete",
+      "id": "production-smoke-test-passed",
+      "description": "Production smoke test passed; operator/date/deployment SHA",
       "status": "unchecked",
       "evidence": null
     }
