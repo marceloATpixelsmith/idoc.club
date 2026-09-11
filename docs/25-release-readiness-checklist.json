@@ -52,6 +52,12 @@
       "evidence": null
     },
     {
+      "id": "production-migrations-applied",
+      "description": "Production database migrations are applied and migration/checksum evidence is recorded",
+      "status": "unchecked",
+      "evidence": null
+    },
+    {
       "id": "build-release-checks",
       "description": "Release build and required workflows pass on the final revision",
       "classification": "automatable",
@@ -170,6 +176,12 @@
       "id": "production-deployment-confirmed",
       "description": "Production deployment and exact SHA confirmed",
       "classification": "manual",
+      "status": "unchecked",
+      "evidence": null
+    },
+    {
+      "id": "production-smoke-test-passed",
+      "description": "Production smoke test passed against the deployed revision",
       "status": "unchecked",
       "evidence": null
     },
