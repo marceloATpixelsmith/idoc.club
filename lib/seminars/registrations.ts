@@ -141,7 +141,7 @@ export async function registerForSeminar(seminarIdValue: unknown): Promise<{ pay
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'member.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ profileId, seminarId: seminarId.data })}::jsonb)`;
     await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId},'seminarId',${seminarId.data},'to',u.email,'firstName',p.first_name)
+      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',u.email,'firstName',p.first_name)
         from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     return { paymentMethod: seminar.payment_method_canonical_id, registrationId };
   });
