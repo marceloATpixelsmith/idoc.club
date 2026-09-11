@@ -32,6 +32,13 @@ export function stripeKeyForServer(environment: Environment = process.env) {
   // sk_ = full-access secret key; rk_ = a dashboard-scoped restricted key. Both are legitimate
   // Stripe API credentials; restricted keys are the more security-conscious choice.
   if (!/^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
+  const mode = value.split('_')[1];
+  // Vercel runs Preview and Production with NODE_ENV=production, so NODE_ENV alone cannot
+  // distinguish the two Stripe accounts. Fail closed when the deployment scope and key mode do
+  // not agree; outside Vercel, a production runtime still requires a live key.
+  const expectedMode = environment.VERCEL_ENV === 'preview' || environment.VERCEL_ENV === 'development'
+    ? 'test' : environment.VERCEL_ENV === 'production' || environment.NODE_ENV === 'production' ? 'live' : null;
+  if (expectedMode && mode !== expectedMode) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY mode.');
   return value;
 }
 

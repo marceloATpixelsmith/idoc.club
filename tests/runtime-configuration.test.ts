@@ -72,6 +72,16 @@ test('malformed URLs, undersized secrets, and malformed provider settings fail c
   }
 });
 
+test('Stripe test and live keys are isolated by deployment environment', () => {
+  const testKey = `rk_test_${'t'.repeat(24)}`;
+  const liveKey = `rk_live_${'l'.repeat(24)}`;
+  assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'preview' }), testKey);
+  assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'production' }), liveKey);
+  assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'preview' }), /STRIPE_SECRET_KEY mode/);
+  assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), /STRIPE_SECRET_KEY mode/);
+  assert.throws(() => stripeKeyForServer({ NODE_ENV: 'production', STRIPE_SECRET_KEY: testKey }), /STRIPE_SECRET_KEY mode/);
+});
+
 test('development permits loopback HTTP without weakening production HTTPS', () => {
   for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
     assert.equal(baseUrlForServer({ BASE_URL: `http://${hostname}:3000`, NODE_ENV: 'development' }), `http://${hostname}:3000`);

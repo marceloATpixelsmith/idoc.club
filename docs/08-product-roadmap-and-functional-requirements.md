@@ -256,7 +256,7 @@ The starter must be hardened before production data is imported. The required tr
 
 # 12. Immediate next action
 
-Complete the reopened Release 2 membership-billing and access remediation in docs/25 before Stripe production configuration, migration rehearsal, or public launch. Release 3 establishes migrated membership readiness only; the public IDOC launch occurs after Releases 4–6 and complete-project acceptance. **The non-recurring (manual/one-time/PayPal/bank/cash/complimentary) membership grace-period gap docs/25 §2.2/§2.3 already tracks — no code path currently grants the five-day grace window when a non-recurring term's `valid_until` passes, only Stripe subscription payment failure does — remains open and blocked on that document's broader renewal-preference redesign; a September 2026 compliance audit re-confirmed it and deliberately did not attempt an isolated fix outside that plan.**
+The membership-billing and access remediation in docs/25 is implemented through the merged membership, seminar/refund, and final verification slices. Before Stripe production configuration or public launch, operators must complete the documented production configuration, deployed UAT, migration rehearsal, and release sign-off. Release 3 establishes migrated membership readiness only; the public IDOC launch occurs after Releases 4–6 and complete-project acceptance. The remaining roadmap blocker is operational evidence and acceptance, not an unimplemented non-recurring grace path.
 
 ### Known issue: pre-Release-4 migration snapshot lineage gaps (not remediated)
 

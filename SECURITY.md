@@ -38,3 +38,9 @@ penetration-test certification.
 ## Release-evidence boundary
 
 Repository security checks include a blocking high-severity dependency audit and behavioral authentication tests. They do not constitute production sign-off. The authoritative checklist currently preserves eight previously recorded operator-verification entries while fresh step-up/session/role invalidation and the production smoke test remain unchecked; the repository must not manufacture those two manual results.
+
+Stripe fake-client, disposable-database, and browser-fixture checks likewise do not prove provider or
+live-account configuration. Test and live Stripe keys, webhook secrets, Products, Prices, Customers,
+and data must remain isolated by deployment environment. A live-payment claim requires retained,
+redacted evidence from the supplied live account; neither CI nor this repository contains live
+credentials or bypasses Stripe challenges, IDOC authentication, TOTP, CSRF, or authorization.

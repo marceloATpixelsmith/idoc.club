@@ -63,6 +63,24 @@ test('a signature that does not match the configured secret is rejected before a
   assert.equal((await sql`select count(*)::int as count from idoc.stripe_events`)[0].count, 0);
 });
 
+test('a missing signature is rejected before any database access', async () => {
+  const response = await POST(new Request('https://idoc.club/api/stripe/webhook', {
+    body: JSON.stringify(fixtureEvent('customer.subscription.created', subscriptionObject())),
+    headers: { 'content-type': 'application/json' }, method: 'POST',
+  }));
+  assert.equal(response.status, 400);
+  assert.equal((await sql`select count(*)::int as count from idoc.stripe_events`)[0].count, 0);
+});
+
+test('a verified unknown event is durably acknowledged and replay-safe without side effects', async () => {
+  const event = fixtureEvent('product.updated', { id: 'prod_unrelated_fixture' }, 'evt_unknown_fixture');
+  assert.equal((await postWebhook(event)).status, 200);
+  assert.equal((await postWebhook(event)).status, 200);
+  const [stored] = await sql`select event_type, processed_at is not null as processed from idoc.stripe_events where external_event_id='evt_unknown_fixture'`;
+  assert.deepEqual(stored, { event_type: 'product.updated', processed: true });
+  assert.equal((await sql`select count(*)::int as count from idoc.stripe_events where external_event_id='evt_unknown_fixture'`)[0].count, 1);
+});
+
 test('customer.subscription.created creates a subscription row for the matching billing account', async () => {
   const profile = await billedProfile('cus_created_fixture');
   const response = await postWebhook(fixtureEvent('customer.subscription.created', subscriptionObject({ customer: 'cus_created_fixture', id: 'sub_created_fixture' })));
