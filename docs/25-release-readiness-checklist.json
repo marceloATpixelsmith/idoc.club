@@ -55,7 +55,8 @@
       "id": "production-migrations-applied",
       "description": "Production database migrations are applied and migration/checksum evidence is recorded",
       "status": "unchecked",
-      "evidence": null
+      "evidence": null,
+      "classification": "manual"
     },
     {
       "id": "build-release-checks",
@@ -183,7 +184,8 @@
       "id": "production-smoke-test-passed",
       "description": "Production smoke test passed against the deployed revision",
       "status": "unchecked",
-      "evidence": null
+      "evidence": null,
+      "classification": "manual"
     },
     {
       "id": "production-backup-restore",
