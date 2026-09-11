@@ -11,7 +11,6 @@ import {
 const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
 
 function setTestStripeEnvironment() {
-  process.env.NODE_ENV = 'test';
   setTestStripeEnvironment();
 }
 
