@@ -12,6 +12,8 @@ on:
       - '**/*.png'
       - '**/*.jpg'
       - '**/*.jpeg'
+      - 'app/terms/**'
+      - 'app/privacy/**'
       - 'components/navigation-loading.tsx'
       - 'components/navigation-menu.tsx'
   push:
