@@ -16,7 +16,7 @@ test('Stripe readiness validator requires canonical runtime billing inputs', () 
 });
 
 test('Stripe browser evidence accepts restricted test keys and rejects live mode', () => {
-  assert.match(source, /rk_\(test\|live\)/);
+  assert.match(source, /\(sk\|rk\)_\(test\|live\)_/);
   assert.match(source, /STRIPE_E2E_ENABLED/);
   assert.match(source, /keyMode !== 'test'/);
 });
