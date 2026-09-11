@@ -1,4 +1,9 @@
 import 'server-only';
+import {
+  validateStripeKey,
+  validateStripeMembershipProductId,
+  validateStripeWebhookSecret,
+} from './stripe-configuration.mjs';
 
 type Environment = Partial<Record<string, string | undefined>>;
 const MIN_SECRET_LENGTH = 32;
@@ -28,27 +33,11 @@ export function databaseUrlForServer(environment: Environment = process.env) {
 }
 
 export function stripeKeyForServer(environment: Environment = process.env) {
-  const value = required(environment, 'STRIPE_SECRET_KEY');
-  // sk_ = full-access secret key; rk_ = a dashboard-scoped restricted key. Both are legitimate
-  // Stripe API credentials; restricted keys are the more security-conscious choice.
-  if (!/^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]{16,}$/.test(value)) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY.');
-  const mode = value.split('_')[1];
-  // Vercel runs Preview and Production with NODE_ENV=production, so NODE_ENV alone cannot
-  // distinguish the two Stripe accounts. Fail closed when the deployment scope and key mode do
-  // not agree; outside Vercel, a production runtime still requires a live key.
-  const expectedMode = environment.VERCEL_ENV === 'preview' || environment.VERCEL_ENV === 'development'
-    ? 'test' : environment.VERCEL_ENV === 'production' || environment.NODE_ENV === 'production' ? 'live' : null;
-  if (expectedMode && mode !== expectedMode) throw new Error('Invalid production configuration: STRIPE_SECRET_KEY mode.');
-  return value;
+  return validateStripeKey(environment).value;
 }
 
-function productId(environment: Environment, name: string) {
-  const value = required(environment, name);
-  if (!/^prod_[A-Za-z0-9_-]+$/.test(value)) throw new Error(`Invalid production configuration: ${name}.`);
-  return value;
-}
-
-export function stripeMembershipProductIdForServer(environment: Environment = process.env) { return productId(environment, 'STRIPE_MEMBERSHIP_PRODUCT_ID'); }
+export function stripeMembershipProductIdForServer(environment: Environment = process.env) { return validateStripeMembershipProductId(environment); }
+export function stripeWebhookSecretForServer(environment: Environment = process.env) { return validateStripeWebhookSecret(environment); }
 
 export function authSecretForServer(environment: Environment = process.env) { return secret(environment, 'AUTH_SECRET'); }
 
@@ -261,7 +250,7 @@ export function privilegedProductionConfiguration(environment: Environment = pro
     brevoApiKey: brevoApiKeyForServer(environment), brevoFromEmail: brevoFromEmailForServer(environment),
     rateLimitHashKey: secret(environment, 'RATE_LIMIT_HASH_KEY'), stripeKey: stripeKeyForServer(environment),
     stripeMembershipProductId: stripeMembershipProductIdForServer(environment),
-    stripeWebhookSecret: secret(environment, 'STRIPE_WEBHOOK_SECRET'),
+    stripeWebhookSecret: stripeWebhookSecretForServer(environment),
     turnstileSecretKey: turnstileSecretKeyForServer(environment),
   };
 }

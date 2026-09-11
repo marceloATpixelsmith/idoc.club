@@ -2,10 +2,15 @@ import Stripe from 'stripe';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { processStripeEvent } from '@/lib/payments/webhook-handlers';
 import { logError } from '@/lib/observability/logger';
+import { stripeWebhookSecretForServer } from '@/lib/runtime/configuration';
 
 export async function POST(request: Request) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!webhookSecret) return Response.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  let webhookSecret: string;
+  try {
+    webhookSecret = stripeWebhookSecretForServer();
+  } catch {
+    return Response.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  }
   const stripe = getStripeServerClient();
   const payload = await request.text();
   const signature = request.headers.get('stripe-signature') as string;

@@ -12,8 +12,8 @@ import { readFileSync } from 'node:fs';
 
 const RUNBOOK_PATH = 'docs/07-administrator-and-operations-runbook.md';
 const CHECKLIST_PATH = 'docs/25-release-readiness-checklist.json';
-const CHECKLIST_HEADING = '## 15.6 Release signoff (manual evidence only)';
-const CHECKBOX_LINE = /^- \[([ x])\] (.+): _+$/;
+const CHECKLIST_HEADING = '## 15.6 Release signoff evidence checklist';
+const CHECKBOX_LINE = /^- \[([ x])\] `([a-z0-9-]+)` — (.+): _+$/;
 
 export function extractRunbookItems(markdown) {
   const startIndex = markdown.indexOf(CHECKLIST_HEADING);
@@ -26,7 +26,8 @@ export function extractRunbookItems(markdown) {
     const match = line.match(CHECKBOX_LINE);
     if (match) {
       items.push({
-        description: match[2].trim(),
+        description: match[3].trim(),
+        id: match[2],
         status: match[1] === 'x' ? 'verified' : 'unchecked',
       });
     }
@@ -91,6 +92,12 @@ export function validateChecklist(runbookMarkdown, checklistJsonText) {
       errors.push(`Item ${index} text drifted between docs/07 §15.6 and ${CHECKLIST_PATH}:\n` +
         `    docs/07:  "${fromRunbook}"\n    ${CHECKLIST_PATH}: "${fromJson}"`);
     }
+    const runbookId = runbookItems[index]?.id;
+    const jsonId = checklist.items[index]?.id;
+    if (runbookId !== jsonId) {
+      errors.push(`Item ${index} ID drifted between docs/07 §15.6 and ${CHECKLIST_PATH}: ` +
+        `docs/07 is "${runbookId}" but ${CHECKLIST_PATH} is "${jsonId}".`);
+    }
   }
 
   const comparableLength = Math.min(runbookItems.length, checklist.items.length);
@@ -105,6 +112,9 @@ export function validateChecklist(runbookMarkdown, checklistJsonText) {
 
   for (const item of checklist.items) {
     if (!item.id || typeof item.id !== 'string') { errors.push(`An item is missing a string "id".`); continue; }
+    if (item.classification !== 'automatable' && item.classification !== 'manual') {
+      errors.push(`Item "${item.id}": classification must be "automatable" or "manual".`);
+    }
     if (item.status !== 'unchecked' && item.status !== 'verified') {
       errors.push(`Item "${item.id}": status must be "unchecked" or "verified", got ${JSON.stringify(item.status)}.`);
     }

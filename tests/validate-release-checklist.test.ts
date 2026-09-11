@@ -10,18 +10,18 @@ import { extractRunbookItems, validateChecklist } from '../scripts/validate-rele
 // state (docs/07 and docs/25-release-readiness-checklist.json as they actually exist right now) passes
 // cleanly.
 
-const heading = '## 15.6 Release signoff (manual evidence only)';
+const heading = '## 15.6 Release signoff evidence checklist';
 const realEvidence = { notes: 'Confirmed via a real deploy dashboard check.', verifiedAt: '2026-09-01T12:00:00Z', verifiedBy: 'ops-lead-jane' };
 function runbook(items: Array<string | { description: string; status: 'unchecked' | 'verified' }>) {
-  return `# doc\n\n${heading}\n\n${items.map((item) => {
+  return `# doc\n\n${heading}\n\n${items.map((item, index) => {
     const description = typeof item === 'string' ? item : item.description;
     const marker = typeof item === 'string' || item.status === 'unchecked' ? ' ' : 'x';
-    return `- [${marker}] ${description}: __________`;
+    return `- [${marker}] \`item-${index}\` — ${description}: __________`;
   }).join('\n')}\n\n## 16. Next section\n`;
 }
 function checklist(items: { description: string; evidence?: unknown; id?: string; status?: string }[]) {
   return JSON.stringify({ items: items.map((item, index) => ({
-    description: item.description, evidence: item.evidence ?? null, id: item.id ?? `item-${index}`, status: item.status ?? 'unchecked',
+    classification: 'manual', description: item.description, evidence: item.evidence ?? null, id: item.id ?? `item-${index}`, status: item.status ?? 'unchecked',
   })) });
 }
 

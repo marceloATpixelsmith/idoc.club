@@ -526,19 +526,43 @@ Record account IDs/timestamps and safe audit/outbox identifiers, never credentia
 
 Use Node 24 and pnpm 10.28.1 exactly. `package.json` is the canonical package-manager declaration and both GitHub workflows pin the same version. pnpm lifecycle scripts remain denied by default except for the reviewed minimum allowlist: `sharp` (native image library installation used by Next.js), `esbuild` (platform binary selection used by build/database tooling), and `@tailwindcss/oxide` (Tailwind's native compiler). Never broaden this list to solve an install warning without reviewing the package and why its build is necessary. A clean `pnpm install --frozen-lockfile` must succeed non-interactively; `scripts/validate-toolchain-policy.mjs` rejects workflow/version or audit-gate drift.
 
-## 15.6 Release signoff (manual evidence only)
+## 15.6 Release signoff evidence checklist
 
-- [ ] Release 1 Verification is green on final deployed code head: __________
-- [ ] Production database migrations are applied: __________
-- [x] Required Production auth variables are configured in Vercel: __________
-- [x] Google production origin/callback are configured: __________
-- [x] Security-email delivery and retry operation are verified: __________
-- [x] Privileged TOTP enrollment and password/Google login are verified: __________
-- [x] Ordinary password+OTP and remembered-device behavior are verified: __________
-- [x] Password reset and authenticator recovery/replacement are verified: __________
-- [ ] Fresh step-up, session management, and role-change invalidation are verified: __________
-- [ ] Stripe test-mode browser matrix and Dashboard/operational evidence are complete: __________
-- [ ] Production smoke test passed; operator/date/deployment SHA: __________
+Status semantics are identical in this Markdown list and `docs/25-release-readiness-checklist.json`:
+unchecked means evidence is absent or incomplete; verified means a named operator recorded dated,
+non-secret evidence. Automation produces artifacts but never edits either status. IDs, descriptions,
+ordering, and checkbox status are validated in CI.
+
+**Automatable evidence** (run the command or suite, then an operator records its artifact):
+
+- [ ] `repository-unit-tests` — Repository unit tests pass: __________
+- [ ] `database-integration-tests` — Disposable PostgreSQL integration tests pass: __________
+- [ ] `security-tests` — Authentication and authorization security tests pass: __________
+- [ ] `stripe-test-mode-playwright` — Opt-in Stripe test-mode Playwright flows pass: __________
+- [ ] `stripe-webhook-idempotency` — Webhook signature, rollback, replay, ordering, and concurrency tests pass: __________
+- [ ] `stripe-configuration-validation` — Canonical Stripe configuration validation passes: __________
+- [ ] `migration-schema-checks` — Migration, schema, snapshot, and checksum checks pass: __________
+- [ ] `build-release-checks` — Release build and required workflows pass on the final revision: __________
+- [ ] `secret-log-safety-checks` — Secret-free logging and safe-correlation checks pass: __________
+
+**Manual-only evidence** (requires the owner/operator account; repository automation cannot verify it):
+
+- [ ] `stripe-dashboard-webhooks` — Stripe Dashboard webhook endpoint and event configuration confirmed: __________
+- [ ] `stripe-restricted-key-permissions` — Stripe Dashboard restricted-key permissions confirmed: __________
+- [ ] `stripe-customer-portal-settings` — Stripe Customer Portal settings confirmed: __________
+- [x] `production-auth-variables-configured` — Required Production auth variables are configured in Vercel: __________
+- [x] `google-production-origin-callback-configured` — Google production origin/callback are configured: __________
+- [x] `security-email-delivery-retry-verified` — Security-email delivery and retry operation are verified: __________
+- [x] `privileged-totp-enrollment-login-verified` — Privileged TOTP enrollment and password/Google login are verified: __________
+- [x] `ordinary-password-otp-remembered-device-verified` — Ordinary password+OTP and remembered-device behavior are verified: __________
+- [x] `password-reset-recovery-replacement-verified` — Password reset and authenticator recovery/replacement are verified: __________
+- [ ] `step-up-session-role-invalidation-verified` — Fresh step-up, session management, and role-change invalidation are verified: __________
+- [ ] `production-vercel-environment` — Production Vercel environment confirmed: __________
+- [ ] `production-deployment-confirmed` — Production deployment and exact SHA confirmed: __________
+- [ ] `production-backup-restore` — Production backup and restore confirmed: __________
+- [ ] `named-operator-approval` — Named operator approved production release: __________
+- [ ] `live-mode-payment-test` — Separately approved live-mode payment test evidence recorded, if required: __________
+- [ ] `stripe-test-mode-browser-and-dashboard-evidence` — Stripe test-mode browser matrix and provider evidence are complete: __________
 
 ### Security-log ingestion boundary
 
@@ -621,6 +645,12 @@ IDOC Billing Settings remains the renewal-preference authority and ownership is 
 Run against a disposable migrated PostgreSQL database, a dedicated Stripe test account, the normal
 authentication fixtures, and real webhook signatures. Retain redacted event/object IDs, timestamps,
 screenshots, and database assertions for:
+
+The opt-in repository entry point is `STRIPE_E2E_ENABLED=true pnpm test:stripe-e2e`; its complete
+environment contract and evidence split are in [Stripe verification evidence](09-stripe-verification-evidence.md).
+Ordinary CI intentionally does not run this provider-backed suite. Missing credentials, a live key,
+an unsafe database target, an unavailable Product, or an unreachable application is a hard failure
+after opt-in, never a skip.
 
 1. One-time €80 Checkout, submitting animation, return-without-entitlement, verified webhook,
    rolling dates/history, refresh/back/double-click, expiry/stale form, and cross-member denial.
