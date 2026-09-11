@@ -12,6 +12,9 @@ on:
       - '**/*.png'
       - '**/*.jpg'
       - '**/*.jpeg'
+      - 'app/terms/**'
+      - 'app/privacy/**'
+      - '.github/workflows/release-1-verification.yml'
       - 'components/navigation-loading.tsx'
       - 'components/navigation-menu.tsx'
   push:
