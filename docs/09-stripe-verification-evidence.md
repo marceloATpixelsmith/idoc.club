@@ -38,6 +38,13 @@ reachable. It uses the installed `stripe` and `@playwright/test` versions; it ne
 second provider client. Live credentials must never be placed in CI. A run without opt-in test-mode
 evidence is incomplete for production launch.
 
+The fixture member address must match `stripe-e2e-<unique-run>@example.test`. Global setup destroys
+and migrates only the validated disposable database, creates two independently owned test Customers,
+and tags both provider objects with their fixture address. The readiness spec is a real, passing-only
+provider check: it retrieves both Customers and the configured Product and verifies that every object
+is test-mode. It is no longer a skipped placeholder and therefore cannot make an incomplete run look
+accepted.
+
 Before live enablement, an administrator must verify in the Stripe Dashboard test account that the
 configured webhook endpoint subscribes to the event list in docs/04, retries deliver idempotently,
 Customer Portal settings match policy, and restricted-key/secret rotation has been tested. Record

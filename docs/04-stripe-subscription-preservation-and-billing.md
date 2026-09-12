@@ -65,7 +65,7 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
   the schedule's resulting subscription and paid invoice remain webhook-authoritative.
 - Reversal before effective date: cancel or replace the pending transition without creating a duplicate subscription or charge.
 - Every transition: persist the current preference, pending preference, effective date, Stripe schedule/subscription references as applicable, and an audit record. Confirmation messaging must state the effective date and next expected €80 charge.
-- IDOC owns this preference and transition workflow. Customer Portal remains available for payment-method updates and invoice history but must not be treated as the source of IDOC renewal preference.
+- IDOC owns this preference and transition workflow. Customer Portal remains available for payment-method updates and invoice history but must not be treated as the source of IDOC renewal preference. Portal Configuration creation is convergent under concurrent first requests: IDOC reuses its tagged configuration, and concurrent requests share one in-flight creation before creating Portal Sessions.
 
 # 5. Required webhook handling
 
@@ -147,3 +147,8 @@ the complete real Stripe test-mode evidence and the production configuration/mig
 docs/07 must be completed by an operator. Fake-client tests are necessary regression evidence but are
 not a substitute for provider evidence, and no live-payment test may be claimed without supplied,
 verified live evidence.
+
+
+## 11.1 Checkout Session expiry and retry
+
+Checkout idempotency is tied to the current paid-through cycle only while the associated server-recorded Session is open. If that Session expires or becomes unpayable, IDOC rotates the idempotency key, creates a replacement Session, and retains the prior Session as payment evidence. It must never return an expired Checkout URL on retry.

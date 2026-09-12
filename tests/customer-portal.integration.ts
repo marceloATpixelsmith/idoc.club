@@ -13,7 +13,7 @@ beforeEach(async () => {
 after(closeHarness);
 
 function fakePortalClient(preexisting: Array<{ id: string; metadata: Record<string, string> | null }> = []) {
-  const calls = { configurationsCreate: [] as unknown[], configurationsList: [] as unknown[], sessionsCreate: [] as unknown[] };
+  const calls = { configurationsCreate: [] as unknown[], configurationsList: [] as unknown[], sessionsCreate: [] as unknown[], sessionsCreateOptions: [] as unknown[] };
   const configurations = [...preexisting];
   return {
     calls,
@@ -28,7 +28,7 @@ function fakePortalClient(preexisting: Array<{ id: string; metadata: Record<stri
           },
           list: async (params: unknown) => { calls.configurationsList.push(params); return { data: configurations }; },
         },
-        sessions: { create: async (params: unknown) => { calls.sessionsCreate.push(params); return { url: 'https://billing.stripe.com/session/fixture' }; } },
+        sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { url: 'https://billing.stripe.com/session/fixture' }; } },
       },
     },
   };
@@ -68,6 +68,22 @@ test('a second session for the same member reuses the existing Billing Portal Co
   assert.equal(calls.configurationsCreate.length, 1);
   assert.equal(calls.sessionsCreate.length, 2);
   assert.equal((calls.sessionsCreate[1] as any).configuration, 'cfg_1');
+  assert.equal((calls.sessionsCreateOptions[0] as any).idempotencyKey, (calls.sessionsCreateOptions[1] as any).idempotencyKey);
+});
+
+test('forged Customer input cannot cross the real portal ownership boundary', async () => {
+  const owner = await createCompleteGraph();
+  const attacker = await createUser();
+  const attackerProfile = await createProfile(attacker.id);
+  await createMembership(attackerProfile.id);
+  const { calls, client } = fakePortalClient();
+
+  // The public boundary intentionally has no Customer argument. Supplying one dynamically proves
+  // it cannot replace the billing_accounts value resolved from the authenticated actor.
+  await withTestMembershipBoundary({ actor: { id: owner.user.id, roles: [] } }, () =>
+    (createMembershipPortalSession as (...args: unknown[]) => Promise<string>)(client, 'cus_forged_other_member'));
+  assert.equal((calls.sessionsCreate[0] as any).customer, 'cus_fixture');
+  assert.notEqual((calls.sessionsCreate[0] as any).customer, 'cus_forged_other_member');
 });
 
 test('a pre-existing Configuration not created by this module is never reused, even if it happens to be first in the list', async () => {
