@@ -8,12 +8,18 @@ import {
   closeHarness, createMembership, createProfile, createUser, resetIdoc, sql,
 } from './postgres-harness.ts';
 
-const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
+const WEBHOOK_SECRET = 'whsec_fixtureonlysigningsecretfortests';
 
-beforeEach(async () => {
+function setTestStripeEnvironment() {
+  (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
+  process.env.VERCEL_ENV = 'development';
   process.env.STRIPE_SECRET_KEY = 'sk_test_fixture0000000000000000';
   process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
   process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership_fixture';
+}
+
+beforeEach(async () => {
+  setTestStripeEnvironment();
   await resetIdoc();
 });
 after(closeHarness);
@@ -35,6 +41,7 @@ function fixtureEvent(type: string, object: Record<string, unknown>, id = `evt_$
 }
 
 async function postWebhook(event: object, secret = WEBHOOK_SECRET) {
+  setTestStripeEnvironment();
   const payload = JSON.stringify(event);
   const signature = getStripeServerClient().webhooks.generateTestHeaderString({ payload, secret });
   return POST(new Request('https://idoc.club/api/stripe/webhook', {
@@ -64,6 +71,7 @@ test('a signature that does not match the configured secret is rejected before a
 });
 
 test('a missing signature is rejected before any database access', async () => {
+  setTestStripeEnvironment();
   const response = await POST(new Request('https://idoc.club/api/stripe/webhook', {
     body: JSON.stringify(fixtureEvent('customer.subscription.created', subscriptionObject())),
     headers: { 'content-type': 'application/json' }, method: 'POST',

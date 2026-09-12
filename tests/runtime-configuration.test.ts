@@ -25,8 +25,9 @@ const valid = {
   BREVO_API_KEY: 'd'.repeat(32), BREVO_FROM_EMAIL: 'accounts@idoc.club',
   POSTGRES_URL: 'postgres://user:password@database.internal:5432/idoc',
   RATE_LIMIT_HASH_KEY: 'e'.repeat(32), STRIPE_MEMBERSHIP_PRODUCT_ID: 'prod_membership_live', STRIPE_SECRET_KEY: `sk_live_${'f'.repeat(24)}`,
-  STRIPE_WEBHOOK_SECRET: 'g'.repeat(32),
+  STRIPE_WEBHOOK_SECRET: `whsec_${'g'.repeat(32)}`,
   TURNSTILE_SECRET_KEY: 'h'.repeat(32),
+  VERCEL_ENV: 'production',
 };
 
 const key32 = Buffer.alloc(32, 7).toString('base64url');
@@ -44,7 +45,7 @@ test('complete privileged production configuration accepts explicit valid values
 });
 
 test('every privileged setting fails closed when missing, empty, or whitespace-only', () => {
-  for (const name of Object.keys(valid)) {
+  for (const name of Object.keys(valid).filter((name) => name !== 'VERCEL_ENV')) {
     for (const replacement of [undefined, '', '   ']) {
       const environment = { ...valid, [name]: replacement };
       assert.throws(() => privilegedProductionConfiguration(environment), new RegExp(name));
