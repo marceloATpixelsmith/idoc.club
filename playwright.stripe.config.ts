@@ -26,6 +26,7 @@ export default defineConfig({
   outputDir: 'test-results/stripe-e2e',
   reporter: process.env.CI ? [['dot'], ['html', { open: 'never' }]] : [['list'], ['html', { open: 'never' }]],
   use: {
+    ...(process.env.STRIPE_E2E_STORAGE_STATE ? { storageState: process.env.STRIPE_E2E_STORAGE_STATE } : {}),
     baseURL: parsedAppUrl.origin,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
