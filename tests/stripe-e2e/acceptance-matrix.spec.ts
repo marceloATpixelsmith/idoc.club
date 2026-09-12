@@ -94,3 +94,28 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     expect(paymentCountAfter[0].count).toBe(paymentCount[0].count);
   });
 });
+
+
+test('creates a seminar registration through the member UI and opens a provider Checkout Session for the selected fee', async ({ page }) => {
+  await page.goto('/seminars?view=available');
+  const cards = page.locator('section[aria-labelledby="available-seminars-heading"] li');
+  await expect(cards).toHaveCount(2);
+  const firstRegister = cards.first().getByRole('button', { name: /register/i });
+  await expect(firstRegister).toBeVisible();
+  await firstRegister.dblclick();
+  await page.waitForURL(/checkout\\.stripe\\.com/);
+  expect(page.url()).toContain('checkout.stripe.com');
+  const rows = await sql`select checkout_status,expected_amount_cents from idoc.seminar_registrations order by id desc limit 1`;
+  expect(rows).toHaveLength(1);
+  expect(rows[0].checkout_status).toBe('open');
+  expect([5000, 7500]).toContain(rows[0].expected_amount_cents);
+});
+
+test('rejects an expired authenticated session and does not expose administrator reconciliation data', async ({ page }) => {
+  const sessionRows = await sql`select session_id from idoc.auth_sessions order by authenticated_at desc limit 1`;
+  expect(sessionRows).toHaveLength(1);
+  await sql`update idoc.auth_sessions set absolute_expires_at=now()-interval '1 second' where session_id=${sessionRows[0].session_id}`;
+  const response = await page.goto('/admin/reconciliation');
+  expect(response?.status()).toBeGreaterThanOrEqual(300);
+  await expect(page.locator('body')).not.toContainText(/reconciliation finding|stripe customer|payment intent/i);
+});
