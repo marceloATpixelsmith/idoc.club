@@ -8,7 +8,7 @@ import {
   closeHarness, createMembership, createProfile, createUser, resetIdoc, sql,
 } from './postgres-harness.ts';
 
-const WEBHOOK_SECRET = 'whsec_fixture_only_signing_secret_for_tests';
+const WEBHOOK_SECRET = 'whsec_fixtureonlysigningsecretfortests';
 
 function setTestStripeEnvironment() {
   (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
