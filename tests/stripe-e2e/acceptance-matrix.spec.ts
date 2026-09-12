@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
-import Stripe from 'stripe';
 import postgres from 'postgres';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
 const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 
@@ -41,10 +39,12 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     await page.goto('/seminars?view=available');
     await expect(page.getByRole('heading', { name: /seminars & courses/i })).toBeVisible();
 
+    const cards = page.locator('section[aria-labelledby="available-seminars-heading"] li');
+    await expect(cards).toHaveCount(2);
+    const prices = await cards.locator('p').filter({ hasText: /€|No fee/ }).allTextContents();
+    expect(prices.map((price) => price.trim())).toEqual(expect.arrayContaining(['€50.00', '€75.00']));
     const registrationButtons = page.getByRole('button', { name: /register/i });
-    await expect(registrationButtons.first()).toBeVisible();
-    const count = await registrationButtons.count();
-    expect(count).toBeGreaterThan(0);
+    await expect(registrationButtons).toHaveCount(2);
   });
 
   test('rejects a member from accessing administrator refund controls', async ({ page }) => {
@@ -56,6 +56,11 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
 
   test('refresh and back do not duplicate portal sessions or local payment projections', async ({ page }) => {
     await page.goto('/dashboard');
+    const manage = page.getByRole('button', { name: /manage payment method/i });
+    await expect(manage).toBeVisible();
+    await manage.click();
+    await page.waitForURL(/billing\\.stripe\\.com|customer\\.stripe\\.com/);
+    await page.goBack();
     const paymentCount = await sql`select count(*)::int as count from idoc.payments p
       join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
       where u.email=${memberEmail}`;
