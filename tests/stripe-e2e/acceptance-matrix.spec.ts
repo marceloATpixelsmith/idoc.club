@@ -28,7 +28,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     await expect(page.getByText(/paid through:/i)).toBeVisible();
     await expect(page.getByText(/current renewal mode:/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /turn on automatic renewal|turn off automatic renewal|cancel pending change/i })).toBeVisible();
-    const rows = await sql`select e.valid_until from idoc.membership_entitlements e
+    const rows = await sql`select e.valid_until from idoc.memberships e
       join idoc.profiles p on p.id=e.profile_id join idoc.users u on u.id=p.user_id
       where u.email=${memberEmail} order by e.id desc limit 1`;
     expect(rows).toHaveLength(1);
@@ -59,7 +59,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     const manage = page.getByRole('button', { name: /manage payment method/i });
     await expect(manage).toBeVisible();
     await manage.click();
-    await page.waitForURL(/billing\\.stripe\\.com|customer\\.stripe\\.com/);
+    await page.waitForURL(/billing\.stripe\\.com|customer\\.stripe\\.com/);
     await page.goBack();
     const paymentCount = await sql`select count(*)::int as count from idoc.payments p
       join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
