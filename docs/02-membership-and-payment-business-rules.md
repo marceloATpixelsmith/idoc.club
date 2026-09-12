@@ -292,3 +292,8 @@ Existing migrated users should encounter an account-access/activation flow, not 
 ## Refund policy implementation
 
 [10 Refund Policy](10-refund-policy.md) governs membership and seminar refunds. Refunds are administrator-authorized, reasoned, full-only, explicit actions; cancellation never automatically refunds. Original payments remain immutable evidence. Seminar refunds do not change membership entitlement, dates, subscriptions, or membership payment history. Provider-side partial refunds, disputes, chargebacks, and unmatched state produce reconciliation findings.
+
+
+## 12. Stripe Checkout retry behavior
+
+A membership Checkout request is reused only while its server-recorded Checkout Session remains open. If the provider reports that the stored Session has expired or is otherwise no longer payable, the application must create a replacement Session with a new idempotency key and preserve the original Session identifier as historical evidence. A browser retry must never return an expired payment URL.
