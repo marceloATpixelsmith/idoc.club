@@ -17,6 +17,12 @@ For each run retain the commit SHA, UTC timestamp, environment mode, database mi
 Stripe test object IDs, webhook event IDs, Playwright report/trace on failure, and the final local
 projection. Never retain card numbers, secret keys, webhook secrets, or full request headers.
 
+Global setup writes a secret-free `run.json` into `STRIPE_E2E_EVIDENCE_DIR` containing the commit,
+UTC start time, unique run ID, test mode, current migration, configured Product, and both independently
+tagged Customer IDs. Scenario traces and assertions add the Checkout, SetupIntent, PaymentMethod,
+Price, Schedule, subscription, invoice, refund, webhook-event, and final-projection evidence produced
+by that same run; an artifact missing those scenario results is incomplete rather than a passing run.
+
 ## Execution contract
 
 `STRIPE_E2E_ENABLED=true` is explicit opt-in. Install the repository's pinned dependencies, provide

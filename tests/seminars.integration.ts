@@ -4,6 +4,7 @@ import test, { after, beforeEach } from 'node:test';
 import { AuthorizationError } from '../lib/membership/authorization.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { processStripeEvent } from '../lib/payments/webhook-handlers.ts';
+import { refundSeminarRegistration } from '../lib/payments/refunds.ts';
 import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
 import {
   cancelOwnRegistration, exportSeminarRegistrationsCsvRows, getSeminarPaymentMethodInstructions,
@@ -293,6 +294,41 @@ test('createSeminarCheckoutSession prices the session against the seminar\'s cur
   assert.equal(params.metadata.kind, 'seminar_registration');
   const [row] = await sql`select stripe_checkout_session_id from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(row.stripe_checkout_session_id, 'cs_fixture');
+});
+
+test('the production seminar refund flow uses authoritative payment state, persists full provider evidence, and rejects a succeeded retry', async () => {
+  const admin = await adminUser();
+  const { profile, user } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId));
+  await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_authoritative',paid_at=now()
+    where id=${registrationId}`;
+  const providerCalls: Array<{ options: any; params: any }> = [];
+  const provider = { refunds: { create: async (params: any, options: any) => {
+    providerCalls.push({ options, params });
+    return { id: 're_full_fixture', status: 'succeeded' } as never;
+  } } };
+
+  await asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Approved full refund', provider));
+  assert.equal(providerCalls.length, 1);
+  assert.equal(providerCalls[0].params.amount, 5550);
+  assert.equal(providerCalls[0].params.payment_intent, 'pi_authoritative');
+  assert.equal(providerCalls[0].params.metadata.registrationId, String(registrationId));
+  assert.match(providerCalls[0].options.idempotencyKey, new RegExp(`^idoc-seminar-refund-${registrationId}-pi_authoritative$`));
+  const [registration] = await sql`select registration_status,payment_status,stripe_payment_intent_id from idoc.seminar_registrations where id=${registrationId}`;
+  assert.deepEqual(registration, { payment_status: 'refunded', registration_status: 'canceled', stripe_payment_intent_id: 'pi_authoritative' });
+  const [refund] = await sql`select amount_cents,currency,status,reason,external_refund_id,provider_evidence from idoc.payment_refunds where seminar_registration_id=${registrationId}`;
+  assert.equal(refund.amount_cents, 5550);
+  assert.equal(refund.currency, 'EUR');
+  assert.equal(refund.status, 'succeeded');
+  assert.equal(refund.external_refund_id, 're_full_fixture');
+  assert.deepEqual(refund.provider_evidence, { id: 're_full_fixture', status: 'succeeded' });
+  assert.equal((await sql`select count(*)::int count from idoc.memberships where profile_id=${profile.id}`)[0].count, 1);
+  assert.equal((await sql`select count(*)::int count from idoc.payments where profile_id=${profile.id}`)[0].count, 0);
+
+  await assert.rejects(asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Repeat refund attempt', provider)), /already been refunded/);
+  assert.equal(providerCalls.length, 1, 'a succeeded refund must never call Stripe again');
+  assert.equal((await sql`select count(*)::int count from idoc.payment_refunds where seminar_registration_id=${registrationId}`)[0].count, 1);
 });
 
 test('admin registration search/filter finds a member by name or email and CSV export is capped, escaped, and audited', async () => {

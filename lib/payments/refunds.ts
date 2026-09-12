@@ -24,7 +24,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   const [row] = await client<{ payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
-  if (row.payment_status === 'refunded') return;
+  if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
   const baseKey = `idoc-seminar-refund-${registrationId}-${row.stripe_payment_intent_id}`;
   const [priorAttempt] = await client<{ id: number; status: string; external_refund_id: string | null; failure_code: string | null }[]>`select id,status,external_refund_id,failure_code
