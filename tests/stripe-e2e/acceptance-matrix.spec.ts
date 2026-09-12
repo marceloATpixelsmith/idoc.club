@@ -60,7 +60,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     const response = await page.goto('/admin/payments');
     expect(response?.status()).toBeGreaterThanOrEqual(300);
     expect(response?.status()).toBeLessThan(400);
-    await expect(page).not.toHaveText(/approve full refund|refund seminar registration/i);
+    await expect(page.locator('body')).not.toContainText(/approve full refund|refund seminar registration/i);
   });
 
   test('refresh and back do not duplicate portal sessions or local payment projections', async ({ page }) => {
