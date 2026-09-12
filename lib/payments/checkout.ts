@@ -15,7 +15,7 @@ export type CheckoutMode = 'payment' | 'subscription';
 // inject a fake without satisfying the entire (very large) real Stripe SDK surface. The real
 // client structurally satisfies this already.
 export type CheckoutStripeClient = {
-  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id: string; status: string | null; expires_at: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ id?: string; url: string | null }> } };
+  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ id?: string; url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
 
