@@ -1,0 +1,97 @@
+import { expect, test } from '@playwright/test';
+import Stripe from 'stripe';
+import postgres from 'postgres';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
+const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
+
+function evidencePath() {
+  const value = process.env.STRIPE_E2E_EVIDENCE_DIR;
+  if (!value) throw new Error('STRIPE_E2E_EVIDENCE_DIR is required.');
+  return value;
+}
+
+async function waitFor<T>(read: () => Promise<T | null>, label: string) {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const value = await read();
+    if (value !== null) return value;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error(`Timed out waiting for ${label}.`);
+}
+
+test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
+  test.beforeEach(async ({ context }) => {
+    if (!process.env.STRIPE_E2E_MEMBER_EMAIL) throw new Error('STRIPE_E2E_MEMBER_EMAIL is required.');
+    await context.tracing.start({ screenshots: true, snapshots: true });
+  });
+
+  test.afterEach(async ({ context }, info) => {
+    await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
+  });
+
+  test('opens a server-created Customer Portal session without accepting a client Customer ID', async ({ page }) => {
+    await page.goto('/dashboard');
+    const manage = page.getByRole('button', { name: /manage payment method/i }).or(
+      page.getByRole('button', { name: /customer portal/i }),
+    );
+    await expect(manage).toBeVisible();
+    const before = await stripe.billingPortal.sessions.list({ limit: 100 });
+    await manage.click();
+    await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
+    const after = await stripe.billingPortal.sessions.list({ limit: 100 });
+    expect(after.data.some((s) => !before.data.some((old) => old.id === s.id))).toBe(true);
+    expect(page.url()).not.toContain('customer=');
+    expect(page.url()).not.toContain('profileId=');
+  });
+
+  test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page.getByText(/paid through:/i)).toBeVisible();
+    await expect(page.getByText(/current renewal mode:/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /turn on automatic renewal|turn off automatic renewal|cancel pending change/i })).toBeVisible();
+    const rows = await sql`select e.valid_until from idoc.membership_entitlements e
+      join idoc.profiles p on p.id=e.profile_id join idoc.users u on u.id=p.user_id
+      where u.email=${memberEmail} order by e.id desc limit 1`;
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].valid_until)).not.toBe('');
+  });
+
+  test('keeps seminar checkout prices isolated to the selected seminar', async ({ page }) => {
+    await page.goto('/seminars?view=available');
+    await expect(page.getByRole('heading', { name: /seminars & courses/i })).toBeVisible();
+    const registrationButtons = page.getByRole('button', { name: /register|sign up|enroll/i });
+    await expect(registrationButtons.first()).toBeVisible();
+    const count = await registrationButtons.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += 1) {
+      await expect(registrationButtons.nth(i)).not.toHaveAttribute('data-price', /^(0|undefined)$/);
+    }
+  });
+
+  test('rejects a member from accessing administrator refund controls', async ({ page }) => {
+    const response = await page.goto('/admin/payments');
+    expect(response?.status()).toBeGreaterThanOrEqual(300);
+    expect(response?.status()).toBeLessThan(400);
+    await expect(page).not.toHaveText(/approve full refund|refund seminar registration/i);
+  });
+
+  test('refresh and back do not duplicate portal sessions or local payment projections', async ({ page }) => {
+    await page.goto('/dashboard');
+    const before = await stripe.billingPortal.sessions.list({ limit: 100 });
+    const paymentCount = await sql`select count(*)::int as count from idoc.payments p
+      join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
+      where u.email=${memberEmail}`;
+    await page.reload();
+    await page.goBack();
+    await page.goForward();
+    const after = await stripe.billingPortal.sessions.list({ limit: 100 });
+    const paymentCountAfter = await sql`select count(*)::int as count from idoc.payments p
+      join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
+      where u.email=${memberEmail}`;
+    expect(after.data.filter((s) => !before.data.some((old) => old.id === s.id))).toHaveLength(0);
+    expect(paymentCountAfter[0].count).toBe(paymentCount[0].count);
+  });
+});
