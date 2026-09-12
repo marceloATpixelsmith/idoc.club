@@ -10,6 +10,7 @@ function requireEvidencePath() {
 }
 
 async function completeHostedCheckout(page: import('@playwright/test').Page, autoRenew: boolean) {
+  let sessionUrl = '';
   await page.goto('/pricing');
   await expect(page).toHaveURL(/pricing/);
   const renewal = page.getByRole('checkbox', { name: /renew automatically/i });
@@ -17,12 +18,12 @@ async function completeHostedCheckout(page: import('@playwright/test').Page, aut
   if (await renewal.isChecked() !== autoRenew) await renewal.click();
   await page.locator('form').filter({ has: renewal }).getByRole('button', { name: /.+/ }).click();
   await page.waitForURL(/checkout\.stripe\.com/);
-  await page.getByLabel(/email/i).fill(process.env.STRIPE_E2E_MEMBER_EMAIL as string);
   await page.getByLabel(/card number/i).fill('4242424242424242');
   await page.getByLabel(/expiration/i).fill('1230');
   await page.getByLabel(/security code|cvc/i).fill('123');
   await page.getByRole('button', { name: /pay|subscribe|complete/i }).click();
   await page.waitForURL(/dashboard|pricing/, { timeout: 60_000 });
+  return sessionUrl.match(/cs_[A-Za-z0-9_]+/)?.[0] ?? null;
 }
 
 test.describe('Stripe test-mode hosted Checkout acceptance', () => {
@@ -40,7 +41,7 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
 
   test('completes one-time EUR 80 Checkout and returns without browser-authorized entitlement', async ({ page }) => {
     await completeHostedCheckout(page, false);
-    const sessionId = new URL(page.url()).searchParams.get('session_id');
+    const sessionId = await completeHostedCheckout(page, false);
     expect(sessionId).toBeTruthy();
     const session = await stripe.checkout.sessions.retrieve(sessionId as string);
     expect(session.livemode).toBe(false);
@@ -51,7 +52,7 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
 
   test('completes recurring EUR 80 Checkout and verifies the test subscription object', async ({ page }) => {
     await completeHostedCheckout(page, true);
-    const sessionId = new URL(page.url()).searchParams.get('session_id');
+    const sessionId = await completeHostedCheckout(page, true);
     expect(sessionId).toBeTruthy();
     const session = await stripe.checkout.sessions.retrieve(sessionId as string, { expand: ['subscription'] });
     expect(session.livemode).toBe(false);
@@ -62,12 +63,14 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
   });
 
   test('repeated refresh and back navigation never creates a second Checkout session from the return page', async ({ page }) => {
-    await completeHostedCheckout(page, false);
-    const sessionId = new URL(page.url()).searchParams.get('session_id');
+    const before = await stripe.checkout.sessions.list({ limit: 100 });
+    const sessionId = await completeHostedCheckout(page, false);
     await page.reload();
     await page.goBack();
     await page.goForward();
     const sessions = await stripe.checkout.sessions.list({ limit: 100 });
-    expect(sessions.data.filter((session) => session.id === sessionId)).toHaveLength(1);
+    const newSessions = sessions.data.filter((session) => !before.data.some((old) => old.id === session.id));
+    expect(newSessions.filter((session) => session.id === sessionId)).toHaveLength(1);
+    expect(newSessions).toHaveLength(1);
   });
 });
