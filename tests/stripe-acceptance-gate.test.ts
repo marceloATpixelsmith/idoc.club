@@ -3,13 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-test('Stripe acceptance manifest covers ten executable groups and specific manual-only boundaries', () => {
+test('Stripe acceptance manifest covers eleven executable groups and specific manual-only boundaries', () => {
   const manifest = JSON.parse(readFileSync('docs/27-stripe-payment-acceptance-gate.json', 'utf8')) as {
     manualOnly: Array<{ id: string; reason: string }>;
     requirements: Array<{ id: string; tests: string[] }>;
   };
-  assert.equal(manifest.requirements.length, 10);
-  assert.equal(new Set(manifest.requirements.map(({ id }) => id)).size, 10);
+  assert.equal(manifest.requirements.length, 11);
+  assert.equal(new Set(manifest.requirements.map(({ id }) => id)).size, 11);
   assert.ok(manifest.requirements.every(({ tests }) => tests.length > 0));
   assert.ok(manifest.manualOnly.every(({ reason }) => /requires/i.test(reason) && reason.length >= 40));
 });

@@ -8,8 +8,8 @@ const forbidden = /\b(?:test|it|describe)\s*\.\s*(?:skip|fixme)|\b(?:TODO|FIXME)
 const realTest = /\b(?:test|it)\s*\(\s*['"`][^'"`]{12,}['"`]/;
 const behavioralAssertion = /\b(?:assert\.(?:equal|deepEqual|throws|rejects|match|doesNotMatch)|expect\([^\n]+\)\.(?:toBe|toEqual|toHaveLength|toMatch|toThrow|toContain|toBeTruthy|toBeFalsy|toBeGreaterThan|not\.to))/;
 
-if (!Array.isArray(manifest.requirements) || manifest.requirements.length !== 10) {
-  errors.push('The gate must enumerate exactly ten automatable requirement groups.');
+if (!Array.isArray(manifest.requirements) || manifest.requirements.length !== 11) {
+  errors.push('The inventory must enumerate exactly eleven automatable requirement groups.');
 }
 
 const ids = new Set();

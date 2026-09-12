@@ -16,6 +16,7 @@
     { "id": "webhooks", "tests": ["tests/stripe-webhook.integration.ts"] },
     { "id": "reconciliation", "tests": ["tests/reconciliation.test.ts", "tests/reconciliation.integration.ts"] },
     { "id": "browser-security", "tests": ["tests/stripe-e2e/acceptance-matrix.spec.ts"] },
-    { "id": "provider-fixtures", "tests": ["tests/stripe-e2e/global-setup.ts", "tests/stripe-e2e/provider-readiness.spec.ts"] }
+    { "id": "provider-fixtures", "tests": ["tests/stripe-e2e/global-setup.ts", "tests/stripe-e2e/provider-readiness.spec.ts"] },
+    { "id": "customer-email-worker", "tests": ["tests/customer-email.integration.ts"] }
   ]
 }
