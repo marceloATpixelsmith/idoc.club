@@ -31,6 +31,16 @@ export default async function globalSetup() {
     values(${user.id},'Stripe','E2E','1 Test Road','Test City','Test State','00000','DE')
     returning id`;
   await sql`insert into idoc.professional_roles(profile_id,role_type) values(${profile.id},'veterinarian')`;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+  const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
+  if (!product.active || product.deleted) throw new Error('Stripe E2E membership Product fixture is unavailable or inactive.');
+  const customer = await stripe.customers.create({ email }, { idempotencyKey: `idoc-stripe-e2e-customer-${profile.id}` });
+  await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${profile.id},${customer.id})`;
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
+    values(${profile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
+  await sql`insert into idoc.seminars(title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
+    values('Stripe E2E Seminar A','Disposable Stripe E2E fixture',current_date + interval '30 days','10:00','12:00','Europe/Berlin','Test venue A',20,5000,now() + interval '14 days','published','online_stripe',${user.id},${user.id}),
+          ('Stripe E2E Seminar B','Disposable Stripe E2E fixture',current_date + interval '31 days','10:00','12:00','Europe/Berlin','Test venue B',20,7500,now() + interval '14 days','published','online_stripe',${user.id},${user.id})`;
   const sessionId = randomUUID();
   const now = new Date();
   const expires = new Date(now.getTime() + 12 * 60 * 60 * 1000);
@@ -41,10 +51,6 @@ export default async function globalSetup() {
     .sign(new TextEncoder().encode(AUTH_SECRET));
   await mkdir('.stripe-e2e', { recursive: true });
   await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
-
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-  const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
-  if (!product.active || product.deleted) throw new Error('Stripe E2E membership Product fixture is unavailable or inactive.');
 
   const context = await request.newContext();
   try {
