@@ -10,7 +10,7 @@ const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 async function waitForProjection(expectedSource: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    const rows = await sql<{ source: string }>`select p.source from idoc.payments p
+    const rows = await sql`select p.source from idoc.payments p
       join idoc.profiles pr on pr.id = p.profile_id
       join idoc.users u on u.id = pr.user_id
       where u.email = ${memberEmail}
