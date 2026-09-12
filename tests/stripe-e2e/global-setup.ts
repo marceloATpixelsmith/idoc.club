@@ -40,7 +40,7 @@ export default async function globalSetup() {
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime(Math.floor(expires.getTime() / 1000))
     .sign(new TextEncoder().encode(AUTH_SECRET));
   await mkdir('.stripe-e2e', { recursive: true });
-  await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
+  await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
   const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
