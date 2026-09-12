@@ -3,7 +3,7 @@ import 'server-only';
 import type Stripe from 'stripe';
 import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, billingAccounts, memberships, notificationOutbox, paymentRefunds, payments, profiles, reconciliationFindings, renewalPreferences, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
+import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, notificationOutbox, paymentRefunds, payments, profiles, reconciliationFindings, renewalPreferences, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
@@ -293,6 +293,8 @@ async function handleDispute(tx: Transaction, event: Stripe.Event) {
 
 async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Event, stripe: WebhookStripeClient) {
   const session = event.data.object as Stripe.Checkout.Session;
+  await tx.update(membershipCheckoutSessions).set({ status: 'completed', updatedAt: new Date() })
+    .where(eq(membershipCheckoutSessions.externalCheckoutSessionId, session.id));
   if (session.mode === 'setup' && session.metadata?.kind === 'membership_renewal_setup') {
     const customerId = resolvedCustomerId(session.customer);
     const profileId = await resolveProfileId(tx, customerId);
@@ -305,7 +307,15 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     // Lock and reread the authoritative paid-through membership before creating any future Stripe charge schedule.
     // A one-time renewal or administrative extension may have changed valid_until after Setup Checkout began.
     const membership = await lockLatestMembership(tx, profileId);
-    if (!membership || membership.validUntil !== preference.effectiveOn) return;
+    if (!membership || membership.validUntil !== preference.effectiveOn) {
+      await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
+        .where(eq(renewalPreferences.profileId, profileId));
+      await tx.insert(reconciliationFindings).values({ kind: 'pending_schedule_conflict', profileId,
+        summary: 'Renewal Setup completed after the authoritative paid-through date changed.',
+        details: { checkoutSessionId: session.id, expectedEffectiveOn: preference.effectiveOn,
+          currentValidUntil: membership?.validUntil ?? null } });
+      return;
+    }
     if (!stripe.setupIntents || !stripe.paymentMethods || !stripe.prices || !stripe.subscriptionSchedules) {
       throw new Error('Stripe renewal APIs are unavailable.');
     }
@@ -319,11 +329,22 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
       recurring: { interval: 'year' }, unit_amount: MEMBERSHIP_FEE_CENTS },
     { idempotencyKey: `idoc-renewal-price-${profileId}-${preference.effectiveOn}` });
     const startDate = Math.floor(new Date(`${preference.effectiveOn}T00:00:00.000Z`).getTime() / 1000);
-    const schedule = await stripe.subscriptionSchedules.create({ customer: customerId,
-      default_settings: { collection_method: 'charge_automatically', default_payment_method: paymentMethodId },
-      end_behavior: 'release', metadata: { kind: 'idoc_membership', profileId: String(profileId) },
-      phases: [{ items: [{ price: price.id, quantity: 1 }], metadata: { kind: 'idoc_membership', profileId: String(profileId) } }],
-      start_date: startDate }, { idempotencyKey: `idoc-renewal-schedule-${profileId}-${preference.effectiveOn}` });
+    let schedule;
+    try {
+      schedule = await stripe.subscriptionSchedules.create({ customer: customerId,
+        default_settings: { collection_method: 'charge_automatically', default_payment_method: paymentMethodId },
+        end_behavior: 'release', metadata: { kind: 'idoc_membership', profileId: String(profileId) },
+        phases: [{ items: [{ price: price.id, quantity: 1 }], metadata: { kind: 'idoc_membership', profileId: String(profileId) } }],
+        start_date: startDate }, { idempotencyKey: `idoc-renewal-schedule-${profileId}-${preference.effectiveOn}` });
+    } catch {
+      await tx.update(renewalPreferences).set({ externalPaymentMethodId: paymentMethodId,
+        externalRecurringPriceId: price.id, externalSetupIntentId: setupIntent.id,
+        transitionState: 'failed', updatedAt: new Date() }).where(eq(renewalPreferences.profileId, profileId));
+      await tx.insert(reconciliationFindings).values({ kind: 'pending_schedule_conflict', profileId,
+        summary: 'Renewal authorization succeeded but Subscription Schedule creation failed.',
+        details: { checkoutSessionId: session.id, priceId: price.id, setupIntentId: setupIntent.id } });
+      return;
+    }
     await tx.update(renewalPreferences).set({ expectedChargeCents: MEMBERSHIP_FEE_CENTS,
       externalPaymentMethodId: paymentMethodId, externalRecurringPriceId: price.id,
       externalSetupIntentId: setupIntent.id, externalSubscriptionScheduleId: schedule.id,

@@ -23,6 +23,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/validate-auth-docs.mjs
       - run: node scripts/validate-release-checklist.mjs
+      - run: pnpm validate:stripe-acceptance-inventory
       - run: node scripts/check-whitespace.mjs
       - run: pnpm audit --audit-level=high
       - run: pnpm typecheck

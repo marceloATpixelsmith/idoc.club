@@ -17,6 +17,12 @@ For each run retain the commit SHA, UTC timestamp, environment mode, database mi
 Stripe test object IDs, webhook event IDs, Playwright report/trace on failure, and the final local
 projection. Never retain card numbers, secret keys, webhook secrets, or full request headers.
 
+Global setup writes a secret-free `run.json` into `STRIPE_E2E_EVIDENCE_DIR` containing the commit,
+UTC start time, unique run ID, test mode, current migration, configured Product, and both independently
+tagged Customer IDs. Scenario traces and assertions add the Checkout, SetupIntent, PaymentMethod,
+Price, Schedule, subscription, invoice, refund, webhook-event, and final-projection evidence produced
+by that same run; an artifact missing those scenario results is incomplete rather than a passing run.
+
 ## Execution contract
 
 `STRIPE_E2E_ENABLED=true` is explicit opt-in. Install the repository's pinned dependencies, provide
@@ -56,6 +62,19 @@ Provider-backed browser evidence cannot honestly be claimed by ordinary CI witho
 test credentials and a reachable app/database. The release gate distinguishes automated repository
 checks, opt-in Stripe test-mode browser evidence, and manual Dashboard/deployment evidence. A green
 ordinary CI run is not a substitute for the latter two.
+
+## Executable acceptance-completeness gate
+
+`pnpm validate:stripe-acceptance-inventory` reads `docs/27-stripe-payment-acceptance-gate.json` and fails when
+one of the ten automatable requirement groups has no mapped executable test, a mapped file is
+missing, a mapped test contains `skip`, `fixme`, `TODO`, or `FIXME`, or a mapped provider spec fails
+to instantiate Stripe, inspect provider state, and prove `livemode=false`. It also rejects vague
+manual-only entries. Both Fast PR verification and Release 1 verification run this inventory check.
+It deliberately prints that it is not execution evidence. The actual completion gate is
+`STRIPE_E2E_ENABLED=true pnpm test:stripe-acceptance`; it fails closed without opt-in and runs the
+inventory check, all disposable-PostgreSQL integration tests, and the Stripe Playwright suite in
+sequence. Only that successful command plus its dated Playwright/provider artifacts may support an
+automated acceptance claim.
 
 ## Evidence ownership
 

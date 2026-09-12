@@ -644,6 +644,28 @@ export const billingAccounts = idocSchema.table('billing_accounts', {
   externalCustomerId: varchar('external_customer_id', { length: 255 }).notNull().unique(),
 });
 
+/** Append-only membership Checkout evidence. At most one creating/open attempt exists per cycle. */
+export const membershipCheckoutSessions = idocSchema.table('membership_checkout_sessions', {
+  id: serial('id').primaryKey(),
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  externalCheckoutSessionId: varchar('external_checkout_session_id', { length: 255 }).unique(),
+  mode: varchar('mode', { length: 20 }).notNull(),
+  cycle: varchar('cycle', { length: 40 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
+  checkoutUrl: text('checkout_url'),
+  attempt: integer('attempt').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('membership_checkout_sessions_mode_check', sql`${table.mode} in ('payment', 'subscription')`),
+  check('membership_checkout_sessions_status_check', sql`${table.status} in ('creating', 'open', 'expired', 'completed', 'superseded', 'failed')`),
+  uniqueIndex('membership_checkout_sessions_attempt_unique').on(table.profileId, table.mode, table.cycle, table.attempt),
+  uniqueIndex('membership_checkout_sessions_one_open_cycle').on(table.profileId, table.mode, table.cycle)
+    .where(sql`${table.status} in ('creating', 'open')`),
+]);
+
 export const subscriptions = idocSchema.table('subscriptions', {
   id: serial('id').primaryKey(),
   profileId: integer('profile_id').notNull().references(() => profiles.id),

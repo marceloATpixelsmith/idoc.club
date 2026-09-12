@@ -188,6 +188,14 @@ The production Stripe webhook must deliver every event consumed by current payme
 - reconciliation detects inconsistent pending schedules/preferences;
 - secret and browser-output boundary tests include the new environment/state fields.
 
+The Customer email-sync worker now re-reads the Customer ID and normalized email through the queued
+profile ownership graph and ignores payload identifiers. A five-minute `SKIP LOCKED` lease prevents
+duplicate workers from updating Stripe twice; expired leases are recoverable, transient failures use
+bounded exponential retry, and attempt eight dead-letters the job with secret-free audit and
+reconciliation evidence. `tests/customer-email.integration.ts` exercises the production worker and
+an injected Stripe SDK boundary against disposable PostgreSQL; it is repository integration evidence specifically due
+to this behavior and does not replace the real test-mode signoff below.
+
 ## 8. Required real Stripe test-mode signoff
 
 Automated injected clients do not replace this gate. In an isolated staging database and Stripe test mode, verify:

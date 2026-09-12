@@ -13,15 +13,16 @@ beforeEach(async () => {
 after(closeHarness);
 
 function fakePortalClient(preexisting: Array<{ id: string; metadata: Record<string, string> | null }> = []) {
-  const calls = { configurationsCreate: [] as unknown[], configurationsList: [] as unknown[], sessionsCreate: [] as unknown[], sessionsCreateOptions: [] as unknown[] };
+  const calls = { configurationsCreate: [] as unknown[], configurationsCreateOptions: [] as unknown[], configurationsList: [] as unknown[], sessionsCreate: [] as unknown[], sessionsCreateOptions: [] as unknown[] };
   const configurations = [...preexisting];
   return {
     calls,
     client: {
       billingPortal: {
         configurations: {
-          create: async (params: any) => {
+          create: async (params: any, options: unknown) => {
             calls.configurationsCreate.push(params);
+            calls.configurationsCreateOptions.push(options);
             const created = { id: `cfg_${calls.configurationsCreate.length}`, metadata: params.metadata ?? null };
             configurations.push(created);
             return created;
@@ -46,6 +47,7 @@ test('a Stripe-backed member gets a portal session scoped to their own billing a
   assert.equal(sessionParams.return_url, 'https://idoc.club/dashboard');
   assert.equal(sessionParams.configuration, 'cfg_1');
   assert.equal(calls.configurationsCreate.length, 1, 'no existing configuration means one must be created');
+  assert.equal((calls.configurationsCreateOptions[0] as any).idempotencyKey, 'idoc-membership-portal-configuration-v1');
 });
 
 test('no existing Billing Portal Configuration is created with exactly payment_method_update, invoice_history, and at-period-end subscription_cancel, never subscription_update', async () => {

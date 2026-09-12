@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
+import Stripe from 'stripe';
 
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 
 function evidencePath() {
@@ -12,15 +14,34 @@ function evidencePath() {
 
 test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   test('opens a server-created Customer Portal session without accepting a client Customer ID', async ({ page }) => {
+    const billings = await sql`select b.external_customer_id,u.email from idoc.billing_accounts b
+      join idoc.profiles p on p.id=b.profile_id join idoc.users u on u.id=p.user_id
+      where u.email like 'stripe-e2e-%@example.test' order by (u.email=${memberEmail}) desc`;
+    expect(billings).toHaveLength(2);
+    const [billing, forgedBilling] = billings;
+    const customer = await stripe.customers.retrieve(billing.external_customer_id);
+    expect(customer.deleted).toBe(false);
+    if (!customer.deleted) {
+      expect(customer.livemode).toBe(false);
+      expect(customer.email).toBe(billing.email);
+    }
     await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /manage payment method/i }).or(
       page.getByRole('button', { name: /customer portal/i }),
     );
     await expect(manage).toBeVisible();
+    await manage.evaluate((button, forgedCustomerId) => {
+      const form = button.closest('form');
+      if (!form) throw new Error('Portal action form was not found.');
+      const forged = document.createElement('input');
+      forged.name = 'customer';
+      forged.value = String(forgedCustomerId);
+      form.append(forged);
+    }, forgedBilling.external_customer_id);
     await manage.click();
     await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
-    expect(page.url()).not.toContain('customer=');
-    expect(page.url()).not.toContain('profileId=');
+    await expect(page.getByText(billing.email, { exact: false })).toBeVisible();
+    await expect(page.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
   });
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
@@ -72,4 +93,29 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       where u.email=${memberEmail}`;
     expect(paymentCountAfter[0].count).toBe(paymentCount[0].count);
   });
+});
+
+
+test('creates a seminar registration through the member UI and opens a provider Checkout Session for the selected fee', async ({ page }) => {
+  await page.goto('/seminars?view=available');
+  const cards = page.locator('section[aria-labelledby="available-seminars-heading"] li');
+  await expect(cards).toHaveCount(2);
+  const firstRegister = cards.first().getByRole('button', { name: /register/i });
+  await expect(firstRegister).toBeVisible();
+  await firstRegister.dblclick();
+  await page.waitForURL(/checkout\\.stripe\\.com/);
+  expect(page.url()).toContain('checkout.stripe.com');
+  const rows = await sql`select checkout_status,expected_amount_cents from idoc.seminar_registrations order by id desc limit 1`;
+  expect(rows).toHaveLength(1);
+  expect(rows[0].checkout_status).toBe('open');
+  expect([5000, 7500]).toContain(rows[0].expected_amount_cents);
+});
+
+test('rejects an expired authenticated session and does not expose administrator reconciliation data', async ({ page }) => {
+  const sessionRows = await sql`select session_id from idoc.auth_sessions order by authenticated_at desc limit 1`;
+  expect(sessionRows).toHaveLength(1);
+  await sql`update idoc.auth_sessions set absolute_expires_at=now()-interval '1 second' where session_id=${sessionRows[0].session_id}`;
+  const response = await page.goto('/admin/reconciliation');
+  expect(response?.status()).toBeGreaterThanOrEqual(300);
+  await expect(page.locator('body')).not.toContainText(/reconciliation finding|stripe customer|payment intent/i);
 });
