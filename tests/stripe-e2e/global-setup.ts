@@ -7,7 +7,6 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'stripe-e2e-only-auth-secret-32-bytes';
@@ -54,4 +53,5 @@ export default async function globalSetup() {
   } finally {
     await context.dispose();
   }
+  await sql.end();
 }
