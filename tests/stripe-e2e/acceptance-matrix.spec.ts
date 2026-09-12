@@ -59,7 +59,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     const manage = page.getByRole('button', { name: /manage payment method/i });
     await expect(manage).toBeVisible();
     await manage.click();
-    await page.waitForURL(/billing\.stripe\\.com|customer\\.stripe\\.com/);
+    await page.waitForURL(/billing\.stripe\\.com|customer\.stripe\\.com/);
     await page.goBack();
     const paymentCount = await sql`select count(*)::int as count from idoc.payments p
       join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
