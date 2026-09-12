@@ -1,7 +1,23 @@
 import { expect, test } from '@playwright/test';
 import Stripe from 'stripe';
+import postgres from 'postgres';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
+
+async function waitForProjection(sessionId: string, expectedSource: string) {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const rows = await sql<{ source: string }[]>\`select p.source from idoc.payments p
+      join idoc.profiles pr on pr.id = p.profile_id
+      join idoc.users u on u.id = pr.user_id
+      where u.email = ${process.env.STRIPE_E2E_MEMBER_EMAIL}
+      and p.external_payment_id = ${sessionId}\`;
+    if (rows[0]?.source === expectedSource) return;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error('Timed out waiting for verified Stripe webhook projection.');
+}
 
 function evidencePath() {
   const value = process.env.STRIPE_E2E_EVIDENCE_DIR;
@@ -45,6 +61,7 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
     expect(session.mode).toBe('payment');
     expect(session.amount_total).toBe(8000);
     expect(session.currency).toBe('eur');
+    await waitForProjection(session.id, 'stripe_one_time');
   });
 
   test('completes recurring EUR 80 Checkout and verifies the test-mode subscription', async ({ page }) => {
@@ -55,6 +72,7 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
     expect(session.amount_total).toBe(8000);
     expect(session.currency).toBe('eur');
     expect(session.subscription).toBeTruthy();
+    await waitForProjection(session.id, 'stripe_recurring');
   });
 
   test('refresh and back navigation do not create an additional Checkout Session', async ({ page }) => {
