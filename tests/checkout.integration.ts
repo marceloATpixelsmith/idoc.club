@@ -12,11 +12,11 @@ beforeEach(async () => {
 after(closeHarness);
 
 function fakeStripeClient() {
-  const calls = { customersCreate: [] as unknown[], sessionsCreate: [] as unknown[] };
+  const calls = { customersCreate: [] as unknown[], sessionsCreate: [] as unknown[], sessionsCreateOptions: [] as unknown[] };
   return {
     calls,
     client: {
-      checkout: { sessions: { create: async (params: unknown) => { calls.sessionsCreate.push(params); return { url: 'https://checkout.stripe.com/session/fixture' }; } } },
+      checkout: { sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { url: 'https://checkout.stripe.com/session/fixture' }; } } },
       customers: { create: async (params: unknown) => { calls.customersCreate.push(params); return { id: 'cus_fixture_created' }; } },
     },
   };
@@ -38,6 +38,21 @@ test('a first-time checkout creates a Stripe Customer, persists billing_accounts
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', second.client));
   assert.equal(second.calls.customersCreate.length, 0, 'an existing billing account must be reused, not recreated');
   assert.equal((second.calls.sessionsCreate[0] as any).customer, 'cus_fixture_created');
+});
+
+test('duplicate membership Checkout requests use one provider idempotency key for the paid-through cycle', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id);
+  const { calls, client } = fakeStripeClient();
+
+  await Promise.all([
+    withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', client)),
+    withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', client)),
+  ]);
+  assert.equal(calls.sessionsCreate.length, 2);
+  assert.equal((calls.sessionsCreateOptions[0] as any).idempotencyKey, (calls.sessionsCreateOptions[1] as any).idempotencyKey);
+  assert.match((calls.sessionsCreateOptions[0] as any).idempotencyKey, new RegExp(`^idoc-membership-checkout-${profile.id}-payment-`));
 });
 
 test('both checkout modes use the canonical membership Product with mode-appropriate Price data', async () => {

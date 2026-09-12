@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
+import { billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
@@ -60,6 +60,8 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
     throw new Error('An active or pending subscription already exists for this membership.');
   }
+  const [membership] = await db.select({ validUntil: memberships.validUntil }).from(memberships)
+    .where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.id)).limit(1);
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, profile.id);
   const baseUrl = baseUrlForServer();
 
@@ -79,6 +81,11 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     mode,
     subscription_data: mode === 'subscription' ? { metadata: { kind: 'idoc_membership', profileId: String(profile.id) } } : undefined,
     success_url: `${baseUrl}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+  }, {
+    // A browser double-click, retry, refresh, or concurrent request for the same paid-through
+    // cycle must resolve to one provider object. Once a verified payment advances valid_until the
+    // cycle changes, so a legitimate later renewal receives a new key.
+    idempotencyKey: `idoc-membership-checkout-${profile.id}-${mode}-${membership?.validUntil ?? 'new'}`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
   return session.url;

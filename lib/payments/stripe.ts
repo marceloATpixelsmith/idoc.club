@@ -19,7 +19,7 @@ export type PortalStripeClient = {
       create: (params: Stripe.BillingPortal.ConfigurationCreateParams) => Promise<{ id: string; metadata: Record<string, string> | null }>;
       list: (params: { limit: number }) => Promise<{ data: Array<{ id: string; metadata: Record<string, string> | null }> }>;
     };
-    sessions: { create: (params: Stripe.BillingPortal.SessionCreateParams) => Promise<{ url: string }> };
+    sessions: { create: (params: Stripe.BillingPortal.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ url: string }> };
   };
 };
 
@@ -70,6 +70,10 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
     configuration: configurationId,
     customer: billing.externalCustomerId,
     return_url: `${baseUrlForServer()}/dashboard`,
+  }, {
+    // Portal sessions are short-lived. Converge accidental duplicate submissions within a
+    // five-minute interaction window while allowing a fresh session after an old one expires.
+    idempotencyKey: `idoc-membership-portal-${profile.id}-${Math.floor(Date.now() / 300_000)}`,
   });
   return session.url;
 }

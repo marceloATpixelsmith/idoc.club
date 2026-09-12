@@ -22,8 +22,11 @@ export default async function globalSetup() {
     migrationsSchema: 'idoc',
     migrationsTable: '__drizzle_migrations',
   });
+  const runId = randomUUID();
   const email = process.env.STRIPE_E2E_MEMBER_EMAIL;
-  if (!email) throw new Error('STRIPE_E2E_MEMBER_EMAIL is required.');
+  if (!email || !/^stripe-e2e-[a-z0-9-]+@example\.test$/i.test(email)) {
+    throw new Error('STRIPE_E2E_MEMBER_EMAIL must be an unmistakably test-only @example.test address.');
+  }
   const [user] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
     values(${email},'stripe-e2e-disabled-password',now(),'active')
     returning id,session_version`;
@@ -34,10 +37,21 @@ export default async function globalSetup() {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
   const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
   if (!product.active || product.deleted) throw new Error('Stripe E2E membership Product fixture is unavailable or inactive.');
-  const customer = await stripe.customers.create({ email }, { idempotencyKey: `idoc-stripe-e2e-customer-${profile.id}` });
+  const customer = await stripe.customers.create({ email, metadata: { fixture: email } }, { idempotencyKey: `idoc-stripe-e2e-customer-${runId}` });
   await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${profile.id},${customer.id})`;
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
     values(${profile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
+  const secondEmail = `stripe-e2e-${runId}-other@example.test`;
+  const [secondUser] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
+    values(${secondEmail},'stripe-e2e-disabled-password',now(),'active') returning id`;
+  const [secondProfile] = await sql`insert into idoc.profiles(user_id,first_name,last_name,address_1,city,state_province,postal_code,country_code)
+    values(${secondUser.id},'Stripe','Other','2 Test Road','Test City','Test State','00000','DE') returning id`;
+  await sql`insert into idoc.professional_roles(profile_id,role_type) values(${secondProfile.id},'veterinarian')`;
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
+    values(${secondProfile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
+  const secondCustomer = await stripe.customers.create({ email: secondEmail, metadata: { fixture: secondEmail } },
+    { idempotencyKey: `idoc-stripe-e2e-customer-${runId}-other` });
+  await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${secondProfile.id},${secondCustomer.id})`;
   await sql`insert into idoc.seminars(title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
     values('Stripe E2E Seminar A','Disposable Stripe E2E fixture',current_date + interval '30 days','10:00','12:00','Europe/Berlin','Test venue A',20,5000,now() + interval '14 days','published','online_stripe',${user.id},${user.id}),
           ('Stripe E2E Seminar B','Disposable Stripe E2E fixture',current_date + interval '31 days','10:00','12:00','Europe/Berlin','Test venue B',20,7500,now() + interval '14 days','published','online_stripe',${user.id},${user.id})`;
