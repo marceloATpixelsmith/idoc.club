@@ -13,15 +13,6 @@ function evidencePath() {
 }
 
 test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
-  test.beforeEach(async ({ context }) => {
-    if (!process.env.STRIPE_E2E_MEMBER_EMAIL) throw new Error('STRIPE_E2E_MEMBER_EMAIL is required.');
-    await context.tracing.start({ screenshots: true, snapshots: true });
-  });
-
-  test.afterEach(async ({ context }, info) => {
-    await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
-  });
-
   test('opens a server-created Customer Portal session without accepting a client Customer ID', async ({ page }) => {
     await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /manage payment method/i }).or(
