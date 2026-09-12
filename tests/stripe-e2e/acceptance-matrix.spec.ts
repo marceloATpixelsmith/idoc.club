@@ -14,9 +14,11 @@ function evidencePath() {
 
 test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   test('opens a server-created Customer Portal session without accepting a client Customer ID', async ({ page }) => {
-    const [billing] = await sql`select b.external_customer_id,u.email from idoc.billing_accounts b
+    const billings = await sql`select b.external_customer_id,u.email from idoc.billing_accounts b
       join idoc.profiles p on p.id=b.profile_id join idoc.users u on u.id=p.user_id
-      where u.email=${memberEmail}`;
+      where u.email like 'stripe-e2e-%@example.test' order by (u.email=${memberEmail}) desc`;
+    expect(billings).toHaveLength(2);
+    const [billing, forgedBilling] = billings;
     const customer = await stripe.customers.retrieve(billing.external_customer_id);
     expect(customer.deleted).toBe(false);
     if (!customer.deleted) {
@@ -28,9 +30,18 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       page.getByRole('button', { name: /customer portal/i }),
     );
     await expect(manage).toBeVisible();
+    await manage.evaluate((button, forgedCustomerId) => {
+      const form = button.closest('form');
+      if (!form) throw new Error('Portal action form was not found.');
+      const forged = document.createElement('input');
+      forged.name = 'customer';
+      forged.value = String(forgedCustomerId);
+      form.append(forged);
+    }, forgedBilling.external_customer_id);
     await manage.click();
     await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
     await expect(page.getByText(billing.email, { exact: false })).toBeVisible();
+    await expect(page.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
   });
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {

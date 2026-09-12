@@ -351,6 +351,13 @@
       "when": 1789082670658,
       "tag": "0049_payment_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789171200000,
+      "tag": "0050_membership_checkout_sessions",
+      "breakpoints": true
     }
   ]
 }

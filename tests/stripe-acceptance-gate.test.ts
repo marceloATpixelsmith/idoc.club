@@ -17,5 +17,13 @@ test('Stripe acceptance manifest covers ten executable groups and specific manua
 test('the production Stripe acceptance validator passes the repository evidence', () => {
   const result = spawnSync(process.execPath, ['scripts/validate-stripe-acceptance-gate.mjs'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /10 automatable groups/);
+  assert.match(result.stdout, /not execution evidence/);
+});
+
+test('the full acceptance gate fails closed when provider execution is not explicitly enabled', () => {
+  const env = { ...process.env };
+  delete env.STRIPE_E2E_ENABLED;
+  const result = spawnSync(process.execPath, ['scripts/run-stripe-acceptance-gate.mjs'], { encoding: 'utf8', env });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /STRIPE_E2E_ENABLED=true/);
 });

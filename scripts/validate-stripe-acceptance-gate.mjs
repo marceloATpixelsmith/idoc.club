@@ -40,4 +40,4 @@ if (errors.length) {
   console.error(['Stripe acceptance gate failed:', ...errors.map((error) => `- ${error}`)].join('\n'));
   process.exit(1);
 }
-console.log(`Stripe acceptance gate passed: ${manifest.requirements.length} automatable groups and ${manifest.manualOnly.length} manual-only groups are explicitly evidenced.`);
+console.log(`Stripe acceptance inventory is structurally valid: ${manifest.requirements.length} automatable groups and ${manifest.manualOnly.length} manual-only groups. This is not execution evidence.`);

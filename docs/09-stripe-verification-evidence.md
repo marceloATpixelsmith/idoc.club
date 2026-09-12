@@ -59,13 +59,16 @@ ordinary CI run is not a substitute for the latter two.
 
 ## Executable acceptance-completeness gate
 
-`pnpm validate:stripe-acceptance` reads `docs/27-stripe-payment-acceptance-gate.json` and fails when
+`pnpm validate:stripe-acceptance-inventory` reads `docs/27-stripe-payment-acceptance-gate.json` and fails when
 one of the ten automatable requirement groups has no mapped executable test, a mapped file is
 missing, a mapped test contains `skip`, `fixme`, `TODO`, or `FIXME`, or a mapped provider spec fails
 to instantiate Stripe, inspect provider state, and prove `livemode=false`. It also rejects vague
-manual-only entries. Both Fast PR verification and Release 1 verification run this check. The
-manifest is an inventory and drift guard, not proof that an unexecuted provider suite passed: the
-dated Playwright report and provider evidence remain required for that claim.
+manual-only entries. Both Fast PR verification and Release 1 verification run this inventory check.
+It deliberately prints that it is not execution evidence. The actual completion gate is
+`STRIPE_E2E_ENABLED=true pnpm test:stripe-acceptance`; it fails closed without opt-in and runs the
+inventory check, all disposable-PostgreSQL integration tests, and the Stripe Playwright suite in
+sequence. Only that successful command plus its dated Playwright/provider artifacts may support an
+automated acceptance claim.
 
 ## Evidence ownership
 

@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "check": "pnpm typecheck && pnpm test",
-    "check:release1": "node scripts/validate-auth-docs.mjs && node scripts/validate-release-checklist.mjs && pnpm validate:stripe-acceptance && node scripts/validate-toolchain-policy.mjs && node scripts/check-whitespace.mjs && pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build",
+    "check:release1": "node scripts/validate-auth-docs.mjs && node scripts/validate-release-checklist.mjs && pnpm validate:stripe-acceptance-inventory && node scripts/validate-toolchain-policy.mjs && node scripts/check-whitespace.mjs && pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "node --conditions=react-server --experimental-strip-types --test tests/*.test.ts",
     "test:ci": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server --experimental-strip-types --test --test-reporter=dot tests/*.test.ts",
@@ -25,7 +25,8 @@
     "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio",
     "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts",
     "validate:stripe-readiness": "node scripts/validate-stripe-readiness.mjs",
-    "validate:stripe-acceptance": "node scripts/validate-stripe-acceptance-gate.mjs"
+    "validate:stripe-acceptance-inventory": "node scripts/validate-stripe-acceptance-gate.mjs",
+    "test:stripe-acceptance": "node scripts/run-stripe-acceptance-gate.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

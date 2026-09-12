@@ -11,12 +11,13 @@ beforeEach(async () => {
 });
 after(closeHarness);
 
-function fakeStripeClient() {
+function fakeStripeClient(retrieve: (id: string) => Promise<{ expires_at?: number | null; status?: string | null; url: string | null }> =
+  async () => ({ expires_at: Math.floor(Date.now() / 1000) + 1800, status: 'open', url: 'https://checkout.stripe.com/session/fixture' })) {
   const calls = { customersCreate: [] as unknown[], sessionsCreate: [] as unknown[], sessionsCreateOptions: [] as unknown[] };
   return {
     calls,
     client: {
-      checkout: { sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { url: 'https://checkout.stripe.com/session/fixture' }; } } },
+      checkout: { sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { expires_at: Math.floor(Date.now() / 1000) + 1800, id: `cs_fixture_${calls.sessionsCreate.length}`, status: 'open', url: 'https://checkout.stripe.com/session/fixture' }; }, retrieve } },
       customers: { create: async (params: unknown) => { calls.customersCreate.push(params); return { id: 'cus_fixture_created' }; } },
     },
   };
@@ -50,9 +51,58 @@ test('duplicate membership Checkout requests use one provider idempotency key fo
     withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', client)),
     withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', client)),
   ]);
-  assert.equal(calls.sessionsCreate.length, 2);
-  assert.equal((calls.sessionsCreateOptions[0] as any).idempotencyKey, (calls.sessionsCreateOptions[1] as any).idempotencyKey);
+  assert.equal(calls.sessionsCreate.length, 1);
+  assert.equal((await sql`select count(*)::int count from idoc.membership_checkout_sessions`)[0].count, 1);
   assert.match((calls.sessionsCreateOptions[0] as any).idempotencyKey, new RegExp(`^idoc-membership-checkout-${profile.id}-payment-`));
+});
+
+for (const providerStatus of ['expired', 'complete', 'canceled'] as const) {
+  test(`${providerStatus} membership Checkout evidence is retained and replaced with a rotated key`, async () => {
+    const user = await createUser();
+    const profile = await createProfile(user.id);
+    await createMembership(profile.id);
+    const first = fakeStripeClient();
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', first.client));
+    const replacement = fakeStripeClient(async () => ({ status: providerStatus, url: null }));
+    await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', replacement.client));
+    const rows = await sql`select status,idempotency_key from idoc.membership_checkout_sessions order by attempt`;
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].status, providerStatus === 'expired' ? 'expired' : providerStatus === 'complete' ? 'completed' : 'superseded');
+    assert.equal(rows[1].status, 'open');
+    assert.notEqual(rows[0].idempotency_key, rows[1].idempotency_key);
+  });
+}
+
+test('an open payable membership Checkout is retrieved and reused without creating another provider object', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id);
+  const first = fakeStripeClient();
+  await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', first.client));
+  const retry = fakeStripeClient(async () => ({ expires_at: Math.floor(Date.now() / 1000) + 60, status: 'open', url: 'https://checkout.stripe.com/session/reused' }));
+  const url = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', retry.client));
+  assert.equal(url, 'https://checkout.stripe.com/session/reused');
+  assert.equal(retry.calls.sessionsCreate.length, 0);
+  assert.equal((await sql`select count(*)::int count from idoc.membership_checkout_sessions`)[0].count, 1);
+});
+
+test('a provider creation failure is retained and the retry uses a new durable attempt', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id);
+  const failed = fakeStripeClient();
+  failed.client.checkout.sessions.create = async () => { throw new Error('transport unavailable'); };
+  await assert.rejects(withTestMembershipBoundary(
+    { actor: { id: user.id, roles: [] } },
+    () => createMembershipCheckoutSession('payment', failed.client),
+  ), /transport unavailable/);
+  const retry = fakeStripeClient();
+  await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', retry.client));
+  const rows = await sql`select status,attempt,idempotency_key from idoc.membership_checkout_sessions order by attempt`;
+  assert.deepEqual(rows.map(({ attempt, status }) => ({ attempt, status })), [
+    { attempt: 1, status: 'failed' }, { attempt: 2, status: 'open' },
+  ]);
+  assert.notEqual(rows[0].idempotency_key, rows[1].idempotency_key);
 });
 
 test('both checkout modes use the canonical membership Product with mode-appropriate Price data', async () => {
