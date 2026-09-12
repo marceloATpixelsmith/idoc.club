@@ -46,3 +46,9 @@ For a seminar refund in `refund_failed`, an administrator may retry from the IDO
 A refunded seminar payment must never change membership entitlement, membership dates, subscriptions, or membership payment history.
 
 If Stripe reports a refund, dispute, or chargeback that does not match the local record, IDOC must preserve the evidence and create an actionable reconciliation finding. Disputes and chargebacks remain operationally handled through Stripe unless the application later adds dedicated workflows.
+
+## Acceptance evidence gate
+
+The refund acceptance evidence is mapped by `docs/27-stripe-payment-acceptance-gate.json`. Its
+repository checks must stay executable and unskipped; an actual hosted provider run remains required
+before release and cannot be replaced by a source-code assertion or a manually inserted final row.

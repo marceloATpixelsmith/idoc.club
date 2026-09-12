@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "manualOnly": [
+    { "id": "stripe-dashboard", "reason": "Requires an authorized Stripe test/live Dashboard operator and cannot be inferred from repository state." },
+    { "id": "hosted-provider-run", "reason": "Requires disposable Stripe test credentials, a public HTTPS application, webhook delivery, and an unmistakably test-only PostgreSQL database." },
+    { "id": "deployment-vercel", "reason": "Requires Vercel project access and evidence from the deployed revision." },
+    { "id": "production-operations", "reason": "Requires production operator, backup/restore, alerting, and reconciliation evidence." }
+  ],
+  "requirements": [
+    { "id": "membership-checkout", "tests": ["tests/checkout.integration.ts", "tests/stripe-webhook.integration.ts", "tests/stripe-e2e/hosted-checkout.acceptance.spec.ts"] },
+    { "id": "customer-portal", "tests": ["tests/customer-portal.integration.ts", "tests/stripe-e2e/acceptance-matrix.spec.ts"] },
+    { "id": "renewal-switching", "tests": ["tests/subscription-renewal-status.integration.ts", "tests/stripe-webhook.integration.ts"] },
+    { "id": "renewal-grace-recovery", "tests": ["tests/stripe-webhook.integration.ts", "tests/renewal-notice-scan.integration.ts", "tests/account-profile.integration.ts"] },
+    { "id": "seminar-checkout", "tests": ["tests/seminars.integration.ts", "tests/stripe-e2e/acceptance-matrix.spec.ts"] },
+    { "id": "seminar-refunds", "tests": ["tests/payment-refunds.test.ts", "tests/stripe-webhook.integration.ts"] },
+    { "id": "webhooks", "tests": ["tests/stripe-webhook.integration.ts"] },
+    { "id": "reconciliation", "tests": ["tests/reconciliation.test.ts", "tests/reconciliation.integration.ts"] },
+    { "id": "browser-security", "tests": ["tests/stripe-e2e/acceptance-matrix.spec.ts"] },
+    { "id": "provider-fixtures", "tests": ["tests/stripe-e2e/global-setup.ts", "tests/stripe-e2e/provider-readiness.spec.ts"] }
+  ]
+}

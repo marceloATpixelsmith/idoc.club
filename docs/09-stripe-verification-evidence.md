@@ -57,6 +57,16 @@ test credentials and a reachable app/database. The release gate distinguishes au
 checks, opt-in Stripe test-mode browser evidence, and manual Dashboard/deployment evidence. A green
 ordinary CI run is not a substitute for the latter two.
 
+## Executable acceptance-completeness gate
+
+`pnpm validate:stripe-acceptance` reads `docs/27-stripe-payment-acceptance-gate.json` and fails when
+one of the ten automatable requirement groups has no mapped executable test, a mapped file is
+missing, a mapped test contains `skip`, `fixme`, `TODO`, or `FIXME`, or a mapped provider spec fails
+to instantiate Stripe, inspect provider state, and prove `livemode=false`. It also rejects vague
+manual-only entries. Both Fast PR verification and Release 1 verification run this check. The
+manifest is an inventory and drift guard, not proof that an unexecuted provider suite passed: the
+dated Playwright report and provider evidence remain required for that claim.
+
 ## Evidence ownership
 
 Automatable evidence consists of repository unit tests, disposable-PostgreSQL integration tests,

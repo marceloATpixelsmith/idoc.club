@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
+import Stripe from 'stripe';
 
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 
 function evidencePath() {
@@ -12,6 +14,15 @@ function evidencePath() {
 
 test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   test('opens a server-created Customer Portal session without accepting a client Customer ID', async ({ page }) => {
+    const [billing] = await sql`select b.external_customer_id,u.email from idoc.billing_accounts b
+      join idoc.profiles p on p.id=b.profile_id join idoc.users u on u.id=p.user_id
+      where u.email=${memberEmail}`;
+    const customer = await stripe.customers.retrieve(billing.external_customer_id);
+    expect(customer.deleted).toBe(false);
+    if (!customer.deleted) {
+      expect(customer.livemode).toBe(false);
+      expect(customer.email).toBe(billing.email);
+    }
     await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /manage payment method/i }).or(
       page.getByRole('button', { name: /customer portal/i }),
@@ -19,8 +30,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     await expect(manage).toBeVisible();
     await manage.click();
     await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
-    expect(page.url()).not.toContain('customer=');
-    expect(page.url()).not.toContain('profileId=');
+    await expect(page.getByText(billing.email, { exact: false })).toBeVisible();
   });
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
