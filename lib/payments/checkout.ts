@@ -3,7 +3,7 @@ import 'server-only';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
-import { billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
+import { billingAccounts, memberships, profiles, renewalPreferences, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
@@ -15,7 +15,7 @@ export type CheckoutMode = 'payment' | 'subscription';
 // inject a fake without satisfying the entire (very large) real Stripe SDK surface. The real
 // client structurally satisfies this already.
 export type CheckoutStripeClient = {
-  checkout: { sessions: { create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ url: string | null }> } };
+  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id: string; status: string | null; expires_at: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
 
@@ -63,6 +63,14 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   const [membership] = await db.select({ validUntil: memberships.validUntil }).from(memberships)
     .where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.id)).limit(1);
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, profile.id);
+  const [priorPreference] = await db.select({
+    checkoutSessionId: renewalPreferences.externalCheckoutSessionId,
+    effectiveOn: renewalPreferences.effectiveOn,
+  }).from(renewalPreferences).where(eq(renewalPreferences.profileId, profile.id)).limit(1);
+  if (priorPreference?.checkoutSessionId && stripe.checkout.sessions.retrieve) {
+    const prior = await stripe.checkout.sessions.retrieve(priorPreference.checkoutSessionId);
+    if (prior.status === 'open' && prior.url && (!prior.expires_at || prior.expires_at * 1000 > Date.now())) return prior.url;
+  }
   const baseUrl = baseUrlForServer();
 
   const session = await stripe.checkout.sessions.create({
@@ -88,5 +96,9 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     idempotencyKey: `idoc-membership-checkout-${profile.id}-${mode}-${membership?.validUntil ?? 'new'}`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
+  await db.update(renewalPreferences).set({
+    externalCheckoutSessionId: (session as { id?: string }).id ?? null,
+    updatedAt: new Date(),
+  }).where(eq(renewalPreferences.profileId, profile.id));
   return session.url;
 }
