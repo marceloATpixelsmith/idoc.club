@@ -28,16 +28,19 @@ export type PortalStripeClient = {
 // subscription_update enabled) — tag every Configuration this module creates and only ever reuse
 // one carrying that tag, never an arbitrary pre-existing one.
 const PORTAL_CONFIGURATION_METADATA_KEY = 'idoc_membership_portal';
+let portalConfigurationPromise: Promise<string> | null = null;
 
 // IDOC prices membership inline (price_data) per Checkout Session rather than from a stable Price
 // catalog, and there is only one flat €80/year offering — there is nothing to expose for
 // subscription_update (plan-swapping), so only the features docs/04 §7 actually asks for
 // (payment methods, invoices, at-period-end cancellation) are enabled.
 async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<string> {
-  const existing = await stripe.billingPortal.configurations.list({ limit: 100 });
-  const managed = existing.data.find((configuration) => configuration.metadata?.[PORTAL_CONFIGURATION_METADATA_KEY] === 'true');
-  if (managed) return managed.id;
-  const created = await stripe.billingPortal.configurations.create({
+  if (portalConfigurationPromise) return portalConfigurationPromise;
+  portalConfigurationPromise = (async () => {
+    const existing = await stripe.billingPortal.configurations.list({ limit: 100 });
+    const managed = existing.data.find((configuration) => configuration.metadata?.[PORTAL_CONFIGURATION_METADATA_KEY] === 'true');
+    if (managed) return managed.id;
+    const created = await stripe.billingPortal.configurations.create({
     business_profile: { headline: 'Manage your IDOC membership payment method' },
     features: {
       invoice_history: { enabled: true },
@@ -46,7 +49,13 @@ async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<stri
     },
     metadata: { [PORTAL_CONFIGURATION_METADATA_KEY]: 'true' },
   });
-  return created.id;
+    return created.id;
+  })();
+  try {
+    return await portalConfigurationPromise;
+  } finally {
+    portalConfigurationPromise = null;
+  }
 }
 
 /**
