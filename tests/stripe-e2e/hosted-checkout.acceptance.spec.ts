@@ -8,12 +8,12 @@ const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
 async function waitForProjection(expectedSource: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    const rows = await sql<{ source: string }[]>\`select p.source from idoc.payments p
+    const rows = await sql<{ source: string }[]>`select p.source from idoc.payments p
       join idoc.profiles pr on pr.id = p.profile_id
       join idoc.users u on u.id = pr.user_id
       where u.email = ${process.env.STRIPE_E2E_MEMBER_EMAIL}
       and p.source = ${expectedSource}
-      limit 1\`;
+      limit 1`;
     if (rows.length === 1) return;
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
