@@ -4,9 +4,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { resolve } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 
 export default async function globalSetup() {
+  if (!process.env.STRIPE_E2E_EVIDENCE_DIR) throw new Error('STRIPE_E2E_EVIDENCE_DIR is required.');
+  await mkdir(process.env.STRIPE_E2E_EVIDENCE_DIR, { recursive: true });
   const databaseUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.POSTGRES_URL).toString();
   const sql = postgres(databaseUrl, { max: 1, onnotice: () => {} });
   await sql.unsafe('drop schema if exists idoc cascade');
