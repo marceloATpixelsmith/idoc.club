@@ -1869,7 +1869,7 @@
         }
       },
       "foreignKeys": {
-        "membership_checkout_sessions_profile_id_fkey": {
+        "membership_checkout_sessions_profile_id_profiles_id_fk": {
           "name": "membership_checkout_sessions_profile_id_profiles_id_fk",
           "tableFrom": "membership_checkout_sessions",
           "tableTo": "profiles",
