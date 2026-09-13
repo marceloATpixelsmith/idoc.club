@@ -17,8 +17,8 @@ function fakeStripeClient(retrieve: (id: string) => Promise<{ expires_at?: numbe
   return {
     calls,
     client: {
-      checkout: { sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { expires_at: Math.floor(Date.now() / 1000) + 1800, id: `cs_fixture_${calls.sessionsCreate.length}`, status: 'open', url: 'https://checkout.stripe.com/session/fixture' }; }, retrieve } },
-      customers: { create: async (params: unknown) => { calls.customersCreate.push(params); return { id: 'cus_fixture_created' }; } },
+      checkout: { sessions: { create: async (params: unknown, options: unknown) => { calls.sessionsCreate.push(params); calls.sessionsCreateOptions.push(options); return { expires_at: Math.floor(Date.now() / 1000) + 1800, id: `cs_fixture_${Date.now()}_${calls.sessionsCreate.length}_${Math.random().toString(36).slice(2)}`, status: 'open', url: 'https://checkout.stripe.com/session/fixture' }; }, retrieve } },
+      customers: { create: async (params: unknown) => { calls.customersCreate.push(params); return { id: `cus_fixture_created_${Date.now()}_${Math.random().toString(36).slice(2)}` }; } },
     },
   };
 }
