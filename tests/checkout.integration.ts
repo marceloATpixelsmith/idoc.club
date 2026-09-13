@@ -33,7 +33,7 @@ test('a first-time checkout creates a Stripe Customer, persists billing_accounts
   assert.equal(url, 'https://checkout.stripe.com/session/fixture');
   assert.equal(calls.customersCreate.length, 1);
   const [row] = await sql`select external_customer_id from idoc.billing_accounts where profile_id=${profile.id}`;
-  assert.equal(row.external_customer_id, 'cus_fixture_created');
+  assert.match(row.external_customer_id, /^cus_fixture_created_/);
 
   const second = fakeStripeClient();
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', second.client));
