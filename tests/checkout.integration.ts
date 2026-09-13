@@ -38,7 +38,7 @@ test('a first-time checkout creates a Stripe Customer, persists billing_accounts
   const second = fakeStripeClient();
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipCheckoutSession('payment', second.client));
   assert.equal(second.calls.customersCreate.length, 0, 'an existing billing account must be reused, not recreated');
-  assert.equal((second.calls.sessionsCreate[0] as any).customer, 'cus_fixture_created');
+  assert.equal((second.calls.sessionsCreate[0] as any).customer, row.external_customer_id);
 });
 
 test('duplicate membership Checkout requests use one provider idempotency key for the paid-through cycle', async () => {
