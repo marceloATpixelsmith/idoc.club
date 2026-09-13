@@ -322,7 +322,7 @@ test('the production seminar refund flow uses authoritative payment state, persi
   assert.equal(refund.currency, 'EUR');
   assert.equal(refund.status, 'succeeded');
   assert.equal(refund.external_refund_id, `re_full_fixture_${registrationId}`);
-  assert.deepEqual(refund.provider_evidence, { id: 're_full_fixture', status: 'succeeded' });
+  assert.deepEqual(refund.provider_evidence, { id: `re_full_fixture_${registrationId}`, status: 'succeeded' });
   assert.equal((await sql`select count(*)::int count from idoc.memberships where profile_id=${profile.id}`)[0].count, 1);
   assert.equal((await sql`select count(*)::int count from idoc.payments where profile_id=${profile.id}`)[0].count, 0);
 
