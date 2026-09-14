@@ -78,15 +78,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const entitled = isEntitled(entitlement, today);
 
   if (!entitled && !privileged) {
-    return (
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-        <h1 className="text-2xl font-semibold">Pay for your IDOC membership</h1>
-        <p className="max-w-md text-muted-foreground">
-          Your account isn&apos;t an active member yet. Complete payment to unlock your profile, security settings, and the rest of your dashboard.
-        </p>
-        <Link href="/pricing"><Button size="lg">Pay for membership</Button></Link>
-      </main>
-    );
+    redirect('/pricing');
   }
 
   const mode = renewalMode(subscription, entitlement);

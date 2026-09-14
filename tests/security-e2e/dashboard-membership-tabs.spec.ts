@@ -14,20 +14,16 @@ test('an entitled member sees the dashboard menu and My Membership shows status,
   await context.close();
 });
 
-test('a not-yet-entitled member sees only the paywall on dashboard pages', async ({ browser }) => {
+test('a not-yet-entitled member is sent straight to the pricing page, no intermediate paywall screen', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/expired.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
-  await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Pay for membership' })).toBeVisible();
-  // No tab bar at all -- a "menu" offering exactly one destination you can't leave isn't a menu.
-  for (const label of ['My Membership', 'My Profile', 'My Security', 'Member Directory', 'Seminars']) {
-    await expect(page.getByRole('link', { name: label })).toHaveCount(0);
-  }
+  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(page.getByRole('heading', { name: 'IDOC Membership' })).toBeVisible();
+  await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText('Pay for your IDOC membership')).toBeVisible();
+  await expect(page).toHaveURL(/\/pricing$/);
   await page.goto('/seminars');
   await expect(page).toHaveURL(/\/seminars$/);
   await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();
