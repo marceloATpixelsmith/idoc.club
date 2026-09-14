@@ -104,8 +104,13 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
   });
 
   test('SEMINAR-WEBHOOK-INTEGRITY rejects amount, currency, ownership, registration, seminar, Customer, and PaymentIntent mismatches then credits once', async ({ page }) => {
+    const paidBeforeMismatch = await stripe.checkout.sessions.retrieve(sessionId);
+    expect(paidBeforeMismatch.livemode).toBe(false);
+    await page.goto(sessionUrl);
+    await fillStripeCard(page);
     const provider = await stripe.checkout.sessions.retrieve(sessionId);
     expect(provider.livemode).toBe(false);
+    expect(provider.payment_status).toBe('paid');
     const before = await registration();
     const mismatches: Partial<Stripe.Checkout.Session>[] = [
       { amount_total: before.price_cents + 1 }, { currency: 'usd' },
@@ -114,11 +119,9 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
       { metadata: { ...provider.metadata, registrationId: '999999' } },
       { metadata: { ...provider.metadata, seminarId: '999999' } },
     ];
-    for (const mismatch of mismatches) await postVerifiedEvent(completedEvent(provider, mismatch));
+    for (const mismatch of mismatches) await postVerifiedEvent(completedEvent(provider, { payment_status: 'paid', ...mismatch }));
     expect((await registration()).payment_status).toBe('pending');
 
-    await page.goto(sessionUrl);
-    await fillStripeCard(page);
     const paidProvider = await stripe.checkout.sessions.retrieve(sessionId);
     const event = completedEvent(paidProvider);
     await postVerifiedEvent(event);
