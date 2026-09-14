@@ -353,7 +353,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       from pg_index x join pg_class t on t.oid=x.indrelid join pg_namespace n on n.oid=t.relnamespace join pg_class i on i.oid=x.indexrelid
       where n.nspname='idoc' and t.relname=${tableName} order by i.relname`;
     const expectedIndexNames = new Set([
-      ...Object.keys(expectedTable.indexes), ...Object.keys(expectedTable.uniqueConstraints),
+      ...Object.keys(expectedTable.indexes).map((name) => name.slice(0, 63)), ...Object.keys(expectedTable.uniqueConstraints).map((name) => name.slice(0, 63)),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => `${tableName}_pkey`),
       ...Object.values<any>(expectedTable.compositePrimaryKeys).map((value) => value.name.slice(0, 63)),
       ...(extraIndexNamesByTable[tableName] ?? []),
