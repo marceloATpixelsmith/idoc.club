@@ -153,7 +153,7 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
     const refund = await stripe.refunds.retrieve(evidence.external_refund_id, { expand: ['payment_intent'] });
     const intent = typeof refund.payment_intent === 'string'
       ? await stripe.paymentIntents.retrieve(refund.payment_intent) : refund.payment_intent;
-    expect((refund as unknown as Stripe.Refund).livemode).toBe(false);
+    expect((refund as unknown as Record<string, unknown>).livemode).toBe(false);
     expect(refund.amount).toBe(paidRegistration.price_cents);
     expect(refund.metadata).toMatchObject({ kind: 'seminar_registration', registrationId: String(paidRegistration.registration_id), testRun: memberEmail });
     expect(intent?.id).toBe(paidRegistration.stripe_payment_intent_id);
