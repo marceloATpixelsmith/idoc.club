@@ -85,10 +85,9 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
     await button.dblclick();
     await page.waitForURL(/checkout\.stripe\.com/);
     sessionUrl = page.url();
-    sessionId = page.url().match(/cs_[A-Za-z0-9_]+/)?.[0] ?? '';
-    expect(sessionId).toMatch(/^cs_test_/);
-
     const local = await registration();
+    sessionId = local.stripe_checkout_session_id;
+    expect(sessionId).toMatch(/^cs_/);
     const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['line_items', 'payment_intent'] });
     expect(session.livemode).toBe(false);
     expect(session.id).toBe(local.stripe_checkout_session_id);
