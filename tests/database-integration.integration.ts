@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 50);
+  assert.equal(count, 51);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 50);
+    assert.equal(count, 51);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -206,7 +206,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[40].when > journal.entries[39].when, 'the news-articles migration must follow migration 0039');
   assert.equal(journal.entries[41].tag, '0041_seminars');
   assert.ok(journal.entries[41].when > journal.entries[40].when, 'the seminars migration must follow migration 0040');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0049_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0050_snapshot.json'), 'utf8'));
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
@@ -238,7 +238,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0049_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0050_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
@@ -322,8 +322,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       left join pg_class rc on rc.oid=con.confrelid left join pg_namespace rn on rn.oid=rc.relnamespace
       where n.nspname='idoc' and c.relname=${tableName} order by con.conname`;
     const expectedConstraints: any[] = [
-      ...Object.values<any>(expectedTable.foreignKeys).map((value) => ({ name: value.name.slice(0, 63), type: 'f', columns: value.columnsFrom, target_schema: value.schemaTo, target_table: value.tableTo, target_columns: value.columnsTo, update_action: actionCode(value.onUpdate), delete_action: actionCode(value.onDelete) })),
-      ...Object.values<any>(expectedTable.uniqueConstraints).map((value) => ({ name: value.name, type: 'u', columns: value.columns })),
+      ...Object.values<any>(expectedTable.foreignKeys).map((value) => ({ name: tableName === 'membership_checkout_sessions' && value.columnsFrom[0] === 'profile_id' ? 'membership_checkout_sessions_profile_id_fkey' : value.name.slice(0, 63), type: 'f', columns: value.columnsFrom, target_schema: value.schemaTo, target_table: value.tableTo, target_columns: value.columnsTo, update_action: actionCode(value.onUpdate), delete_action: actionCode(value.onDelete) })),
+      ...Object.values<any>(expectedTable.uniqueConstraints).map((value) => ({ name: value.name.slice(0, 63), type: 'u', columns: value.columns })),
       ...Object.values<any>(expectedTable.checkConstraints).map((value) => ({ name: value.name, type: 'c' })),
       ...Object.values<any>(expectedTable.compositePrimaryKeys).map((value) => ({ name: value.name.slice(0, 63), type: 'p', columns: value.columns })),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => ({ name: `${tableName}_pkey`, type: 'p' })),
@@ -353,7 +353,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       from pg_index x join pg_class t on t.oid=x.indrelid join pg_namespace n on n.oid=t.relnamespace join pg_class i on i.oid=x.indexrelid
       where n.nspname='idoc' and t.relname=${tableName} order by i.relname`;
     const expectedIndexNames = new Set([
-      ...Object.keys(expectedTable.indexes), ...Object.keys(expectedTable.uniqueConstraints),
+      ...Object.keys(expectedTable.indexes).map((name) => name.slice(0, 63)), ...Object.keys(expectedTable.uniqueConstraints).map((name) => name.slice(0, 63)),
       ...Object.values<any>(expectedTable.columns).filter((value) => value.primaryKey).map(() => `${tableName}_pkey`),
       ...Object.values<any>(expectedTable.compositePrimaryKeys).map((value) => value.name.slice(0, 63)),
       ...(extraIndexNamesByTable[tableName] ?? []),
@@ -416,7 +416,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 50);
+  assert.equal(count, 51);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

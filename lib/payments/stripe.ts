@@ -16,7 +16,7 @@ export { getStripeServerClient } from './stripe-client';
 export type PortalStripeClient = {
   billingPortal: {
     configurations: {
-      create: (params: Stripe.BillingPortal.ConfigurationCreateParams) => Promise<{ id: string; metadata: Record<string, string> | null }>;
+      create: (params: Stripe.BillingPortal.ConfigurationCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string; metadata: Record<string, string> | null }>;
       list: (params: { limit: number }) => Promise<{ data: Array<{ id: string; metadata: Record<string, string> | null }> }>;
     };
     sessions: { create: (params: Stripe.BillingPortal.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ url: string }> };
@@ -48,7 +48,7 @@ async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<stri
       subscription_cancel: { enabled: true, mode: 'at_period_end' },
     },
     metadata: { [PORTAL_CONFIGURATION_METADATA_KEY]: 'true' },
-  });
+  }, { idempotencyKey: 'idoc-membership-portal-configuration-v1' });
     return created.id;
   })();
   try {

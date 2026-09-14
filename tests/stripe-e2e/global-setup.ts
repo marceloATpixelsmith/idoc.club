@@ -1,5 +1,6 @@
 import { request } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { SignJWT } from 'jose';
 import Stripe from 'stripe';
@@ -37,7 +38,7 @@ export default async function globalSetup() {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
   const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
   if (!product.active || product.deleted) throw new Error('Stripe E2E membership Product fixture is unavailable or inactive.');
-  const customer = await stripe.customers.create({ email, metadata: { fixture: email } }, { idempotencyKey: `idoc-stripe-e2e-customer-${runId}` });
+  const customer = await stripe.customers.create({ email, metadata: { fixture: email, run_id: runId } }, { idempotencyKey: `idoc-stripe-e2e-customer-${runId}` });
   await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${profile.id},${customer.id})`;
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
     values(${profile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
@@ -49,7 +50,7 @@ export default async function globalSetup() {
   await sql`insert into idoc.professional_roles(profile_id,role_type) values(${secondProfile.id},'veterinarian')`;
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
     values(${secondProfile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
-  const secondCustomer = await stripe.customers.create({ email: secondEmail, metadata: { fixture: secondEmail } },
+  const secondCustomer = await stripe.customers.create({ email: secondEmail, metadata: { fixture: secondEmail, run_id: runId } },
     { idempotencyKey: `idoc-stripe-e2e-customer-${runId}-other` });
   await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${secondProfile.id},${secondCustomer.id})`;
   await sql`insert into idoc.seminars(title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
@@ -64,6 +65,11 @@ export default async function globalSetup() {
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime(Math.floor(expires.getTime() / 1000))
     .sign(new TextEncoder().encode(AUTH_SECRET));
   await mkdir('.stripe-e2e', { recursive: true });
+  const commitSha = process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  await writeFile(`${process.env.STRIPE_E2E_EVIDENCE_DIR}/run.json`, JSON.stringify({
+    commitSha, customerIds: [customer.id, secondCustomer.id], databaseMigration: '0050_membership_checkout_sessions',
+    fixtureEmails: [email, secondEmail], mode: 'test', productId: product.id, runId, startedAt: new Date().toISOString(),
+  }, null, 2));
   await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
 
   const context = await request.newContext();

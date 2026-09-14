@@ -22,6 +22,7 @@ test('provider readiness is proven by isolated test-mode Customer and Product ob
     if (!customer.deleted) {
       expect(customer.livemode).toBe(false);
       expect(customer.metadata.fixture).toBe(row.fixture_key);
+      expect(customer.metadata.run_id).toBeTruthy();
     }
   }
 

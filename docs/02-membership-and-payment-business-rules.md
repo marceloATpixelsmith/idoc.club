@@ -296,4 +296,10 @@ Existing migrated users should encounter an account-access/activation flow, not 
 
 ## 12. Stripe Checkout retry behavior
 
-A membership Checkout request is reused only while its server-recorded Checkout Session remains open. If the provider reports that the stored Session has expired or is otherwise no longer payable, the application must create a replacement Session with a new idempotency key and preserve the original Session identifier as historical evidence. A browser retry must never return an expired payment URL.
+A membership Checkout request is reused only while its append-only `membership_checkout_sessions`
+evidence row is open and a fresh provider retrieval confirms that the Session remains open,
+unexpired, and has a usable URL. Each row retains profile, mode, paid-through cycle, provider Session
+ID, status, expiration, URL, attempt, and idempotency key. A transaction-scoped profile lock makes
+concurrent retries converge. If Stripe reports expired, completed, canceled, or otherwise unpayable,
+the old row is marked terminal and retained, and a new attempt/key is created. A browser retry never
+returns an expired payment URL.

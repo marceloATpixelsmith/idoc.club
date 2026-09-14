@@ -24,7 +24,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   const [row] = await client<{ payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
-  if (row.payment_status === 'refunded') return;
+  if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
   const baseKey = `idoc-seminar-refund-${registrationId}-${row.stripe_payment_intent_id}`;
   const [priorAttempt] = await client<{ id: number; status: string; external_refund_id: string | null; failure_code: string | null }[]>`select id,status,external_refund_id,failure_code
@@ -42,13 +42,14 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     const refund = await stripe.refunds.create({ amount: row.price_cents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: row.stripe_payment_intent_id }, { idempotencyKey: key });
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
-      await sql`update idoc.payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
-        refunded_at=${status === 'succeeded' ? new Date() : null},updated_at=now() where id=${request.id}`;
+      await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
+        refunded_at=now(),updated_at=now() where id=${request.id}`;
+      if (status !== 'succeeded') await sql`update idoc.payment_refunds set refunded_at=null where id=${request.id}`;
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
       if (status === 'succeeded') await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents},'refundId',${refund.id},'registrationId',${registrationId},'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
+        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
         from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} on conflict(dedupe_key) do nothing`;
     });
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');

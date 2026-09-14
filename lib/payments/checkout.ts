@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
-import { db } from '@/lib/db/drizzle';
-import { billingAccounts, memberships, profiles, renewalPreferences, subscriptions, users } from '@/lib/db/schema';
+import { client, db } from '@/lib/db/drizzle';
+import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
@@ -15,7 +15,7 @@ export type CheckoutMode = 'payment' | 'subscription';
 // inject a fake without satisfying the entire (very large) real Stripe SDK surface. The real
 // client structurally satisfies this already.
 export type CheckoutStripeClient = {
-  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ id?: string; url: string | null }> } };
+  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ expires_at?: number | null; id?: string; status?: string | null; url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
 
@@ -60,20 +60,35 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
     throw new Error('An active or pending subscription already exists for this membership.');
   }
-  const [membership] = await db.select({ validUntil: memberships.validUntil }).from(memberships)
-    .where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.id)).limit(1);
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, profile.id);
-  const [priorPreference] = await db.select({
-    checkoutSessionId: renewalPreferences.externalCheckoutSessionId,
-    effectiveOn: renewalPreferences.effectiveOn,
-  }).from(renewalPreferences).where(eq(renewalPreferences.profileId, profile.id)).limit(1);
-  if (priorPreference?.checkoutSessionId && stripe.checkout.sessions.retrieve) {
-    const prior = await stripe.checkout.sessions.retrieve(priorPreference.checkoutSessionId);
-    if (prior.status === 'open' && prior.url && (!prior.expires_at || prior.expires_at * 1000 > Date.now())) return prior.url;
-  }
   const baseUrl = baseUrlForServer();
-
-  const session = await stripe.checkout.sessions.create({
+  const result = await client.begin(async (sql): Promise<{ error: unknown } | string> => {
+    await sql`select pg_advisory_xact_lock(${profile.id})`;
+    const [membership] = await sql<{ valid_until: string }[]>`select valid_until from idoc.memberships
+      where profile_id=${profile.id} order by id desc limit 1 for update`;
+    const cycle = membership?.valid_until ?? 'new';
+    const [prior] = await sql<{ checkout_url: string | null; external_checkout_session_id: string | null; id: number }[]>`
+      select id,external_checkout_session_id,checkout_url from idoc.membership_checkout_sessions
+      where profile_id=${profile.id} and mode=${mode} and cycle=${cycle} and status in ('creating','open')
+      order by attempt desc limit 1 for update`;
+    if (prior?.external_checkout_session_id && stripe.checkout.sessions.retrieve) {
+      const provider = await stripe.checkout.sessions.retrieve(prior.external_checkout_session_id);
+      const payable = provider.status === 'open' && provider.url && (!provider.expires_at || provider.expires_at * 1000 > Date.now());
+      if (payable) return provider.url as string;
+      const terminal = provider.status === 'expired' ? 'expired' : provider.status === 'complete' ? 'completed' : 'superseded';
+      await sql`update idoc.membership_checkout_sessions set status=${terminal},updated_at=now() where id=${prior.id}`;
+    } else if (prior) {
+      await sql`update idoc.membership_checkout_sessions set status='superseded',updated_at=now() where id=${prior.id}`;
+    }
+    const [sequence] = await sql<{ attempt: number }[]>`select coalesce(max(attempt),0)::int + 1 attempt
+      from idoc.membership_checkout_sessions where profile_id=${profile.id} and mode=${mode} and cycle=${cycle}`;
+    const attempt = sequence.attempt;
+    const idempotencyKey = `idoc-membership-checkout-${profile.id}-${mode}-${cycle}-${attempt}`;
+    const [evidence] = await sql<{ id: number }[]>`insert into idoc.membership_checkout_sessions
+      (profile_id,mode,cycle,status,idempotency_key,attempt) values
+      (${profile.id},${mode},${cycle},'creating',${idempotencyKey},${attempt}) returning id`;
+    let session;
+    try { session = await stripe.checkout.sessions.create({
     cancel_url: `${baseUrl}/pricing`,
     customer: customerId,
     line_items: [{
@@ -93,12 +108,21 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     // A browser double-click, retry, refresh, or concurrent request for the same paid-through
     // cycle must resolve to one provider object. Once a verified payment advances valid_until the
     // cycle changes, so a legitimate later renewal receives a new key.
-    idempotencyKey: `idoc-membership-checkout-${profile.id}-${mode}-${membership?.validUntil ?? 'new'}`,
+    idempotencyKey,
   });
-  if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
-  await db.update(renewalPreferences).set({
-    externalCheckoutSessionId: (session as { id?: string }).id ?? null,
-    updatedAt: new Date(),
-  }).where(eq(renewalPreferences.profileId, profile.id));
-  return session.url;
+    } catch (error) {
+      await sql`update idoc.membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
+      return { error };
+    }
+    if (!session.id || !session.url) {
+      await sql`update idoc.membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
+      return { error: new Error('Stripe did not return a complete Checkout Session.') };
+    }
+    await sql`update idoc.membership_checkout_sessions set external_checkout_session_id=${session.id},
+      checkout_url=${session.url},expires_at=${session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null},
+      status='open',updated_at=now() where id=${evidence.id}`;
+    return session.url;
+  });
+  if (typeof result === 'string') return result;
+  throw result.error;
 }

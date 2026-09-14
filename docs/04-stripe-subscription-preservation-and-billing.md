@@ -65,7 +65,7 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
   the schedule's resulting subscription and paid invoice remain webhook-authoritative.
 - Reversal before effective date: cancel or replace the pending transition without creating a duplicate subscription or charge.
 - Every transition: persist the current preference, pending preference, effective date, Stripe schedule/subscription references as applicable, and an audit record. Confirmation messaging must state the effective date and next expected €80 charge.
-- IDOC owns this preference and transition workflow. Customer Portal remains available for payment-method updates and invoice history but must not be treated as the source of IDOC renewal preference. Portal Configuration creation is convergent under concurrent first requests: IDOC reuses its tagged configuration, and concurrent requests share one in-flight creation before creating Portal Sessions.
+- IDOC owns this preference and transition workflow. Customer Portal remains available for payment-method updates and invoice history but must not be treated as the source of IDOC renewal preference. Portal Configuration creation is convergent under concurrent first requests: IDOC reuses its tagged configuration, concurrent requests within one process share one in-flight creation, and a stable Stripe idempotency key converges creation across application instances before Portal Sessions are created.
 
 # 5. Required webhook handling
 
@@ -151,4 +151,10 @@ verified live evidence.
 
 ## 11.1 Checkout Session expiry and retry
 
-Checkout idempotency is tied to the current paid-through cycle only while the associated server-recorded Session is open. If that Session expires or becomes unpayable, IDOC rotates the idempotency key, creates a replacement Session, and retains the prior Session as payment evidence. It must never return an expired Checkout URL on retry.
+Checkout idempotency is tied to the current paid-through cycle only while the associated append-only
+`membership_checkout_sessions` row is open and provider retrieval confirms it is payable. The row
+persists its profile, mode, cycle, provider ID, status, expiration, URL, attempt number, and exact
+idempotency key. Profile-scoped transaction locking serializes first creation and replacement. If
+that Session expires, completes, is canceled, or otherwise becomes unpayable, IDOC marks the prior
+row terminal, rotates the attempt/key, creates a replacement, and retains all earlier rows as
+evidence. It never returns an expired Checkout URL on retry.
