@@ -108,10 +108,12 @@ test('BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one
   expect(rows).toHaveLength(1);
   expect(rows[0].checkout_status).toBe('open');
   expect([5000, 7500]).toContain(rows[0].expected_amount_cents);
-  const counts = await sql`select count(*)::int count,count(distinct r.stripe_checkout_session_id)::int sessions
-    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    where r.stripe_checkout_session_id is not null and s.title='Stripe E2E Seminar B'`;
-  expect(counts[0]).toMatchObject({ count: 1, sessions: 1 });
+  const providerSessions = await stripe.checkout.sessions.list({ limit: 100 });
+  const matchingProviderSessions = providerSessions.data.filter((session) =>
+    session.livemode === false && session.metadata?.kind === 'seminar_registration' &&
+    session.metadata?.registrationId === String(rows[0].id));
+  expect(matchingProviderSessions).toHaveLength(1);
+  expect(matchingProviderSessions[0].id).toBe(rows[0].stripe_checkout_session_id);
 });
 
 test('BROWSER-EXPIRED-SESSION rejects protected reads and mutations without leaking data', async ({ page }) => {
