@@ -42,7 +42,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     const refund = await stripe.refunds.create({ amount: row.price_cents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: row.stripe_payment_intent_id }, { idempotencyKey: key });
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
-      await sql`update idoc.payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
+      await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
         refunded_at=now(),updated_at=now() where id=${request.id}`;
       if (status !== 'succeeded') await sql`update idoc.payment_refunds set refunded_at=null where id=${request.id}`;
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
