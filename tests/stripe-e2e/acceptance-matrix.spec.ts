@@ -104,7 +104,7 @@ test('BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one
   await firstRegister.dblclick();
   await page.waitForURL(/checkout\.stripe\.com/);
   expect(page.url()).toContain('checkout.stripe.com');
-  const rows = await sql`select checkout_status,expected_amount_cents from idoc.seminar_registrations order by id desc limit 1`;
+  const rows = await sql`select id,checkout_status,expected_amount_cents,stripe_checkout_session_id from idoc.seminar_registrations order by id desc limit 1`;
   expect(rows).toHaveLength(1);
   expect(rows[0].checkout_status).toBe('open');
   expect([5000, 7500]).toContain(rows[0].expected_amount_cents);
