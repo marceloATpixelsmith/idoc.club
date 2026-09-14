@@ -55,6 +55,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
+    console.error('seminar_refund_transaction_failed', error instanceof Error ? error.message : 'unknown');
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
     await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
