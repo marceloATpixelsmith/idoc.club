@@ -158,3 +158,13 @@ idempotency key. Profile-scoped transaction locking serializes first creation an
 that Session expires, completes, is canceled, or otherwise becomes unpayable, IDOC marks the prior
 row terminal, rotates the attempt/key, creates a replacement, and retains all earlier rows as
 evidence. It never returns an expired Checkout URL on retry.
+
+### Seminar Checkout provider re-verification
+
+For a seminar `checkout.session.completed` event, the handler retrieves the exact Session ID from
+Stripe before crediting the registration. The retrieved test/live provider object must match the
+locally owned billing Customer, active registration, profile, seminar, stored Checkout Session,
+authoritative database price, expected amount, EUR currency, paid status, and a PaymentIntent. A
+mismatch creates reconciliation evidence and never credits the registration. Seminar payments and
+refunds never alter membership entitlement. Stripe E2E fixtures add an unmistakable per-run tag to
+PaymentIntent and Refund metadata; ordinary member objects do not receive test metadata.

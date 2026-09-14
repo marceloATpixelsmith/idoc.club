@@ -1,22 +1,299 @@
 {
-  "version": 1,
+  "version": 2,
+  "executionClasses": {
+    "local": "Executable with disposable PostgreSQL and local provider doubles; never provider evidence.",
+    "stripe-test-mode": "Executable only with the explicit Stripe E2E safety contract and real test-mode Stripe API objects.",
+    "manual-only": "External operational evidence; never represented by an automated test."
+  },
   "manualOnly": [
-    { "id": "stripe-dashboard", "reason": "Requires an authorized Stripe test/live Dashboard operator and cannot be inferred from repository state." },
-    { "id": "hosted-provider-run", "reason": "Requires disposable Stripe test credentials, a public HTTPS application, webhook delivery, and an unmistakably test-only PostgreSQL database." },
-    { "id": "deployment-vercel", "reason": "Requires Vercel project access and evidence from the deployed revision." },
-    { "id": "production-operations", "reason": "Requires production operator, backup/restore, alerting, and reconciliation evidence." }
+    {
+      "id": "MANUAL-STRIPE-DASHBOARD",
+      "reason": "Requires an authorized Stripe Dashboard operator to verify endpoint subscriptions, restricted-key permissions, Portal policy, retry delivery, and secret rotation."
+    },
+    {
+      "id": "MANUAL-HTTPS-WEBHOOK",
+      "reason": "Requires a publicly reachable HTTPS deployment and Stripe-originated webhook delivery evidence; locally signed delivery exercises the production handler but is not Dashboard delivery evidence."
+    },
+    {
+      "id": "MANUAL-VERCEL",
+      "reason": "Requires Vercel project access, deployed revision evidence, and protected environment inspection."
+    },
+    {
+      "id": "MANUAL-PRODUCTION-OPERATIONS",
+      "reason": "Requires named operators to verify production backup and restore, alerting, reconciliation response, retention, and launch approval."
+    }
   ],
   "requirements": [
-    { "id": "membership-checkout", "tests": ["tests/checkout.integration.ts", "tests/stripe-webhook.integration.ts", "tests/stripe-e2e/hosted-checkout.acceptance.spec.ts"] },
-    { "id": "customer-portal", "tests": ["tests/customer-portal.integration.ts", "tests/stripe-e2e/acceptance-matrix.spec.ts"] },
-    { "id": "renewal-switching", "tests": ["tests/subscription-renewal-status.integration.ts", "tests/stripe-webhook.integration.ts"] },
-    { "id": "renewal-grace-recovery", "tests": ["tests/stripe-webhook.integration.ts", "tests/renewal-notice-scan.integration.ts", "tests/account-profile.integration.ts"] },
-    { "id": "seminar-checkout", "tests": ["tests/seminars.integration.ts", "tests/stripe-e2e/acceptance-matrix.spec.ts"] },
-    { "id": "seminar-refunds", "tests": ["tests/payment-refunds.test.ts", "tests/stripe-webhook.integration.ts"] },
-    { "id": "webhooks", "tests": ["tests/stripe-webhook.integration.ts"] },
-    { "id": "reconciliation", "tests": ["tests/reconciliation.test.ts", "tests/reconciliation.integration.ts"] },
-    { "id": "browser-security", "tests": ["tests/stripe-e2e/acceptance-matrix.spec.ts"] },
-    { "id": "provider-fixtures", "tests": ["tests/stripe-e2e/global-setup.ts", "tests/stripe-e2e/provider-readiness.spec.ts"] },
-    { "id": "customer-email-worker", "tests": ["tests/customer-email.integration.ts"] }
+    {
+      "id": "STRIPE-CHECKOUT",
+      "scenarios": [
+        {
+          "id": "MEMBERSHIP-ONE-TIME",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/hosted-checkout.acceptance.spec.ts",
+            "name": "completes one-time EUR 80 Checkout and verifies the test-mode Session"
+          },
+          "evidence": [
+            "checkout.sessions.retrieve",
+            "session.livemode",
+            "session.amount_total",
+            "session.currency"
+          ]
+        },
+        {
+          "id": "MEMBERSHIP-RECURRING",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/hosted-checkout.acceptance.spec.ts",
+            "name": "completes recurring EUR 80 Checkout and verifies the test-mode subscription"
+          },
+          "evidence": [
+            "checkout.sessions.retrieve",
+            "session.livemode",
+            "session.subscription"
+          ]
+        },
+        {
+          "id": "SEMINAR-CHECKOUT-PROVIDER",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/seminar-provider.acceptance.spec.ts",
+            "name": "SEMINAR-CHECKOUT-PROVIDER retrieves the exact server-created Session and ignores client-controlled payment fields"
+          },
+          "evidence": [
+            "checkout.sessions.retrieve",
+            "session.livemode",
+            "amountCents",
+            "currency: 'usd'",
+            "customer: 'cus_forged'",
+            "payment_intent: 'pi_forged'",
+            "registrationId: '999999'",
+            "profileId: '999999'"
+          ]
+        },
+        {
+          "id": "SEMINAR-WEBHOOK-INTEGRITY",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/seminar-provider.acceptance.spec.ts",
+            "name": "SEMINAR-WEBHOOK-INTEGRITY rejects amount, currency, ownership, registration, seminar, Customer, and PaymentIntent mismatches then credits once"
+          },
+          "evidence": [
+            "postVerifiedEvent",
+            "payment_status).toBe('pending')",
+            "payment_status).toBe('paid')",
+            "audit_count",
+            "membership_count"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "STRIPE-REFUNDS",
+      "scenarios": [
+        {
+          "id": "SEMINAR-REFUND-PROVIDER",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/seminar-provider.acceptance.spec.ts",
+            "name": "SEMINAR-REFUND-PROVIDER uses authoritative state, verifies the Stripe Refund, and is idempotent"
+          },
+          "evidence": [
+            "refundSeminarRegistration",
+            "stripe.refunds.retrieve",
+            "refund.livemode",
+            "refund.amount",
+            "intent?.currency",
+            "already been refunded"
+          ]
+        },
+        {
+          "id": "SEMINAR-REFUND-FAILURE-RECOVERY",
+          "execution": "local",
+          "test": {
+            "path": "tests/seminars.integration.ts",
+            "name": "preserves paid evidence when Stripe refund fails and permits a safe retry"
+          },
+          "evidence": [
+            "refund_failed",
+            "stripe_request_failed",
+            "payment_refunds"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "STRIPE-BROWSER-SECURITY",
+      "scenarios": [
+        {
+          "id": "BROWSER-DOUBLE-CLICK",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one provider Checkout Session"
+          },
+          "evidence": [
+            "dblclick",
+            "count(distinct r.stripe_checkout_session_id)",
+            "sessions: 1"
+          ]
+        },
+        {
+          "id": "BROWSER-REFRESH-BACK",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-REFRESH-BACK refresh and back do not duplicate portal sessions or local payment projections"
+          },
+          "evidence": [
+            "page.reload",
+            "page.goBack",
+            "page.goForward",
+            "paymentCountAfter"
+          ]
+        },
+        {
+          "id": "BROWSER-EXPIRED-SESSION",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-EXPIRED-SESSION rejects protected reads and mutations without leaking data"
+          },
+          "evidence": [
+            "absolute_expires_at",
+            "page.request.post",
+            "not.toMatch"
+          ]
+        },
+        {
+          "id": "BROWSER-CSRF-FAILURE",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-CSRF-FAILURE rejects a seminar mutation with missing CSRF and creates no database or Stripe object"
+          },
+          "evidence": [
+            "csrf_token",
+            "security check failed",
+            "after[0].count"
+          ]
+        },
+        {
+          "id": "BROWSER-UNAUTHORIZED-MEMBER",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-UNAUTHORIZED-MEMBER denies cross-member billing, seminar, payment, refund, and reconciliation identifiers without leakage"
+          },
+          "evidence": [
+            "external_customer_id",
+            "/admin/payments",
+            "/admin/reconciliation",
+            "not.toMatch"
+          ]
+        },
+        {
+          "id": "BROWSER-ADMIN-RECONCILIATION",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/acceptance-matrix.spec.ts",
+            "name": "BROWSER-ADMIN-RECONCILIATION permits an administrator while forged ownership identifiers reveal no provider data"
+          },
+          "evidence": [
+            "admin.json",
+            "status()).toBe(200)",
+            "not.toContain"
+          ]
+        },
+        {
+          "id": "CSRF-MUTATION-MATRIX",
+          "execution": "local",
+          "test": {
+            "path": "tests/security-e2e/csrf.spec.ts",
+            "name": "a real profile-update Server Action rejects a same-origin, correctly authenticated submission whose CSRF token field has been tampered with"
+          },
+          "evidence": [
+            "csrf_token",
+            "tampered",
+            "session security check failed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "STRIPE-ISOLATION",
+      "scenarios": [
+        {
+          "id": "PROVIDER-FIXTURES-UNIQUE",
+          "execution": "stripe-test-mode",
+          "test": {
+            "path": "tests/stripe-e2e/provider-readiness.spec.ts",
+            "name": "provider readiness is proven by isolated test-mode Customer and Product objects"
+          },
+          "evidence": [
+            "external_customer_id",
+            "metadata.run_id",
+            "livemode"
+          ]
+        },
+        {
+          "id": "LIVE-KEY-REJECTION",
+          "execution": "local",
+          "test": {
+            "path": "tests/stripe-readiness.test.ts",
+            "name": "deployment and browser-verification mode mismatches fail closed"
+          },
+          "evidence": [
+            "liveKey",
+            "browserVerification",
+            "test mode"
+          ]
+        },
+        {
+          "id": "PRODUCTION-DATABASE-REJECTION",
+          "execution": "local",
+          "test": {
+            "path": "tests/test-database-url.test.ts",
+            "name": "rejects missing, malformed, unsupported, ambiguous, and production-like URLs"
+          },
+          "evidence": [
+            "production-db",
+            "assert.throws"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "STRIPE-LOCAL-PROJECTIONS",
+      "scenarios": [
+        {
+          "id": "WEBHOOK-REPLAY",
+          "execution": "local",
+          "test": {
+            "path": "tests/stripe-webhook.integration.ts",
+            "name": "a replayed event id is a no-op the second time, never double-crediting a payment"
+          },
+          "evidence": [
+            "second",
+            "count(*)::int",
+            "assert.equal"
+          ]
+        },
+        {
+          "id": "RECONCILIATION-AUTHORIZATION",
+          "execution": "local",
+          "test": {
+            "path": "tests/reconciliation.integration.ts",
+            "name": "listReconciliationFindings and getLastReconciliationRun reject a non-administrator"
+          },
+          "evidence": [
+            "nonAdmin",
+            "assert.rejects",
+            "listReconciliationFindings"
+          ]
+        }
+      ]
+    }
   ]
 }

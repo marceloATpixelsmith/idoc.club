@@ -21,8 +21,9 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const registrationId = Number(registrationIdValue); if (!Number.isInteger(registrationId) || registrationId <= 0) throw new RefundError('Registration not found.');
   const explanation = reason(reasonValue);
-  const [row] = await client<{ payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents
-    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id where r.id=${registrationId} limit 1`;
+  const [row] = await client<{ email: string; payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents,u.email
+    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
   if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
@@ -39,7 +40,8 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     values(${registrationId},${key},${row.price_cents},'pending',${explanation},${actor.id}) on conflict(idempotency_key) do update set updated_at=now() returning id`;
   const stripe = testStripe ?? getStripeServerClient();
   try {
-    const refund = await stripe.refunds.create({ amount: row.price_cents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: row.stripe_payment_intent_id }, { idempotencyKey: key });
+    const refund = await stripe.refunds.create({ amount: row.price_cents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId),
+      ...(row.email?.startsWith('stripe-e2e-') && row.email.endsWith('@example.test') ? { testRun: row.email } : {}) }, payment_intent: row.stripe_payment_intent_id }, { idempotencyKey: key });
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
       await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,

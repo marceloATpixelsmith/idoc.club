@@ -53,6 +53,10 @@ export default async function globalSetup() {
   const secondCustomer = await stripe.customers.create({ email: secondEmail, metadata: { fixture: secondEmail, run_id: runId } },
     { idempotencyKey: `idoc-stripe-e2e-customer-${runId}-other` });
   await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${secondProfile.id},${secondCustomer.id})`;
+  const adminEmail = `stripe-e2e-${runId}-admin@example.test`;
+  const [admin] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
+    values(${adminEmail},'stripe-e2e-disabled-password',now(),'active') returning id,session_version`;
+  await sql`insert into idoc.application_roles(user_id,role) values(${admin.id},'administrator')`;
   await sql`insert into idoc.seminars(title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
     values('Stripe E2E Seminar A','Disposable Stripe E2E fixture',current_date + interval '30 days','10:00','12:00','Europe/Berlin','Test venue A',20,5000,now() + interval '14 days','published','online_stripe',${user.id},${user.id}),
           ('Stripe E2E Seminar B','Disposable Stripe E2E fixture',current_date + interval '31 days','10:00','12:00','Europe/Berlin','Test venue B',20,7500,now() + interval '14 days','published','online_stripe',${user.id},${user.id})`;
@@ -68,9 +72,16 @@ export default async function globalSetup() {
   const commitSha = process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   await writeFile(`${process.env.STRIPE_E2E_EVIDENCE_DIR}/run.json`, JSON.stringify({
     commitSha, customerIds: [customer.id, secondCustomer.id], databaseMigration: '0050_membership_checkout_sessions',
-    fixtureEmails: [email, secondEmail], mode: 'test', productId: product.id, runId, startedAt: new Date().toISOString(),
+    fixtureEmails: [email, secondEmail, adminEmail], mode: 'test', productId: product.id, runId, startedAt: new Date().toISOString(),
   }, null, 2));
   await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
+  const adminSessionId = randomUUID();
+  await sql`insert into idoc.auth_sessions(session_id,user_id,session_version,authenticated_at,last_activity_at,absolute_expires_at)
+    values(${adminSessionId},${admin.id},${admin.session_version},${now.toISOString()},${now.toISOString()},${expires.toISOString()})`;
+  const adminToken = await new SignJWT({ version: 2, sessionId: adminSessionId, user: { id: admin.id, sessionVersion: admin.session_version }, authenticatedAt: now.toISOString(), lastActivityAt: now.toISOString(), absoluteExpiresAt: expires.toISOString() })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime(Math.floor(expires.getTime() / 1000))
+    .sign(new TextEncoder().encode(AUTH_SECRET));
+  await writeFile('.stripe-e2e/admin.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: adminToken, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));
 
   const context = await request.newContext();
   try {

@@ -88,3 +88,94 @@ permission confirmation, Customer Portal settings, Production Vercel environment
 production backup/restore, named operator approval, every live-mode payment test, and every artifact
 that requires access to the owner's Stripe or Vercel accounts. The Stripe evidence checklist item
 must remain unchecked until a real operator supplies structured, non-secret evidence.
+
+## Acceptance audit follow-up: scenario boundaries
+
+The version 2 manifest maps stable requirement and scenario IDs to an **exact test title**, execution
+class, and scenario-specific evidence anchors. The validator parses TypeScript test declarations and
+requires assertions inside the mapped test body; it rejects absent files, duplicate IDs, skipped,
+fixed, placeholder, or disabled tests, missing behavior anchors, fake-provider claims in provider
+scenarios, and automated mappings on manual-only items. Its actionable diagnostic includes the
+requirement ID, scenario ID, test path, missing behavior, and expected evidence. This remains an
+inventory/traceability check: passing it says nothing about whether PostgreSQL, Playwright, or Stripe
+ran.
+
+### Executable locally
+
+Disposable-PostgreSQL integration tests cover authoritative seminar pricing and ownership,
+registration concurrency, webhook mismatch rejection and replay, refund authorization and exact
+amounts, retained original payment evidence, provider-failure recovery, duplicate-refund prevention,
+CSRF rejection, reconciliation authorization, test-database rejection, and live-key rejection.
+Provider doubles in these tests deliberately prove application behavior only and are never described
+as Stripe evidence.
+
+### Executable with Stripe test mode
+
+`tests/stripe-e2e/seminar-provider.acceptance.spec.ts` registers through the member UI, injects forged
+client payment/ownership fields, retrieves the exact server-created Checkout Session from Stripe,
+asserts its Customer, registration, profile, seminar, authoritative amount, EUR currency, and
+`livemode=false`, then drives the production signature-verifying webhook endpoint. Mismatch events
+run while the retrieved provider Session is unpaid, the completed provider Session credits exactly
+once, and replay leaves the payment audit and membership entitlement unchanged. The provider refund
+scenario uses the same authorized refund service called by the administrator Server Action, retrieves
+the real Refund and PaymentIntent, verifies amount/currency/ownership metadata and test mode, checks
+the canceled/refunded projection without changing membership, and proves a second attempt neither
+calls Stripe nor duplicates evidence. Browser scenarios separately exercise member denial, the real
+CSRF form boundary, expired sessions, double-click, refresh/back/forward, cross-member identifier
+forgery and the administrator reconciliation page. Administrator refund CSRF and fresh-TOTP behavior
+also remains executable in the local security/integration suites; the provider suite does not bypass
+or weaken those boundaries.
+
+The application re-retrieves a seminar Checkout Session from Stripe during verified webhook handling
+and uses that response for payment, Customer, PaymentIntent, amount and currency decisions. A signed
+event body cannot replace those provider-controlled fields. Test-created Customers carry `run_id` and
+fixture metadata; seminar PaymentIntents and Refunds carry `testRun` equal to the unique
+`stripe-e2e-...@example.test` fixture identity. IDs are generated per database reset/run, the suite is
+single-worker, and stable idempotency keys are scoped to newly generated registration IDs. Concurrent
+runs therefore require different disposable databases and fixture email values and cannot reuse a
+Customer, Checkout Session, PaymentIntent, registration, or Refund identity.
+
+### Provider execution safety and exact inputs
+
+The complete provider command requires all of the following (values shown are shapes, not secrets):
+
+```sh
+NODE_ENV=test \
+STRIPE_E2E_ENABLED=true \
+STRIPE_E2E_APP_URL=https://reachable-test-host.example.test \
+STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<unique-run>@example.test \
+STRIPE_E2E_EVIDENCE_DIR=.stripe-e2e/evidence/<unique-run> \
+TEST_DATABASE_URL=postgresql://.../idoc_stripe_e2e_<unique-run> \
+POSTGRES_URL=postgresql://.../a-different-non-test-production-destination \
+AUTH_SECRET=<test-only-at-least-32-byte-secret> \
+BASE_URL=https://reachable-test-host.example.test \
+STRIPE_SECRET_KEY=sk_test_... \
+STRIPE_WEBHOOK_SECRET=whsec_... \
+STRIPE_MEMBERSHIP_PRODUCT_ID=prod_... \
+STRIPE_MEMBERSHIP_RECURRING_PRICE_ID=price_... \
+STRIPE_MEMBERSHIP_ONE_TIME_PRICE_ID=price_... \
+STRIPE_PORTAL_CONFIGURATION_ID=bpc_... \
+pnpm test:stripe-acceptance
+```
+
+The existing configuration validation is fail-closed: provider execution refuses absent opt-in,
+live-mode keys, invalid canonical Stripe objects, unreachable application URLs, ambiguous database
+names, or a test destination equal to `POSTGRES_URL`. Production/live Stripe keys must never be
+available to test jobs. The database is dropped and migrated, so it must be disposable and dedicated
+to one run. Do not point two concurrent runs at the same database or reuse a fixture email.
+
+Stripe test objects are intentionally retained in the test account, unmistakably tagged, for audit
+and Dashboard correlation; local database fixtures are destroyed on the next run. Operators may
+later remove tagged test objects under the Stripe account's retention policy. Cleanup must never
+delete `payments`, `payment_refunds`, audit rows, webhook-event rows, or other historical production
+payment evidence.
+
+### Still manual-only
+
+No repository check supplies Stripe Dashboard endpoint-subscription/retry evidence, genuine
+Stripe-originated delivery to the public HTTPS endpoint, restricted-key permission/rotation proof,
+Customer Portal Dashboard configuration, Vercel deployment/environment evidence, production
+backup/restore, alert delivery, operator reconciliation response, or live launch approval. Locally
+signed webhook requests intentionally use the production verification/processing route but do not
+claim Stripe-originated network delivery. These items remain manual-only in document 27 and must be
+attached to the release record by authorized operators.
