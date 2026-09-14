@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 51);
+  assert.equal(count, 52);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,10 +77,51 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 51);
+    assert.equal(count, 52);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
+  }
+});
+
+test('forward recovery repairs migrations skipped after an out-of-order production ledger', async () => {
+  await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
+  const through0043 = await mkdtemp(join(tmpdir(), 'idoc-through-0043-'));
+  const through0046 = await mkdtemp(join(tmpdir(), 'idoc-through-0046-'));
+  try {
+    for (const [temporary, lastIndex] of [[through0043, 43], [through0046, 46]] as const) {
+      await mkdir(join(temporary, 'meta'));
+      const migrationNames = (await readdir(migrationsFolder))
+        .filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= lastIndex);
+      for (const name of migrationNames) await cp(join(migrationsFolder, name), join(temporary, name));
+      const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+      journal.entries = journal.entries.slice(0, lastIndex + 1);
+      await writeFile(join(temporary, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+    }
+
+    await migrate(database, { migrationsFolder: through0043, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    await migrate(database, { migrationsFolder: through0046, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name='content_pages'`).length, 0);
+    assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name='administrator_table_preferences'`).length, 0);
+
+    await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+
+    for (const tableName of ['content_pages', 'content_page_audiences', 'content_page_revisions',
+      'administrator_table_preferences', 'renewal_preferences', 'payment_refunds', 'membership_checkout_sessions']) {
+      assert.equal((await sql`select 1 from information_schema.tables where table_schema='idoc' and table_name=${tableName}`).length, 1,
+        `idoc.${tableName} must be restored by the forward recovery migration`);
+    }
+    assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='memberships' and column_name='grace_ends_on'`).length, 1);
+    for (const columnName of ['expected_amount_cents', 'currency', 'checkout_status', 'checkout_created_at',
+      'payment_status_updated_at', 'disputed_at', 'chargeback_at']) {
+      assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='seminar_registrations' and column_name=${columnName}`).length, 1,
+        `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
+    }
+    const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
+    assert.equal(count, 46, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
+  } finally {
+    await rm(through0043, { force: true, recursive: true });
+    await rm(through0046, { force: true, recursive: true });
   }
 });
 
@@ -206,7 +247,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[40].when > journal.entries[39].when, 'the news-articles migration must follow migration 0039');
   assert.equal(journal.entries[41].tag, '0041_seminars');
   assert.ok(journal.entries[41].when > journal.entries[40].when, 'the seminars migration must follow migration 0040');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0050_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0051_snapshot.json'), 'utf8'));
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
@@ -238,7 +279,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0050_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0051_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
@@ -416,7 +457,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 51);
+  assert.equal(count, 52);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

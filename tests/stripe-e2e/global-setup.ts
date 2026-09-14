@@ -1,7 +1,7 @@
 import { request } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { SignJWT } from 'jose';
 import Stripe from 'stripe';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -23,6 +23,11 @@ export default async function globalSetup() {
     migrationsSchema: 'idoc',
     migrationsTable: '__drizzle_migrations',
   });
+  const migrationJournal = JSON.parse(await readFile(resolve(process.cwd(), 'lib/db/migrations/meta/_journal.json'), 'utf8'));
+  const databaseMigration = migrationJournal.entries.at(-1)?.tag;
+  if (typeof databaseMigration !== 'string' || !/^\d{4}_[a-z0-9_]+$/.test(databaseMigration)) {
+    throw new Error('The current database migration could not be resolved from the Drizzle journal.');
+  }
   const runId = randomUUID();
   const email = process.env.STRIPE_E2E_MEMBER_EMAIL;
   if (!email || !/^stripe-e2e-[a-z0-9-]+@example\.test$/i.test(email)) {
@@ -71,7 +76,7 @@ export default async function globalSetup() {
   await mkdir('.stripe-e2e', { recursive: true });
   const commitSha = process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   await writeFile(`${process.env.STRIPE_E2E_EVIDENCE_DIR}/run.json`, JSON.stringify({
-    commitSha, customerIds: [customer.id, secondCustomer.id], databaseMigration: '0050_membership_checkout_sessions',
+    commitSha, customerIds: [customer.id, secondCustomer.id], databaseMigration,
     fixtureEmails: [email, secondEmail, adminEmail], mode: 'test', productId: product.id, runId, startedAt: new Date().toISOString(),
   }, null, 2));
   await writeFile('.stripe-e2e/member.json', JSON.stringify({ cookies: [{ name: 'idoc-session', value: token, domain: new URL(process.env.STRIPE_E2E_APP_URL as string).hostname, path: '/', expires: Math.floor(expires.getTime() / 1000), httpOnly: true, secure: false, sameSite: 'Lax' }], origins: [] }));

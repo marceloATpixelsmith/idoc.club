@@ -681,7 +681,7 @@ verified.** Use only minimal controlled amounts if a separately approved live te
 ### Deployment, replay, reconciliation, and incident procedures
 
 1. Back up PostgreSQL; verify `idoc` schema ownership and migration checksum history; apply every
-   migration through `0049`; run the disposable-database integration/migration checks; then verify
+   migration through `0051`; run the disposable-database integration/migration checks; then verify
    tables, constraints, indexes, and generated Drizzle snapshot/journal match the committed schema.
    Do not enable refund UI or webhook traffic on a revision whose schema migration is incomplete.
 2. Deploy with payment traffic disabled, validate `/api/health`, Cron `CRON_SECRET`, provider mode,
