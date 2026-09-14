@@ -102,7 +102,7 @@
           "evidence": [
             "refundSeminarRegistration",
             "stripe.refunds.retrieve",
-            "refund.livemode",
+            "(refund as unknown as Stripe.Refund).livemode",
             "refund.amount",
             "intent?.currency",
             "already been refunded"
