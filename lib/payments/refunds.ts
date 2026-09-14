@@ -43,7 +43,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
       await sql`update idoc.payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
-        refunded_at=${status === 'succeeded' ? new Date() : null},updated_at=now() where id=${request.id}`;
+        refunded_at=${status === 'succeeded' ? new Date().toISOString() : null},updated_at=now() where id=${request.id}`;
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
@@ -57,7 +57,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
     await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
-    throw new RefundError(process.env.NODE_ENV === 'test' && error instanceof Error ? `Refund transaction failed: ${error.message}` : 'Stripe could not complete the refund. The payment was preserved for reconciliation.');
+    throw new RefundError('Stripe could not complete the refund. The payment was preserved for reconciliation.');
   }
 }
 
