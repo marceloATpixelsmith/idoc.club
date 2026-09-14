@@ -43,7 +43,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
       await sql`update idoc.payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
-        refunded_at=case when ${status} = 'succeeded' then now() else null end,updated_at=now() where id=${request.id}`;
+        refunded_at=case when ${status}::text = 'succeeded' then now() else null end,updated_at=now() where id=${request.id}`;
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
