@@ -331,6 +331,31 @@ test('the production seminar refund flow uses authoritative payment state, persi
   assert.equal((await sql`select count(*)::int count from idoc.payment_refunds where seminar_registration_id=${registrationId}`)[0].count, 1);
 });
 
+test('preserves paid evidence when Stripe refund fails and permits a safe retry', async () => {
+  const admin = await adminUser();
+  const { profile, user } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId));
+  await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_preserved',paid_at=now() where id=${registrationId}`;
+  const failure = { refunds: { create: async () => { throw new Error('injected provider outage'); } } };
+  await assert.rejects(asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Provider failure recovery', failure)), /payment was preserved/i);
+  const [registration] = await sql`select registration_status,payment_status,stripe_payment_intent_id,paid_at from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(registration.registration_status, 'registered');
+  assert.equal(registration.payment_status, 'refund_failed');
+  assert.equal(registration.stripe_payment_intent_id, 'pi_preserved');
+  assert.ok(registration.paid_at);
+  const [failed] = await sql`select status,failure_code,external_refund_id from idoc.payment_refunds where seminar_registration_id=${registrationId}`;
+  assert.deepEqual(failed, { external_refund_id: null, failure_code: 'stripe_request_failed', status: 'failed' });
+  assert.equal((await sql`select count(*)::int count from idoc.memberships where profile_id=${profile.id}`)[0].count, 1);
+
+  let calls = 0;
+  const recovery = { refunds: { create: async () => { calls += 1; return { id: 're_recovered', status: 'succeeded' } as never; } } };
+  await asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Provider failure recovery', recovery));
+  assert.equal(calls, 1);
+  assert.equal((await sql`select count(*)::int count from idoc.payment_refunds where seminar_registration_id=${registrationId}`)[0].count, 1);
+  assert.equal((await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`)[0].payment_status, 'refunded');
+});
+
 test('admin registration search/filter finds a member by name or email and CSV export is capped, escaped, and audited', async () => {
   const admin = await adminUser();
   const { user } = await paidMember();

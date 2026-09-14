@@ -16,6 +16,7 @@ export type WebhookStripeClient = {
   checkout: {
     sessions: {
       listLineItems: (sessionId: string) => Promise<{ data: Array<{ price: { id: string; product: string | { id: string } } | null }> }>;
+      retrieve?: (sessionId: string) => Promise<Stripe.Checkout.Session>;
     };
   };
   setupIntents?: { retrieve: (id: string) => Promise<Stripe.SetupIntent> };
@@ -165,7 +166,12 @@ async function handleInvoicePaymentActionRequired(_tx: Transaction, _event: Stri
 // entitlement (docs/02 §12) -- this only ever updates idoc.seminar_registrations, distinguished
 // from a membership checkout entirely by the `kind` metadata createSeminarCheckoutSession sets, so
 // it can never be confused with the membership one-time-fee path below even if amounts coincide.
-async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: Stripe.Checkout.Session) {
+async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredSession: Stripe.Checkout.Session, stripe: WebhookStripeClient) {
+  // Stripe's retrieval response, rather than browser input or even the delivered event body, is
+  // authoritative for provider-controlled payment/customer fields in production.
+  const session = stripe.checkout.sessions.retrieve
+    ? await stripe.checkout.sessions.retrieve(deliveredSession.id)
+    : deliveredSession;
   const registrationId = Number(session.metadata?.registrationId);
   const metadataProfileId = Number(session.metadata?.profileId);
   const metadataSeminarId = Number(session.metadata?.seminarId);
@@ -175,8 +181,10 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: S
   const [registration] = await tx.select({ checkoutSessionId: seminarRegistrations.stripeCheckoutSessionId,
     expectedAmountCents: seminarRegistrations.expectedAmountCents, paymentStatus: seminarRegistrations.paymentStatus,
     priceCents: seminars.priceCents, profileId: seminarRegistrations.profileId,
-    registrationStatus: seminarRegistrations.registrationStatus, seminarId: seminarRegistrations.seminarId }).from(seminarRegistrations)
+    registrationStatus: seminarRegistrations.registrationStatus, seminarId: seminarRegistrations.seminarId,
+    customerId: billingAccounts.externalCustomerId }).from(seminarRegistrations)
     .innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
+    .leftJoin(billingAccounts, eq(billingAccounts.profileId, seminarRegistrations.profileId))
     .where(eq(seminarRegistrations.id, registrationId)).limit(1);
   if (!registration) return;
   // Grant credit only against this seminar's own current fee, matching the amount/currency
@@ -185,7 +193,8 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, session: S
     registration.seminarId === metadataSeminarId && registration.checkoutSessionId === session.id &&
     registration.expectedAmountCents === registration.priceCents && session.amount_total === registration.priceCents &&
     session.metadata?.amountCents === String(registration.priceCents) && session.metadata?.currency === 'EUR' &&
-    session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid';
+    session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid' &&
+    resolvedCustomerId(session.customer) === registration.customerId;
   if (!valid) {
     await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
       summary: 'A paid seminar Checkout Session did not match its active local registration.',
@@ -355,7 +364,7 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     return;
   }
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
-  if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session);
+  if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session, stripe);
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;
   const ownedProfileId = await resolveProfileId(tx, resolvedCustomerId(session.customer));

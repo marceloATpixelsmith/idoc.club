@@ -23,8 +23,8 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
   const actor = await requireAccountAccess('member');
   const registrationId = Number(registrationIdValue);
   if (!Number.isInteger(registrationId) || registrationId <= 0) throw new SeminarRegistrationError('Registration not found.');
-  const [identity] = await client<{ profile_id: number; user_id: number }[]>`select r.profile_id,p.user_id from idoc.seminar_registrations r
-    join idoc.profiles p on p.id=r.profile_id where r.id=${registrationId} limit 1`;
+  const [identity] = await client<{ email: string; profile_id: number; user_id: number }[]>`select r.profile_id,p.user_id,u.email from idoc.seminar_registrations r
+    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
   if (!identity || identity.user_id !== actor.id) throw new SeminarRegistrationError('Registration not found.');
   const stripe = (testStripeClient ?? getStripeServerClient()) as SeminarCheckoutStripeClient;
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, identity.profile_id);
@@ -51,8 +51,10 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
       cancel_url: `${baseUrl}/seminars?checkout=canceled`, customer: customerId,
       line_items: [{ price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents }, quantity: 1 }],
       metadata: { amountCents: String(row.price_cents), currency: 'EUR', kind: 'seminar_registration',
-        profileId: String(row.profile_id), registrationId: String(registrationId), seminarId: String(row.seminar_id) },
-      mode: 'payment', payment_intent_data: { metadata: { kind: 'seminar_registration', registrationId: String(registrationId) } },
+        profileId: String(row.profile_id), registrationId: String(registrationId), seminarId: String(row.seminar_id),
+        ...(identity.email?.startsWith('stripe-e2e-') && identity.email.endsWith('@example.test') ? { testRun: identity.email } : {}) },
+      mode: 'payment', payment_intent_data: { metadata: { kind: 'seminar_registration', registrationId: String(registrationId),
+        ...(identity.email?.startsWith('stripe-e2e-') && identity.email.endsWith('@example.test') ? { testRun: identity.email } : {}) } },
       success_url: `${baseUrl}/seminars?checkout=success`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
