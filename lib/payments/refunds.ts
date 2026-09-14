@@ -49,13 +49,12 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
       if (status === 'succeeded') await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents},'refundId',${refund.id},'registrationId',${registrationId},'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
+        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
         from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} on conflict(dedupe_key) do nothing`;
     });
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
-    console.error('seminar_refund_transaction_failed', error instanceof Error ? error.message : 'unknown');
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
     await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
