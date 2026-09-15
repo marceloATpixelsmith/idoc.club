@@ -8,6 +8,8 @@ The profile, roles, consent evidence, audit evidence, and account-state transiti
 
 After an opted-in onboarding transaction commits, the server makes a best-effort Mailchimp Marketing add-or-update request. It sends both `status` and `status_if_new` as `subscribed`, allowing a new member to be created and a previously pending or unsubscribed member to be resubscribed from fresh explicit consent. The request has a five-second timeout. Missing configuration, provider rejection, network failure, or timeout cannot roll back onboarding and has no Stripe, payment, billing, entitlement, or subscription effect.
 
+Self-service membership cancellation (docs/02 §5.1) makes the mirror-image best-effort request, setting only `status` to `unsubscribed` (never `status_if_new`, so a member with no existing Mailchimp record is not given one just to mark it unsubscribed). The same isolation applies in both directions: this call can never block, fail, or roll back the membership-level cancellation it accompanies.
+
 ## Runtime configuration
 
 The server-only integration uses `MAILCHIMP_MARKETING_API_KEY`, `MAILCHIMP_MARKETING_SERVER_PREFIX`, and `MAILCHIMP_MARKETING_AUDIENCE_ID`. If any value is absent, onboarding still completes and no provider call is attempted. These values must never be exposed to browser code or persisted as consent evidence.

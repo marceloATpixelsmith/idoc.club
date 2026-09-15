@@ -1,14 +1,14 @@
 import 'server-only';
 
 import { z } from 'zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, memberships, subscriptions } from '@/lib/db/schema';
+import { auditLog, memberships } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator } from './authorization';
 import { lockLatestMembership } from './locking';
-import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
-import { cancelMemberSubscription, type CancellationStripeClient } from '@/lib/payments/stripe';
+import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import type { CancellationStripeClient } from '@/lib/payments/stripe';
 
 const REINSTATABLE_STATUSES = ['active', 'grace', 'complimentary', 'canceled'] as const;
 // Deliberately excludes 'suspended': all suspension goes through suspendMembership below, which
@@ -22,27 +22,6 @@ function isRealCalendarDate(value: string): boolean {
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
-async function findOpenSubscription(profileId: number) {
-  const [subscription] = await db.select({ externalSubscriptionId: subscriptions.externalSubscriptionId })
-    .from(subscriptions)
-    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES)))
-    .orderBy(desc(subscriptions.createdAt)).limit(1);
-  return subscription ?? null;
-}
-
-// Best-effort: cancels an open Stripe subscription if one exists, never throws. Does not write
-// subscriptions.status — the customer.subscription.deleted webhook this triggers owns that write.
-async function cancelOpenSubscriptionIfAny(profileId: number, testStripeClient?: CancellationStripeClient): Promise<{ stripeCancelError?: string; stripeCancelled: boolean }> {
-  const subscription = await findOpenSubscription(profileId);
-  if (!subscription) return { stripeCancelled: false };
-  try {
-    await cancelMemberSubscription(subscription.externalSubscriptionId, testStripeClient);
-    return { stripeCancelled: true };
-  } catch (error) {
-    return { stripeCancelError: error instanceof Error ? error.message : 'Unknown Stripe error.', stripeCancelled: false };
-  }
 }
 
 /**

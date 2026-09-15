@@ -25,8 +25,10 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       expect(customer.livemode).toBe(false);
       expect(customer.email).toBe(billing.email);
     }
-    await page.goto('/dashboard');
-    const manage = page.getByRole('button', { name: /manage payment method/i }).or(
+    // "Manage payment method" on the dashboard is now an in-app link to its own subpage; the
+    // actual portal-opening button lives there.
+    await page.goto('/dashboard/payment-method');
+    const manage = page.getByRole('button', { name: /update payment method/i }).or(
       page.getByRole('button', { name: /customer portal/i }),
     );
     await expect(manage).toBeVisible();
@@ -38,12 +40,10 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       forged.value = String(forgedCustomerId);
       form.append(forged);
     }, forgedBilling.external_customer_id);
-    // "Manage payment method" opens the portal in a new tab rather than navigating this page away.
-    const [popup] = await Promise.all([page.waitForEvent('popup'), manage.click()]);
-    await popup.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
-    await expect(popup.getByText(billing.email, { exact: false })).toBeVisible();
-    await expect(popup.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
-    await popup.close();
+    await manage.click();
+    await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
+    await expect(page.getByText(billing.email, { exact: false })).toBeVisible();
+    await expect(page.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
   });
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
@@ -78,15 +78,11 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   });
 
   test('BROWSER-REFRESH-BACK refresh and back do not duplicate portal sessions or local payment projections', async ({ page }) => {
-    await page.goto('/dashboard');
-    const manage = page.getByRole('button', { name: /manage payment method/i });
+    await page.goto('/dashboard/payment-method');
+    const manage = page.getByRole('button', { name: /update payment method/i });
     await expect(manage).toBeVisible();
-    // The portal opens in a new tab, leaving this page's own history at /dashboard throughout --
-    // exercise the back/reload/back/forward sequence against that unaffected history, same intent
-    // as the pre-popup same-tab version of this test.
-    const [popup] = await Promise.all([page.waitForEvent('popup'), manage.click()]);
-    await popup.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
-    await popup.close();
+    await manage.click();
+    await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
     await page.goBack();
     const paymentCount = await sql`select count(*)::int as count from idoc.payments p
       join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id

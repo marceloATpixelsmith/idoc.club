@@ -9,11 +9,14 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSession } from '@/lib/auth/session';
-import { subscribeToMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
+import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
 export type OnboardingConsentInput = {
@@ -218,6 +221,44 @@ export async function deleteOwnAccount() {
     }).where(eq(users.id, actor.id));
     await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
   });
+}
+
+/**
+ * Self-service membership cancellation -- distinct from both deleteOwnAccount (which mangles the
+ * login email and denies all future sign-in) and disableAutomaticRenewal/the Renewal Mode control
+ * (which only stops future billing while access continues through the paid-through date). This
+ * ends access immediately: status becomes 'canceled' with valid_until backdated to yesterday, so
+ * isEntitled returns false starting now rather than at the next date rollover. The login/profile
+ * record itself is untouched -- a member can sign back in later and see an inactive membership,
+ * e.g. to re-subscribe from the pricing page. Best-effort cancels any open Stripe subscription
+ * immediately (not at-period-end) and unsubscribes from the marketing mailing list; neither failure
+ * blocks the membership-level cancellation, which is unconditional and DB-only.
+ */
+export async function cancelOwnMembership(testStripeClient?: CancellationStripeClient) {
+  const actor = await authenticatedActor('billing_boundary');
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) throw new Error('A member profile is required to cancel a membership.');
+  const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, actor.id)).limit(1);
+
+  const membership = await db.transaction(async (tx) => {
+    const current = await lockLatestMembership(tx, profile.id);
+    if (!current) throw new Error('No membership on file to cancel.');
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const [updated] = await tx.update(memberships).set({
+      status: 'canceled', updatedAt: new Date(), validUntil: yesterday.toISOString().slice(0, 10),
+    }).where(eq(memberships.id, current.id)).returning();
+    await tx.insert(auditLog).values({
+      action: 'member.membership_canceled', actorId: actor.id,
+      afterJson: { membership: updated }, beforeJson: { membership: current },
+      entityId: String(profile.id), entityType: 'profile', reason: 'Member self-service cancellation.',
+    });
+    return updated;
+  });
+
+  const stripeResult = await cancelOpenSubscriptionIfAny(profile.id, testStripeClient);
+  if (account?.email) await unsubscribeFromMarketingAudience(account.email);
+  return { membership, ...stripeResult };
 }
 
 export async function listAuditHistory(profileId: number) {

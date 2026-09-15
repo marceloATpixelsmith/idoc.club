@@ -1,38 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
-import { cancelPendingRenewalAction, disableAutomaticRenewalAction, enableAutomaticRenewalAction, manageBillingAction } from '@/lib/payments/actions';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { cancelPendingRenewalAction, disableAutomaticRenewalAction, enableAutomaticRenewalAction } from '@/lib/payments/actions';
+import { cancelMembershipAction } from './membership-actions';
 
 type Preference = { currentMode: string; effectiveOn: string | null; expectedChargeCents: number | null; pendingMode: string | null } | null;
 type Action = typeof enableAutomaticRenewalAction;
-
-function ManageBillingButton() {
-  const [state, submit, pending, dialog] = useFreshStepUpAction(manageBillingAction, {});
-  // The Server Action is async, so by the time its redirectUrl comes back we're well past the
-  // click's user-activation window -- a bare window.open() here would be silently popup-blocked.
-  // Open the tab synchronously from the click instead, then point it at the real URL once known;
-  // if the popup was blocked (or never captured), fall back to navigating the current tab.
-  const popupRef = useRef<Window | null>(null);
-  useEffect(() => {
-    if (!state.redirectUrl) return;
-    const popup = popupRef.current;
-    if (popup && !popup.closed) popup.location.href = String(state.redirectUrl);
-    else window.location.assign(String(state.redirectUrl));
-  }, [state.redirectUrl]);
-  return <><form action={submit} onSubmit={() => {
-    const popup = window.open('', '_blank');
-    if (popup) popup.opener = null;
-    popupRef.current = popup;
-  }}><CsrfField /><Button disabled={pending} type="submit">
-    {pending ? <AuthPendingLabel text="Submitting" /> : 'Manage payment method'}
-  </Button>{state.error ? <p className="mt-2 text-sm text-red-400" role="alert">{state.error}</p> : null}</form>{dialog}</>;
-}
 
 /** One real native radio group (shared `name`, one `<form>`) so arrow-key navigation and a single
  * tab stop work the way assistive tech expects -- two separately-formed radios don't group. The
@@ -62,7 +42,37 @@ function RenewalModeGroup({ dispatch, selection }: { dispatch: Action; selection
         </label>
       </div>
     </form>
-    {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
+    {state.error ? <p className="mt-2 text-sm text-red-400" role="alert">{state.error}</p> : null}
+    {dialog}
+  </>;
+}
+
+/** Distinct from, and never triggered by, the Renewal Mode control above -- this ends access
+ * immediately rather than just stopping future billing, so it gets its own explicit confirmation
+ * naming exactly what happens before anything is submitted. */
+function CancelMembershipButton() {
+  const [state, submit, pending, dialog] = useFreshStepUpAction(cancelMembershipAction, {});
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  return <>
+    <Dialog onOpenChange={setConfirmOpen} open={confirmOpen}>
+      <DialogTrigger asChild><Button type="button">Cancel membership</Button></DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cancel your membership?</DialogTitle>
+          <DialogDescription>
+            This ends your membership immediately, removes you from the mailing list, and signs you out of every device. It does not delete your account or login -- you can sign back in later, but your membership will show as canceled.
+          </DialogDescription>
+        </DialogHeader>
+        <form action={submit}>
+          <CsrfField />
+          {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
+          <DialogFooter className="mt-2">
+            <DialogClose asChild><Button type="button" variant="outline">Keep my membership</Button></DialogClose>
+            <Button disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Canceling" /> : 'Yes, cancel my membership'}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
     {dialog}
   </>;
 }
@@ -94,28 +104,41 @@ export function MembershipCard({ canManageBilling, renewalDate, showRenew, statu
   }, [pendingMode]);
 
   return (
-    <section className="mt-6 max-w-md space-y-3 rounded-lg border p-4">
-      <h2 className="font-semibold text-foreground">Membership</h2>
-      <p className="text-sm text-foreground">Type: <span className="inline-flex items-center gap-2 align-middle text-2xl font-semibold tracking-tight text-gold">{typeIcon}{typeLabel}</span></p>
+    <section className="mt-6 max-w-md rounded-lg border p-5">
+      <h2 className="text-lg font-semibold text-foreground">Membership</h2>
 
-      {statusLabel ? <p className="text-sm text-foreground">Status: {statusLabel}</p> : null}
-      {renewalDate ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-foreground">Renewal Date: {renewalDate}</p>
-          {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
-        </div>
-      ) : null}
-      <p className="text-sm text-foreground">Annual membership: €80</p>
+      <dl className="mt-4 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-3 text-sm">
+        <dt className="font-semibold text-foreground">Type</dt>
+        <dd className="flex items-center gap-2 text-xl font-semibold text-gold">{typeIcon}{typeLabel}</dd>
+
+        {statusLabel ? <><dt className="font-semibold text-foreground">Status</dt><dd className="text-foreground">{statusLabel}</dd></> : null}
+
+        {renewalDate ? <>
+          <dt className="font-semibold text-foreground">Renewal Date</dt>
+          <dd className="flex flex-wrap items-center justify-between gap-3 text-foreground">
+            <span>{renewalDate}</span>
+            {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
+          </dd>
+        </> : null}
+
+        <dt className="font-semibold text-foreground">Annual Fee</dt>
+        <dd className="text-foreground">€80 / year</dd>
+      </dl>
 
       {renewalDate ? (
-        <fieldset className="space-y-1">
-          <legend className="text-sm text-foreground">Renewal Mode</legend>
+        <fieldset className="mt-5 space-y-2 border-t border-border pt-4">
+          <legend className="text-sm font-semibold text-foreground">Renewal Mode</legend>
           <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
           {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {preference?.effectiveOn}.</p> : null}
         </fieldset>
       ) : null}
 
-      {canManageBilling ? <div className="flex flex-wrap gap-2"><ManageBillingButton /></div> : null}
+      {canManageBilling || renewalDate ? (
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+          {canManageBilling ? <Link href="/dashboard/payment-method"><Button>Manage payment method</Button></Link> : null}
+          {renewalDate ? <CancelMembershipButton /> : null}
+        </div>
+      ) : null}
     </section>
   );
 }
