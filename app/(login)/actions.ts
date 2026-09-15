@@ -250,6 +250,11 @@ const updateAccountSchema = z.object({
   email: z.string().email('Invalid email address')
 });
 
+// A 'use server' file may only export async functions, so this can't be exported for a composing
+// caller (e.g. My Profile's combined save action, app/(dashboard)/account/actions.ts) to import --
+// that file keeps its own copy of this exact string, which must stay in sync with it.
+const EMAIL_VERIFICATION_PENDING_MESSAGE = 'Check the new address to verify your email change.';
+
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
@@ -260,7 +265,7 @@ export const updateAccount = validatedActionWithUser(
       if (duplicate) return { error: 'That email address is unavailable.' };
       await issueEmailVerification(user.id, data.email);
       await consumeFreshStepUp();
-      return { success: 'Check the new address to verify your email change.' };
+      return { success: EMAIL_VERIFICATION_PENDING_MESSAGE };
     }
     // The normalized identity is unchanged (only casing/whitespace may differ, or nothing did), so
     // this never needs step-up, a duplicate check, or verification -- but the display form the

@@ -79,7 +79,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
     listOwnPaymentHistory(),
     getOwnRenewalPreference(),
-    canManageBilling ? getOwnPaymentMethodSummary() : Promise.resolve(null),
+    // A Stripe lookup failure here must never take down the rest of My Membership (status,
+    // renewal controls, cancellation, payment history) -- it only means the Payment Method box
+    // can't show the card on file right now; the member can still retry via its own button.
+    canManageBilling ? getOwnPaymentMethodSummary().catch(() => 'unavailable' as const) : Promise.resolve(null),
   ]);
   const { icon: typeIcon, label: typeLabel } = classificationDisplay(roles);
 

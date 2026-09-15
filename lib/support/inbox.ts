@@ -106,7 +106,7 @@ export async function getOwnConversation(publicIdValue: unknown) {
       where public_id=${publicId}::uuid and member_user_id=${actor.id} for update`;
     if (!rows[0]) return null;
     await sql`update idoc.support_conversations set member_read_at=now() where public_id=${publicId}::uuid and member_user_id=${actor.id}`;
-    const messages = await sql`select author_side,body,created_at from idoc.support_messages m join idoc.support_conversations c on c.id=m.conversation_id
+    const messages = await sql`select author_side,body,m.created_at from idoc.support_messages m join idoc.support_conversations c on c.id=m.conversation_id
       where c.public_id=${publicId}::uuid and c.member_user_id=${actor.id} order by m.created_at,m.id`;
     return { ...rows[0], messages };
   });

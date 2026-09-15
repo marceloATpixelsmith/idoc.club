@@ -5,14 +5,16 @@ function brandLabel(brand: string): string {
   return brand.length > 0 ? brand.charAt(0).toUpperCase() + brand.slice(1) : brand;
 }
 
-export function PaymentMethodCard({ summary }: { summary: PaymentMethodSummary | null }) {
+export function PaymentMethodCard({ summary }: { summary: PaymentMethodSummary | null | 'unavailable' }) {
   return (
     <section className="mt-6 max-w-md rounded-lg border p-5">
       <h2 className="text-lg font-semibold text-foreground">Payment Method</h2>
 
       <div className="mt-4 text-sm">
         <p className="font-semibold text-foreground">Card on file</p>
-        {summary ? (
+        {summary === 'unavailable' ? (
+          <p className="mt-1 text-muted-foreground">Card details are temporarily unavailable. Try again shortly.</p>
+        ) : summary ? (
           <p className="mt-1 text-foreground">
             {brandLabel(summary.brand)} ending in {summary.last4} — expires {String(summary.expMonth).padStart(2, '0')}/{summary.expYear}
           </p>

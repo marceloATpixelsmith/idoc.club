@@ -93,9 +93,9 @@ test('a forged Origin cannot reach the real sign-out action either: a state-chan
 // session cookie would succeed on Origin checking alone even if the token check were deleted
 // entirely. These two tests isolate the token requirement itself: a real browser, a real
 // authenticated session, and a real Next.js Server Action, with only the CSRF evidence disturbed.
-// /dashboard/profile now also renders the account name/email form (its own separate Server Action)
-// above the professional profile form, so selectors below must scope to the profile form
-// specifically -- the one carrying the "firstName" field -- rather than grab the page's first form.
+// /dashboard/profile renders one merged form (account email plus the professional profile fields,
+// saved together by a single Server Action) -- selectors below scope to the form carrying the
+// "firstName" field, the one form actually on the page.
 test('a real profile-update Server Action rejects a same-origin, correctly authenticated submission whose CSRF token field has been tampered with', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();

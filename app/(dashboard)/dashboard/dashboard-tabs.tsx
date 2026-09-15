@@ -13,6 +13,14 @@ const ALL_TABS = [
   { href: '/dashboard/support', icon: LifeBuoy, label: 'Support' },
 ];
 
+// '/dashboard' has no subpages of its own (Payment Method now lives inline on that same page), so
+// it matches only exactly -- otherwise it would swallow every other tab's subpages too, since it's
+// a prefix of all of them. Support does have its own subpages (e.g. /dashboard/support/[publicId]),
+// so it -- and any future tab with subpages -- still matches by prefix.
+function isActiveTab(pathname: string, href: string): boolean {
+  return href === '/dashboard' ? pathname === '/dashboard' : pathname === href || pathname.startsWith(`${href}/`);
+}
+
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
  * paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
@@ -38,7 +46,7 @@ export function DashboardTabs({ entitled, memberSupport, supportUnread }: { enti
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
-              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${pathname === tab.href ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
+              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${isActiveTab(pathname, tab.href) ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}
