@@ -20,13 +20,18 @@ export const checkoutAction = validatedAction(checkoutSchema, async ({ mode }) =
   redirect(url);
 });
 
-export async function manageBillingAction(formData: FormData): Promise<void> {
-  await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-  const url = await createMembershipPortalSession();
-  redirect(url);
-}
-
 type BillingActionState = { error?: string; redirectUrl?: string; stepUpRequired?: boolean; success?: string };
+
+// Returns the portal URL instead of redirecting server-side, so the caller can open it in a new
+// tab/window rather than navigating the current dashboard away.
+export async function manageBillingAction(_state: BillingActionState, formData: FormData): Promise<BillingActionState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    return { redirectUrl: await createMembershipPortalSession() };
+  } catch {
+    return { error: 'Could not open the billing portal. Please retry.' };
+  }
+}
 
 async function protectedBillingMutation(formData: FormData, operation: () => Promise<string | void>): Promise<BillingActionState> {
   try {
