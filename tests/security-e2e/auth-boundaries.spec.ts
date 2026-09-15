@@ -25,7 +25,8 @@ test('account-state and role boundaries are enforced on direct requests', async 
     ['onboarding', '/dashboard', true],
     ['onboarding', '/onboarding', false],
     ['suspended', '/dashboard', false],
-    ['expired', '/dashboard', true],
+    ['expired', '/dashboard', false],
+    ['expired', '/pricing', true],
     ['member-a', '/admin', false],
     ['administrator', '/admin', true],
   ] as const;

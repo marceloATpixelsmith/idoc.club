@@ -31,7 +31,7 @@ export function CheckoutForm({ label }: { label: string }) {
           </span>
         </span>
       </label>
-      <Button type="submit" disabled={isPending} variant="outline" className="w-full rounded-full">
+      <Button type="submit" disabled={isPending} className="w-full">
         {isPending ? (
           <>
             <Loader2 className="animate-spin mr-2 h-4 w-4" />
