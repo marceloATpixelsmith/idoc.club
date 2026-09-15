@@ -2,10 +2,14 @@
 
 import { updateAccount } from '@/app/(login)/actions';
 import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
-import { parseMemberProfileFormData } from '@/lib/membership/validation';
+import { memberProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import type { StepUpActionState } from '@/components/auth/fresh-step-up-action';
+
+// Must match app/(login)/actions.ts's own private copy exactly -- see that file's comment on why
+// it can't be exported for this file to import instead.
+const EMAIL_VERIFICATION_PENDING_MESSAGE = 'Check the new address to verify your email change.';
 
 // Deliberately NOT exported: a 'use server' file turns every *exported* top-level function into
 // an independently RPC-invokable Server Action with its own action ID, bypassing whatever a caller
@@ -37,11 +41,21 @@ export async function saveOwnAccountAndProfileForm(_state: StepUpActionState, fo
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
   }
+  const member = await getOwnPrivateMember();
+  // Validate the profile fields before any account-side effect runs (step-up authority consumed,
+  // a real verification email sent) -- an invalid profile must never leave a pending email change
+  // the member believes already succeeded, or force them through MFA again just to retry.
+  if (member && !memberProfileSchema.safeParse(parseMemberProfileFormData(formData)).success) {
+    return { error: 'Review the highlighted profile fields.' };
+  }
   const accountResult = await updateAccount({}, formData) as StepUpActionState;
   if (accountResult.stepUpRequired || accountResult.error) return accountResult;
-  const member = await getOwnPrivateMember();
   if (!member) return accountResult;
   const profileResult = await saveOwnMemberProfile(parseMemberProfileFormData(formData));
   if (profileResult.error) return profileResult;
-  return { success: 'Your account and profile were updated.' };
+  // The login email itself does not change until the member follows that link -- never replace
+  // this instruction with a generic "updated" message that could read as already complete.
+  return accountResult.success === EMAIL_VERIFICATION_PENDING_MESSAGE
+    ? { success: 'Your profile was updated. Check your new email address to verify the change.' }
+    : { success: 'Your account and profile were updated.' };
 }
