@@ -227,12 +227,20 @@ export async function deleteOwnAccount() {
  * Self-service membership cancellation -- distinct from both deleteOwnAccount (which mangles the
  * login email and denies all future sign-in) and disableAutomaticRenewal/the Renewal Mode control
  * (which only stops future billing while access continues through the paid-through date). This
- * ends access immediately: status becomes 'canceled' with valid_until backdated to yesterday, so
- * isEntitled returns false starting now rather than at the next date rollover. The login/profile
- * record itself is untouched -- a member can sign back in later and see an inactive membership,
- * e.g. to re-subscribe from the pricing page. Best-effort cancels any open Stripe subscription
- * immediately (not at-period-end) and unsubscribes from the marketing mailing list; neither failure
- * blocks the membership-level cancellation, which is unconditional and DB-only.
+ * ends access immediately, reusing suspendMembership's own proven status/access semantics ('canceled'
+ * plus a backdated valid_until was tried first and rejected: it can violate memberships_dates_check
+ * when starts_on is today, silently rolling back the whole cancellation while leaving access and any
+ * subscription active) -- 'suspended' denies access regardless of valid_until without touching it at
+ * all, so no date arithmetic and no constraint risk. The distinct audit action name
+ * ('member.membership_canceled' vs admin suspension's 'admin.membership.suspended') is what
+ * distinguishes a self-cancellation from an administrator's suspension-for-cause in the record; nothing
+ * in the schema needs to. The login/profile record itself is untouched -- a member can sign back in
+ * later, though (like any other non-entitled member) they land on the pricing page, not a dashboard
+ * view of the canceled membership. Best-effort cancels any open Stripe subscription immediately (not
+ * at-period-end) and unsubscribes from the marketing mailing list; neither failure blocks the
+ * membership-level cancellation, which is unconditional and DB-only. handleInvoicePaid and
+ * handleInvoicePaymentFailed both check for this 'suspended' status before touching entitlement, so a
+ * Stripe event already in flight at the moment of cancellation can never silently revive it.
  */
 export async function cancelOwnMembership(testStripeClient?: CancellationStripeClient) {
   const actor = await authenticatedActor('billing_boundary');
@@ -243,10 +251,8 @@ export async function cancelOwnMembership(testStripeClient?: CancellationStripeC
   const membership = await db.transaction(async (tx) => {
     const current = await lockLatestMembership(tx, profile.id);
     if (!current) throw new Error('No membership on file to cancel.');
-    const yesterday = new Date();
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const [updated] = await tx.update(memberships).set({
-      status: 'canceled', updatedAt: new Date(), validUntil: yesterday.toISOString().slice(0, 10),
+      status: 'suspended', updatedAt: new Date(),
     }).where(eq(memberships.id, current.id)).returning();
     await tx.insert(auditLog).values({
       action: 'member.membership_canceled', actorId: actor.id,

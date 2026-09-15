@@ -115,6 +115,17 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: 
   await tx.insert(renewalPreferences).values({ currentMode: 'recurring', profileId })
     .onConflictDoNothing({ target: renewalPreferences.profileId });
   const membership = await lockLatestMembership(tx, profileId);
+  // A suspended membership (administrator action, or self-service cancellation -- see
+  // cancelOwnMembership) must never be silently reactivated by a Stripe event that was already in
+  // flight at the moment of suspension/cancellation. The payment itself is still recorded above --
+  // money genuinely changed hands and needs to stay reconcilable -- but entitlement is left exactly
+  // as the member/administrator set it, and the conflict is surfaced for manual review instead.
+  if (membership?.status === 'suspended') {
+    await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
+      summary: 'Stripe reported a successful renewal payment for a membership that is currently suspended; entitlement was not restored automatically.',
+      details: { invoiceId: invoice.id, paymentId: inserted.id } });
+    return;
+  }
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
     await tx.update(memberships).set({ graceEndsOn: null, status: 'active', updatedAt: new Date(), validUntil })
@@ -135,8 +146,10 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   // Stripe's Smart Retries fire a distinct invoice.payment_failed event (distinct event.id, so
   // stripeEvents's dedup doesn't catch it) on every retry attempt for the same unpaid invoice. Only
   // the transition into grace should move validUntil/send a notice — an already-'grace' membership
-  // means this is a later retry, not a new failure, and must be a no-op.
-  if (!membership || membership.status === 'grace') return;
+  // means this is a later retry, not a new failure, and must be a no-op. A 'suspended' membership
+  // (administrator action, or self-service cancellation) must not be moved into grace either -- that
+  // would imply access continues until grace ends, contradicting the suspension/cancellation.
+  if (!membership || membership.status === 'grace' || membership.status === 'suspended') return;
   // Stripe's invoice period start is the authoritative scheduled-renewal date. The fallback is
   // retained only for legacy/test invoices that predate that field.
   const failedRenewalDate = invoice.period_start

@@ -34,21 +34,42 @@ test('cancelOwnMembership ends access immediately, cancels an open Stripe subscr
   const { profile, user } = await createCompleteGraph();
   await insertOpenSubscription(profile.id);
   const { calls, client } = fakeCancellationClient();
+  const [before] = await sql`select valid_until from idoc.memberships where profile_id=${profile.id}`;
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'canceled');
+  // 'suspended', not 'canceled' -- reuses suspendMembership's own proven "deny access regardless of
+  // valid_until, don't touch the date" semantics rather than backdating valid_until, which can
+  // violate memberships_dates_check when starts_on is today (a Codex review finding on the first
+  // version of this function).
+  assert.equal(result.membership.status, 'suspended');
   assert.equal(result.stripeCancelled, true);
   assert.deepEqual(calls, ['sub_fixture']);
 
   const today = new Date().toISOString().slice(0, 10);
-  assert.ok(result.membership.validUntil < today, 'valid_until must be backdated so entitlement ends today, not at the next date rollover');
+  assert.equal(result.membership.validUntil, before.valid_until, 'valid_until must be left untouched -- status alone denies access');
   assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), false);
 
   const [audit] = await sql`select action,actor_id,entity_type,entity_id from idoc.audit_log
     where entity_type='profile' and entity_id=${String(profile.id)} and action='member.membership_canceled'`;
   assert.ok(audit, 'a self-service cancellation audit row must exist');
   assert.equal(audit.actor_id, user.id);
+});
+
+test('a membership that starts today can still be cancelled the same day (valid_until >= starts_on is never violated)', async () => {
+  // The exact scenario the original backdating approach broke: starts_on = today means any
+  // valid_until before today would violate memberships_dates_check and roll back the whole
+  // cancellation, silently leaving access and any subscription active.
+  const { user, profile } = await createCompleteGraph();
+  const today = new Date().toISOString().slice(0, 10);
+  await sql`update idoc.memberships set starts_on=${today}, valid_until=${today} where profile_id=${profile.id}`;
+  const { client } = fakeCancellationClient();
+
+  const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
+
+  assert.equal(result.membership.status, 'suspended');
+  assert.equal(result.membership.validUntil, today);
+  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), false);
 });
 
 test('cancellation is unconditional even when the Stripe cancellation fails', async () => {
@@ -58,7 +79,7 @@ test('cancellation is unconditional even when the Stripe cancellation fails', as
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'canceled');
+  assert.equal(result.membership.status, 'suspended');
   assert.equal(result.stripeCancelled, false);
   assert.ok(result.stripeCancelError);
 });
@@ -69,7 +90,7 @@ test('a member with no open Stripe subscription is cleanly canceled without any 
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'canceled');
+  assert.equal(result.membership.status, 'suspended');
   assert.equal(result.stripeCancelled, false);
   assert.deepEqual(calls, []);
 });
