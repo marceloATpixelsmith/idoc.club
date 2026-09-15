@@ -235,7 +235,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         </div>
 
         <fieldset className="space-y-4 border-0 p-0">
-          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">ADDRESS</legend>
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">ADDRESS</legend>
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="countryCode">Country</Label>
             <CountrySelect id="countryCode" name="countryCode" onChange={handleCountryChange} value={countryCode} />
@@ -319,7 +319,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
 
         {classification !== 'veterinarian' ? (
           <fieldset className="space-y-4 border-0 p-0">
-            <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">OFFICIAL INFORMATION</legend>
+            <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">OFFICIAL INFORMATION</legend>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="nationalFederationCountryCode">National Federation</Label>
@@ -361,7 +361,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         ) : null}
 
         <fieldset className="space-y-3 border-0 p-0">
-          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-foreground">CONSENT</legend>
+          <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">CONSENT</legend>
           <ConsentCheckbox name="termsAccepted" required>
             {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
           </ConsentCheckbox>

@@ -104,7 +104,7 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
 
   return (
     <section className="mt-6 max-w-md rounded-lg border p-5">
-      <h2 className="text-lg font-semibold text-foreground">Membership</h2>
+      <h2 className="text-lg font-bold uppercase tracking-wider text-gold">Membership</h2>
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-3 text-sm">
         <dt className="font-semibold text-foreground">Type</dt>
@@ -126,7 +126,7 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
 
       {renewalDate ? (
         <fieldset className="mt-5 space-y-2 border-t border-border pt-4">
-          <legend className="text-sm font-semibold text-foreground">Renewal Mode</legend>
+          <legend className="text-sm font-bold uppercase tracking-wider text-gold">Renewal Mode</legend>
           <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
           <p className="text-xs text-muted-foreground">
             {selection === 'recurring'

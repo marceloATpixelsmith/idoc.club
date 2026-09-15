@@ -8,7 +8,7 @@ function brandLabel(brand: string): string {
 export function PaymentMethodCard({ summary }: { summary: PaymentMethodSummary | null | 'unavailable' }) {
   return (
     <section className="mt-6 max-w-md rounded-lg border p-5">
-      <h2 className="text-lg font-semibold text-foreground">Payment Method</h2>
+      <h2 className="text-lg font-bold uppercase tracking-wider text-gold">Payment Method</h2>
 
       <div className="mt-4 text-sm">
         <p className="font-semibold text-foreground">Card on file</p>
