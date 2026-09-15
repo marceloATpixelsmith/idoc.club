@@ -26,20 +26,28 @@ test('canonical readiness accepts full and restricted keys in the correct deploy
     assert.equal(validateStripeReadiness({ ...base, STRIPE_SECRET_KEY }).keyMode, 'test');
   }
   for (const STRIPE_SECRET_KEY of [liveKey, restrictedLiveKey]) {
-    assert.equal(validateStripeReadiness({ ...base, STRIPE_SECRET_KEY, VERCEL_ENV: 'production' }).keyMode, 'live');
+    assert.equal(validateStripeReadiness({ ...base, BASE_URL: 'https://idoc.club', STRIPE_SECRET_KEY, VERCEL_ENV: 'production' }).keyMode, 'live');
   }
 });
 
 test('Vercel scopes and local execution resolve modes without treating Preview NODE_ENV as live', () => {
   assert.equal(stripeDeploymentMode({ NODE_ENV: 'production', VERCEL_ENV: 'preview' }), 'test');
   assert.equal(stripeDeploymentMode({ VERCEL_ENV: 'development' }), 'test');
-  assert.equal(stripeDeploymentMode({ VERCEL_ENV: 'production' }), 'live');
+  assert.equal(stripeDeploymentMode({ BASE_URL: 'https://idoc.club', VERCEL_ENV: 'production' }), 'live');
+  assert.equal(stripeDeploymentMode({ BASE_URL: 'https://www.idoc.club', VERCEL_ENV: 'production' }), 'live');
   assert.equal(stripeDeploymentMode({ NODE_ENV: 'production' }), 'live');
   assert.equal(stripeDeploymentMode({ NODE_ENV: 'development' }), 'test');
 });
 
+test('a Production deployment aliased to a non-canonical domain stays in test mode', () => {
+  assert.equal(stripeDeploymentMode({ BASE_URL: 'https://redesign.idoc.club', VERCEL_ENV: 'production' }), 'test');
+  assert.equal(stripeDeploymentMode({ VERCEL_ENV: 'production' }), 'test');
+  assert.equal(stripeDeploymentMode({ BASE_URL: 'not-a-url', VERCEL_ENV: 'production' }), 'test');
+  assert.equal(validateStripeKey({ BASE_URL: 'https://redesign.idoc.club', STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }).mode, 'test');
+});
+
 test('deployment and browser-verification mode mismatches fail closed', () => {
-  assert.throws(() => validateStripeKey({ STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), /mode/);
+  assert.throws(() => validateStripeKey({ BASE_URL: 'https://idoc.club', STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), /mode/);
   assert.throws(() => validateStripeKey({ STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'preview' }), /mode/);
   assert.throws(() => validateStripeKey({ STRIPE_SECRET_KEY: liveKey }, { browserVerification: true }), /test mode/);
   assert.equal(validateStripeKey({ STRIPE_SECRET_KEY: restrictedTestKey }, { browserVerification: true }).mode, 'test');
