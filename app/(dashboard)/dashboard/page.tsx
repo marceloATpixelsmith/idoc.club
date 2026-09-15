@@ -87,6 +87,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
   const [history, renewalPreference] = await Promise.all([listOwnPaymentHistory(), getOwnRenewalPreference()]);
   const { icon: typeIcon, label: typeLabel } = classificationDisplay(roles);
+  // The one date worth leading with: while an open subscription is actually going to bill again,
+  // that's Stripe's own currentPeriodEnd, not the paid-through date -- an early renewal (docs/02 §5)
+  // or an administrator's Extend Expiration Date correction can leave the two different.
+  const renewalDate = entitlement ? (mode === 'auto_renew' ? (subscription?.currentPeriodEnd ?? entitlement.validUntil) : entitlement.validUntil) : null;
 
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
@@ -95,10 +99,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <MembershipCard
         canManageBilling={canManageBilling}
+        paidThroughDate={entitlement?.validUntil ?? null}
         preference={renewalPreference}
         recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
         renewalCaption={entitlement ? renewalCaption(mode) : null}
-        renewalDate={entitlement?.validUntil ?? null}
+        renewalDate={renewalDate}
         showRenew={showRenew}
         statusLabel={entitlement ? (MEMBERSHIP_STATUS_LABELS[entitlement.status] ?? entitlement.status) : 'No membership record on file'}
         typeIcon={typeIcon}

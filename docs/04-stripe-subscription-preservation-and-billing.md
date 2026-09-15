@@ -99,7 +99,7 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
 
 # 7. Customer Portal and email changes
 
-For Stripe-backed paid/grace members, the member portal can generate a Stripe Customer Portal session server-side, allowing the user to manage payment methods and invoices. The application must verify that the authenticated user owns the Stripe Customer ID before creating the portal session. IDOC Billing Settings, not a generic Stripe plan selector, controls whether the membership renews automatically.
+For Stripe-backed paid/grace members, the member portal can generate a Stripe Customer Portal session server-side, allowing the user to manage payment methods and invoices. The application must verify that the authenticated user owns the Stripe Customer ID before creating the portal session. The dashboard's "Manage payment method" control opens this session in a new browser tab/window rather than navigating the member away from the dashboard; if the browser blocks the popup, it falls back to same-tab navigation instead of silently doing nothing. IDOC Billing Settings, not a generic Stripe plan selector, controls whether the membership renews automatically.
 
 After a member verifies an email/username change, update the matching Stripe Customer email server-side. Never use email as the linkage key for a subscription; retain and validate Stripe Customer and Subscription IDs.
 
