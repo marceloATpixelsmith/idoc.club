@@ -9,11 +9,14 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSession } from '@/lib/auth/session';
-import { subscribeToMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
+import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
 export type OnboardingConsentInput = {
@@ -218,6 +221,50 @@ export async function deleteOwnAccount() {
     }).where(eq(users.id, actor.id));
     await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
   });
+}
+
+/**
+ * Self-service membership cancellation -- distinct from both deleteOwnAccount (which mangles the
+ * login email and denies all future sign-in) and disableAutomaticRenewal/the Renewal Mode control
+ * (which only stops future billing while access continues through the paid-through date). This
+ * ends access immediately, reusing suspendMembership's own proven status/access semantics ('canceled'
+ * plus a backdated valid_until was tried first and rejected: it can violate memberships_dates_check
+ * when starts_on is today, silently rolling back the whole cancellation while leaving access and any
+ * subscription active) -- 'suspended' denies access regardless of valid_until without touching it at
+ * all, so no date arithmetic and no constraint risk. The distinct audit action name
+ * ('member.membership_canceled' vs admin suspension's 'admin.membership.suspended') is what
+ * distinguishes a self-cancellation from an administrator's suspension-for-cause in the record; nothing
+ * in the schema needs to. The login/profile record itself is untouched -- a member can sign back in
+ * later, though (like any other non-entitled member) they land on the pricing page, not a dashboard
+ * view of the canceled membership. Best-effort cancels any open Stripe subscription immediately (not
+ * at-period-end) and unsubscribes from the marketing mailing list; neither failure blocks the
+ * membership-level cancellation, which is unconditional and DB-only. handleInvoicePaid and
+ * handleInvoicePaymentFailed both check for this 'suspended' status before touching entitlement, so a
+ * Stripe event already in flight at the moment of cancellation can never silently revive it.
+ */
+export async function cancelOwnMembership(testStripeClient?: CancellationStripeClient) {
+  const actor = await authenticatedActor('billing_boundary');
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) throw new Error('A member profile is required to cancel a membership.');
+  const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, actor.id)).limit(1);
+
+  const membership = await db.transaction(async (tx) => {
+    const current = await lockLatestMembership(tx, profile.id);
+    if (!current) throw new Error('No membership on file to cancel.');
+    const [updated] = await tx.update(memberships).set({
+      status: 'suspended', updatedAt: new Date(),
+    }).where(eq(memberships.id, current.id)).returning();
+    await tx.insert(auditLog).values({
+      action: 'member.membership_canceled', actorId: actor.id,
+      afterJson: { membership: updated }, beforeJson: { membership: current },
+      entityId: String(profile.id), entityType: 'profile', reason: 'Member self-service cancellation.',
+    });
+    return updated;
+  });
+
+  const stripeResult = await cancelOpenSubscriptionIfAny(profile.id, testStripeClient);
+  if (account?.email) await unsubscribeFromMarketingAudience(account.email);
+  return { membership, ...stripeResult };
 }
 
 export async function listAuditHistory(profileId: number) {

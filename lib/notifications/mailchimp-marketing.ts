@@ -34,3 +34,32 @@ export async function subscribeToMarketingAudience(email: string): Promise<void>
     // Marketing delivery is deliberately isolated from onboarding and billing.
   }
 }
+
+/**
+ * Best-effort removal from the marketing audience (self-service membership cancellation). Unlike
+ * subscribeToMarketingAudience, this omits status_if_new -- there is nothing to create an
+ * unsubscribed record for if the member was never on the list, so a member with no Mailchimp
+ * history stays absent rather than gaining a stray row.
+ */
+export async function unsubscribeFromMarketingAudience(email: string): Promise<void> {
+  const apiKey = process.env.MAILCHIMP_MARKETING_API_KEY?.trim();
+  const audienceId = process.env.MAILCHIMP_MARKETING_AUDIENCE_ID?.trim();
+  const serverPrefix = process.env.MAILCHIMP_MARKETING_SERVER_PREFIX?.trim();
+  if (!(apiKey && audienceId && serverPrefix)) return;
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const memberHash = createHash('md5').update(normalizedEmail).digest('hex');
+  try {
+    await fetch(`https://${serverPrefix}.api.mailchimp.com/3.0/lists/${audienceId}/members/${memberHash}`, {
+      body: JSON.stringify({ status: 'unsubscribed' }),
+      headers: {
+        Authorization: `Basic ${Buffer.from(`idoc:${apiKey}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    // Marketing delivery is deliberately isolated from onboarding and billing.
+  }
+}

@@ -51,6 +51,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     regenerateRecoveryCodes: 'session-boundary',
   },
   'lib/payments/actions.ts': { cancelPendingRenewalAction: 'delegates-to-data-access', checkoutAction: 'delegates-to-data-access', disableAutomaticRenewalAction: 'delegates-to-data-access', enableAutomaticRenewalAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
+  'app/(dashboard)/dashboard/membership-actions.ts': { cancelMembershipAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access', refundMembershipPaymentForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/security/actions.ts': { recordGoogleOauthRotationEvidenceForm: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/support/actions.ts': {
@@ -206,6 +207,7 @@ test('delegates-to-data-access actions call an ownership-enforcing membership da
     'lib/payments/actions.ts': [
       { from: './checkout', functionName: 'createMembershipCheckoutSession' }, { from: './stripe', functionName: 'createMembershipPortalSession' },
     ],
+    'app/(dashboard)/dashboard/membership-actions.ts': [{ from: '@/lib/membership/data-access', functionName: 'cancelOwnMembership' }],
     'app/(dashboard)/admin/payments/actions.ts': [{ from: '@/lib/payments/manual-payments', functionName: 'recordManualPayment' }, { from: '@/lib/payments/refunds', functionName: 'refundMembershipPayment' }],
     'app/(dashboard)/admin/security/actions.ts': [{
       from: '@/lib/auth/google-oidc-secret-audit', functionName: 'recordActiveGoogleOauthSecretRotation',

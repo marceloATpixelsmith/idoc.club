@@ -155,6 +155,37 @@ test('invoice.paid records a payment and extends an early renewal by 12 months f
   assert.equal(after.valid_until, expected.toISOString().slice(0, 10));
 });
 
+test('invoice.paid does not reactivate a suspended membership -- money is still recorded, but entitlement is left alone and a status_conflict finding is raised', async () => {
+  // Covers a self-service cancellation (cancelOwnMembership) or an administrator suspension that
+  // raced a renewal invoice already in flight -- see lib/membership/data-access.ts's cancelOwnMembership.
+  const profile = await billedProfile('cus_invoice_suspended');
+  await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+    values(${profile.id}, 'suspended', '2025-01-01', '2099-12-31', 'migration')`;
+  const response = await postWebhook(fixtureEvent('invoice.paid', {
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_invoice_suspended', id: 'in_suspended_fixture',
+    status_transitions: { paid_at: Math.floor(Date.now() / 1000) },
+  }));
+  assert.equal(response.status, 200);
+  const [payment] = await sql`select source, amount_cents from idoc.payments where external_payment_id='in_suspended_fixture'`;
+  assert.equal(payment.source, 'stripe_recurring', 'the payment itself must still be recorded -- money genuinely changed hands');
+  const [after] = await sql`select status from idoc.memberships where profile_id=${profile.id}`;
+  assert.equal(after.status, 'suspended', 'a suspended/canceled membership must never be silently reactivated by a stale renewal event');
+  const [finding] = await sql`select kind, profile_id from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`;
+  assert.ok(finding, 'the conflict must be surfaced for manual review');
+});
+
+test('invoice.payment_failed does not move a suspended membership into grace', async () => {
+  const profile = await billedProfile('cus_invoice_failed_suspended');
+  await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+    values(${profile.id}, 'suspended', '2025-01-01', '2099-12-31', 'migration')`;
+  const response = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_failed_suspended', id: 'in_failed_suspended_fixture' }));
+  assert.equal(response.status, 200);
+  const [after] = await sql`select status, grace_ends_on from idoc.memberships where profile_id=${profile.id}`;
+  assert.equal(after.status, 'suspended');
+  assert.equal(after.grace_ends_on, null);
+  assert.equal((await sql`select count(*)::int as count from idoc.notification_outbox where kind='membership.payment_failed' and profile_id=${profile.id}`)[0].count, 0);
+});
+
 test('invoice.paid starts a fresh 12-month term from the payment date when the prior membership already expired', async () => {
   const profile = await billedProfile('cus_invoice_expired');
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source) values(${profile.id}, 'expired', '2024-01-01', '2025-01-01', 'migration')`;

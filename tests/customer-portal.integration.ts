@@ -44,22 +44,19 @@ test('a Stripe-backed member gets a portal session scoped to their own billing a
   assert.equal(calls.sessionsCreate.length, 1);
   const sessionParams = calls.sessionsCreate[0] as any;
   assert.equal(sessionParams.customer, 'cus_fixture');
-  assert.equal(sessionParams.return_url, 'https://idoc.club/dashboard');
+  assert.equal(sessionParams.return_url, 'https://idoc.club/dashboard/payment-method');
   assert.equal(sessionParams.configuration, 'cfg_1');
   assert.equal(calls.configurationsCreate.length, 1, 'no existing configuration means one must be created');
-  assert.equal((calls.configurationsCreateOptions[0] as any).idempotencyKey, 'idoc-membership-portal-configuration-v1');
+  assert.equal((calls.configurationsCreateOptions[0] as any).idempotencyKey, 'idoc-membership-portal-configuration-v2');
 });
 
-test('no existing Billing Portal Configuration is created with exactly payment_method_update, invoice_history, and at-period-end subscription_cancel, never subscription_update', async () => {
+test('no existing Billing Portal Configuration is created with exactly payment_method_update, never invoice_history, subscription_cancel, or subscription_update', async () => {
   const { user } = await createCompleteGraph();
   const { calls, client } = fakePortalClient();
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipPortalSession(client));
   const params = calls.configurationsCreate[0] as any;
-  assert.deepEqual(Object.keys(params.features).sort(), ['invoice_history', 'payment_method_update', 'subscription_cancel']);
+  assert.deepEqual(Object.keys(params.features).sort(), ['payment_method_update']);
   assert.equal(params.features.payment_method_update.enabled, true);
-  assert.equal(params.features.invoice_history.enabled, true);
-  assert.equal(params.features.subscription_cancel.enabled, true);
-  assert.equal(params.features.subscription_cancel.mode, 'at_period_end');
 });
 
 test('a second session for the same member reuses the existing Billing Portal Configuration instead of creating another', async () => {

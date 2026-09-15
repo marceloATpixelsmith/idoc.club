@@ -6,7 +6,7 @@ test('an entitled member sees the dashboard menu and My Membership shows status,
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'My Membership' })).toBeVisible();
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
-  await expect(page.getByText(/^Type: /)).toBeVisible();
+  await expect(page.getByText('Type', { exact: true })).toBeVisible();
   await expect(page.getByText('Payment history')).toBeVisible();
   for (const label of ['My Profile', 'My Security']) {
     await expect(page.getByRole('link', { name: label })).toBeVisible();
