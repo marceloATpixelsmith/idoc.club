@@ -197,7 +197,7 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - Switching automatic renewal on for a non-recurring member collects and stores payment authorization without charging immediately, then schedules annual €80 billing to begin on the current paid-through date. The member may reverse a pending change before it becomes effective. Repeated or concurrent requests must be idempotent and must not create duplicate Customers, payment methods, schedules, or subscriptions.
 
-- Billing Settings shows the membership amount, paid-through date, current renewal preference, any pending change, its effective date, and the next expected charge. Stripe Customer Portal may manage payment methods and invoices, but IDOC owns the membership-specific automatic-renewal preference and transition workflow.
+- Billing Settings shows the membership amount, one Renewal Date (the next Stripe charge date while automatic renewal is active, otherwise the paid-through date), the paid-through date separately whenever it differs from the Renewal Date (an early renewal or an administrator's Extend Expiration Date correction can leave the two different), current renewal preference, and any pending change with its effective date. Stripe Customer Portal may manage payment methods and invoices, but IDOC owns the membership-specific automatic-renewal preference and transition workflow.
 
 - Send an automatic-renewal notice 15 days before the scheduled renewal date.
 

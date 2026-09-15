@@ -162,6 +162,32 @@
     font-weight: 600;
     letter-spacing: -0.02em;
   }
+
+  /*
+   * Sitewide affordance: anything clickable shows the pointer cursor, not the
+   * browser's default arrow (native <button> and <summary> don't get one on
+   * their own). Disabled controls keep the not-allowed cursor instead.
+   */
+  a[href],
+  button:not(:disabled),
+  [type='button']:not(:disabled),
+  [type='submit']:not(:disabled),
+  [type='reset']:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [data-slot='button']:not(:disabled),
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [type='button']:disabled,
+  [type='submit']:disabled,
+  [type='reset']:disabled,
+  [role='button'][aria-disabled='true'],
+  [data-slot='button']:disabled {
+    cursor: not-allowed;
+  }
 }
 
 @utility eyebrow {

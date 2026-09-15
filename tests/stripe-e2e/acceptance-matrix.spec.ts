@@ -38,15 +38,17 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       forged.value = String(forgedCustomerId);
       form.append(forged);
     }, forgedBilling.external_customer_id);
-    await manage.click();
-    await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
-    await expect(page.getByText(billing.email, { exact: false })).toBeVisible();
-    await expect(page.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
+    // "Manage payment method" opens the portal in a new tab rather than navigating this page away.
+    const [popup] = await Promise.all([page.waitForEvent('popup'), manage.click()]);
+    await popup.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
+    await expect(popup.getByText(billing.email, { exact: false })).toBeVisible();
+    await expect(popup.getByText(forgedBilling.email, { exact: false })).toHaveCount(0);
+    await popup.close();
   });
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText(/paid through:/i)).toBeVisible();
+    await expect(page.getByText(/renewal date:/i)).toBeVisible();
     await expect(page.getByText(/current renewal mode:/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /turn on automatic renewal|turn off automatic renewal|cancel pending change/i })).toBeVisible();
     const rows = await sql`select e.valid_until from idoc.memberships e
@@ -79,8 +81,12 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /manage payment method/i });
     await expect(manage).toBeVisible();
-    await manage.click();
-    await page.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
+    // The portal opens in a new tab, leaving this page's own history at /dashboard throughout --
+    // exercise the back/reload/back/forward sequence against that unaffected history, same intent
+    // as the pre-popup same-tab version of this test.
+    const [popup] = await Promise.all([page.waitForEvent('popup'), manage.click()]);
+    await popup.waitForURL(/billing\.stripe\.com|customer\.stripe\.com/);
+    await popup.close();
     await page.goBack();
     const paymentCount = await sql`select count(*)::int as count from idoc.payments p
       join idoc.profiles pr on pr.id=p.profile_id join idoc.users u on u.id=pr.user_id
