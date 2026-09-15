@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfField } from '@/components/security/csrf-field';
@@ -11,10 +12,8 @@ import { cancelPendingRenewalAction, disableAutomaticRenewalAction, enableAutoma
 type Preference = { currentMode: string; effectiveOn: string | null; expectedChargeCents: number | null; pendingMode: string | null } | null;
 type Action = typeof enableAutomaticRenewalAction;
 
-function ActionButton({ action, children, newWindow = false, variant = 'default' }: {
-  action: Action; children: ReactNode; newWindow?: boolean; variant?: 'default' | 'outline';
-}) {
-  const [state, submit, pending, dialog] = useFreshStepUpAction(action, {});
+function ManageBillingButton() {
+  const [state, submit, pending, dialog] = useFreshStepUpAction(manageBillingAction, {});
   // The Server Action is async, so by the time its redirectUrl comes back we're well past the
   // click's user-activation window -- a bare window.open() here would be silently popup-blocked.
   // Open the tab synchronously from the click instead, then point it at the real URL once known;
@@ -23,33 +22,77 @@ function ActionButton({ action, children, newWindow = false, variant = 'default'
   useEffect(() => {
     if (!state.redirectUrl) return;
     const popup = popupRef.current;
-    if (newWindow && popup && !popup.closed) popup.location.href = String(state.redirectUrl);
+    if (popup && !popup.closed) popup.location.href = String(state.redirectUrl);
     else window.location.assign(String(state.redirectUrl));
-  }, [newWindow, state.redirectUrl]);
+  }, [state.redirectUrl]);
   return <><form action={submit} onSubmit={() => {
-    if (!newWindow) return;
     const popup = window.open('', '_blank');
     if (popup) popup.opener = null;
     popupRef.current = popup;
-  }}><CsrfField /><Button disabled={pending} type="submit" variant={variant}>
-    {pending ? <AuthPendingLabel text="Submitting" /> : children}
-  </Button>{state.error ? <p className="mt-2 text-sm text-red-400" role="alert">{state.error}</p> : null}
-  {state.success ? <p className="mt-2 text-sm text-green-400" role="status">{state.success}</p> : null}</form>{dialog}</>;
+  }}><CsrfField /><Button disabled={pending} type="submit">
+    {pending ? <AuthPendingLabel text="Submitting" /> : 'Manage payment method'}
+  </Button>{state.error ? <p className="mt-2 text-sm text-red-400" role="alert">{state.error}</p> : null}</form>{dialog}</>;
 }
 
-export function MembershipCard({ canManageBilling, paidThroughDate, renewalCaption, renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
+/** One real native radio group (shared `name`, one `<form>`) so arrow-key navigation and a single
+ * tab stop work the way assistive tech expects -- two separately-formed radios don't group. The
+ * bound Server Action itself picks, from the submitted value and the member's current state,
+ * whichever mutation actually moves them there (see MembershipCard for the state it closes over). */
+function RenewalModeGroup({ dispatch, selection }: { dispatch: Action; selection: 'non_recurring' | 'recurring' }) {
+  const [state, submit, pending, dialog] = useFreshStepUpAction(dispatch, {});
+  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+  useEffect(() => {
+    if (state.redirectUrl) { window.location.assign(String(state.redirectUrl)); return; }
+    if (state.success) router.refresh();
+  }, [router, state.redirectUrl, state.success]);
+  return <>
+    <form action={submit} ref={formRef}>
+      <CsrfField />
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input checked={selection === 'recurring'} className="cursor-pointer" disabled={pending} name="renewalMode"
+            onChange={() => formRef.current?.requestSubmit()} type="radio" value="recurring" />
+          Automatic
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input checked={selection === 'non_recurring'} className="cursor-pointer" disabled={pending} name="renewalMode"
+            onChange={() => formRef.current?.requestSubmit()} type="radio" value="non_recurring" />
+          Manual
+        </label>
+      </div>
+    </form>
+    {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
+    {dialog}
+  </>;
+}
+
+export function MembershipCard({ canManageBilling, renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
   canManageBilling: boolean;
-  paidThroughDate: string | null;
   preference: Preference;
   recurring: boolean;
-  renewalCaption: string | null;
   renewalDate: string | null;
   showRenew: boolean;
   statusLabel: string | null;
   typeIcon: ReactNode;
   typeLabel: string;
 }) {
-  const pending = preference?.pendingMode;
+  const pendingMode = preference?.pendingMode ?? null;
+  const selection: 'non_recurring' | 'recurring' = pendingMode === 'recurring' || pendingMode === 'non_recurring'
+    ? pendingMode
+    : recurring ? 'recurring' : 'non_recurring';
+  // A pending change (either direction) can only be reversed by cancelling it -- there's no direct
+  // path from "cancel pending" straight to the opposite mode without first landing back where you
+  // started, same as the single "Cancel pending change" button this control replaces. Reading
+  // pendingMode from the closure (rather than trusting the submitted value) keeps the routing
+  // decision tied to the same server-rendered state the radios themselves reflect.
+  const dispatchRenewalMode = useCallback((state: Parameters<Action>[0], formData: FormData) => {
+    if (pendingMode) return cancelPendingRenewalAction(state, formData);
+    return formData.get('renewalMode') === 'recurring'
+      ? enableAutomaticRenewalAction(state, formData)
+      : disableAutomaticRenewalAction(state, formData);
+  }, [pendingMode]);
+
   return (
     <section className="mt-6 max-w-md space-y-3 rounded-lg border p-4">
       <h2 className="font-semibold text-foreground">Membership</h2>
@@ -62,26 +105,17 @@ export function MembershipCard({ canManageBilling, paidThroughDate, renewalCapti
           {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
         </div>
       ) : null}
-      {/* An early renewal (docs/02 §5) or an administrator's Extend Expiration Date correction can
-       * push the paid-through date past the subscription's own next-charge date; when that happens,
-       * Renewal Date alone would understate how long the membership is actually covered for. */}
-      {paidThroughDate && paidThroughDate !== renewalDate ? <p className="text-sm text-foreground">Membership paid through: {paidThroughDate}</p> : null}
-      {renewalDate ? <p className="text-sm text-foreground">Current renewal mode: {recurring ? 'Automatic renewal' : 'One-time renewal'}</p> : null}
-      {renewalCaption ? <p className="text-sm text-muted-foreground">{renewalCaption}</p> : null}
       <p className="text-sm text-foreground">Annual membership: €80</p>
 
-      {pending ? <div className="rounded-md bg-muted p-3 text-sm" role="status">
-        Pending change: {pending === 'recurring' ? 'enable automatic renewal' : 'disable automatic renewal'} on {preference?.effectiveOn}.
-        {preference?.expectedChargeCents ? <span> Expected charge: €{(preference.expectedChargeCents / 100).toFixed(2)}.</span> : null}
-      </div> : null}
+      {renewalDate ? (
+        <fieldset className="space-y-1">
+          <legend className="text-sm text-foreground">Renewal Mode</legend>
+          <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
+          {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {preference?.effectiveOn}.</p> : null}
+        </fieldset>
+      ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {canManageBilling ? <ActionButton action={manageBillingAction} newWindow variant="outline">Manage payment method</ActionButton> : null}
-        {renewalDate ? (pending
-          ? <ActionButton action={cancelPendingRenewalAction}>Cancel pending change</ActionButton>
-          : recurring ? <ActionButton action={disableAutomaticRenewalAction}>Turn off automatic renewal</ActionButton>
-            : <ActionButton action={enableAutomaticRenewalAction}>Turn on automatic renewal</ActionButton>) : null}
-      </div>
+      {canManageBilling ? <div className="flex flex-wrap gap-2"><ManageBillingButton /></div> : null}
     </section>
   );
 }

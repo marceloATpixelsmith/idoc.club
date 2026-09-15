@@ -13,17 +13,6 @@ import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// Every member-type caption, without repeating the renewal date itself -- that's shown once, in
-// the card's own "Renewal Date" line, right above.
-function renewalCaption(mode: ReturnType<typeof renewalMode>): string | null {
-  switch (mode) {
-    case 'auto_renew': return 'Renews automatically.';
-    case 'cancels_at_period_end': return 'Auto-renewal is cancelled. Your membership stays active through the renewal date above.';
-    case 'manual': return 'Manual renewal — renew via the pricing page before the renewal date above.';
-    default: return null;
-  }
-}
-
 /** "Judge + Steward" is the classification-picker's own option label (profile-form.tsx); the
  * membership summary uses the more compact form the member actually asked for here. Each
  * classification gets its own gold icon so the member's type reads at a glance. */
@@ -87,10 +76,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
   const [history, renewalPreference] = await Promise.all([listOwnPaymentHistory(), getOwnRenewalPreference()]);
   const { icon: typeIcon, label: typeLabel } = classificationDisplay(roles);
-  // The one date worth leading with: while an open subscription is actually going to bill again,
-  // that's Stripe's own currentPeriodEnd, not the paid-through date -- an early renewal (docs/02 §5)
-  // or an administrator's Extend Expiration Date correction can leave the two different.
-  const renewalDate = entitlement ? (mode === 'auto_renew' ? (subscription?.currentPeriodEnd ?? entitlement.validUntil) : entitlement.validUntil) : null;
 
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
@@ -99,11 +84,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <MembershipCard
         canManageBilling={canManageBilling}
-        paidThroughDate={entitlement?.validUntil ?? null}
         preference={renewalPreference}
         recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
-        renewalCaption={entitlement ? renewalCaption(mode) : null}
-        renewalDate={renewalDate}
+        renewalDate={entitlement?.validUntil ?? null}
         showRenew={showRenew}
         statusLabel={entitlement ? (MEMBERSHIP_STATUS_LABELS[entitlement.status] ?? entitlement.status) : 'No membership record on file'}
         typeIcon={typeIcon}

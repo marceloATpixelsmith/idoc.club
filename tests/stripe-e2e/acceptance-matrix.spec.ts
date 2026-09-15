@@ -49,8 +49,8 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page.getByText(/renewal date:/i)).toBeVisible();
-    await expect(page.getByText(/current renewal mode:/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /turn on automatic renewal|turn off automatic renewal|cancel pending change/i })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Automatic' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Manual' })).toBeVisible();
     const rows = await sql`select e.valid_until from idoc.memberships e
       join idoc.profiles p on p.id=e.profile_id join idoc.users u on u.id=p.user_id
       where u.email=${memberEmail} order by e.id desc limit 1`;
