@@ -83,10 +83,18 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
     .from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
   if (!billing) throw new Error('No Stripe billing account exists for this member.');
   const configurationId = await resolvedConfigurationId(stripe);
+  const returnUrl = `${baseUrlForServer()}/dashboard/payment-method`;
   const session = await stripe.billingPortal.sessions.create({
     configuration: configurationId,
     customer: billing.externalCustomerId,
-    return_url: `${baseUrlForServer()}/dashboard/payment-method`,
+    return_url: returnUrl,
+    // Jump straight to the add/update card form instead of the portal's own home page (the
+    // Configuration has nothing else enabled anyway), and redirect back the instant the card is
+    // saved rather than leaving the member on a Stripe-hosted "you're done" screen.
+    flow_data: {
+      type: 'payment_method_update',
+      after_completion: { type: 'redirect', redirect: { return_url: returnUrl } },
+    },
   }, {
     // Portal sessions are short-lived. Converge accidental duplicate submissions within a
     // five-minute interaction window while allowing a fresh session after an old one expires.

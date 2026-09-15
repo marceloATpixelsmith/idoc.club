@@ -14,6 +14,28 @@ test('an entitled member sees the dashboard menu and My Membership shows status,
   await context.close();
 });
 
+test('the My Membership tab stays highlighted on its own subpages, like Payment Method', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  // The class that carries the active-tab styling lives on the nested <button>, not the <a> itself.
+  const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
+  const myProfileButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Profile' }).locator('button');
+
+  await page.goto('/dashboard');
+  await expect(myMembershipButton()).toHaveClass(/border-gold/);
+  await expect(myProfileButton()).not.toHaveClass(/border-gold/);
+
+  await page.goto('/dashboard/payment-method');
+  await expect(myMembershipButton()).toHaveClass(/border-gold/);
+  await expect(myProfileButton()).not.toHaveClass(/border-gold/);
+
+  await page.goto('/dashboard/profile');
+  await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
+  await expect(myProfileButton()).toHaveClass(/border-gold/);
+
+  await context.close();
+});
+
 test('a not-yet-entitled member is sent straight to the pricing page, no intermediate paywall screen', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/expired.json' });
   const page = await context.newPage();
