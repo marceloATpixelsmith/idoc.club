@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
@@ -34,11 +34,12 @@ function ManageBillingButton() {
   </Button>{state.error ? <p className="mt-2 text-sm text-red-400" role="alert">{state.error}</p> : null}</form>{dialog}</>;
 }
 
-/** One radio option in the Renewal Mode control. Selecting it submits its own hidden form
- * immediately (no separate "save" button) -- `action` is whichever mutation actually moves the
- * member toward this option from wherever they currently stand (see MembershipCard). */
-function RenewalModeOption({ action, checked, label }: { action: Action; checked: boolean; label: string }) {
-  const [state, submit, pending, dialog] = useFreshStepUpAction(action, {});
+/** One real native radio group (shared `name`, one `<form>`) so arrow-key navigation and a single
+ * tab stop work the way assistive tech expects -- two separately-formed radios don't group. The
+ * bound Server Action itself picks, from the submitted value and the member's current state,
+ * whichever mutation actually moves them there (see MembershipCard for the state it closes over). */
+function RenewalModeGroup({ dispatch, selection }: { dispatch: Action; selection: 'non_recurring' | 'recurring' }) {
+  const [state, submit, pending, dialog] = useFreshStepUpAction(dispatch, {});
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   useEffect(() => {
@@ -46,13 +47,20 @@ function RenewalModeOption({ action, checked, label }: { action: Action; checked
     if (state.success) router.refresh();
   }, [router, state.redirectUrl, state.success]);
   return <>
-    <form action={submit} className="contents" ref={formRef}>
+    <form action={submit} ref={formRef}>
       <CsrfField />
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input checked={checked} className="cursor-pointer" disabled={pending}
-          onChange={() => formRef.current?.requestSubmit()} type="radio" />
-        {label}
-      </label>
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input checked={selection === 'recurring'} className="cursor-pointer" disabled={pending} name="renewalMode"
+            onChange={() => formRef.current?.requestSubmit()} type="radio" value="recurring" />
+          Automatic
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input checked={selection === 'non_recurring'} className="cursor-pointer" disabled={pending} name="renewalMode"
+            onChange={() => formRef.current?.requestSubmit()} type="radio" value="non_recurring" />
+          Manual
+        </label>
+      </div>
     </form>
     {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
     {dialog}
@@ -70,12 +78,20 @@ export function MembershipCard({ canManageBilling, renewalDate, showRenew, statu
   typeLabel: string;
 }) {
   const pendingMode = preference?.pendingMode ?? null;
+  const selection: 'non_recurring' | 'recurring' = pendingMode === 'recurring' || pendingMode === 'non_recurring'
+    ? pendingMode
+    : recurring ? 'recurring' : 'non_recurring';
   // A pending change (either direction) can only be reversed by cancelling it -- there's no direct
   // path from "cancel pending" straight to the opposite mode without first landing back where you
-  // started, same as the single "Cancel pending change" button this control replaces.
-  const toAutomatic = pendingMode ? cancelPendingRenewalAction : enableAutomaticRenewalAction;
-  const toManual = pendingMode ? cancelPendingRenewalAction : disableAutomaticRenewalAction;
-  const selection = pendingMode ?? (recurring ? 'recurring' : 'non_recurring');
+  // started, same as the single "Cancel pending change" button this control replaces. Reading
+  // pendingMode from the closure (rather than trusting the submitted value) keeps the routing
+  // decision tied to the same server-rendered state the radios themselves reflect.
+  const dispatchRenewalMode = useCallback((state: Parameters<Action>[0], formData: FormData) => {
+    if (pendingMode) return cancelPendingRenewalAction(state, formData);
+    return formData.get('renewalMode') === 'recurring'
+      ? enableAutomaticRenewalAction(state, formData)
+      : disableAutomaticRenewalAction(state, formData);
+  }, [pendingMode]);
 
   return (
     <section className="mt-6 max-w-md space-y-3 rounded-lg border p-4">
@@ -94,10 +110,7 @@ export function MembershipCard({ canManageBilling, renewalDate, showRenew, statu
       {renewalDate ? (
         <fieldset className="space-y-1">
           <legend className="text-sm text-foreground">Renewal Mode</legend>
-          <div className="flex items-center gap-4">
-            <RenewalModeOption action={toAutomatic} checked={selection === 'recurring'} label="Automatic" />
-            <RenewalModeOption action={toManual} checked={selection === 'non_recurring'} label="Manual" />
-          </div>
+          <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
           {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {preference?.effectiveOn}.</p> : null}
         </fieldset>
       ) : null}
