@@ -615,9 +615,17 @@ Administrators can likewise approve a full refund of a Stripe membership payment
   not match the deployment.`). Never copy Customers, webhook secrets, Products, Prices, SetupIntents,
   PaymentMethods, schedules, or subscriptions between modes. Product IDs are opaque, so the Stripe
   API's account/mode ownership check is authoritative: verify the configured Product using the
-  configured key before signoff. Before the real go-live, replace the temporary subdomain's test key
-  with the live one, or point `idoc.club` at that same deployment (which flips the requirement to
-  live automatically via `BASE_URL`).
+  configured key before signoff. `BASE_URL` and the Stripe mode are two independently configured
+  values, not derived from each other or from which domain currently resolves to the deployment:
+  aliasing `idoc.club` to a deployment does not itself change that deployment's `BASE_URL`, and
+  changing `STRIPE_SECRET_KEY` alone does not change `BASE_URL` either. Neither change alone is a
+  safe go-live: swapping in the live key while `BASE_URL` still reads the temporary subdomain fails
+  closed (checkout breaks with the mode-mismatch error above), while aliasing `idoc.club` to the
+  deployment without updating `BASE_URL` does not -- it silently keeps accepting the test key while
+  now serving real member traffic, so real cards fail against Stripe test mode instead of loudly
+  erroring. Go-live is therefore one coordinated change: update `BASE_URL` to `https://idoc.club`,
+  swap in the live key, and redeploy, all before (or atomically with) switching the canonical domain
+  alias -- never one of these steps on its own.
 - In each mode create one active **IDOC Annual Membership** Product. The application creates EUR
   80.00 inline one-time/recurring Prices and future-transition recurring Prices under that Product;
   no browser amount, currency, Product, Price, Customer, profile, ownership, date, or refund value is
