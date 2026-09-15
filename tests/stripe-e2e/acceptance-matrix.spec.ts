@@ -25,9 +25,8 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
       expect(customer.livemode).toBe(false);
       expect(customer.email).toBe(billing.email);
     }
-    // "Manage payment method" on the dashboard is now an in-app link to its own subpage; the
-    // actual portal-opening button lives there.
-    await page.goto('/dashboard/payment-method');
+    // "Update payment method" lives in its own Payment Method box on the My Membership page.
+    await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /update payment method/i }).or(
       page.getByRole('button', { name: /customer portal/i }),
     );
@@ -78,7 +77,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
   });
 
   test('BROWSER-REFRESH-BACK refresh and back do not duplicate portal sessions or local payment projections', async ({ page }) => {
-    await page.goto('/dashboard/payment-method');
+    await page.goto('/dashboard');
     const manage = page.getByRole('button', { name: /update payment method/i });
     await expect(manage).toBeVisible();
     await manage.click();

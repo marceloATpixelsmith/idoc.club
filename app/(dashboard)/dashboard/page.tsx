@@ -4,10 +4,12 @@ import { getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requi
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
 import { PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
+import { getOwnPaymentMethodSummary } from '@/lib/payments/stripe';
 import { getUser } from '@/lib/db/queries';
 import { parseMemberClassification } from '@/lib/membership/classification';
 import { OnboardingWizard } from '@/app/(dashboard)/onboarding/onboarding-wizard';
 import { MembershipCard } from './membership-card';
+import { PaymentMethodCard } from './payment-method-card';
 import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
 
 const RENEW_WINDOW_DAYS = 15;
@@ -74,7 +76,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const mode = renewalMode(subscription, entitlement);
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
-  const [history, renewalPreference] = await Promise.all([listOwnPaymentHistory(), getOwnRenewalPreference()]);
+  const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
+    listOwnPaymentHistory(),
+    getOwnRenewalPreference(),
+    canManageBilling ? getOwnPaymentMethodSummary() : Promise.resolve(null),
+  ]);
   const { icon: typeIcon, label: typeLabel } = classificationDisplay(roles);
 
   return (
@@ -82,16 +88,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <h1 className="text-2xl font-semibold">My Membership</h1>
       <p className="mt-3">Welcome, {member.profile.firstName} {member.profile.lastName}.</p>
 
-      <MembershipCard
-        canManageBilling={canManageBilling}
-        preference={renewalPreference}
-        recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
-        renewalDate={entitlement?.validUntil ?? null}
-        showRenew={showRenew}
-        statusLabel={entitlement ? (MEMBERSHIP_STATUS_LABELS[entitlement.status] ?? entitlement.status) : 'No membership record on file'}
-        typeIcon={typeIcon}
-        typeLabel={typeLabel}
-      />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <MembershipCard
+          preference={renewalPreference}
+          recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
+          renewalDate={entitlement?.validUntil ?? null}
+          showRenew={showRenew}
+          statusLabel={entitlement ? (MEMBERSHIP_STATUS_LABELS[entitlement.status] ?? entitlement.status) : 'No membership record on file'}
+          typeIcon={typeIcon}
+          typeLabel={typeLabel}
+        />
+        {canManageBilling ? <PaymentMethodCard summary={paymentMethodSummary} /> : null}
+      </div>
 
       <section className="mt-6 max-w-2xl">
         <h2 className="font-medium text-foreground">Payment history</h2>
