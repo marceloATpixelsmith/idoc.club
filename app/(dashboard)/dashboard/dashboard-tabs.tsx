@@ -13,6 +13,18 @@ const ALL_TABS = [
   { href: '/dashboard/support', icon: LifeBuoy, label: 'Support' },
 ];
 
+// A subpage (e.g. /dashboard/payment-method) belongs to whichever tab's own prefix it falls
+// under. '/dashboard' itself is a prefix of every dashboard route, so it only claims a path that no
+// more specific tab (profile, security, support) already claims -- this needs no per-subpage
+// hardcoding as new My Membership subpages are added.
+function isActiveTab(pathname: string, href: string): boolean {
+  if (href === '/dashboard') {
+    return pathname === '/dashboard'
+      || !ALL_TABS.some((tab) => tab.href !== '/dashboard' && (pathname === tab.href || pathname.startsWith(`${tab.href}/`)));
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
  * paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
@@ -38,7 +50,7 @@ export function DashboardTabs({ entitled, memberSupport, supportUnread }: { enti
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
-              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${pathname === tab.href ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
+              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${isActiveTab(pathname, tab.href) ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}

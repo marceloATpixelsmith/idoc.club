@@ -34,6 +34,11 @@ const PORTAL_CONFIGURATION_METADATA_KEY = 'idoc_membership_portal';
 const PORTAL_CONFIGURATION_VERSION = 'v2';
 let portalConfigurationPromise: Promise<string> | null = null;
 
+// Bumped whenever the session's own request parameters change shape (e.g. flow_data was added in
+// v2) so a retry within the same five-minute idempotency bucket, spanning a deploy, never replays
+// against a key whose prior request had different parameters -- Stripe rejects that outright.
+const SESSION_IDEMPOTENCY_VERSION = 'v2';
+
 // IDOC prices membership inline (price_data) per Checkout Session rather than from a stable Price
 // catalog, and there is only one flat €80/year offering — there is nothing to expose for
 // subscription_update (plan-swapping). subscription_cancel and invoice_history were dropped in v2:
@@ -83,14 +88,25 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
     .from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
   if (!billing) throw new Error('No Stripe billing account exists for this member.');
   const configurationId = await resolvedConfigurationId(stripe);
+  const returnUrl = `${baseUrlForServer()}/dashboard/payment-method`;
   const session = await stripe.billingPortal.sessions.create({
     configuration: configurationId,
     customer: billing.externalCustomerId,
-    return_url: `${baseUrlForServer()}/dashboard/payment-method`,
+    return_url: returnUrl,
+    // Jump straight to the add/update card form instead of the portal's own home page (the
+    // Configuration has nothing else enabled anyway), and redirect back the instant the card is
+    // saved rather than leaving the member on a Stripe-hosted "you're done" screen.
+    flow_data: {
+      type: 'payment_method_update',
+      after_completion: { type: 'redirect', redirect: { return_url: returnUrl } },
+    },
   }, {
     // Portal sessions are short-lived. Converge accidental duplicate submissions within a
     // five-minute interaction window while allowing a fresh session after an old one expires.
-    idempotencyKey: `idoc-membership-portal-${profile.id}-${Math.floor(Date.now() / 300_000)}`,
+    // Versioned like the Configuration's own key (docs/04 §7): a retry that lands in the same
+    // bucket just after this flow_data change shipped must never replay against a key whose prior
+    // request had different parameters, which Stripe rejects outright.
+    idempotencyKey: `idoc-membership-portal-session-${SESSION_IDEMPOTENCY_VERSION}-${profile.id}-${Math.floor(Date.now() / 300_000)}`,
   });
   return session.url;
 }

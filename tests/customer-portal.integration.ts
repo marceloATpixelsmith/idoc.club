@@ -48,6 +48,20 @@ test('a Stripe-backed member gets a portal session scoped to their own billing a
   assert.equal(sessionParams.configuration, 'cfg_1');
   assert.equal(calls.configurationsCreate.length, 1, 'no existing configuration means one must be created');
   assert.equal((calls.configurationsCreateOptions[0] as any).idempotencyKey, 'idoc-membership-portal-configuration-v2');
+  // Versioned like the Configuration's own key: a retry landing in the same five-minute bucket as a
+  // pre-flow_data request must never replay against a key whose request shape has since changed --
+  // Stripe rejects reused idempotency keys whose parameters differ.
+  assert.match((calls.sessionsCreateOptions[0] as any).idempotencyKey, /^idoc-membership-portal-session-v2-\d+-\d+$/);
+});
+
+test('the session deep-links straight into the add/update card form and returns to the app the instant it is saved, never the portal home page', async () => {
+  const { user } = await createCompleteGraph();
+  const { calls, client } = fakePortalClient();
+  await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createMembershipPortalSession(client));
+  const flowData = (calls.sessionsCreate[0] as any).flow_data;
+  assert.equal(flowData.type, 'payment_method_update');
+  assert.equal(flowData.after_completion.type, 'redirect');
+  assert.equal(flowData.after_completion.redirect.return_url, 'https://idoc.club/dashboard/payment-method');
 });
 
 test('no existing Billing Portal Configuration is created with exactly payment_method_update, never invoice_history, subscription_cancel, or subscription_update', async () => {
