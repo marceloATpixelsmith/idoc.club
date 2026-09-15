@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import postgres from 'postgres';
 
 test('an entitled member sees the dashboard menu and My Membership shows status, no paywall', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
@@ -39,6 +41,35 @@ test('the renewal mode explains what the selected mode means in plain language',
     await expect(page.getByText(/your membership will expire on/i)).toBeVisible();
   }
   await context.close();
+});
+
+test('the Support tab stays highlighted on its own subpages, only My Membership matches exactly', async ({ browser }) => {
+  const { userId } = JSON.parse(await readFile('.security-e2e/member-a-sessions.json', 'utf8')) as { userId: number };
+  const databaseUrl = process.env.TEST_DATABASE_URL;
+  expect(databaseUrl).toBeTruthy();
+  const sql = postgres(databaseUrl!, { max: 1, onnotice: () => {} });
+  const [conversation] = await sql`insert into idoc.support_conversations(member_user_id,category,subject)
+    values(${userId},'technical_support','Nav highlight regression fixture') returning id,public_id`;
+  // A real conversation always carries at least its opening message -- exercise that join, not just
+  // an empty thread, so this fixture also covers getOwnConversation's own message query.
+  await sql`insert into idoc.support_messages(conversation_id,author_user_id,author_side,body,idempotency_key)
+    values(${conversation.id},${userId},'member','Nav highlight regression fixture message',gen_random_uuid())`;
+
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
+  const supportButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' }).locator('button');
+
+  await page.goto(`/dashboard/support/${conversation.public_id}`);
+  await expect(supportButton()).toHaveClass(/border-gold/);
+  await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
+
+  await page.goto('/dashboard');
+  await expect(myMembershipButton()).toHaveClass(/border-gold/);
+  await expect(supportButton()).not.toHaveClass(/border-gold/);
+
+  await context.close();
+  await sql.end();
 });
 
 test('a not-yet-entitled member is sent straight to the pricing page, no intermediate paywall screen', async ({ browser }) => {
