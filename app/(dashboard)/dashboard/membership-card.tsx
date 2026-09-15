@@ -77,8 +77,7 @@ function CancelMembershipButton() {
   </>;
 }
 
-export function MembershipCard({ canManageBilling, renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
-  canManageBilling: boolean;
+export function MembershipCard({ renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
   preference: Preference;
   recurring: boolean;
   renewalDate: string | null;
@@ -129,14 +128,18 @@ export function MembershipCard({ canManageBilling, renewalDate, showRenew, statu
         <fieldset className="mt-5 space-y-2 border-t border-border pt-4">
           <legend className="text-sm font-semibold text-foreground">Renewal Mode</legend>
           <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
+          <p className="text-xs text-muted-foreground">
+            {selection === 'recurring'
+              ? `(Your membership will automatically renew on ${renewalDate}.)`
+              : `(Your membership will expire on ${renewalDate}.)`}
+          </p>
           {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {preference?.effectiveOn}.</p> : null}
         </fieldset>
       ) : null}
 
-      {canManageBilling || renewalDate ? (
+      {renewalDate ? (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-          {canManageBilling ? <Link href="/dashboard/payment-method"><Button>Manage payment method</Button></Link> : null}
-          {renewalDate ? <CancelMembershipButton /> : null}
+          <CancelMembershipButton />
         </div>
       ) : null}
     </section>

@@ -14,25 +14,30 @@ test('an entitled member sees the dashboard menu and My Membership shows status,
   await context.close();
 });
 
-test('the My Membership tab stays highlighted on its own subpages, like Payment Method', async ({ browser }) => {
+test('the Payment Method box only appears for a member with a Stripe billing account', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
-  // The class that carries the active-tab styling lives on the nested <button>, not the <a> itself.
-  const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
-  const myProfileButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Profile' }).locator('button');
-
   await page.goto('/dashboard');
-  await expect(myMembershipButton()).toHaveClass(/border-gold/);
-  await expect(myProfileButton()).not.toHaveClass(/border-gold/);
+  await expect(page.getByRole('heading', { name: 'Membership', exact: true })).toBeVisible();
+  // member-a has no Stripe billing account in this fixture set -- only tests/stripe-e2e's
+  // acceptance-matrix spec, backed by real Stripe test-mode data, covers the box's actual contents
+  // (card on file, the Update Payment Method button). Here it must not render at all, never an
+  // empty/broken box.
+  await expect(page.getByRole('heading', { name: 'Payment Method' })).toHaveCount(0);
+  await context.close();
+});
 
-  await page.goto('/dashboard/payment-method');
-  await expect(myMembershipButton()).toHaveClass(/border-gold/);
-  await expect(myProfileButton()).not.toHaveClass(/border-gold/);
-
-  await page.goto('/dashboard/profile');
-  await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
-  await expect(myProfileButton()).toHaveClass(/border-gold/);
-
+test('the renewal mode explains what the selected mode means in plain language', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  await page.goto('/dashboard');
+  const automaticRadio = page.getByRole('radio', { name: 'Automatic' });
+  await expect(automaticRadio).toBeVisible();
+  if (await automaticRadio.isChecked()) {
+    await expect(page.getByText(/your membership will automatically renew on/i)).toBeVisible();
+  } else {
+    await expect(page.getByText(/your membership will expire on/i)).toBeVisible();
+  }
   await context.close();
 });
 

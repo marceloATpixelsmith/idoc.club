@@ -74,7 +74,7 @@ async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<stri
  * Customer — a member without a billing account has never completed real Stripe Checkout (docs/04
  * §8) and must not be forced into one just to reach this button. The Customer ID is derived
  * server-side from the actor's own profile only; there is no parameter through which a caller could
- * name someone else's Customer. Returns the member to the dashboard's own payment-method subpage,
+ * name someone else's Customer. Returns the member to their own My Membership dashboard page,
  * never the generic portal landing, so they never leave the app's own membership-management surface
  * for longer than the actual card-entry step.
  */
@@ -88,7 +88,7 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
     .from(billingAccounts).where(eq(billingAccounts.profileId, profile.id)).limit(1);
   if (!billing) throw new Error('No Stripe billing account exists for this member.');
   const configurationId = await resolvedConfigurationId(stripe);
-  const returnUrl = `${baseUrlForServer()}/dashboard/payment-method`;
+  const returnUrl = `${baseUrlForServer()}/dashboard`;
   const session = await stripe.billingPortal.sessions.create({
     configuration: configurationId,
     customer: billing.externalCustomerId,

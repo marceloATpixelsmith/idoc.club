@@ -44,7 +44,7 @@ test('a Stripe-backed member gets a portal session scoped to their own billing a
   assert.equal(calls.sessionsCreate.length, 1);
   const sessionParams = calls.sessionsCreate[0] as any;
   assert.equal(sessionParams.customer, 'cus_fixture');
-  assert.equal(sessionParams.return_url, 'https://idoc.club/dashboard/payment-method');
+  assert.equal(sessionParams.return_url, 'https://idoc.club/dashboard');
   assert.equal(sessionParams.configuration, 'cfg_1');
   assert.equal(calls.configurationsCreate.length, 1, 'no existing configuration means one must be created');
   assert.equal((calls.configurationsCreateOptions[0] as any).idempotencyKey, 'idoc-membership-portal-configuration-v2');
@@ -61,7 +61,7 @@ test('the session deep-links straight into the add/update card form and returns 
   const flowData = (calls.sessionsCreate[0] as any).flow_data;
   assert.equal(flowData.type, 'payment_method_update');
   assert.equal(flowData.after_completion.type, 'redirect');
-  assert.equal(flowData.after_completion.redirect.return_url, 'https://idoc.club/dashboard/payment-method');
+  assert.equal(flowData.after_completion.redirect.return_url, 'https://idoc.club/dashboard');
 });
 
 test('no existing Billing Portal Configuration is created with exactly payment_method_update, never invoice_history, subscription_cancel, or subscription_update', async () => {

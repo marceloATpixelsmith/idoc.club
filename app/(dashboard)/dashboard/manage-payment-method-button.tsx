@@ -7,10 +7,10 @@ import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { manageBillingAction } from '@/lib/payments/actions';
 
-/** Same-tab redirect is correct here (unlike the old dashboard-card button): this page is itself
- * the in-app "manage payment method" destination, and Stripe's own return_url (set server-side in
- * createMembershipPortalSession) brings the member straight back to it -- there is no separate
- * membership page left open elsewhere to protect a popup for. */
+/** Same-tab redirect is correct here: this button lives on the dashboard's own My Membership page,
+ * and Stripe's own return_url (set server-side in createMembershipPortalSession) brings the member
+ * straight back to that same page -- there is no separate page left open elsewhere to protect a
+ * popup for. */
 export function ManagePaymentMethodButton() {
   const [state, submit, pending, dialog] = useFreshStepUpAction(manageBillingAction, {});
   useEffect(() => {
