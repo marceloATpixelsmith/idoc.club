@@ -611,6 +611,15 @@ Administrators can likewise approve a full refund of a Stripe membership payment
   Customers, webhook secrets, Products, Prices, SetupIntents, PaymentMethods, schedules, or
   subscriptions between modes. Product IDs are opaque, so the Stripe API's account/mode ownership
   check is authoritative: verify the configured Product using the configured key before signoff.
+- The Production/Preview split above is per Vercel deployment target (`VERCEL_ENV`), not per domain.
+  Aliasing a Production deployment to a temporary or staging subdomain -- for example, serving an
+  in-progress redesign at `redesign.idoc.club` while `idoc.club` still serves the prior release --
+  does not relax the live-key requirement: that deployment still runs with `VERCEL_ENV=production`
+  and still fails closed on a test `STRIPE_SECRET_KEY` (`Invalid Stripe configuration:
+  STRIPE_SECRET_KEY mode does not match the deployment.`). To exercise Checkout with a test key while
+  a redesign is in progress, deploy it as a Preview build instead (any non-`main` branch, or
+  `vercel deploy` without `--prod`) and test against that `*.vercel.app` preview URL rather than
+  aliasing Production to a temporary subdomain.
 - In each mode create one active **IDOC Annual Membership** Product. The application creates EUR
   80.00 inline one-time/recurring Prices and future-transition recurring Prices under that Product;
   no browser amount, currency, Product, Price, Customer, profile, ownership, date, or refund value is
