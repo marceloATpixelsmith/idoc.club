@@ -108,6 +108,11 @@ export async function createMembershipPortalSession(testStripeClient?: PortalStr
     // request had different parameters, which Stripe rejects outright.
     idempotencyKey: `idoc-membership-portal-session-${SESSION_IDEMPOTENCY_VERSION}-${profile.id}-${Math.floor(Date.now() / 300_000)}`,
   });
+  // TEMPORARY diagnostic: a member reported landing on the portal's default overview instead of
+  // the payment-method-update flow. Logging exactly what Stripe echoed back for this session (not
+  // just the narrowed { url } our own PortalStripeClient type exposes) to confirm whether flow_data
+  // was actually accepted, before removing this once root-caused.
+  console.log('[DIAG-PORTAL]', JSON.stringify({ configurationId, url: session.url, flow: (session as unknown as { flow?: unknown }).flow }));
   return session.url;
 }
 
