@@ -77,10 +77,13 @@ test('Stripe test and live keys are isolated by deployment environment', () => {
   const testKey = `rk_test_${'t'.repeat(24)}`;
   const liveKey = `rk_live_${'l'.repeat(24)}`;
   assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'preview' }), testKey);
-  assert.equal(stripeKeyForServer({ STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'production' }), liveKey);
+  assert.equal(stripeKeyForServer({ BASE_URL: 'https://idoc.club', STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'production' }), liveKey);
   assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: liveKey, VERCEL_ENV: 'preview' }), /STRIPE_SECRET_KEY mode/);
-  assert.throws(() => stripeKeyForServer({ STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), /STRIPE_SECRET_KEY mode/);
+  assert.throws(() => stripeKeyForServer({ BASE_URL: 'https://idoc.club', STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), /STRIPE_SECRET_KEY mode/);
   assert.throws(() => stripeKeyForServer({ NODE_ENV: 'production', STRIPE_SECRET_KEY: testKey }), /STRIPE_SECRET_KEY mode/);
+  // A Production deployment aliased to a non-canonical domain (a temporary redesign subdomain) is
+  // not treated as live -- it accepts a test key just like Preview/Development.
+  assert.equal(stripeKeyForServer({ BASE_URL: 'https://redesign.idoc.club', STRIPE_SECRET_KEY: testKey, VERCEL_ENV: 'production' }), testKey);
 });
 
 test('development permits loopback HTTP without weakening production HTTPS', () => {

@@ -605,21 +605,19 @@ Administrators can likewise approve a full refund of a Stripe membership payment
 ### Environment and provider objects
 
 - Set server-only `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
-  `STRIPE_MEMBERSHIP_PRODUCT_ID` in every payment-capable environment. Production must use a live
-  `sk_live_` or preferably least-privilege `rk_live_` key. Vercel Preview/Development must use a
-  test key; runtime validation rejects a live key there and a test key in Production. Never copy
-  Customers, webhook secrets, Products, Prices, SetupIntents, PaymentMethods, schedules, or
-  subscriptions between modes. Product IDs are opaque, so the Stripe API's account/mode ownership
-  check is authoritative: verify the configured Product using the configured key before signoff.
-- The Production/Preview split above is per Vercel deployment target (`VERCEL_ENV`), not per domain.
-  Aliasing a Production deployment to a temporary or staging subdomain -- for example, serving an
-  in-progress redesign at `redesign.idoc.club` while `idoc.club` still serves the prior release --
-  does not relax the live-key requirement: that deployment still runs with `VERCEL_ENV=production`
-  and still fails closed on a test `STRIPE_SECRET_KEY` (`Invalid Stripe configuration:
-  STRIPE_SECRET_KEY mode does not match the deployment.`). To exercise Checkout with a test key while
-  a redesign is in progress, deploy it as a Preview build instead (any non-`main` branch, or
-  `vercel deploy` without `--prod`) and test against that `*.vercel.app` preview URL rather than
-  aliasing Production to a temporary subdomain.
+  `STRIPE_MEMBERSHIP_PRODUCT_ID` in every payment-capable environment. Only a Vercel Production
+  deployment actually serving `idoc.club` or `www.idoc.club` (as read from `BASE_URL`) requires a
+  live `sk_live_` or preferably least-privilege `rk_live_` key; everything else -- Preview,
+  Development, and a Production deployment aliased to any other domain (a temporary redesign
+  subdomain such as `redesign.idoc.club`, say) -- must use a test key. Runtime validation
+  (`lib/runtime/stripe-configuration.mjs`'s `stripeDeploymentMode`) rejects a live key outside the
+  canonical domain and a test key on it (`Invalid Stripe configuration: STRIPE_SECRET_KEY mode does
+  not match the deployment.`). Never copy Customers, webhook secrets, Products, Prices, SetupIntents,
+  PaymentMethods, schedules, or subscriptions between modes. Product IDs are opaque, so the Stripe
+  API's account/mode ownership check is authoritative: verify the configured Product using the
+  configured key before signoff. Before the real go-live, replace the temporary subdomain's test key
+  with the live one, or point `idoc.club` at that same deployment (which flips the requirement to
+  live automatically via `BASE_URL`).
 - In each mode create one active **IDOC Annual Membership** Product. The application creates EUR
   80.00 inline one-time/recurring Prices and future-transition recurring Prices under that Product;
   no browser amount, currency, Product, Price, Customer, profile, ownership, date, or refund value is
