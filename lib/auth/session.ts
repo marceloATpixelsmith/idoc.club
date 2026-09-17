@@ -5,8 +5,7 @@ import { describeUserAgent } from '@/lib/auth/session-device-label';
 import { NewUser } from '@/lib/db/schema';
 import {
   readActiveSession,
-  recordSignInAudit,
-  registerSession,
+  registerSessionWithSignInAudit,
   revokeSession,
   touchSession,
 } from '@/lib/auth/session-registry';
@@ -146,7 +145,9 @@ export async function setSession(user: NewUser) {
     absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_SECONDS * 1000).toISOString(),
   };
 
-  await registerSession({
+  // The single choke point every login path (password, email OTP, TOTP MFA, post-enrollment
+  // recovery-code acknowledgment) converges on, so this covers all of them with one call site.
+  await registerSessionWithSignInAudit({
     sessionId: session.sessionId,
     userId: session.user.id,
     sessionVersion: session.user.sessionVersion,
@@ -155,9 +156,6 @@ export async function setSession(user: NewUser) {
     absoluteExpiresAt: new Date(session.absoluteExpiresAt),
     deviceLabel: await requestDeviceLabel(),
   });
-  // The single choke point every login path (password, email OTP, TOTP MFA, post-enrollment
-  // recovery-code acknowledgment) converges on, so this covers all of them with one call site.
-  await recordSignInAudit(session.user.id);
 
   const environment = requestEnvironment();
   const cookieStore = await requestCookies();

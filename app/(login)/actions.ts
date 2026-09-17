@@ -21,7 +21,7 @@ import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
-import { recordSignOutAudit, revokeAllUserSessions } from '@/lib/auth/session-registry';
+import { revokeAllUserSessions, revokeSessionWithSignOutAudit } from '@/lib/auth/session-registry';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -183,12 +183,17 @@ export async function signOut(csrfToken: string) {
   // though signing out an already-forged session mainly harms the attacker's own forged state --
   // it is still cookie-authenticated, state-changing, and invoked directly (not via a <form>), so it
   // is checked the same way as every other JS-invoked Server Action.
-  // Captured before clearSession() clears the session cookie -- rawCanonicalUserId() would have
-  // nothing left to read from afterward.
+  // Captured before clearSession() clears the session cookie -- rawCanonicalUserId() and
+  // rawCanonicalSessionId() would have nothing left to read from afterward.
   const userId = await rawCanonicalUserId();
-  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), userId);
+  const sessionId = await rawCanonicalSessionId();
+  await requireCsrfTokenValue(csrfToken, sessionId, userId);
+  // Revoke and audit together, before touching browser state -- the same revoke-before-cookie-clear
+  // ordering clearSession() itself already follows (see its own comment), just made atomic with the
+  // audit evidence too. clearSession()'s own internal revokeSession() call becomes a harmless,
+  // coalesce-idempotent no-op against the row this one already revoked.
+  if (userId && sessionId) await revokeSessionWithSignOutAudit(sessionId, userId);
   await clearSession();
-  if (userId) await recordSignOutAudit(userId);
 }
 
 const updatePasswordSchema = z.object({

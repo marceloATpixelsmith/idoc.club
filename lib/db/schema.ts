@@ -319,7 +319,11 @@ export const auditLog = idocSchema.table('audit_log', {
   afterJson: jsonb('after_json'),
   reason: text('reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  // Supports getActivityLogs() (lib/db/queries.ts): My Security's Activity card looks up one
+  // actor's own rows, newest first, without this scanning and sorting the whole append-only table.
+  index('audit_log_actor_activity_idx').on(table.actorId, table.createdAt),
+]);
 
 /** Validated, per-administrator data-table state. Transient UI state (selection, open menus,
  * confirmations, and loading indicators) is deliberately never stored here. */
