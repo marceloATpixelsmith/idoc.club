@@ -238,7 +238,10 @@ test('AUTH-PASSWORD-005: an incorrect current password is rejected without mutat
   const [row] = await sql`select password_hash, session_version from idoc.users where id=${user.id}`;
   assert.equal(row.password_hash, user.passwordHash);
   assert.equal(row.session_version, user.sessionVersion);
-  assert.equal((await sql`select count(*)::int count from idoc.audit_log where actor_id=${user.id}`)[0].count, 0);
+  // Not a bare count(*)=0: setSession() on line 231 above is this test's own setup, and now
+  // legitimately writes its own 'account.session.signed_in' row (lib/auth/session-registry.ts's
+  // registerSessionWithSignInAudit). What actually must be zero is evidence of a password change.
+  assert.equal((await sql`select count(*)::int count from idoc.audit_log where actor_id=${user.id} and action='account.password.changed'`)[0].count, 0);
   assert.equal((await sql`select count(*)::int count from idoc.auth_security_notification_outbox where user_id=${user.id}`)[0].count, 0);
 });
 
