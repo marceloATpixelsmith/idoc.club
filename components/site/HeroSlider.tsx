@@ -169,7 +169,7 @@ export function HeroSlider() {
               type="button"
               aria-label="Previous slide"
               onClick={() => go(index - 1)}
-              className="border border-border p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
+              className="border border-border bg-transparent p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -177,7 +177,7 @@ export function HeroSlider() {
               type="button"
               aria-label="Next slide"
               onClick={() => go(index + 1)}
-              className="border border-border p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
+              className="border border-border bg-transparent p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
             >
               <ChevronRight className="size-4" />
             </button>
