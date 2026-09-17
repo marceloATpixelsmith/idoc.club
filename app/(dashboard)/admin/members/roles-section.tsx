@@ -37,7 +37,7 @@ export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; use
         </select>
       </label>
       <label className="block text-sm">Reason (required)<textarea className="mt-1 block w-full border p-2" name="reason" required rows={2} /></label>
-      <button className="rounded bg-blue-700 px-3 py-1 text-sm text-white" disabled={grantPending} type="submit">Grant role</button>
+      <button className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground" disabled={grantPending} type="submit">Grant role</button>
       {grantState.error && <p className="text-sm text-red-400">{grantState.error}</p>}
       {grantState.success && <p className="text-sm text-green-400">{grantState.success}</p>}
     </form>

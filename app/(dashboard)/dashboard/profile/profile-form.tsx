@@ -163,7 +163,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
         <CsrfField />
 
         <fieldset className="space-y-4 border-0 p-0">
-          <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-foreground">Account</legend>
+          <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Account</legend>
           <div className="max-w-sm">
             <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="email">Email</Label>
             <Input defaultValue={email} id="email" name="email" required type="email" />
@@ -172,7 +172,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
 
         {member ? <>
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
-            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-foreground">Personal information</legend>
+            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Personal information</legend>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="firstName">First Name</Label>
@@ -186,7 +186,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
           </fieldset>
 
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
-            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-foreground">Address</legend>
+            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Address</legend>
             <div className="max-w-sm">
               <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="countryCode">Country</Label>
               <CountrySelect id="countryCode" name="countryCode" onChange={handleCountryChange} value={countryCode} />
@@ -266,7 +266,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
           </fieldset>
 
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
-            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-foreground">Professional classification</legend>
+            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Professional classification</legend>
             <div className="max-w-sm">
               <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="classification">Classification</Label>
               <select
@@ -286,7 +286,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
 
           {classification !== 'veterinarian' ? (
             <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
-              <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-foreground">Official information</legend>
+              <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Official information</legend>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="nationalFederationCountryCode">National Federation</Label>

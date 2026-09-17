@@ -13,7 +13,7 @@ export default async function AdminSecurityPage() {
     <main className="flex-1 py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">Super Admin security operations</h1>
       <section className="mt-6">
-        <h2 className="text-lg font-semibold">Google OAuth client-secret rotation</h2>
+        <h2 className="text-lg font-bold uppercase tracking-wider text-gold">Google OAuth client-secret rotation</h2>
         {latest ? (
           <p className="mt-2 text-sm text-muted-foreground">
             Latest evidence: version <strong>{latest.toVersion}</strong>, recorded{' '}

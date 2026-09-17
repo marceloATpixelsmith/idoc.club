@@ -25,13 +25,13 @@ export function OrganizationSettingsForm({ address, methods }: { address: Organi
   const [instructions, setInstructions] = useState(sanitizedBankInstructions);
   return <form action={action} className="mt-8 max-w-3xl space-y-8">
     <CsrfField />
-    <fieldset className="grid gap-4 rounded-lg border p-5 sm:grid-cols-2"><legend className="px-2 text-lg font-semibold">Organization address</legend>
+    <fieldset className="grid gap-4 rounded-lg border p-5 sm:grid-cols-2"><legend className="px-2 text-lg font-bold uppercase tracking-wider text-gold">Organization address</legend>
       {ADDRESS_FIELDS.map(([name, label]) => <div key={name} className={name.startsWith('address') ? 'sm:col-span-2' : ''}>
         <label className="block text-sm font-medium" htmlFor={name}>{label}{name === 'address2' ? ' (optional)' : ''}</label>
         <input className="mt-1 w-full rounded-md border p-2" defaultValue={address?.[name] ?? ''} id={name} maxLength={name === 'postalCode' ? 30 : name.startsWith('address') ? 200 : 100} name={name} />
       </div>)}
     </fieldset>
-    <fieldset className="space-y-6 rounded-lg border p-5"><legend className="px-2 text-lg font-semibold">Seminar payment methods</legend>
+    <fieldset className="space-y-6 rounded-lg border p-5"><legend className="px-2 text-lg font-bold uppercase tracking-wider text-gold">Seminar payment methods</legend>
       <section><h2 className="font-medium">{stripe.displayLabel}</h2><p className="text-sm text-muted-foreground">Required system default. Always enabled and protected.</p></section>
       <section className="space-y-3"><label className="flex gap-3 font-medium"><input checked={bankEnabled} name="bankEnabled" onChange={(event) => setBankEnabled(event.target.checked)} type="checkbox" />Enable {bank.displayLabel}</label>
         <div><label className="block text-sm font-medium" id="bank-instructions-label">Bank Transfer instructions{bankEnabled ? ' (required)' : ''}</label>

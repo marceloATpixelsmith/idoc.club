@@ -54,7 +54,7 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
 
         <aside className="space-y-6">
           <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-semibold">Quick actions</h2>
+            <h2 className="mb-3 font-bold uppercase tracking-wider text-gold">Quick actions</h2>
             <div className="space-y-3">
               {status !== 'published' ? (
                 <NewsForm action={publishNewsArticle} pendingLabel="Publishing" submitLabel="Publish now">
@@ -79,7 +79,7 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
             </div>
           </section>
           <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-semibold">Reschedule</h2>
+            <h2 className="mb-3 font-bold uppercase tracking-wider text-gold">Reschedule</h2>
             <NewsForm action={scheduleNewsArticle} pendingLabel="Scheduling" submitLabel="Set schedule">
               <input name="id" type="hidden" value={id} />
               <label className="block text-sm">Publication date (UTC)<input className="mt-1 block w-full border p-2" name="publicationDate" required type="datetime-local" /></label>

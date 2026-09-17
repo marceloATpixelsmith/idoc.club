@@ -78,23 +78,23 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         </section>
 
         <section className="mt-8 max-w-2xl" id="seminar-history">
-          <h3 className="font-medium text-foreground">Seminar history</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Seminar history</h3>
           <div className="mt-2 overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Seminar</th><th className="p-2 text-left">Date</th><th className="p-2 text-left">Registration</th><th className="p-2 text-left">Payment</th><th className="p-2 text-left">Seminar status</th><th className="p-2 text-left">Location</th></tr></thead><tbody>
             {seminarHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={6}>No seminar history is associated with this member.</td></tr> : seminarHistory.map((seminar) => <tr className="border-t" key={seminar.id}><td className="p-2">{seminar.title}</td><td className="p-2">{seminar.seminarDate}</td><td className="p-2">{seminar.registrationStatus}</td><td className="p-2">{seminar.paymentStatus}</td><td className="p-2">{seminar.seminarStatus}</td><td className="p-2">{seminar.location}</td></tr>)}
           </tbody></table></div>
         </section>
 
         <section className="mt-8 max-w-2xl" id="payment-history">
-          <h3 className="font-medium text-foreground">Payment History</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Payment History</h3>
           <div className="mt-2 overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Payment date</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Origin</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>
             {paymentHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={5}>No payments have been recorded for this member.</td></tr> : paymentHistory.map((payment, index) => <tr className="border-t" key={`${payment.paidAt.toISOString()}-${index}`}><td className="p-2">{payment.paidAt.toISOString()}</td><td className="p-2">{money(payment.amountCents, payment.currency)}</td><td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td><td className="p-2">{payment.source.startsWith('stripe_') ? 'Stripe' : 'Manual'}</td><td className="p-2">{payment.reference ?? '—'}</td></tr>)}
           </tbody></table></div>
         </section>
 
-        {selected.entitlement && <section className="mt-8 max-w-2xl" id="extend-expiration"><h3 className="font-medium text-foreground">Extend Expiration Date</h3><p className="mt-1 text-sm text-muted-foreground">Extension only: this does not add a payment or change Stripe billing dates. Use Correct entitlement below for a genuine correction.</p><ExtendExpirationForm currentValidUntil={selected.entitlement.validUntil} profileId={selected.profile.id} /></section>}
+        {selected.entitlement && <section className="mt-8 max-w-2xl" id="extend-expiration"><h3 className="font-bold uppercase tracking-wider text-gold">Extend Expiration Date</h3><p className="mt-1 text-sm text-muted-foreground">Extension only: this does not add a payment or change Stripe billing dates. Use Correct entitlement below for a genuine correction.</p><ExtendExpirationForm currentValidUntil={selected.entitlement.validUntil} profileId={selected.profile.id} /></section>}
 
         <section className="mt-8 max-w-2xl">
-          <h3 className="font-medium text-foreground">Membership status</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Membership status</h3>
           {selected.entitlement?.status === 'suspended'
             ? <ReinstateForm profileId={selected.profile.id} />
             : selected.entitlement
@@ -103,7 +103,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         </section>
 
         <section className="mt-8 max-w-2xl">
-          <h3 className="font-medium text-foreground">Account authentication</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Account authentication</h3>
           <p className="mt-1 text-sm text-muted-foreground">Distinct from membership status above: this controls whether the user can sign in at all.</p>
           {accountState === 'suspended'
             ? <ReinstateAccountForm userId={selected.profile.userId} />
@@ -111,32 +111,32 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         </section>
 
         <section className="mt-8 max-w-2xl">
-          <h3 className="font-medium text-foreground">Correct entitlement</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Correct entitlement</h3>
           <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} profileId={selected.profile.id} />
         </section>
 
         <section className="mt-8 max-w-2xl" id="edit-member">
-          <h3 className="font-medium text-foreground">Edit Member Information / Change Membership Type</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Edit Member Information / Change Membership Type</h3>
           <p className="mt-1 text-sm text-muted-foreground">Membership type changes preserve role history and do not change expiration, payments, or Stripe billing.</p>
           <AdminProfileForm member={selected} profileId={selected.profile.id} />
         </section>
 
         {isSuperAdmin && (
           <section className="mt-8 max-w-2xl">
-            <h3 className="font-medium text-foreground">Application roles</h3>
+            <h3 className="font-bold uppercase tracking-wider text-gold">Application roles</h3>
             <RolesSection activeRoles={activeRoles} userId={selected.profile.userId} />
           </section>
         )}
 
         {isSuperAdmin && (
           <section className="mt-8 max-w-2xl">
-            <h3 className="font-medium text-foreground">Incident response</h3>
+            <h3 className="font-bold uppercase tracking-wider text-gold">Incident response</h3>
             <ForceRevokeAllAuthorityForm userId={selected.profile.userId} />
           </section>
         )}
 
         <section className="mt-8 max-w-2xl">
-          <h3 className="font-medium text-foreground">Audit trail</h3>
+          <h3 className="font-bold uppercase tracking-wider text-gold">Audit trail</h3>
           <table className="mt-2 min-w-full border text-sm">
             <thead>
               <tr className="border-b bg-surface text-left">

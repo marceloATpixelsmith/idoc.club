@@ -119,7 +119,7 @@ export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) 
             type="button"
             aria-label="Toggle navigation"
             onClick={() => setOpen((v) => !v)}
-            className="text-foreground lg:hidden"
+            className="bg-transparent text-foreground lg:hidden"
           >
             {open ? <X className="size-6" /> : <Menu className="size-6" />}
           </button>

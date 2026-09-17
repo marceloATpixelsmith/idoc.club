@@ -60,7 +60,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
         </SeminarForm>
         <aside className="space-y-4">
           <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-semibold">Quick actions</h2>
+            <h2 className="mb-3 font-bold uppercase tracking-wider text-gold">Quick actions</h2>
             <div className="space-y-3">
               {status !== 'published' ? <SeminarForm action={publishSeminarAction} pendingLabel="Publishing" submitLabel="Publish"><input name="id" type="hidden" value={id} /></SeminarForm> : null}
               {status !== 'canceled' ? <SeminarForm action={cancelSeminarAction} pendingLabel="Canceling" submitLabel="Cancel seminar"><input name="id" type="hidden" value={id} /></SeminarForm> : null}

@@ -21,7 +21,7 @@ export function MembershipPerksForm({ perks }: { perks: MembershipPerk[] }) {
 
   return (
     <fieldset className="mt-8 max-w-3xl space-y-4 rounded-lg border p-5">
-      <legend className="px-2 text-lg font-semibold">Membership perks</legend>
+      <legend className="px-2 text-lg font-bold uppercase tracking-wider text-gold">Membership perks</legend>
       <p className="text-sm text-muted-foreground">
         Shown on every membership-tier box on the public membership page, and on the dashboard payment box.
       </p>
