@@ -95,6 +95,23 @@ export async function revokeOtherUserSessions(userId: number, currentSessionId: 
   `);
 }
 
+/** My Security's Activity card reads idoc.audit_log directly (lib/auth/security-activity.ts names
+ * the exact action strings it renders) -- every session lifecycle event that should show up there
+ * writes through here rather than each caller composing its own insert. */
+export async function recordSignInAudit(userId: number) {
+  await db.execute(sql`
+    insert into idoc.audit_log(actor_id,action,entity_type,entity_id)
+    values(${userId},'account.session.signed_in','user',${String(userId)})
+  `);
+}
+
+export async function recordSignOutAudit(userId: number) {
+  await db.execute(sql`
+    insert into idoc.audit_log(actor_id,action,entity_type,entity_id)
+    values(${userId},'account.session.signed_out','user',${String(userId)})
+  `);
+}
+
 export async function revokeOtherUserSessionsWithEvidence(input: {
   userId: number;
   currentSessionId: string;

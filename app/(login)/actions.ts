@@ -21,7 +21,7 @@ import { clearPendingLogin, getPendingLogin, requireLoginOtp } from '@/lib/auth/
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
-import { revokeAllUserSessions } from '@/lib/auth/session-registry';
+import { recordSignOutAudit, revokeAllUserSessions } from '@/lib/auth/session-registry';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -183,8 +183,12 @@ export async function signOut(csrfToken: string) {
   // though signing out an already-forged session mainly harms the attacker's own forged state --
   // it is still cookie-authenticated, state-changing, and invoked directly (not via a <form>), so it
   // is checked the same way as every other JS-invoked Server Action.
-  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), await rawCanonicalUserId());
+  // Captured before clearSession() clears the session cookie -- rawCanonicalUserId() would have
+  // nothing left to read from afterward.
+  const userId = await rawCanonicalUserId();
+  await requireCsrfTokenValue(csrfToken, await rawCanonicalSessionId(), userId);
   await clearSession();
+  if (userId) await recordSignOutAudit(userId);
 }
 
 const updatePasswordSchema = z.object({

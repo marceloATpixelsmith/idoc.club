@@ -10,6 +10,7 @@ import { CsrfField } from '@/components/security/csrf-field';
 import { GoogleIdentityCard } from './google-identity-card';
 import { PasswordField } from './password-field';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
+import { SECURITY_ACTIVITY_LABELS } from '@/lib/auth/security-activity';
 
 type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
@@ -17,19 +18,6 @@ type DeleteState = { error?: string; success?: string };
 type ActivityLogEntry = { action: string; id: number; timestamp: string };
 type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; logs: ActivityLogEntry[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; deviceLabel: string | null; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-
-const ACTIVITY_LABELS: Record<string, string> = {
-  ACCEPT_INVITATION: 'Accepted an invitation',
-  CREATE_TEAM: 'Created a new team',
-  DELETE_ACCOUNT: 'Deleted account',
-  INVITE_TEAM_MEMBER: 'Invited a team member',
-  REMOVE_TEAM_MEMBER: 'Removed a team member',
-  SIGN_IN: 'Signed in',
-  SIGN_OUT: 'Signed out',
-  SIGN_UP: 'Signed up',
-  UPDATE_ACCOUNT: 'Updated account',
-  UPDATE_PASSWORD: 'Changed password',
-};
 
 export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending, passwordDialog] = useFreshStepUpAction(updatePassword, {} as PasswordState);
@@ -112,7 +100,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
                   {logs.map((log) => (
                     <tr key={log.id} className="border-b">
                       <td className="p-2">{formatDate(log.timestamp)}</td>
-                      <td className="p-2">{ACTIVITY_LABELS[log.action] ?? log.action}</td>
+                      <td className="p-2">{SECURITY_ACTIVITY_LABELS[log.action] ?? log.action}</td>
                     </tr>
                   ))}
                 </tbody>
