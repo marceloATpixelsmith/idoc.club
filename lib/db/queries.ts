@@ -1,7 +1,8 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, profiles, users } from './schema';
+import { auditLog, profiles, users } from './schema';
 import { getSession } from '@/lib/auth/session';
+import { SECURITY_ACTIVITY_LABELS } from '@/lib/auth/security-activity';
 
 export type PublicUser = { email: string; firstName: string | null; id: number; lastName: string | null };
 export type SecurityPageUser = { accountState: 'active' | 'onboarding'; id: number; sessionVersion: number };
@@ -68,6 +69,9 @@ export async function getUser() {
   return user[0];
 }
 
+/** Powers My Security's Activity card with the member's own real security history -- idoc.audit_log
+ * rows they themselves caused, restricted to SECURITY_ACTIVITY_LABELS' curated allow-list so this
+ * stays a security activity feed rather than a general account-history dump. */
 export async function getActivityLogs() {
   const { requireAccountAccess } = await import('@/lib/membership/data-access');
   await requireAccountAccess('member');
@@ -77,16 +81,9 @@ export async function getActivityLogs() {
   }
 
   return await db
-    .select({
-      id: activityLogs.id,
-      action: activityLogs.action,
-      timestamp: activityLogs.timestamp,
-      userName: sql<string>`concat_ws(' ', ${profiles.firstName}, ${profiles.lastName})`,
-    })
-    .from(activityLogs)
-    .leftJoin(users, eq(activityLogs.userId, users.id))
-    .leftJoin(profiles, eq(profiles.userId, users.id))
-    .where(eq(activityLogs.userId, session.user.id))
-    .orderBy(desc(activityLogs.timestamp))
+    .select({ id: auditLog.id, action: auditLog.action, timestamp: auditLog.createdAt })
+    .from(auditLog)
+    .where(and(eq(auditLog.actorId, session.user.id), inArray(auditLog.action, Object.keys(SECURITY_ACTIVITY_LABELS))))
+    .orderBy(desc(auditLog.createdAt))
     .limit(10);
 }

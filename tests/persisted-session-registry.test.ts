@@ -9,7 +9,7 @@ const middleware = readFileSync('middleware.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0016_persisted_auth_sessions.sql', 'utf8');
 
 test('new canonical sessions are persisted before the cookie is issued', () => {
-  const register = session.indexOf('await registerSession({');
+  const register = session.indexOf('await registerSessionWithSignInAudit({');
   const cookie = session.indexOf('cookieStore.set(sessionCookieName(environment)');
   assert.ok(register >= 0 && cookie > register);
   assert.match(session, /sessionId: randomUUID\(\)/);

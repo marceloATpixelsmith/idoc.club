@@ -83,14 +83,14 @@ for (const line of matrix.split("\n")) {
   }
 }
 
-if (matrixById.size !== 155) {
-  throw new Error(`Canonical matrix must expand to 155 controls; found ${matrixById.size}`);
+if (matrixById.size !== 156) {
+  throw new Error(`Canonical matrix must expand to 156 controls; found ${matrixById.size}`);
 }
 
 const counts = Object.fromEntries([...statuses].map((status) => [status, 0]));
 for (const status of matrixById.values()) counts[status] += 1;
-if (Object.values(counts).reduce((sum, count) => sum + count, 0) !== 155) {
-  throw new Error("Canonical matrix status counts do not sum to 155 controls");
+if (Object.values(counts).reduce((sum, count) => sum + count, 0) !== 156) {
+  throw new Error("Canonical matrix status counts do not sum to 156 controls");
 }
 
 const backlogById = new Map();
@@ -131,7 +131,7 @@ if (missing.length || extra.length || classificationMismatches.length) {
 }
 
 console.log(
-  `Auth documentation valid: 155 controls; ${expectedBacklog.size} exact applicable non-verified backlog rows ` +
+  `Auth documentation valid: 156 controls; ${expectedBacklog.size} exact applicable non-verified backlog rows ` +
     `(${counts.verified} verified, ${counts["implemented-but-unverified"]} implemented-but-unverified, ` +
     `${counts.partial} partial, ${counts.missing} missing, ${counts["not-applicable"]} not-applicable).`,
 );

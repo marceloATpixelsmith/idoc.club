@@ -95,6 +95,42 @@ export async function revokeOtherUserSessions(userId: number, currentSessionId: 
   `);
 }
 
+/** Atomic sign-in: the persisted session row and its audit_log evidence commit together, so a
+ * connection drop between the two statements can never leave a phantom, un-audited session sitting
+ * in the registry for up to its absolute lifetime. My Security's Activity card reads idoc.audit_log
+ * directly (lib/auth/security-activity.ts names the exact action strings it renders). */
+export async function registerSessionWithSignInAudit(input: NewPersistedSession) {
+  await client.begin(async (tx) => {
+    await tx`
+      insert into idoc.auth_sessions (
+        session_id, user_id, session_version, authenticated_at, last_activity_at, absolute_expires_at, device_label
+      ) values (
+        ${input.sessionId}, ${input.userId}, ${input.sessionVersion}, ${input.authenticatedAt.toISOString()},
+        ${input.lastActivityAt.toISOString()}, ${input.absoluteExpiresAt.toISOString()}, ${input.deviceLabel ?? null}
+      )
+      on conflict (session_id) do nothing
+    `;
+    await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id)
+      values(${input.userId},'account.session.signed_in','user',${String(input.userId)})`;
+  });
+}
+
+/** Atomic sign-out: the mirror of registerSessionWithSignInAudit above. Safe to call ahead of
+ * clearSession()'s own revokeSession() (used by every OTHER caller of clearSession(), which must
+ * not itself emit a "signed out" audit event) -- that later call's UPDATE is coalesce-idempotent
+ * against the row this one already revoked, so it becomes a harmless no-op. */
+export async function revokeSessionWithSignOutAudit(sessionId: string, userId: number) {
+  await client.begin(async (tx) => {
+    await tx`
+      update idoc.auth_sessions
+      set revoked_at=coalesce(revoked_at,now()),revoke_reason=coalesce(revoke_reason,'user-signout'),updated_at=now()
+      where session_id=${sessionId} and user_id=${userId}
+    `;
+    await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id)
+      values(${userId},'account.session.signed_out','user',${String(userId)})`;
+  });
+}
+
 export async function revokeOtherUserSessionsWithEvidence(input: {
   userId: number;
   currentSessionId: string;
