@@ -155,24 +155,6 @@
     font-weight: 700;
   }
 
-  /*
-   * Sitewide button color: a hand-styled native <button> that sets no
-   * background utility of its own (no Tailwind `bg-*` class anywhere in its
-   * class list) defaults to the same gold/dark-blue treatment as the shared
-   * Button component's default variant, rather than sitting transparent
-   * over the page's dark-navy background (which reads as an unstyled "dark
-   * blue" button). A button that already sets its own background -- most
-   * commonly a destructive red -- is excluded via the `[class*='bg-']`
-   * check, so there is no utility class here to lose a specificity fight
-   * against. The shared Button component (data-slot="button") sets its own
-   * background per variant in components/ui/button.tsx and is excluded
-   * here too.
-   */
-  button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary) {
-    background: var(--gold);
-    color: var(--primary-foreground);
-  }
-
   h1,
   h2,
   h3,
@@ -207,6 +189,29 @@
   [data-slot='button']:disabled {
     cursor: not-allowed;
   }
+}
+
+/*
+ * Sitewide button color: a hand-styled native <button> that sets no
+ * background utility of its own (no Tailwind `bg-*` class anywhere in its
+ * class list) defaults to the same gold/dark-blue treatment as the shared
+ * Button component's default variant, rather than sitting transparent over
+ * the page's dark-navy background (which reads as an unstyled "dark blue"
+ * button). A button that already sets its own background -- most commonly a
+ * destructive red -- is excluded via the `[class*='bg-']` check. Written
+ * unlayered (outside Tailwind's `@layer base/components/utilities`, which
+ * this file's earlier rules all sit inside) so its `color` declaration wins
+ * over a same-button `text-*` utility class too -- e.g. a native button
+ * still carrying `text-muted-foreground` from before it had a background at
+ * all -- rather than losing that fight and leaving low-contrast text on a
+ * gold background. Cascade layers always lose to unlayered rules regardless
+ * of selector specificity, so this doesn't need `!important`. The shared
+ * Button component (data-slot="button") sets its own background per variant
+ * in components/ui/button.tsx and is excluded here too.
+ */
+button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary) {
+  background: var(--gold);
+  color: var(--primary-foreground);
 }
 
 @utility eyebrow {
