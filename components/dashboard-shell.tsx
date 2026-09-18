@@ -1,43 +1,38 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense } from 'react';
-import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
+import { Header } from '@/components/site/Header';
 import { NavigationLoadingProvider } from '@/components/navigation-loading';
-import { HeaderShell } from '@/components/site/HeaderShell';
 import { Button } from '@/components/ui/button';
+import type { MainNavAccess } from '@/lib/auth/user-menu-access';
 
 export function DashboardShell({
   children,
-  showAdminDashboard,
+  navAccess,
 }: {
   children: React.ReactNode;
-  showAdminDashboard: boolean;
+  navAccess: MainNavAccess;
 }) {
   return (
     <section className="flex min-h-screen flex-col">
-      <HeaderShell
-        right={
-          <div className="flex items-center space-x-6">
-            <Suspense fallback={<div className="h-9" />}>
-              <AuthenticatedUserMenu
-                showAdminDashboard={showAdminDashboard}
-                loggedOut={
-                  <>
-                    <Link
-                      href="/pricing"
-                      className="text-[0.8rem] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Pricing
-                    </Link>
-                    <Button asChild className="rounded-full">
-                      <Link href="/sign-up">Sign Up</Link>
-                    </Button>
-                  </>
-                }
-              />
-            </Suspense>
-          </div>
+      <Header
+        entitled={navAccess.entitled}
+        memberSupport={navAccess.memberSupport}
+        showAdminDashboard={navAccess.showAdminDashboard}
+        signedIn={navAccess.signedIn}
+        supportUnread={navAccess.supportUnread}
+        loggedOut={
+          <>
+            <Link
+              href="/pricing"
+              className="text-[0.8rem] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Pricing
+            </Link>
+            <Button asChild className="rounded-full">
+              <Link href="/sign-up">Sign Up</Link>
+            </Button>
+          </>
         }
       />
       <NavigationLoadingProvider>{children}</NavigationLoadingProvider>

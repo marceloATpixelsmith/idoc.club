@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
+import { DASHBOARD_NAV_ITEMS, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
 
 const nav = [
   { href: '/', label: 'Home' },
   { href: '/seminars', label: 'Seminars' },
   { href: '/membership', label: 'Membership' },
-  { href: '/contact', label: 'Contact' },
 ] as const;
 
 const aboutLinks = [
@@ -29,9 +30,23 @@ function navClassName(active: boolean) {
   return `text-[0.8rem] font-medium uppercase tracking-[0.14em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
 }
 
-function AboutDropdown({ pathname }: { pathname: string }) {
+/** Shared hover/click dropdown shell for a top-level nav item with subpages -- used for both "About
+ * IDOC" (always visible) and "My IDOC" (entitled members only). */
+function NavDropdown({
+  href,
+  isItemActive = isActive,
+  items,
+  label,
+  pathname,
+}: {
+  href: string;
+  isItemActive?: (pathname: string, href: string) => boolean;
+  items: readonly { href: string; label: string }[];
+  label: string;
+  pathname: string;
+}) {
   const [open, setOpen] = useState(false);
-  const active = aboutLinks.some((item) => isActive(pathname, item.href));
+  const active = items.some((item) => isItemActive(pathname, item.href));
 
   return (
     <div
@@ -39,19 +54,19 @@ function AboutDropdown({ pathname }: { pathname: string }) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <Link href="/about" className={`flex items-center gap-1 ${navClassName(active)}`}>
-        About IDOC
+      <Link href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
+        {label}
         <ChevronDown className="size-3" />
       </Link>
 
       {open && (
         <div className="absolute left-0 top-full z-[60] min-w-[16rem] border border-border bg-background/95 pt-2 backdrop-blur-md">
           <ul className="flex flex-col">
-            {aboutLinks.map((item) => (
+            {items.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
                 >
                   {item.label}
                 </Link>
@@ -64,6 +79,48 @@ function AboutDropdown({ pathname }: { pathname: string }) {
   );
 }
 
+/** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
+ * subpages dropdown once entitled, or a plain link to /pricing beforehand (never-paid or
+ * post-grace-expired), mirroring how /dashboard itself redirects an unentitled member straight to
+ * /pricing (see app/(dashboard)/dashboard/page.tsx's paywall gate). */
+function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
+  if (!entitled) {
+    return (
+      <Link href="/pricing" className={navClassName(isActive(pathname, '/pricing'))}>
+        My IDOC
+      </Link>
+    );
+  }
+  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={DASHBOARD_NAV_ITEMS} label="My IDOC" pathname={pathname} />;
+}
+
+function ContactNavLink({
+  className,
+  memberSupport,
+  onClick,
+  pathname,
+  supportUnread,
+}: {
+  className: string;
+  memberSupport: boolean;
+  onClick?: () => void;
+  pathname: string;
+  supportUnread: number;
+}) {
+  const href = memberSupport ? '/dashboard/support' : '/contact';
+  const label = memberSupport ? 'Support' : 'Contact';
+  return (
+    <Link href={href} onClick={onClick} className={`${className} inline-flex items-center gap-1.5`}>
+      {label}
+      {memberSupport && supportUnread > 0 && (
+        <span aria-label={`${supportUnread} unread support replies`} className="rounded-full bg-primary px-1.5 py-0.5 text-[0.6rem] normal-case tracking-normal text-primary-foreground">
+          {supportUnread}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function MemberLoginLink({ className, onClick }: { className?: string; onClick?: () => void }) {
   return (
     <Link href="/sign-in" className={className} onClick={onClick}>
@@ -72,7 +129,21 @@ function MemberLoginLink({ className, onClick }: { className?: string; onClick?:
   );
 }
 
-export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) {
+export function Header({
+  entitled,
+  loggedOut,
+  memberSupport,
+  showAdminDashboard,
+  signedIn,
+  supportUnread,
+}: {
+  entitled: boolean;
+  loggedOut?: ReactNode;
+  memberSupport: boolean;
+  showAdminDashboard: boolean;
+  signedIn: boolean;
+  supportUnread: number;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -87,13 +158,17 @@ export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) 
                 Home
               </Link>
 
-              <AboutDropdown pathname={pathname} />
+              <NavDropdown href="/about" items={aboutLinks} label="About IDOC" pathname={pathname} />
 
               {nav.slice(1).map((item) => (
                 <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
                   {item.label}
                 </Link>
               ))}
+
+              {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
+
+              <ContactNavLink className={navClassName(memberSupport ? isActive(pathname, '/dashboard/support') : isActive(pathname, '/contact'))} memberSupport={memberSupport} pathname={pathname} supportUnread={supportUnread} />
 
               <span className="text-border" aria-hidden="true">
                 |
@@ -109,10 +184,12 @@ export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) 
               </a>
             </nav>
 
-            <AuthenticatedUserMenu
-              showAdminDashboard={showAdminDashboard}
-              loggedOut={<MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
-            />
+            <Suspense fallback={<div className="h-9" />}>
+              <AuthenticatedUserMenu
+                showAdminDashboard={showAdminDashboard}
+                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+              />
+            </Suspense>
           </div>
 
           <button
@@ -167,6 +244,47 @@ export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) 
                   </Link>
                 </li>
               ))}
+              {signedIn && (
+                entitled ? (
+                  <li className="pt-2">
+                    <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                      My IDOC
+                    </p>
+                    <ul className="flex flex-col">
+                      {DASHBOARD_NAV_ITEMS.map((item) => (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : (
+                  <li>
+                    <Link
+                      href="/pricing"
+                      onClick={() => setOpen(false)}
+                      className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                    >
+                      My IDOC
+                    </Link>
+                  </li>
+                )
+              )}
+              <li>
+                <ContactNavLink
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                  memberSupport={memberSupport}
+                  onClick={() => setOpen(false)}
+                  pathname={pathname}
+                  supportUnread={supportUnread}
+                />
+              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"
@@ -181,11 +299,13 @@ export function Header({ showAdminDashboard }: { showAdminDashboard: boolean }) 
               </li>
               <li>
                 <div className="mt-3 flex justify-center">
-                  <AuthenticatedUserMenu
-                    showAdminDashboard={showAdminDashboard}
-                    onNavigate={() => setOpen(false)}
-                    loggedOut={<MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />}
-                  />
+                  <Suspense fallback={<div className="h-9" />}>
+                    <AuthenticatedUserMenu
+                      showAdminDashboard={showAdminDashboard}
+                      onNavigate={() => setOpen(false)}
+                      loggedOut={loggedOut ?? <MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />}
+                    />
+                  </Suspense>
                 </div>
               </li>
             </ul>

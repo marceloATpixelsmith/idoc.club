@@ -88,12 +88,20 @@ export async function listOwnConversations() {
     from idoc.support_conversations c where member_user_id=${actor.id} order by updated_at desc`;
 }
 
-export async function memberUnreadCount() {
-  const actor = await requireSupportMember();
+/** Internal query for a caller that has already authorized the request and resolved the member's
+ * user id itself (the site header's nav-access helper, which must avoid re-resolving the actor on
+ * every page load) -- unlike memberUnreadCount() below, this performs no authorization check of its
+ * own, so it must never be reachable from an unauthenticated/unauthorized caller. */
+export async function memberUnreadCountForUser(userId: number) {
   const [row] = await client<{ count: number }[]>`select count(*)::int count from idoc.support_messages m
-    join idoc.support_conversations c on c.id=m.conversation_id where c.member_user_id=${actor.id}
+    join idoc.support_conversations c on c.id=m.conversation_id where c.member_user_id=${userId}
     and m.author_side='admin' and (c.member_read_at is null or m.created_at>c.member_read_at)`;
   return row?.count ?? 0;
+}
+
+export async function memberUnreadCount() {
+  const actor = await requireSupportMember();
+  return memberUnreadCountForUser(actor.id);
 }
 
 export async function getOwnConversation(publicIdValue: unknown) {

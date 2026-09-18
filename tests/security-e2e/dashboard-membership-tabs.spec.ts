@@ -43,7 +43,11 @@ test('the renewal mode explains what the selected mode means in plain language',
   await context.close();
 });
 
-test('the Support tab stays highlighted on its own subpages, only My Membership matches exactly', async ({ browser }) => {
+test('My Membership stays highlighted on the dashboard sidebar; Support highlights in the header instead, on its own subpages too', async ({ browser }) => {
+  // Support was moved out of the "My Dashboard" sidebar entirely (it's reached from the header's
+  // Contact/Support nav item now, see components/site/Header.tsx) -- this proves the sidebar's
+  // remaining My Membership entry still highlights correctly, and that the header item highlights
+  // on Support's own subpages exactly the way the old sidebar tab used to.
   const { userId } = JSON.parse(await readFile('.security-e2e/member-a-sessions.json', 'utf8')) as { userId: number };
   const databaseUrl = process.env.TEST_DATABASE_URL;
   expect(databaseUrl).toBeTruthy();
@@ -58,15 +62,15 @@ test('the Support tab stays highlighted on its own subpages, only My Membership 
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
-  const supportButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' }).locator('button');
+  const supportNavLink = () => page.getByRole('link', { name: 'Support' }).first();
 
   await page.goto(`/dashboard/support/${conversation.public_id}`);
-  await expect(supportButton()).toHaveClass(/border-gold/);
+  await expect(supportNavLink()).toHaveClass(/text-gold/);
   await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
 
   await page.goto('/dashboard');
   await expect(myMembershipButton()).toHaveClass(/border-gold/);
-  await expect(supportButton()).not.toHaveClass(/border-gold/);
+  await expect(supportNavLink()).not.toHaveClass(/text-gold/);
 
   await context.close();
   await sql.end();

@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, LayoutDashboard, LogOut } from 'lucide-react';
+import { LayoutDashboard, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type PointerEvent, type ReactNode, useRef, useState } from 'react';
@@ -104,12 +104,6 @@ export function AuthenticatedUserMenu({
         onPointerEnter={openForMouse}
         onPointerLeave={closeForMouse}
       >
-        <DropdownMenuItem asChild>
-          <Link href="/dashboard" onClick={handleNavigate}>
-            <Home />
-            <span>My Dashboard</span>
-          </Link>
-        </DropdownMenuItem>
         {showAdminDashboard && (
           <DropdownMenuItem asChild>
             <Link href="/admin" onClick={handleNavigate}>
