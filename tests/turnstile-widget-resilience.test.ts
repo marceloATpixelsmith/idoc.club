@@ -66,7 +66,7 @@ test('the managed widget stays hidden while loading or passing silently and appe
 
 test('the real Turnstile widget configuration itself is untouched by the resilience changes', () => {
   assert.match(widget, /size: 'flexible'/);
-  assert.match(widget, /theme: 'light'/);
+  assert.match(widget, /theme = 'light'/);
   assert.match(widget, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(widget, /challenges\.cloudflare\.com\/turnstile/);
 });
