@@ -7,6 +7,7 @@ import { AuthorizationError, isAdministrator } from '@/lib/membership/authorizat
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { getUser } from '@/lib/db/queries';
 
 export type MainNavAccess = {
   /** Gates the header's "My IDOC" dropdown (a plain /pricing link otherwise, see signedIn) --
@@ -49,15 +50,24 @@ async function isCurrentlyEntitled(userId: number): Promise<boolean> {
  * independently. The browser continues to receive identity data exclusively through the existing
  * PublicUser shape -- none of this is exposed via /api/user. */
 export async function getMainNavAccess(): Promise<MainNavAccess> {
+  // Mirrors app/(dashboard)/dashboard/layout.tsx's own onboarding special-case: an onboarding
+  // account is real and signed in (/api/user -- and so the header's initials menu -- already
+  // treats it that way), but mayAccessAccountFunction only permits the 'onboarding' operation for
+  // it, not 'profile'. Without this, requireAccountAccess('profile') would throw for every
+  // onboarding visitor, falling through to the LOGGED_OUT shape below and incorrectly showing the
+  // Membership/Become-a-Member sales links to someone who is already signed in (a Codex review
+  // finding on this pull request).
+  const user = await getUser();
+  const onboarding = user?.accountState === 'onboarding';
   let actor;
   try {
-    actor = await requireAccountAccess('profile');
+    actor = await requireAccountAccess(onboarding ? 'onboarding' : 'profile');
   } catch (error) {
     if (error instanceof AuthorizationError) return LOGGED_OUT;
     throw error;
   }
   const privileged = isPrivilegedActor(actor);
-  const entitled = privileged || (await isCurrentlyEntitled(actor.id));
+  const entitled = !onboarding && (privileged || (await isCurrentlyEntitled(actor.id)));
   return {
     entitled,
     memberSupport: entitled && !privileged,

@@ -101,10 +101,15 @@ test('the dashboard sidebar heading reads My IDOC, matching the header nav item 
 });
 
 test('nav access is a server-derived capability without changing PublicUser', () => {
-  assert.match(navAccess, /requireAccountAccess\('profile'\)/);
+  assert.match(navAccess, /requireAccountAccess\(onboarding \? 'onboarding' : 'profile'\)/);
   assert.match(navAccess, /isAdministrator\(actor\)/);
   assert.match(publicUser, /export type PublicUser = \{ email: string; firstName: string \| null; id: number; lastName: string \| null \}/);
   assert.doesNotMatch(publicUser.slice(0, publicUser.indexOf('export type SecurityPageUser')), /role|administrator/i);
+});
+
+test('an onboarding account counts as signed in for nav-visibility purposes, mirroring the dashboard layout\'s own onboarding special-case (behavioral proof: tests/main-nav-access.integration.ts)', () => {
+  assert.match(navAccess, /const onboarding = user\?\.accountState === 'onboarding'/);
+  assert.match(navAccess, /const entitled = !onboarding && /);
 });
 
 test('direct admin access remains server-authorized independently of menu visibility', () => {

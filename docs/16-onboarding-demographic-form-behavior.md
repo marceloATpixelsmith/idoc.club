@@ -6,6 +6,10 @@ This document is authoritative for the member demographic onboarding form presen
 
 After the password or Google signup step creates the authenticated account, the account opens My Membership inside the dashboard. Until profile onboarding and payment are complete, the other dashboard navigation is hidden and direct requests to those pages return the account to My Membership. The header continues to provide sign-out.
 
+## Site-wide navigation for a signed-in account
+
+The main site header's "Membership" nav item and the footer's "Become a Member" link are both join/pricing pitches aimed at a visitor who is not yet a member. Both are hidden the moment an account is signed in -- including while still onboarding, since the account already exists and only needs to finish its profile and payment, not be sold on joining. `lib/auth/user-menu-access.ts`'s `getMainNavAccess()` is the single source of this `signedIn` flag (`components/site/Header.tsx`, `components/site/Footer.tsx`); it treats an onboarding account the same way `app/(dashboard)/dashboard/layout.tsx` does (`requireAccountAccess('onboarding')` rather than `'profile'`, which the account policy otherwise rejects for that state), so `signedIn` stays true throughout onboarding even though `entitled` does not become true until payment completes.
+
 Public links may add a `membership` query parameter to `/sign-up`. The accepted values are `judge`, `steward`, `judge_steward`, and `veterinarian`. Email signup carries a valid value in the signed pending-signup cookie through the email, OTP, and password steps. Google signup carries it through the server-owned OAuth transaction return path. Invalid values are ignored and never become trusted profile data.
 
 When My Membership opens the classification step, a valid carried value preselects the matching card and emphasizes it with the primary gold border, ring, tinted surface, and glow. The member may still choose any other classification before continuing. Profile submission validates the final selection server-side, activates the completed profile, and moves directly to membership payment.
