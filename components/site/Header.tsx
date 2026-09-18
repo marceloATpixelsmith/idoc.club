@@ -16,6 +16,13 @@ const nav = [
   { href: '/contact', label: 'Contact' },
 ] as const;
 
+// Membership is a join/pricing pitch aimed at visitors who aren't members yet -- a signed-in
+// member already has one, so the nav item just disappears rather than pointing them back at their
+// own sales page.
+function topNavItems(signedIn: boolean) {
+  return nav.slice(1).filter((item) => item.href !== '/membership' || !signedIn);
+}
+
 const aboutLinks = [
   { href: '/about', label: 'About' },
   { href: '/about/board-members', label: 'Board Members' },
@@ -134,7 +141,7 @@ export function Header({
 
               <NavDropdown href="/about" items={aboutLinks} label="About IDOC" pathname={pathname} />
 
-              {nav.slice(1).map((item) => (
+              {topNavItems(signedIn).map((item) => (
                 <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
                   {item.label}
                 </Link>
@@ -205,7 +212,7 @@ export function Header({
                   ))}
                 </ul>
               </li>
-              {nav.slice(1).map((item) => (
+              {topNavItems(signedIn).map((item) => (
                 <li key={item.href}>
                   <Link
                     href={item.href}

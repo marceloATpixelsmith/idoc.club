@@ -11,6 +11,15 @@ const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx
 const adminLayout = readFileSync('app/(dashboard)/admin/layout.tsx', 'utf8');
 const publicUser = readFileSync('lib/db/queries.ts', 'utf8');
 const navAccess = readFileSync('lib/auth/user-menu-access.ts', 'utf8');
+const footer = readFileSync('components/site/Footer.tsx', 'utf8');
+
+test('the footer hides Become a Member once signed in, and its phone number is a tel: link', () => {
+  assert.match(footer, /export async function Footer\(\{ signedIn \}: \{ signedIn: boolean \}\)/);
+  assert.match(footer, /\{!signedIn && \(/);
+  assert.match(footer, /Become a Member/);
+  assert.match(footer, /href="tel:\+32476914795"/);
+  assert.match(marketingLayout, /<Footer signedIn=\{navAccess\.signedIn\} \/>/);
+});
 
 test('the same header renders on marketing and dashboard pages alike', () => {
   assert.match(dashboardShell, /<Header\b/);
@@ -56,6 +65,12 @@ test('Contact is always a plain nav item, for the public and signed-in members a
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
+test('Membership is hidden from the top nav once signed in -- a member already has one', () => {
+  assert.match(header, /item\.href !== '\/membership' \|\| !signedIn/);
+  assert.match(header, /topNavItems\(signedIn\)/g);
+  assert.doesNotMatch(header, /nav\.slice\(1\)\.map/);
+});
+
 test('Support lives in both the dashboard sidebar and the header My IDOC dropdown, hidden from privileged administrators in either', () => {
   assert.match(dashboardTabs, /LifeBuoy/);
   assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
@@ -86,10 +101,15 @@ test('the dashboard sidebar heading reads My IDOC, matching the header nav item 
 });
 
 test('nav access is a server-derived capability without changing PublicUser', () => {
-  assert.match(navAccess, /requireAccountAccess\('profile'\)/);
+  assert.match(navAccess, /requireAccountAccess\(onboarding \? 'onboarding' : 'profile'\)/);
   assert.match(navAccess, /isAdministrator\(actor\)/);
   assert.match(publicUser, /export type PublicUser = \{ email: string; firstName: string \| null; id: number; lastName: string \| null \}/);
   assert.doesNotMatch(publicUser.slice(0, publicUser.indexOf('export type SecurityPageUser')), /role|administrator/i);
+});
+
+test('an onboarding account counts as signed in for nav-visibility purposes, mirroring the dashboard layout\'s own onboarding special-case (behavioral proof: tests/main-nav-access.integration.ts)', () => {
+  assert.match(navAccess, /const onboarding = user\?\.accountState === 'onboarding'/);
+  assert.match(navAccess, /const entitled = !onboarding && /);
 });
 
 test('direct admin access remains server-authorized independently of menu visibility', () => {

@@ -13,7 +13,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         signedIn={navAccess.signedIn}
       />
       <main className="flex-1">{children}</main>
-      <Footer />
+      <Footer signedIn={navAccess.signedIn} />
     </div>
   );
 }
