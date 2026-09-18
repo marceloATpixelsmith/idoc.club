@@ -7,16 +7,15 @@ import { AuthorizationError, isAdministrator } from '@/lib/membership/authorizat
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { memberUnreadCountForUser } from '@/lib/support/inbox';
 
 export type MainNavAccess = {
-  /** Gates the header's "My IDOC" dropdown and the Contact->Support swap -- mirrors the same
-   * convenience check app/(dashboard)/dashboard/layout.tsx uses for the sidebar, never an
-   * authorization boundary on its own. */
+  /** Gates the header's "My IDOC" dropdown (a plain /pricing link otherwise, see signedIn) --
+   * mirrors the same convenience check app/(dashboard)/dashboard/layout.tsx uses for the sidebar,
+   * never an authorization boundary on its own. */
   entitled: boolean;
   /** entitled && not privileged -- an administrator/super_admin is never a support *member* (see
    * lib/support/inbox.ts's requireSupportMember, which rejects them), so the header must never
-   * route one of them into Support in place of the ordinary Contact page. */
+   * offer Support (inside the My IDOC dropdown) to one of them. */
   memberSupport: boolean;
   /** A signed-in, non-entitled (never-paid or post-grace-expired) member still needs a way back
    * into the payment flow from the header -- the "My IDOC" nav item falls back to a plain link to
@@ -24,10 +23,9 @@ export type MainNavAccess = {
    * false. Distinct from entitled: every entitled visitor is also signedIn, but not the reverse. */
   signedIn: boolean;
   showAdminDashboard: boolean;
-  supportUnread: number;
 };
 
-const LOGGED_OUT: MainNavAccess = { entitled: false, memberSupport: false, showAdminDashboard: false, signedIn: false, supportUnread: 0 };
+const LOGGED_OUT: MainNavAccess = { entitled: false, memberSupport: false, showAdminDashboard: false, signedIn: false };
 
 /** The header renders on every single page, so this mirrors exactly what
  * lib/membership/data-access.ts's authenticatedActor() already computes internally for its own
@@ -46,8 +44,7 @@ async function isCurrentlyEntitled(userId: number): Promise<boolean> {
 
 /** Everything the site header needs to decide what its main navigation shows a visitor: whether
  * they may see the Admin Dashboard link in the initials menu, plus whether this is a signed-in,
- * currently entitled member (or a never-gated administrator/super_admin) -- and, only for an
- * entitled non-privileged member, their unread support-reply count. Never an authorization
+ * currently entitled member (or a never-gated administrator/super_admin). Never an authorization
  * boundary itself; every underlying dashboard/support page re-checks its own requireAccountAccess
  * independently. The browser continues to receive identity data exclusively through the existing
  * PublicUser shape -- none of this is exposed via /api/user. */
@@ -61,12 +58,10 @@ export async function getMainNavAccess(): Promise<MainNavAccess> {
   }
   const privileged = isPrivilegedActor(actor);
   const entitled = privileged || (await isCurrentlyEntitled(actor.id));
-  const memberSupport = entitled && !privileged;
   return {
     entitled,
-    memberSupport,
+    memberSupport: entitled && !privileged,
     showAdminDashboard: isAdministrator(actor),
     signedIn: true,
-    supportUnread: memberSupport ? await memberUnreadCountForUser(actor.id) : 0,
   };
 }

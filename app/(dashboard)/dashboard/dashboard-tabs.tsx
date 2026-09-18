@@ -4,13 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Shield, Menu, UserCog } from 'lucide-react';
-import { DASHBOARD_NAV_ITEMS, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
+import { Users, Shield, Menu, UserCog, LifeBuoy } from 'lucide-react';
+import { DASHBOARD_NAV_ITEMS, dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 
 const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Users> = {
   '/dashboard': Users,
   '/dashboard/profile': UserCog,
   '/dashboard/security': Shield,
+  '/dashboard/support': LifeBuoy,
 };
 
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
@@ -18,7 +19,7 @@ const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Use
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
  * entitled (or for a privileged administrator/super_admin, who is never gated by payment status),
  * the real bar appears. This is UI convenience, never an authorization boundary on its own. */
-export function DashboardTabs({ entitled }: { entitled: boolean }) {
+export function DashboardTabs({ entitled, memberSupport, supportUnread }: { entitled: boolean; memberSupport: boolean; supportUnread: number }) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   if (!entitled) return null;
@@ -26,15 +27,15 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
   return (
     <>
       <div className="flex items-center justify-between border-b border-border bg-surface/50 px-5 py-4 lg:hidden">
-        <div><p className="eyebrow">Member area</p><span className="font-display text-xl">My Dashboard</span></div>
+        <div><p className="eyebrow">Member area</p><span className="font-display text-xl">My IDOC</span></div>
         <Button className="-mr-3" variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)}>
           <Menu className="h-6 w-6" />
           <span className="sr-only">Toggle navigation</span>
         </Button>
       </div>
       <nav aria-label="My Dashboard" className={`flex-col gap-1 border-b border-border bg-surface/50 px-3 pb-5 pt-2 lg:min-h-[calc(100dvh-96px)] lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-3 lg:pb-5 lg:pt-8 ${isMenuOpen ? 'flex' : 'hidden'} lg:flex`}>
-        <div className="hidden px-3 pb-5 lg:block"><p className="eyebrow">Member area</p><p className="mt-1 font-display text-xl text-foreground">My Dashboard</p></div>
-        {DASHBOARD_NAV_ITEMS.map((tab) => (
+        <div className="hidden px-3 pb-5 lg:block"><p className="eyebrow">Member area</p><p className="mt-1 font-display text-xl text-foreground">My IDOC</p></div>
+        {dashboardNavItems(memberSupport).map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
@@ -42,6 +43,7 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
             >
               {(() => { const Icon = TAB_ICONS[tab.href]; return <Icon className="h-4 w-4" />; })()}
               {tab.label}
+              {tab.href === '/dashboard/support' && supportUnread > 0 ? <span aria-label={`${supportUnread} unread support replies`} className="rounded-full bg-primary px-2 py-0.5 text-primary-foreground">{supportUnread}</span> : null}
             </Button>
           </Link>
         ))}

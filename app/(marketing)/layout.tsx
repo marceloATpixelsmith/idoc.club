@@ -11,7 +11,6 @@ export default async function MarketingLayout({ children }: { children: React.Re
         memberSupport={navAccess.memberSupport}
         showAdminDashboard={navAccess.showAdminDashboard}
         signedIn={navAccess.signedIn}
-        supportUnread={navAccess.supportUnread}
       />
       <main className="flex-1">{children}</main>
       <Footer />

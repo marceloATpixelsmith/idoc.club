@@ -6,13 +6,14 @@ import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
-import { DASHBOARD_NAV_ITEMS, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
+import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
 
 const nav = [
   { href: '/', label: 'Home' },
   { href: '/seminars', label: 'Seminars' },
   { href: '/membership', label: 'Membership' },
+  { href: '/contact', label: 'Contact' },
 ] as const;
 
 const aboutLinks = [
@@ -82,8 +83,10 @@ function NavDropdown({
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
  * subpages dropdown once entitled, or a plain link to /pricing beforehand (never-paid or
  * post-grace-expired), mirroring how /dashboard itself redirects an unentitled member straight to
- * /pricing (see app/(dashboard)/dashboard/page.tsx's paywall gate). */
-function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
+ * /pricing (see app/(dashboard)/dashboard/page.tsx's paywall gate). Support is excluded from the
+ * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
+ * separate /admin/support inbox) -- see dashboardNavItems. */
+function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; memberSupport: boolean; pathname: string }) {
   if (!entitled) {
     return (
       <Link href="/pricing" className={navClassName(isActive(pathname, '/pricing'))}>
@@ -91,34 +94,7 @@ function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string
       </Link>
     );
   }
-  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={DASHBOARD_NAV_ITEMS} label="My IDOC" pathname={pathname} />;
-}
-
-function ContactNavLink({
-  className,
-  memberSupport,
-  onClick,
-  pathname,
-  supportUnread,
-}: {
-  className: string;
-  memberSupport: boolean;
-  onClick?: () => void;
-  pathname: string;
-  supportUnread: number;
-}) {
-  const href = memberSupport ? '/dashboard/support' : '/contact';
-  const label = memberSupport ? 'Support' : 'Contact';
-  return (
-    <Link href={href} onClick={onClick} className={`${className} inline-flex items-center gap-1.5`}>
-      {label}
-      {memberSupport && supportUnread > 0 && (
-        <span aria-label={`${supportUnread} unread support replies`} className="rounded-full bg-primary px-1.5 py-0.5 text-[0.6rem] normal-case tracking-normal text-primary-foreground">
-          {supportUnread}
-        </span>
-      )}
-    </Link>
-  );
+  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={dashboardNavItems(memberSupport)} label="My IDOC" pathname={pathname} />;
 }
 
 function MemberLoginLink({ className, onClick }: { className?: string; onClick?: () => void }) {
@@ -135,14 +111,12 @@ export function Header({
   memberSupport,
   showAdminDashboard,
   signedIn,
-  supportUnread,
 }: {
   entitled: boolean;
   loggedOut?: ReactNode;
   memberSupport: boolean;
   showAdminDashboard: boolean;
   signedIn: boolean;
-  supportUnread: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -166,9 +140,7 @@ export function Header({
                 </Link>
               ))}
 
-              {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
-
-              <ContactNavLink className={navClassName(memberSupport ? isActive(pathname, '/dashboard/support') : isActive(pathname, '/contact'))} memberSupport={memberSupport} pathname={pathname} supportUnread={supportUnread} />
+              {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
 
               <span className="text-border" aria-hidden="true">
                 |
@@ -251,7 +223,7 @@ export function Header({
                       My IDOC
                     </p>
                     <ul className="flex flex-col">
-                      {DASHBOARD_NAV_ITEMS.map((item) => (
+                      {dashboardNavItems(memberSupport).map((item) => (
                         <li key={item.href}>
                           <Link
                             href={item.href}
@@ -276,15 +248,6 @@ export function Header({
                   </li>
                 )
               )}
-              <li>
-                <ContactNavLink
-                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                  memberSupport={memberSupport}
-                  onClick={() => setOpen(false)}
-                  pathname={pathname}
-                  supportUnread={supportUnread}
-                />
-              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"
