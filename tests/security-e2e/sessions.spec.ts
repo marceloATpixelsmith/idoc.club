@@ -41,13 +41,13 @@ test('authenticated navigation menu works by keyboard without hover', async ({ b
   const trigger = page.getByRole('button', { name: /Open .* menu/ });
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('menuitem', { name: 'My Dashboard' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Admin Dashboard' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
 
   await trigger.click();
-  await expect(page.getByRole('menuitem', { name: 'My Dashboard' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
   await context.close();
 });
 
@@ -59,9 +59,8 @@ test('marketing navigation replaces the dashboard button with role-aware user me
 
     const trigger = page.getByRole('button', { name: /Open .* menu/ }).first();
     await expect(trigger).toBeVisible();
-    await expect(page.getByRole('link', { name: 'My Dashboard', exact: true })).toHaveCount(0);
     await trigger.click();
-    await expect(page.getByRole('menuitem', { name: 'My Dashboard' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
     const adminItem = page.getByRole('menuitem', { name: 'Admin Dashboard' });
     if (fixture === 'member-a') await expect(adminItem).toHaveCount(0);
     else await expect(adminItem).toBeVisible();

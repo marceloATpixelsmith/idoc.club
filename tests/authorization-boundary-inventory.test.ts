@@ -86,6 +86,10 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
   'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access', saveMembershipPerks: 'delegates-to-data-access' },
+  // The public contact form: no session/entitlement involved on either side, only Turnstile +
+  // rate-limiting + CSRF, the same anonymous-safe shape as the pre-authentication login actions --
+  // it just happens to live outside app/(login)/.
+  'app/(marketing)/contact/actions.ts': { submitContactForm: 'pre-authentication' },
 };
 
 const routeHandlers: Record<string, string> = {

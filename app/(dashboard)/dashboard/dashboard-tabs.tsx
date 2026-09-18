@@ -4,19 +4,18 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Shield, Menu, UserCog, LifeBuoy } from 'lucide-react';
+import { Users, Shield, Menu, UserCog } from 'lucide-react';
+import { DASHBOARD_NAV_ITEMS } from '@/lib/navigation/dashboard-nav';
 
-const ALL_TABS = [
-  { href: '/dashboard', icon: Users, label: 'My Membership' },
-  { href: '/dashboard/profile', icon: UserCog, label: 'My Profile' },
-  { href: '/dashboard/security', icon: Shield, label: 'My Security' },
-  { href: '/dashboard/support', icon: LifeBuoy, label: 'Support' },
-];
+const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Users> = {
+  '/dashboard': Users,
+  '/dashboard/profile': UserCog,
+  '/dashboard/security': Shield,
+};
 
 // '/dashboard' has no subpages of its own (Payment Method now lives inline on that same page), so
 // it matches only exactly -- otherwise it would swallow every other tab's subpages too, since it's
-// a prefix of all of them. Support does have its own subpages (e.g. /dashboard/support/[publicId]),
-// so it -- and any future tab with subpages -- still matches by prefix.
+// a prefix of all of them.
 function isActiveTab(pathname: string, href: string): boolean {
   return href === '/dashboard' ? pathname === '/dashboard' : pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -26,7 +25,7 @@ function isActiveTab(pathname: string, href: string): boolean {
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
  * entitled (or for a privileged administrator/super_admin, who is never gated by payment status),
  * the real bar appears. This is UI convenience, never an authorization boundary on its own. */
-export function DashboardTabs({ entitled, memberSupport, supportUnread }: { entitled: boolean; memberSupport: boolean; supportUnread: number }) {
+export function DashboardTabs({ entitled }: { entitled: boolean }) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   if (!entitled) return null;
@@ -42,15 +41,14 @@ export function DashboardTabs({ entitled, memberSupport, supportUnread }: { enti
       </div>
       <nav aria-label="My Dashboard" className={`flex-col gap-1 border-b border-border bg-surface/50 px-3 pb-5 pt-2 lg:min-h-[calc(100dvh-96px)] lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-3 lg:pb-5 lg:pt-8 ${isMenuOpen ? 'flex' : 'hidden'} lg:flex`}>
         <div className="hidden px-3 pb-5 lg:block"><p className="eyebrow">Member area</p><p className="mt-1 font-display text-xl text-foreground">My Dashboard</p></div>
-        {ALL_TABS.filter((tab) => memberSupport || tab.href !== '/dashboard/support').map((tab) => (
+        {DASHBOARD_NAV_ITEMS.map((tab) => (
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
               className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${isActiveTab(pathname, tab.href) ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
             >
-              <tab.icon className="h-4 w-4" />
+              {(() => { const Icon = TAB_ICONS[tab.href]; return <Icon className="h-4 w-4" />; })()}
               {tab.label}
-              {tab.href === '/dashboard/support' && supportUnread > 0 ? <span aria-label={`${supportUnread} unread support replies`} className="rounded-full bg-primary px-2 py-0.5 text-primary-foreground">{supportUnread}</span> : null}
             </Button>
           </Link>
         ))}

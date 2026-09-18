@@ -3,7 +3,6 @@ import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { DashboardTabs } from './dashboard-tabs';
 import { getUser } from '@/lib/db/queries';
-import { memberUnreadCount } from '@/lib/support/inbox';
 
 export default async function DashboardLayout({
   children
@@ -24,11 +23,10 @@ export default async function DashboardLayout({
   const entitled = privileged || (!onboarding && member
     ? isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))
     : false);
-  const supportUnread = entitled && !privileged ? await memberUnreadCount() : 0;
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-7xl flex-col lg:flex-row">
-      <DashboardTabs entitled={entitled} memberSupport={!privileged} supportUnread={supportUnread} />
+      <DashboardTabs entitled={entitled} />
       <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
