@@ -56,6 +56,12 @@ test('Contact is always a plain nav item, for the public and signed-in members a
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
+test('Membership is hidden from the top nav once signed in -- a member already has one', () => {
+  assert.match(header, /item\.href !== '\/membership' \|\| !signedIn/);
+  assert.match(header, /topNavItems\(signedIn\)/g);
+  assert.doesNotMatch(header, /nav\.slice\(1\)\.map/);
+});
+
 test('Support lives in both the dashboard sidebar and the header My IDOC dropdown, hidden from privileged administrators in either', () => {
   assert.match(dashboardTabs, /LifeBuoy/);
   assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
