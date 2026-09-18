@@ -22,7 +22,7 @@ export default async function ContactPage() {
         title="Contact"
         intro="The IDOC secretariat answers membership, seminar and press enquiries."
       />
-      <section className="mx-auto grid max-w-5xl gap-12 px-5 py-20 lg:grid-cols-2 lg:px-8">
+      <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-2 lg:px-8">
         <div className="space-y-12">
           <div>
             <h2 className="rule-gold text-2xl">Secretariat</h2>

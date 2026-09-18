@@ -20,9 +20,16 @@ const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render
 export function TurnstileWidget({
   action,
   onVerify,
+  theme = 'light',
 }: {
   action: string;
   onVerify?: (token: string) => void;
+  /** The canonical auth reference (docs/13) forces every sign-in/sign-up/recovery usage to the
+   * light theme regardless of this app's own dark background -- see
+   * tests/canonical-auth-reference-adoption.test.ts and tests/turnstile-widget-resilience.test.ts,
+   * which pin that contract. A caller outside that reference design (e.g. the public contact page,
+   * which never loads components/auth/canonical-reference.css) may override it. */
+  theme?: 'dark' | 'light';
 }) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -74,7 +81,7 @@ export function TurnstileWidget({
         'expired-callback': () => onVerify?.(''),
         sitekey: siteKey,
         size: 'flexible',
-        theme: 'light',
+        theme,
       });
       setFailed(false);
       window.requestAnimationFrame(updateChallengeVisibility);
@@ -105,7 +112,7 @@ export function TurnstileWidget({
       resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changing callback identity must not reset a solved challenge.
-  }, [action, scriptLoaded, siteKey, updateChallengeVisibility]);
+  }, [action, scriptLoaded, siteKey, theme, updateChallengeVisibility]);
 
   // The Cloudflare script sometimes never fires onLoad/onError at all (blocked by a
   // network filter or extension rather than a request that fails outright), which would
