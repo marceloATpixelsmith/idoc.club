@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
-import { DASHBOARD_NAV_ITEMS } from '@/lib/navigation/dashboard-nav';
+import { DASHBOARD_NAV_ITEMS, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
 
 const nav = [
@@ -34,17 +34,19 @@ function navClassName(active: boolean) {
  * IDOC" (always visible) and "My IDOC" (entitled members only). */
 function NavDropdown({
   href,
+  isItemActive = isActive,
   items,
   label,
   pathname,
 }: {
   href: string;
+  isItemActive?: (pathname: string, href: string) => boolean;
   items: readonly { href: string; label: string }[];
   label: string;
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
-  const active = items.some((item) => isActive(pathname, item.href));
+  const active = items.some((item) => isItemActive(pathname, item.href));
 
   return (
     <div
@@ -64,7 +66,7 @@ function NavDropdown({
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
                 >
                   {item.label}
                 </Link>
@@ -75,6 +77,21 @@ function NavDropdown({
       )}
     </div>
   );
+}
+
+/** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
+ * subpages dropdown once entitled, or a plain link to /pricing beforehand (never-paid or
+ * post-grace-expired), mirroring how /dashboard itself redirects an unentitled member straight to
+ * /pricing (see app/(dashboard)/dashboard/page.tsx's paywall gate). */
+function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
+  if (!entitled) {
+    return (
+      <Link href="/pricing" className={navClassName(isActive(pathname, '/pricing'))}>
+        My IDOC
+      </Link>
+    );
+  }
+  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={DASHBOARD_NAV_ITEMS} label="My IDOC" pathname={pathname} />;
 }
 
 function ContactNavLink({
@@ -117,12 +134,14 @@ export function Header({
   loggedOut,
   memberSupport,
   showAdminDashboard,
+  signedIn,
   supportUnread,
 }: {
   entitled: boolean;
   loggedOut?: ReactNode;
   memberSupport: boolean;
   showAdminDashboard: boolean;
+  signedIn: boolean;
   supportUnread: number;
 }) {
   const pathname = usePathname();
@@ -147,9 +166,7 @@ export function Header({
                 </Link>
               ))}
 
-              {entitled && (
-                <NavDropdown href="/dashboard" items={DASHBOARD_NAV_ITEMS} label="My IDOC" pathname={pathname} />
-              )}
+              {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
 
               <ContactNavLink className={navClassName(memberSupport ? isActive(pathname, '/dashboard/support') : isActive(pathname, '/contact'))} memberSupport={memberSupport} pathname={pathname} supportUnread={supportUnread} />
 
@@ -227,25 +244,37 @@ export function Header({
                   </Link>
                 </li>
               ))}
-              {entitled && (
-                <li className="pt-2">
-                  <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
-                    My IDOC
-                  </p>
-                  <ul className="flex flex-col">
-                    {DASHBOARD_NAV_ITEMS.map((item) => (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          onClick={() => setOpen(false)}
-                          className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
+              {signedIn && (
+                entitled ? (
+                  <li className="pt-2">
+                    <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                      My IDOC
+                    </p>
+                    <ul className="flex flex-col">
+                      {DASHBOARD_NAV_ITEMS.map((item) => (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : (
+                  <li>
+                    <Link
+                      href="/pricing"
+                      onClick={() => setOpen(false)}
+                      className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                    >
+                      My IDOC
+                    </Link>
+                  </li>
+                )
               )}
               <li>
                 <ContactNavLink

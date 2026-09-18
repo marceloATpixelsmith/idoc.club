@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfField } from '@/components/security/csrf-field';
 import { TurnstileWidget } from '@/components/turnstile-widget';
@@ -14,6 +14,19 @@ import { submitContactForm } from './actions';
 export function ContactForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(submitContactForm, {});
   const [turnstileToken, setTurnstileToken] = useState('');
+  // Every submission attempt consumes its Turnstile token server-side whether or not it ultimately
+  // succeeds (e.g. a caught Brevo delivery failure after verification passed) -- retrying with the
+  // same already-spent token would just fail verification again with no way out short of a page
+  // reload. Remounting the widget (via the key below) forces a fresh challenge/token on every
+  // failed attempt.
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
+
+  useEffect(() => {
+    if (state.error) {
+      setTurnstileToken('');
+      setTurnstileAttempt((attempt) => attempt + 1);
+    }
+  }, [state]);
 
   if (state.success) {
     return (
@@ -43,7 +56,7 @@ export function ContactForm() {
         <Label htmlFor="contact-message">Message</Label>
         <Textarea id="contact-message" name="message" required maxLength={5000} rows={6} />
       </div>
-      <TurnstileWidget action="contact" onVerify={setTurnstileToken} />
+      <TurnstileWidget key={turnstileAttempt} action="contact" onVerify={setTurnstileToken} />
       {state.error ? <p className="text-sm text-destructive" role="alert">{state.error}</p> : null}
       <Button disabled={pending || !turnstileToken} type="submit">
         {pending ? <AuthPendingLabel text="Sending" /> : 'Send message'}

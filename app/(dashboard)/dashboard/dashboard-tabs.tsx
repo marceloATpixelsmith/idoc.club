@@ -5,20 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Users, Shield, Menu, UserCog } from 'lucide-react';
-import { DASHBOARD_NAV_ITEMS } from '@/lib/navigation/dashboard-nav';
+import { DASHBOARD_NAV_ITEMS, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 
 const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Users> = {
   '/dashboard': Users,
   '/dashboard/profile': UserCog,
   '/dashboard/security': Shield,
 };
-
-// '/dashboard' has no subpages of its own (Payment Method now lives inline on that same page), so
-// it matches only exactly -- otherwise it would swallow every other tab's subpages too, since it's
-// a prefix of all of them.
-function isActiveTab(pathname: string, href: string): boolean {
-  return href === '/dashboard' ? pathname === '/dashboard' : pathname === href || pathname.startsWith(`${href}/`);
-}
 
 /** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
  * paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
@@ -45,7 +38,7 @@ export function DashboardTabs({ entitled }: { entitled: boolean }) {
           <Link key={tab.href} href={tab.href} onClick={() => setIsMenuOpen(false)}>
             <Button
               variant="ghost"
-              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${isActiveTab(pathname, tab.href) ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
+              className={`w-full justify-start gap-3 rounded-md border-l-2 border-transparent px-3 shadow-none ${isDashboardNavItemActive(pathname, tab.href) ? 'border-gold bg-background text-foreground' : 'text-muted-foreground hover:bg-background/70'}`}
             >
               {(() => { const Icon = TAB_ICONS[tab.href]; return <Icon className="h-4 w-4" />; })()}
               {tab.label}

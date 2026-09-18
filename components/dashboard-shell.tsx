@@ -19,6 +19,7 @@ export function DashboardShell({
         entitled={navAccess.entitled}
         memberSupport={navAccess.memberSupport}
         showAdminDashboard={navAccess.showAdminDashboard}
+        signedIn={navAccess.signedIn}
         supportUnread={navAccess.supportUnread}
         loggedOut={
           <>
