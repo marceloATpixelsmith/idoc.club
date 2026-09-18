@@ -11,6 +11,15 @@ const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx
 const adminLayout = readFileSync('app/(dashboard)/admin/layout.tsx', 'utf8');
 const publicUser = readFileSync('lib/db/queries.ts', 'utf8');
 const navAccess = readFileSync('lib/auth/user-menu-access.ts', 'utf8');
+const footer = readFileSync('components/site/Footer.tsx', 'utf8');
+
+test('the footer hides Become a Member once signed in, and its phone number is a tel: link', () => {
+  assert.match(footer, /export async function Footer\(\{ signedIn \}: \{ signedIn: boolean \}\)/);
+  assert.match(footer, /\{!signedIn && \(/);
+  assert.match(footer, /Become a Member/);
+  assert.match(footer, /href="tel:\+32476914795"/);
+  assert.match(marketingLayout, /<Footer signedIn=\{navAccess\.signedIn\} \/>/);
+});
 
 test('the same header renders on marketing and dashboard pages alike', () => {
   assert.match(dashboardShell, /<Header\b/);

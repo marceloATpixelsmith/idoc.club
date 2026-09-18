@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatOrganizationAddress, getPublicOrganizationAddress } from '@/lib/organization/settings';
 
-export async function Footer() {
+export async function Footer({ signedIn }: { signedIn: boolean }) {
   const addressLines = formatOrganizationAddress(await getPublicOrganizationAddress());
   return (
     <footer className="mt-24 border-t border-border bg-surface/60">
@@ -20,7 +20,11 @@ export async function Footer() {
           <h4 className="eyebrow">Contact</h4>
           <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
             {addressLines.length > 0 && <li><address className="not-italic">{addressLines.map((line) => <span className="block" key={line}>{line}</span>)}</address></li>}
-            <li>+32 476 914 795</li>
+            <li>
+              <a href="tel:+32476914795" className="hover:text-gold">
+                +32 476 914 795
+              </a>
+            </li>
             <li>
               <a href="mailto:accounts@idoc.club" className="hover:text-gold">
                 accounts@idoc.club
@@ -65,11 +69,13 @@ export async function Footer() {
                 Dressage News
               </a>
             </li>
-            <li>
-              <Link href="/membership" className="hover:text-gold">
-                Become a Member
-              </Link>
-            </li>
+            {!signedIn && (
+              <li>
+                <Link href="/membership" className="hover:text-gold">
+                  Become a Member
+                </Link>
+              </li>
+            )}
             <li>
               <Link href="/sign-in" className="hover:text-gold">
                 Member Area
