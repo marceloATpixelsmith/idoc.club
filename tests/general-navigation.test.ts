@@ -43,22 +43,27 @@ test('the shared menu drops My Dashboard, keeping only the conditional Admin Das
   assert.match(menu, /href="\/admin"/);
 });
 
-test('the header exposes a My IDOC dropdown of the dashboard subpages, gated on entitlement -- falling back to a plain /pricing link for a signed-in member who is not yet entitled', () => {
-  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} pathname=\{pathname\} \/>/);
+test('the header exposes a My IDOC dropdown of the dashboard subpages (including Support), gated on entitlement -- falling back to a plain /pricing link for a signed-in member who is not yet entitled', () => {
+  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} memberSupport=\{memberSupport\} pathname=\{pathname\} \/>/);
   assert.match(header, /label="My IDOC"/);
   assert.match(header, /href="\/pricing"/);
   assert.match(header, /from '@\/lib\/navigation\/dashboard-nav'/);
 });
 
-test('the header swaps Contact for Support (with an unread badge) for entitled non-admin members', () => {
-  assert.match(header, /memberSupport \? '\/dashboard\/support' : '\/contact'/);
-  assert.match(header, /memberSupport \? 'Support' : 'Contact'/);
-  assert.match(header, /supportUnread > 0/);
+test('Contact is always a plain nav item, for the public and signed-in members alike -- never swapped for Support', () => {
+  assert.match(header, /\{ href: '\/contact', label: 'Contact' \}/);
+  assert.doesNotMatch(header, /ContactNavLink/);
+  assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
-test('the dashboard sidebar no longer lists Support -- it moved to the header Contact item', () => {
-  assert.doesNotMatch(dashboardTabs, /\/dashboard\/support/);
-  assert.doesNotMatch(dashboardTabs, /LifeBuoy/);
+test('Support lives in both the dashboard sidebar and the header My IDOC dropdown, hidden from privileged administrators in either', () => {
+  assert.match(dashboardTabs, /LifeBuoy/);
+  assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
+  const dashboardNav = readFileSync('lib/navigation/dashboard-nav.ts', 'utf8');
+  assert.match(dashboardNav, /\{ href: '\/dashboard\/support', label: 'Support' \}/);
+  assert.match(dashboardNav, /export function dashboardNavItems\(memberSupport: boolean\)/);
+  assert.match(dashboardTabs, /dashboardNavItems\(memberSupport\)/);
+  assert.match(header, /dashboardNavItems\(memberSupport\)/);
 });
 
 test('the My Membership root route matches exactly, in both the sidebar and the header dropdown, so a dashboard subpage never highlights two items at once', () => {
@@ -73,6 +78,11 @@ test('a signed-in member who is not yet entitled still has a way back to Pricing
   assert.match(navAccess, /signedIn: boolean/);
   assert.match(header, /if \(!entitled\) \{/);
   assert.match(header, /href="\/pricing"/);
+});
+
+test('the dashboard sidebar heading reads My IDOC, matching the header nav item it belongs to', () => {
+  assert.doesNotMatch(dashboardTabs, />My Dashboard</);
+  assert.match(dashboardTabs, />My IDOC</);
 });
 
 test('nav access is a server-derived capability without changing PublicUser', () => {

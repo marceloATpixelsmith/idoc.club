@@ -20,7 +20,6 @@ export function DashboardShell({
         memberSupport={navAccess.memberSupport}
         showAdminDashboard={navAccess.showAdminDashboard}
         signedIn={navAccess.signedIn}
-        supportUnread={navAccess.supportUnread}
         loggedOut={
           <>
             <Link
