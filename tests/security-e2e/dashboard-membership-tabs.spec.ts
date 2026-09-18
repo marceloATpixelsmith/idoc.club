@@ -101,7 +101,7 @@ test('an administrator with no member profile sees the dashboard menu and an hon
   const context = await browser.newContext({ storageState: '.security-e2e/administrator-no-profile.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   await expect(page.getByText('You have no member profile')).toBeVisible();
   for (const label of ['My Profile', 'My Security']) {

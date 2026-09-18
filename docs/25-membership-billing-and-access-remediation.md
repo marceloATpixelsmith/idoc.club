@@ -233,7 +233,7 @@ This inventory records the requested dashboard slice against current implementat
 
 | Requirement group | Status | Evidence / remaining dependency |
 |---|---|---|
-| Horizontal My Membership, My Profile, My Security, and My Seminars tabs; Membership is default | Already implemented and verified | The shared dashboard tab bar uses exactly these destinations, with `/dashboard` as Membership. |
+| Horizontal My Membership, My Profile, My Security, and My Seminars tabs; Membership is default | Already implemented and verified | The shared dashboard tab bar uses exactly these destinations, with `/dashboard/membership` as Membership (`/dashboard` is the thin entry point: it hosts onboarding for an `onboarding`-state account and otherwise redirects to `/dashboard/membership`). |
 | Remove duplicate General and Activity interfaces while retaining old bookmarks | Already implemented and verified | General is removed; `/dashboard/activity` redirects to Security, where owned activity is rendered. There are no General/Activity navigation items. |
 | Never-paid payment/logout-only UI and direct server-side denial | Already implemented and verified | Layout, pages, actions, and shared data-access policy gate Profile, Security, Seminars, history, and mutations; payment and CSRF-protected logout remain reachable. Payment uses the account's already-recorded professional classification and introduces no type-selection step. |
 | Previously-paid expiration and five-day grace are distinct from never-paid | Already implemented and verified | Database entitlement remains authoritative; grace retains dashboard access and post-grace expiration enters the documented payment-only state without repeating onboarding. |

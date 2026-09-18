@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     const config = loadGoogleOidcConfig();
     const applicationOrigin = new URL(config.redirectUri).origin;
-    const returnTo = request.nextUrl.searchParams.get('returnTo') ?? '/dashboard';
+    const returnTo = request.nextUrl.searchParams.get('returnTo') ?? (intent === 'login' ? '/' : '/dashboard');
 
     phase = 'authorization_request';
     const authorization = await createGoogleAuthorizationRequest({

@@ -71,6 +71,9 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   const role = await authoritativeMfaRole(foundUser.id);
+  // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
+  // fully set-up account gets the "login lands on the homepage" destination.
+  const loginDestination = foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
 
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();
@@ -104,7 +107,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
       if (currentRole === 'member') {
         await clearPendingLogin();
         await setSession(foundUser);
-        redirect('/dashboard');
+        redirect(loginDestination);
       }
       const [currentUser] = await db.select().from(users).where(and(
         eq(users.id, foundUser.id),
@@ -114,7 +117,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
         await clearPendingLogin();
         return { error: 'Your sign-in session expired. Start again.', email };
       }
-      if (await beginPrimaryMfa(currentUser, 'password', '/dashboard')) {
+      if (await beginPrimaryMfa(currentUser, 'password', currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
         await clearPendingLogin();
         redirect('/mfa');
       }
@@ -128,13 +131,13 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     redirect('/sign-in');
   }
 
-  if (await beginPrimaryMfa(foundUser, 'password', '/dashboard')) {
+  if (await beginPrimaryMfa(foundUser, 'password', loginDestination)) {
     await clearPendingLogin();
     redirect('/mfa');
   }
   await clearPendingLogin();
   await setSession(foundUser);
-  redirect('/dashboard');
+  redirect(loginDestination);
 }, { skipCsrf: true });
 
 const accountLinkSchema = z.object({ email: z.string().email().max(255) });

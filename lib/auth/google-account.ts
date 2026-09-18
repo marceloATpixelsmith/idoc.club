@@ -115,9 +115,11 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     throw new GoogleAccountNotEligibleError();
   }
 
+  // An account that hasn't finished onboarding still needs the wizard, not wherever the caller asked
+  // to land -- only a fully set-up account is sent to its requested (or default) destination.
   return {
     newAccount,
-    redirectTo: identity.returnTo || '/dashboard',
+    redirectTo: user.accountState === 'onboarding' ? '/dashboard' : (identity.returnTo || '/dashboard'),
     user,
   };
 }

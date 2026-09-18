@@ -91,8 +91,8 @@ function NavDropdown({
 
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
  * subpages dropdown once entitled, or a plain link to /pricing beforehand (never-paid or
- * post-grace-expired), mirroring how /dashboard itself redirects an unentitled member straight to
- * /pricing (see app/(dashboard)/dashboard/page.tsx's paywall gate). Support is excluded from the
+ * post-grace-expired), mirroring how /dashboard/membership itself redirects an unentitled member
+ * straight to /pricing (see app/(dashboard)/dashboard/membership/page.tsx's paywall gate). Support is excluded from the
  * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
  * separate /admin/support inbox) -- see dashboardNavItems. */
 function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; memberSupport: boolean; pathname: string }) {
@@ -151,9 +151,11 @@ export function Header({
 
               {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
 
-              <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
-                {contactLink.label}
-              </Link>
+              {!signedIn && (
+                <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
+                  {contactLink.label}
+                </Link>
+              )}
 
               <span className="text-border" aria-hidden="true">
                 |
@@ -261,15 +263,17 @@ export function Header({
                   </li>
                 )
               )}
-              <li>
-                <Link
-                  href={contactLink.href}
-                  onClick={() => setOpen(false)}
-                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  {contactLink.label}
-                </Link>
-              </li>
+              {!signedIn && (
+                <li>
+                  <Link
+                    href={contactLink.href}
+                    onClick={() => setOpen(false)}
+                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                  >
+                    {contactLink.label}
+                  </Link>
+                </li>
+              )}
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"

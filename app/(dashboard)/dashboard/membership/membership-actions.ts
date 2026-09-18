@@ -20,7 +20,7 @@ export async function cancelMembershipAction(_state: CancelMembershipState, form
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
     const actor = await getUser();
     if (!actor) return { error: 'Sign in again to cancel your membership.' };
-    if ((await requireFreshStepUp(actor, 'change-security-settings', '/dashboard')).required) return { stepUpRequired: true };
+    if ((await requireFreshStepUp(actor, 'change-security-settings', '/dashboard/membership')).required) return { stepUpRequired: true };
     await cancelOwnMembership();
     await revokeAllUserSessions(actor.id, 'membership-canceled');
     await forgetAllLoginDevices(actor.id, 'membership-canceled');
