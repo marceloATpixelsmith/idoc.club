@@ -65,6 +65,17 @@ test('Contact is always a plain nav item, for the public and signed-in members a
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
+test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
+  const myIdocIndex = header.indexOf('<MyIdocNav ');
+  const desktopContactIndex = header.indexOf('href={contactLink.href}');
+  assert.ok(myIdocIndex > -1 && desktopContactIndex > myIdocIndex);
+
+  const mobileMyIdocSection = header.indexOf("My IDOC\n                    </p>");
+  const mobilePricingFallback = header.indexOf('href="/pricing"');
+  const mobileContactIndex = header.lastIndexOf('href={contactLink.href}');
+  assert.ok(mobileContactIndex > mobileMyIdocSection && mobileContactIndex > mobilePricingFallback);
+});
+
 test('Membership is hidden from the top nav once signed in -- a member already has one', () => {
   assert.match(header, /item\.href !== '\/membership' \|\| !signedIn/);
   assert.match(header, /topNavItems\(signedIn\)/g);

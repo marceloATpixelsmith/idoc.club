@@ -13,8 +13,10 @@ const nav = [
   { href: '/', label: 'Home' },
   { href: '/seminars', label: 'Seminars' },
   { href: '/membership', label: 'Membership' },
-  { href: '/contact', label: 'Contact' },
 ] as const;
+
+// Contact renders separately, after My IDOC, rather than as part of this list.
+const contactLink = { href: '/contact', label: 'Contact' } as const;
 
 // Membership is a join/pricing pitch aimed at visitors who aren't members yet -- a signed-in
 // member already has one, so the nav item just disappears rather than pointing them back at their
@@ -149,6 +151,10 @@ export function Header({
 
               {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
 
+              <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
+                {contactLink.label}
+              </Link>
+
               <span className="text-border" aria-hidden="true">
                 |
               </span>
@@ -255,6 +261,15 @@ export function Header({
                   </li>
                 )
               )}
+              <li>
+                <Link
+                  href={contactLink.href}
+                  onClick={() => setOpen(false)}
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  {contactLink.label}
+                </Link>
+              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"
