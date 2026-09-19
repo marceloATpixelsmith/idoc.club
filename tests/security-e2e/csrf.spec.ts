@@ -118,7 +118,13 @@ test('a real profile-update Server Action rejects a same-origin, correctly authe
     await route.continue({ postData: Buffer.from(tampered, 'latin1') });
   });
   await profileForm.locator('button[type="submit"]').click();
-  await expect(page.locator('text=session security check failed')).toBeVisible();
+  // A generous timeout here: this assertion has been observed to occasionally time out at the
+  // default 5s when the shared single-worker dev server is still finishing work from the
+  // immediately preceding test in this same file -- the rejection itself is synchronous
+  // server-side, but the round trip (dev-mode compilation, single Node process) can occasionally
+  // run long under sequential load. This never weakens what is being verified, only how long the
+  // assertion is willing to wait for it.
+  await expect(page.locator('text=session security check failed')).toBeVisible({ timeout: 15_000 });
   // The session itself is unaffected -- this is a rejected mutation, not a broken session.
   const identity = await context.request.get('/api/user');
   expect((await identity.json()).email).toBe('member-a@security.example.test');
@@ -132,6 +138,7 @@ test('the same real profile-update Server Action rejects the submission when the
   const profileForm = page.locator('form').filter({ has: page.locator('input[name="firstName"]') });
   await context.clearCookies({ name: 'idoc-csrf' });
   await profileForm.locator('button[type="submit"]').click();
-  await expect(page.locator('text=session security check failed')).toBeVisible();
+  // See the timeout comment on the preceding test -- same shared-dev-server rationale.
+  await expect(page.locator('text=session security check failed')).toBeVisible({ timeout: 15_000 });
   await context.close();
 });
