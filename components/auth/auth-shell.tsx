@@ -22,8 +22,10 @@ export function AuthShell({
       <section className="idoc-auth-shell__content">
         <div className={`idoc-auth-shell__inner${wide ? ' idoc-auth-shell__inner--wide' : ''}`}>
           <header className="idoc-auth-shell__header">
-            {/* eslint-disable-next-line @next/next/no-img-element -- canonical auth branding asset */}
-            <img alt="IDOC" className="idoc-auth-shell__logo" src="/idoc-logo.svg" />
+            <Link href="/" aria-label="IDOC home">
+              {/* eslint-disable-next-line @next/next/no-img-element -- canonical auth branding asset */}
+              <img alt="IDOC" className="idoc-auth-shell__logo" src="/idoc-logo.svg" />
+            </Link>
           </header>
 
           <div className="idoc-auth-shell__page">

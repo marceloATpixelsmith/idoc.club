@@ -115,9 +115,18 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     throw new GoogleAccountNotEligibleError();
   }
 
+  // An account that hasn't finished onboarding still needs the wizard, not wherever the caller asked
+  // to land -- but a returnTo that's already dashboard-scoped (e.g. a signup's own
+  // /dashboard?membership=... carrying the classification to preselect) is preserved rather than
+  // overwritten, since it already points at the wizard. Only a returnTo pointing elsewhere (e.g. the
+  // login flow's own homepage default) gets forced back to the wizard's entry route.
+  const requestedReturnTo = identity.returnTo || '/dashboard';
+  const redirectTo = user.accountState === 'onboarding' && !requestedReturnTo.startsWith('/dashboard')
+    ? '/dashboard'
+    : requestedReturnTo;
   return {
     newAccount,
-    redirectTo: identity.returnTo || '/dashboard',
+    redirectTo,
     user,
   };
 }

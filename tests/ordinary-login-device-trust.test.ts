@@ -53,14 +53,14 @@ test('trusted ordinary login rechecks current privilege and reloads the user bef
   assert.ok(trusted.indexOf('await clearPendingLogin()') < trusted.indexOf('await setSession(foundUser)'));
   assert.match(trusted, /const \[currentUser\] = await db\.select\(\)\.from\(users\)/);
   assert.match(trusted, /!currentUser \|\| currentUser\.deletedAt \|\| !\['active', 'onboarding'\]\.includes\(currentUser\.accountState\)/);
-  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', '\/dashboard'\)/);
-  assert.doesNotMatch(trusted, /beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)/);
+  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', currentUser\.accountState === 'onboarding' \? '\/dashboard' : '\/'\)/);
+  assert.doesNotMatch(trusted, /beginPrimaryMfa\(foundUser, 'password', loginDestination\)/);
 });
 
 test('successful privileged primary login clears obsolete pending-login continuation before MFA/session transition', () => {
   const actions = read('app/(login)/actions.ts');
-  const privileged = actions.slice(actions.lastIndexOf("if (await beginPrimaryMfa(foundUser, 'password', '/dashboard'))"), actions.indexOf('const accountLinkSchema'));
-  assert.match(privileged, /if \(await beginPrimaryMfa\(foundUser, 'password', '\/dashboard'\)\) \{\s+await clearPendingLogin\(\);\s+redirect\('\/mfa'\);/);
+  const privileged = actions.slice(actions.lastIndexOf("if (await beginPrimaryMfa(foundUser, 'password', loginDestination))"), actions.indexOf('const accountLinkSchema'));
+  assert.match(privileged, /if \(await beginPrimaryMfa\(foundUser, 'password', loginDestination\)\) \{\s+await clearPendingLogin\(\);\s+redirect\('\/mfa'\);/);
   assert.match(privileged, /await clearPendingLogin\(\);\s+await setSession\(foundUser\);/);
 });
 

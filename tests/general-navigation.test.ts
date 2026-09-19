@@ -59,10 +59,21 @@ test('the header exposes a My IDOC dropdown of the dashboard subpages (including
   assert.match(header, /from '@\/lib\/navigation\/dashboard-nav'/);
 });
 
-test('Contact is always a plain nav item, for the public and signed-in members alike -- never swapped for Support', () => {
+test('Contact is a plain nav item, never swapped for Support', () => {
   assert.match(header, /\{ href: '\/contact', label: 'Contact' \}/);
   assert.doesNotMatch(header, /ContactNavLink/);
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
+});
+
+test('Contact is hidden only for a member whose My IDOC actually offers Support/Contact instead -- never for signed-in accounts with no such substitute (onboarding, unpaid, or privileged administrators)', () => {
+  const desktopContactBlock = header.slice(header.indexOf('<MyIdocNav '), header.indexOf('<span className="text-border"'));
+  assert.match(desktopContactBlock, /\{\(!signedIn \|\| !memberSupport\) && \(/);
+  assert.match(desktopContactBlock, /href=\{contactLink\.href\}/);
+
+  const mobilePricingFallback = header.lastIndexOf('href="/pricing"');
+  const mobileContactBlock = header.slice(mobilePricingFallback, header.indexOf('facebook.com/groups', mobilePricingFallback));
+  assert.match(mobileContactBlock, /\{\(!signedIn \|\| !memberSupport\) && \(/);
+  assert.match(mobileContactBlock, /href=\{contactLink\.href\}/);
 });
 
 test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
@@ -86,15 +97,16 @@ test('Support lives in both the dashboard sidebar and the header My IDOC dropdow
   assert.match(dashboardTabs, /LifeBuoy/);
   assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
   const dashboardNav = readFileSync('lib/navigation/dashboard-nav.ts', 'utf8');
-  assert.match(dashboardNav, /\{ href: '\/dashboard\/support', label: 'Support' \}/);
+  assert.match(dashboardNav, /\{ href: '\/dashboard\/support', label: 'Support\/Contact' \}/);
   assert.match(dashboardNav, /export function dashboardNavItems\(memberSupport: boolean\)/);
   assert.match(dashboardTabs, /dashboardNavItems\(memberSupport\)/);
   assert.match(header, /dashboardNavItems\(memberSupport\)/);
 });
 
-test('the My Membership root route matches exactly, in both the sidebar and the header dropdown, so a dashboard subpage never highlights two items at once', () => {
+test('every dashboard nav item URL matches its label and no entry is a prefix of another, in both the sidebar and the header dropdown, so a dashboard subpage never highlights two items at once', () => {
   const dashboardNav = readFileSync('lib/navigation/dashboard-nav.ts', 'utf8');
-  assert.match(dashboardNav, /href === '\/dashboard' \? pathname === '\/dashboard' : pathname === href \|\| pathname\.startsWith\(`\$\{href\}\/`\)/);
+  assert.match(dashboardNav, /\{ href: '\/dashboard\/membership', label: 'My Membership' \}/);
+  assert.match(dashboardNav, /return pathname === href \|\| pathname\.startsWith\(`\$\{href\}\/`\)/);
   assert.match(dashboardTabs, /isDashboardNavItemActive/);
   assert.doesNotMatch(dashboardTabs, /function isActiveTab/);
   assert.match(header, /isItemActive=\{isDashboardNavItemActive\}/);

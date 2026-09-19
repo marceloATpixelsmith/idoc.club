@@ -8,14 +8,14 @@ import { Users, Shield, Menu, UserCog, LifeBuoy } from 'lucide-react';
 import { DASHBOARD_NAV_ITEMS, dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 
 const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Users> = {
-  '/dashboard': Users,
+  '/dashboard/membership': Users,
   '/dashboard/profile': UserCog,
   '/dashboard/security': Shield,
   '/dashboard/support': LifeBuoy,
 };
 
-/** Before payment, the member has no dashboard capability beyond paying -- see dashboard/page.tsx's
- * paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
+/** Before payment, the member has no dashboard capability beyond paying -- see
+ * dashboard/membership/page.tsx's paywall gate, which is the actual enforcement point. A "menu" offering exactly one destination
  * you can't leave isn't a menu, so this renders nothing at all rather than a single-item bar; once
  * entitled (or for a privileged administrator/super_admin, who is never gated by payment status),
  * the real bar appears. This is UI convenience, never an authorization boundary on its own. */

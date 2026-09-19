@@ -40,6 +40,20 @@ test('a first-time Google identity with a verified email and no existing account
   assert.equal(row.user_id, result.user.id);
 });
 
+test('a first-time Google signup carrying a validated membership tier keeps that tier in the onboarding redirect, rather than being overwritten by the bare wizard entry route', async () => {
+  const claim = identity({ returnTo: '/dashboard?membership=judge' });
+  const result = await authenticateGoogleIdentity(claim);
+  assert.equal(result.user.accountState, 'onboarding');
+  assert.equal(result.redirectTo, '/dashboard?membership=judge');
+});
+
+test('a first-time Google identity via the login flow (whose default returnTo is the homepage) still lands a new onboarding account on the wizard, not the homepage', async () => {
+  const claim = identity({ returnTo: '/' });
+  const result = await authenticateGoogleIdentity(claim);
+  assert.equal(result.user.accountState, 'onboarding');
+  assert.equal(result.redirectTo, '/dashboard');
+});
+
 test('a returning Google identity (an existing external_identities row) authenticates the same account and updates last_used_at, without creating a duplicate user', async () => {
   const claim = identity();
   const first = await authenticateGoogleIdentity(claim);
