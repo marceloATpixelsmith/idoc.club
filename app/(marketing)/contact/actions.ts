@@ -41,5 +41,5 @@ export const submitContactForm = validatedAction(contactSchema, async ({ email, 
     return { error: 'There was a problem sending your message. Please try again.' };
   }
 
-  return { success: 'Thanks for reaching out -- the IDOC secretariat will respond as soon as possible.' };
+  return { success: 'Thanks for reaching out -- IDOC will respond as soon as possible.' };
 });
