@@ -22,7 +22,10 @@
   background: oklch(0.6 0.21 25 / 16%);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--destructive);
+  /* --auth-error-color (brighter, tuned for the dark auth-shell background) is only defined
+   * within .idoc-auth-shell; a caller outside that scope (e.g. the contact page) falls back to
+   * the global --destructive token. */
+  color: var(--auth-error-color, var(--destructive));
 }
 
 .idoc-auth-turnstile__retry {
