@@ -151,7 +151,11 @@ export function Header({
 
               {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
 
-              {!signedIn && (
+              {/* Contact is only replaced by the dashboard's own Support/Contact entry for a member who
+                * actually gets one (memberSupport) -- an onboarding/unpaid member (Pricing-only My IDOC
+                * fallback) or a privileged administrator (Support filtered out of their My IDOC dropdown,
+                * since they use /admin/support instead) would otherwise lose every path to Contact. */}
+              {(!signedIn || !memberSupport) && (
                 <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
                   {contactLink.label}
                 </Link>
@@ -263,7 +267,7 @@ export function Header({
                   </li>
                 )
               )}
-              {!signedIn && (
+              {(!signedIn || !memberSupport) && (
                 <li>
                   <Link
                     href={contactLink.href}

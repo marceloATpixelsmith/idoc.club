@@ -65,14 +65,14 @@ test('Contact is a plain nav item, never swapped for Support', () => {
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
-test('Contact is hidden from the top nav once signed in -- My IDOC > Support covers it instead', () => {
+test('Contact is hidden only for a member whose My IDOC actually offers Support/Contact instead -- never for signed-in accounts with no such substitute (onboarding, unpaid, or privileged administrators)', () => {
   const desktopContactBlock = header.slice(header.indexOf('<MyIdocNav '), header.indexOf('<span className="text-border"'));
-  assert.match(desktopContactBlock, /\{!signedIn && \(/);
+  assert.match(desktopContactBlock, /\{\(!signedIn \|\| !memberSupport\) && \(/);
   assert.match(desktopContactBlock, /href=\{contactLink\.href\}/);
 
   const mobilePricingFallback = header.lastIndexOf('href="/pricing"');
   const mobileContactBlock = header.slice(mobilePricingFallback, header.indexOf('facebook.com/groups', mobilePricingFallback));
-  assert.match(mobileContactBlock, /\{!signedIn && \(/);
+  assert.match(mobileContactBlock, /\{\(!signedIn \|\| !memberSupport\) && \(/);
   assert.match(mobileContactBlock, /href=\{contactLink\.href\}/);
 });
 
