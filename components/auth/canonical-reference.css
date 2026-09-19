@@ -640,47 +640,9 @@
   opacity: 0.6;
 }
 
-.idoc-auth-turnstile {
-  width: 100%;
-  min-width: 0;
-  min-height: 65px;
-  overflow: hidden;
-  border-radius: 10px;
-}
-
-.idoc-auth-turnstile > div,
-.idoc-auth-turnstile iframe {
-  max-width: 100% !important;
-}
-
-.idoc-auth-turnstile__loading {
-  margin: 0;
-  padding: 8px 12px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--auth-instruction-color);
-}
-
-.idoc-auth-turnstile__error {
-  margin: 8px 0 0;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: oklch(0.6 0.21 25 / 16%);
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--auth-error-color);
-}
-
-.idoc-auth-turnstile__retry {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  color: inherit;
-  cursor: pointer;
-}
+/* Turnstile widget containment (.idoc-auth-turnstile and friends) now lives in
+ * components/turnstile-widget.css, imported by the widget component itself, so every caller gets
+ * identical layout behavior without depending on this auth-only stylesheet being loaded. */
 
 .idoc-auth-shell__legal {
   margin: 0;

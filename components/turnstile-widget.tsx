@@ -3,6 +3,7 @@
 import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
+import './turnstile-widget.css';
 
 declare global {
   interface Window {
