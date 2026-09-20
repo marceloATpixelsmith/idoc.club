@@ -10,6 +10,9 @@ function googleErrorMessage(value?: string) {
   if (value === 'failed') {
     return 'Google authentication could not be completed. Please try again.';
   }
+  if (value === 'unlink-failed') {
+    return 'Your new password was saved, but Google could not be disconnected. Sign in with your new password and try disconnecting Google again.';
+  }
   return '';
 }
 

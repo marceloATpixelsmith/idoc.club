@@ -98,10 +98,10 @@ The implemented linking boundary is:
 - issuer + Google `sub` remains the stable external identity key;
 - concurrent link attempts are serialized and the persistence layer returns authoritative collision outcomes;
 - the identity row, immutable security audit evidence, and a durable user-security notification outbox record are persisted in one database transaction;
-- disconnecting Google requires fresh current-password verification and is allowed only through the canonical Google issuer path;
+- disconnecting Google requires fresh current-password verification (for an account that already has one) and is allowed only through the canonical Google issuer path;
 - successful link and unlink operations enqueue a security email handled by the existing account-delivery cron cadence.
 
-Google-only accounts created through provider signup do not know the random internal password hash used to satisfy the current non-null database credential column. They therefore cannot disconnect their sole Google sign-in method through the password-verified unlink control, which preserves the canonical requirement not to strand an account without a usable primary authentication method. A future password-establishment flow may provide such accounts an alternate primary method before unlinking.
+Google-only accounts created through provider signup do not know the random internal password hash used to satisfy the current non-null database credential column (tracked explicitly by `idoc.users.password_set_at`, null until a real, member-known password exists). They therefore cannot disconnect their sole Google sign-in method through the password-verified unlink control above, which preserves the canonical requirement not to strand an account without a usable primary authentication method. Instead, a distinct password-establishment flow (`createPasswordAndDisconnectGoogle`, `app/(dashboard)/dashboard/security/actions.ts`) gives such an account its one self-service path off Google: a one-time code emailed to the account's own verified address (`google_disconnect_verification`, `lib/auth/email-otp.ts`) stands in for the current-password check these accounts cannot satisfy -- proof the requester controls the account's inbox, not merely an already-authenticated browser session -- and only then is the new password saved and the Google identity unlinked, atomically ordered so the password is saved first and a later unlink failure can never leave the account without any usable credential.
 
 ## Canonical session lifecycle
 

@@ -17,6 +17,8 @@ import {
 import { unlinkGoogleIdentity } from '@/lib/auth/google-identity-linking';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
+import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
+import { requestOrigin } from '@/lib/security/rate-limit';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
 import { regenerateRecoveryCodesWithEvidence } from '@/lib/auth/mfa/recovery-regeneration';
@@ -153,7 +155,29 @@ export const disconnectGoogleIdentity = validatedActionWithUser(
   },
 );
 
-const createPasswordSchema = z.object({ newPassword: passwordSchema });
+// Members hold no TOTP factor (authoritativeMfaRole 'member' -> configuredFactor 'none' in
+// step-up.ts), so requireFreshStepUp below is a no-op for exactly the accounts this whole flow
+// exists for -- and unlike updatePassword/disconnectGoogleIdentity, there is no existing password
+// to re-verify either. Without an independent proof, anyone controlling an already-authenticated
+// session (not just the member who knows the Google credentials) could silently replace the
+// account's sole sign-in method. A one-time code emailed to the account's own verified address is
+// the same proof-of-identity fallback the codebase already relies on for members at login
+// (beginPrimaryMfa's email-OTP challenge) -- an attacker who merely controls the session cookie
+// does not also control that inbox.
+export const sendGoogleDisconnectVerificationCode = validatedActionWithUser(emptySchema, async (_, __, user) => {
+  if (user.passwordSetAt) return { error: 'A password is already set for this account.' };
+  const origin = await requestOrigin();
+  const result = await issueEmailOtp(user.email, 'google_disconnect_verification', { origin, userId: user.id });
+  if (result.status === 'ok') return { success: 'Check your email for a verification code.' };
+  if (result.status === 'cooldown') return { success: 'A code was already sent recently -- check your email, or wait a moment before requesting another.' };
+  if (result.status === 'rate_limited') return { error: 'Too many attempts. Please try again later.' };
+  return { error: 'The verification code could not be sent. Please try again.' };
+});
+
+const createPasswordSchema = z.object({
+  newPassword: passwordSchema,
+  otpCode: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code we emailed you.'),
+});
 
 // A Google-only account (google-account.ts: `passwordSetAt` stays null) has no real, known password
 // to satisfy disconnectGoogleIdentity's currentPassword check -- that control deliberately requires
@@ -164,12 +188,24 @@ const createPasswordSchema = z.object({ newPassword: passwordSchema });
 // stranded account with neither credential usable.
 export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
   createPasswordSchema,
-  async ({ newPassword }, _, user) => {
+  async ({ newPassword, otpCode }, _, user) => {
     if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) return { stepUpRequired: true };
     if (user.passwordSetAt) return { error: 'A password is already set for this account.' };
     if ((await checkPasswordBreached(newPassword)).breached) {
       await notifyWebmasterOfBreachedPasswordAttempt({ email: user.email, source: 'google-disconnect' });
       return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
+    }
+    // Verified (and consumed) last, immediately before the mutation: proof the requester also
+    // controls the account's own inbox, not just this browser session -- see the comment on
+    // sendGoogleDisconnectVerificationCode above for why this exists.
+    const otpOrigin = await requestOrigin();
+    const otpResult = await verifyEmailOtp(user.email, 'google_disconnect_verification', otpCode, otpOrigin, user.id);
+    if (otpResult !== 'verified') {
+      const message = otpResult === 'expired' ? 'That code expired. Request a new one.'
+        : otpResult === 'locked' ? 'Too many incorrect attempts. Request a new code.'
+          : otpResult === 'rate_limited' ? 'Too many attempts. Please try again later.'
+            : 'That code is incorrect.';
+      return { error: message };
     }
 
     const newPasswordHash = await hashPassword(newPassword);
