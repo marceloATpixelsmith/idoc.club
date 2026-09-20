@@ -6,10 +6,10 @@ import { ContactForm } from './contact-form';
 export const metadata: Metadata = {
   title: 'Contact IDOC',
   description:
-    'Contact the International Dressage Officials Club secretariat in Brecht, Belgium for membership, seminars and press enquiries.',
+    'Contact the International Dressage Officials Club (IDOC) in Brecht, Belgium with any question or enquiry.',
   openGraph: {
     title: 'Contact IDOC',
-    description: 'Reach the IDOC secretariat for membership, seminar and press enquiries.',
+    description: 'Reach IDOC with any question or enquiry.',
   },
 };
 
@@ -20,29 +20,24 @@ export default async function ContactPage() {
       <PageHeader
         eyebrow="Get in touch"
         title="Contact"
-        intro="The IDOC secretariat answers membership, seminar and press enquiries."
+        intro="Have a question, or want to learn more about IDOC? Send us a message and we'll get back to you."
       />
       <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-2 lg:px-8">
-        <div className="space-y-12">
-          <div>
-            <h2 className="rule-gold text-2xl">Secretariat</h2>
-            <address className="mt-6 space-y-1 text-sm not-italic leading-relaxed text-muted-foreground">
-              {addressLines.map((line) => <p key={line}>{line}</p>)}
-              <p>+32 476 914 795</p>
-              <p>
-                <a href="mailto:accounts@idoc.club" className="text-gold hover:opacity-80">
-                  accounts@idoc.club
-                </a>
-              </p>
-            </address>
-          </div>
-          <div>
-            <h2 className="rule-gold text-2xl">Membership & dues</h2>
-            <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-              For applications, invoices and changes of officiating status, email the
-              secretariat with your name, nation and current FEI or national level.
+        <div>
+          <h2 className="rule-gold text-2xl">Contact details</h2>
+          <address className="mt-6 space-y-1 text-base not-italic leading-relaxed text-muted-foreground">
+            {addressLines.map((line) => <p key={line}>{line}</p>)}
+            <p className="mt-4 text-lg font-medium text-foreground">
+              <a href="tel:+32476914795" className="hover:text-gold">
+                +32 476 914 795
+              </a>
             </p>
-          </div>
+            <p className="text-lg font-medium">
+              <a href="mailto:accounts@idoc.club" className="text-gold hover:opacity-80">
+                accounts@idoc.club
+              </a>
+            </p>
+          </address>
         </div>
         <div>
           <h2 className="rule-gold text-2xl">Send a message</h2>

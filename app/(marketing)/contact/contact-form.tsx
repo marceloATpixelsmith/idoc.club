@@ -56,13 +56,7 @@ export function ContactForm() {
         <Label htmlFor="contact-message">Message</Label>
         <Textarea id="contact-message" name="message" required maxLength={5000} rows={6} />
       </div>
-      {/* This page never loads components/auth/canonical-reference.css (that stylesheet is scoped
-        * to AuthShell / the (login) route group), so the widget's iframe gets none of that file's
-        * containment rules for free -- replicate just the ones that matter here (bounded width,
-        * clipped overflow, reserved height so the layout doesn't jump when a challenge appears). */}
-      <div className="w-full min-w-0 overflow-hidden rounded-[10px] [&_iframe]:max-w-full [&>div]:max-w-full [&>[data-challenge-visible=true]]:min-h-[65px]">
-        <TurnstileWidget key={turnstileAttempt} action="contact" onVerify={setTurnstileToken} theme="dark" />
-      </div>
+      <TurnstileWidget key={turnstileAttempt} action="contact" onVerify={setTurnstileToken} theme="dark" />
       {state.error ? <p className="text-sm text-destructive" role="alert">{state.error}</p> : null}
       <Button disabled={pending || !turnstileToken} type="submit">
         {pending ? <AuthPendingLabel text="Sending" /> : 'Send message'}

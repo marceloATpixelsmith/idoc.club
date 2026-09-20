@@ -1,0 +1,40 @@
+/* Containment for the Turnstile widget itself -- travels with the component so every caller
+ * (canonical auth pages, the public contact form, or any future usage) gets identical layout
+ * behavior without depending on a page-specific stylesheet being loaded. */
+
+.idoc-auth-turnstile {
+  width: 100%;
+  min-width: 0;
+  min-height: 65px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.idoc-auth-turnstile > div,
+.idoc-auth-turnstile iframe {
+  max-width: 100% !important;
+}
+
+.idoc-auth-turnstile__error {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: oklch(0.6 0.21 25 / 16%);
+  font-size: 14px;
+  line-height: 1.5;
+  /* --auth-error-color (brighter, tuned for the dark auth-shell background) is only defined
+   * within .idoc-auth-shell; a caller outside that scope (e.g. the contact page) falls back to
+   * the global --destructive token. */
+  color: var(--auth-error-color, var(--destructive));
+}
+
+.idoc-auth-turnstile__retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  color: inherit;
+  cursor: pointer;
+}
