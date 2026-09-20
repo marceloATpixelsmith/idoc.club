@@ -10,13 +10,14 @@ import { checkRateLimit } from '@/lib/security/rate-limit';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { logError } from '@/lib/observability/logger';
 
-export type EmailOtpPurpose = 'login_verification' | 'password_reset' | 'signup_verification';
+export type EmailOtpPurpose = 'google_disconnect_verification' | 'login_verification' | 'password_reset' | 'signup_verification';
 
 const CODE_LIFETIME_MS = 15 * 60 * 1000;
 const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const RATE_LIMIT_PURPOSES: Record<EmailOtpPurpose, { issue: string; verify: string }> = {
+  google_disconnect_verification: { issue: 'email_otp_google_disconnect_verification', verify: 'otp_verify_google_disconnect' },
   login_verification: { issue: 'email_otp_login_verification', verify: 'otp_verify_login' },
   password_reset: { issue: 'email_otp_password_reset', verify: 'otp_verify_reset' },
   signup_verification: { issue: 'email_otp_signup_verification', verify: 'otp_verify_signup' },
@@ -35,6 +36,7 @@ function deliveryFailureCategory(error: unknown) {
 }
 
 const SUBJECTS: Record<EmailOtpPurpose, string> = {
+  google_disconnect_verification: 'Your IDOC verification code',
   login_verification: 'Your IDOC sign-in code',
   password_reset: 'Your IDOC password reset code',
   signup_verification: 'Your IDOC verification code',
@@ -45,7 +47,9 @@ function emailHtml(code: string, purpose: EmailOtpPurpose) {
     ? 'Use this code to reset your IDOC password.'
     : purpose === 'login_verification'
       ? 'Use this code to sign in to your IDOC account.'
-      : 'Use this code to verify your email address for IDOC.';
+      : purpose === 'google_disconnect_verification'
+        ? 'Use this code to confirm it’s really you before creating a password and disconnecting Google from your IDOC account.'
+        : 'Use this code to verify your email address for IDOC.';
   return renderTransactionalEmail({
     bodyHtml: `<p style="text-align:center;">${intro}</p>${emailCode(code)}`,
     footerNote: 'This code expires in 15 minutes. If you did not request this, you can safely ignore this email.',

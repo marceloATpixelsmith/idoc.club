@@ -49,7 +49,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     createPasswordAndDisconnectGoogle: 'session-boundary',
     disconnectGoogleIdentity: 'session-boundary', forgetAllRememberedDevices: 'session-boundary',
     forgetThisDevice: 'session-boundary', logOutOtherSessions: 'session-boundary', logOutSession: 'session-boundary',
-    regenerateRecoveryCodes: 'session-boundary',
+    regenerateRecoveryCodes: 'session-boundary', sendGoogleDisconnectVerificationCode: 'session-boundary',
   },
   'lib/payments/actions.ts': { cancelPendingRenewalAction: 'delegates-to-data-access', checkoutAction: 'delegates-to-data-access', disableAutomaticRenewalAction: 'delegates-to-data-access', enableAutomaticRenewalAction: 'delegates-to-data-access', manageBillingAction: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/membership/membership-actions.ts': { cancelMembershipAction: 'delegates-to-data-access' },

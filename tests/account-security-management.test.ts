@@ -10,6 +10,7 @@ const queries = readFileSync('lib/db/queries.ts', 'utf8');
 const devices = readFileSync('lib/auth/login-device-trust.ts', 'utf8');
 const registry = readFileSync('lib/auth/session-registry.ts', 'utf8');
 const loginActions = readFileSync('app/(login)/actions.ts', 'utf8');
+const signInPage = readFileSync('app/(login)/sign-in/page.tsx', 'utf8');
 
 const FORBIDDEN_RENDERED_SECRETS = /passwordHash|encryptedSecret|tokenDigest|recoveryCodeId|session cookie|sessionVersion/;
 
@@ -70,10 +71,13 @@ test('a Google-only account (no known password) does not see the password-change
   assert.match(client, /<CardHeader><CardTitle>Password<\/CardTitle><\/CardHeader>/);
 });
 
-test('a Google-only account is offered a create-a-password control on the Google card instead of a current-password field it cannot fill in', () => {
+test('a Google-only account is offered a create-a-password control on the Google card instead of a current-password field it cannot fill in, gated behind an emailed verification code', () => {
   assert.match(googleCard, /GoogleIdentityCard\(\{ hasPassword \}: \{ hasPassword: boolean \}\)/);
   assert.match(googleCard, /const needsPasswordToDisconnect = linked && !hasPassword;/);
   assert.match(googleCard, /needsPasswordToDisconnect \? \(/);
+  assert.match(googleCard, /action=\{sendCodeAction\}/);
+  assert.match(googleCard, /sendGoogleDisconnectVerificationCode/);
+  assert.match(googleCard, /name="otpCode"/);
   assert.match(googleCard, /<PasswordField autoComplete="new-password"[^/]*name="newPassword" required \/>/);
   assert.match(googleCard, /action=\{createAction\}/);
   assert.match(googleCard, /createPasswordAndDisconnectGoogle/);
@@ -83,15 +87,27 @@ test('a Google-only account is offered a create-a-password control on the Google
   assert.match(googleCard, /id="google-current-password"/);
 });
 
-test('creating a password to disconnect Google requires fresh step-up, rejects a breached password, and saves the password before ever touching the Google link', () => {
+test('an ordinary member (no TOTP factor) gets a real, independent proof of identity before the sole credential is replaced, since requireFreshStepUp alone is a no-op for them', () => {
+  assert.match(actions, /export const sendGoogleDisconnectVerificationCode = validatedActionWithUser\(emptySchema, async \(_, __, user\) => \{/);
+  const send = actions.slice(actions.indexOf('export const sendGoogleDisconnectVerificationCode'), actions.indexOf('const createPasswordSchema'));
+  assert.match(send, /if \(user\.passwordSetAt\) return \{ error:/);
+  assert.match(send, /issueEmailOtp\(user\.email, 'google_disconnect_verification', \{ origin, userId: user\.id \}\)/);
+});
+
+test('creating a password to disconnect Google requires fresh step-up, a verified one-time email code, rejects a breached password, and saves the password before ever touching the Google link', () => {
   const create = actions.slice(actions.indexOf('export const createPasswordAndDisconnectGoogle'));
   assert.match(create, /requireFreshStepUp\(user, 'change-security-settings'/);
   assert.match(create, /if \(user\.passwordSetAt\) return \{ error:/);
   assert.match(create, /checkPasswordBreached\(newPassword\)/);
   assert.match(create, /notifyWebmasterOfBreachedPasswordAttempt\(\{ email: user\.email, source: 'google-disconnect' \}\)/);
+  assert.match(actions, /otpCode: z\.string\(\)\.regex\(\/\^\\d\{6\}\$\/, /);
+  assert.match(create, /verifyEmailOtp\(user\.email, 'google_disconnect_verification', otpCode, otpOrigin, user\.id\)/);
+  assert.match(create, /if \(otpResult !== 'verified'\)/);
+  const otpVerifyIndex = create.indexOf('verifyEmailOtp(');
   const passwordSaveIndex = create.indexOf('tx.update(users).set');
   const unlinkIndex = create.indexOf('unlinkGoogleIdentity(');
-  assert.ok(passwordSaveIndex > 0 && unlinkIndex > passwordSaveIndex, 'the password must be saved before Google is unlinked, never after');
+  assert.ok(otpVerifyIndex > 0 && otpVerifyIndex < passwordSaveIndex && passwordSaveIndex < unlinkIndex,
+    'the email code must be verified before the password is saved, and the password must be saved before Google is unlinked, never after');
   assert.match(create, /passwordSetAt: now/);
   assert.match(create, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
   assert.match(create, /account\.password\.created/);
@@ -102,6 +118,10 @@ test('creating a password to disconnect Google requires fresh step-up, rejects a
   assert.match(create, /await consumeFreshStepUp\(\);\s*await clearSession\(\);/);
   assert.match(create, /redirect\('\/sign-in\?password=created'\)/);
   assert.match(create, /redirect\('\/sign-in\?password=created&google=unlink-failed'\)/);
+  // The sign-in page must actually explain this redirect, not silently show nothing -- a member
+  // sent here after a successful password save but a failed unlink should not be left thinking the
+  // whole thing failed.
+  assert.match(signInPage, /value === 'unlink-failed'/);
   assert.doesNotMatch(create.slice(unlinkIndex), /return \{ error:/, 'no inline error may be returned after the password is already saved -- the session is already invalidated by then');
 });
 
