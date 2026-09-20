@@ -115,7 +115,7 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
  * credential; the compatibility activation path still supplies a new password. */
 async function applyMigrationActivationMutation(tx: Tx, userId: number, password?: string): Promise<boolean> {
   const now = new Date();
-  const passwordUpdate = password === undefined ? {} : { passwordHash: await hashPassword(password) };
+  const passwordUpdate = password === undefined ? {} : { passwordHash: await hashPassword(password), passwordSetAt: now };
   const [claimed] = await tx.update(users)
     .set({ ...passwordUpdate, accountState: 'active', emailVerifiedAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
     .where(and(eq(users.id, userId), eq(users.accountState, 'migrated_pending')))
@@ -181,7 +181,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
     if (!claimed) return { status: 'invalid' as const };
     const now = new Date();
-    await tx.update(users).set({ passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
+    await tx.update(users).set({ passwordHash: await hashPassword(password), passwordSetAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
     await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
     await tx.insert(auditLog).values({ actorId: record.userId, action: `account.${purpose}.completed`, entityId: String(record.userId), entityType: 'user' });
     await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)

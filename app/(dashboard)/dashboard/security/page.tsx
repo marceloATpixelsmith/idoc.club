@@ -30,6 +30,7 @@ export default async function SecurityPage() {
     getActivityLogs(),
   ]);
   return <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
+    hasPassword={user.hasPassword}
     logs={logs.map(({ action, id, timestamp }) => ({ action, id, timestamp: timestamp.toISOString() }))}
     privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }) =>
       ({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />;

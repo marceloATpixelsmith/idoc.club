@@ -62,7 +62,7 @@ test('live privileged mutations require canonical sensitive actions', () => {
   assert.equal((roles.match(/requireSuperAdmin\(actor\)/g) ?? []).length, 2);
   assert.doesNotMatch(roles, /requireFreshStepUp|cookies\(/);
   const security = source('app/(dashboard)/dashboard/security/actions.ts');
-  assert.equal((security.match(/requireFreshStepUp\(user, 'change-security-settings'/g) ?? []).length, 2);
+  assert.equal((security.match(/requireFreshStepUp\(user, 'change-security-settings'/g) ?? []).length, 3);
   assert.equal((security.match(/comparePasswords\(currentPassword, user\.passwordHash\)/g) ?? []).length, 2);
 });
 

@@ -5,9 +5,10 @@ import { sendTransactionalEmail } from './brevo-transactional';
 import { taggedSubject } from './alert-severity';
 import { logWarn } from '@/lib/observability/logger';
 
-export type BreachedPasswordSource = 'migration-activation' | 'password-change' | 'password-reset' | 'password-reset-token' | 'signup';
+export type BreachedPasswordSource = 'google-disconnect' | 'migration-activation' | 'password-change' | 'password-reset' | 'password-reset-token' | 'signup';
 
 const SOURCE_LABEL: Record<BreachedPasswordSource, string> = {
+  'google-disconnect': 'creating a password while disconnecting Google',
   'migration-activation': 'migrated-account activation',
   'password-change': 'a self-service password change',
   'password-reset': 'a password reset',

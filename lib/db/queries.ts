@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth/session';
 import { SECURITY_ACTIVITY_LABELS } from '@/lib/auth/security-activity';
 
 export type PublicUser = { email: string; firstName: string | null; id: number; lastName: string | null };
-export type SecurityPageUser = { accountState: 'active' | 'onboarding'; id: number; sessionVersion: number };
+export type SecurityPageUser = { accountState: 'active' | 'onboarding'; hasPassword: boolean; id: number; sessionVersion: number };
 
 /** AUTH-API-003: the only user-shaped value ever sent to the browser -- every server-rendered
  * consumer of the current user's identity (the root layout's SWR fallback, the /api/user route
@@ -36,6 +36,7 @@ export async function getSecurityPageUser(): Promise<SecurityPageUser | null> {
       accountState: users.accountState,
       emailVerifiedAt: users.emailVerifiedAt,
       id: users.id,
+      passwordSetAt: users.passwordSetAt,
       sessionVersion: users.sessionVersion,
     })
     .from(users)
@@ -47,7 +48,7 @@ export async function getSecurityPageUser(): Promise<SecurityPageUser | null> {
     return null;
   }
 
-  return { accountState: user.accountState as 'active' | 'onboarding', id: user.id, sessionVersion: user.sessionVersion };
+  return { accountState: user.accountState as 'active' | 'onboarding', hasPassword: user.passwordSetAt !== null, id: user.id, sessionVersion: user.sessionVersion };
 }
 
 export async function getUser() {

@@ -102,7 +102,7 @@ export const completeSignup = validatedAction(completeSignupSchema, async ({ pas
   }
   const newUser: NewUser = {
     accountState: 'onboarding', email: pending.email, emailDisplay: pending.emailDisplay, emailVerifiedAt: new Date(),
-    passwordHash: await hashPassword(password), role: 'member',
+    passwordHash: await hashPassword(password), passwordSetAt: new Date(), role: 'member',
   };
   const [createdUser] = await db.insert(users).values(newUser).returning();
   if (!createdUser) return { error: 'Something went wrong creating your account. Please try again.' };

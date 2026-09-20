@@ -5,6 +5,8 @@ import test from 'node:test';
 const actions = readFileSync('app/(dashboard)/dashboard/security/actions.ts', 'utf8');
 const page = readFileSync('app/(dashboard)/dashboard/security/page.tsx', 'utf8');
 const client = readFileSync('app/(dashboard)/dashboard/security/security-client.tsx', 'utf8');
+const googleCard = readFileSync('app/(dashboard)/dashboard/security/google-identity-card.tsx', 'utf8');
+const queries = readFileSync('lib/db/queries.ts', 'utf8');
 const devices = readFileSync('lib/auth/login-device-trust.ts', 'utf8');
 const registry = readFileSync('lib/auth/session-registry.ts', 'utf8');
 const loginActions = readFileSync('app/(login)/actions.ts', 'utf8');
@@ -59,6 +61,41 @@ test('password change and deletion deliberately invalidate authentication state'
   assert.ok(deletion.indexOf('await deleteOwnAccount()') < deletion.indexOf("await revokeAllUserSessions(user.id, 'account-deleted')"));
   assert.match(deletion, /forgetAllLoginDevices\(user\.id, 'account-deleted'\)/);
   assert.match(deletion, /requireFreshStepUp\(user, 'change-security-settings'/);
+});
+
+test('a Google-only account (no known password) does not see the password-change card, since it has no current password to enter', () => {
+  assert.match(queries, /hasPassword: user\.passwordSetAt !== null/);
+  assert.match(page, /hasPassword=\{user\.hasPassword\}/);
+  assert.match(client, /\{hasPassword \? <Card>/);
+  assert.match(client, /<CardHeader><CardTitle>Password<\/CardTitle><\/CardHeader>/);
+});
+
+test('a Google-only account is offered a create-a-password control on the Google card instead of a current-password field it cannot fill in', () => {
+  assert.match(googleCard, /GoogleIdentityCard\(\{ hasPassword \}: \{ hasPassword: boolean \}\)/);
+  assert.match(googleCard, /const needsPasswordToDisconnect = linked && !hasPassword;/);
+  assert.match(googleCard, /needsPasswordToDisconnect \? \(/);
+  assert.match(googleCard, /<PasswordField autoComplete="new-password"[^/]*name="newPassword" required \/>/);
+  assert.match(googleCard, /action=\{createAction\}/);
+  assert.match(googleCard, /createPasswordAndDisconnectGoogle/);
+  // The current-password field/Disconnect button remain for an account that already has a real
+  // password (one that signed up normally and later linked Google) -- only the passwordless case
+  // gets the new control.
+  assert.match(googleCard, /id="google-current-password"/);
+});
+
+test('creating a password to disconnect Google requires fresh step-up, rejects a breached password, and saves the password before ever touching the Google link', () => {
+  const create = actions.slice(actions.indexOf('export const createPasswordAndDisconnectGoogle'));
+  assert.match(create, /requireFreshStepUp\(user, 'change-security-settings'/);
+  assert.match(create, /if \(user\.passwordSetAt\) return \{ error:/);
+  assert.match(create, /checkPasswordBreached\(newPassword\)/);
+  assert.match(create, /notifyWebmasterOfBreachedPasswordAttempt\(\{ email: user\.email, source: 'google-disconnect' \}\)/);
+  const passwordSaveIndex = create.indexOf('tx.update(users).set');
+  const unlinkIndex = create.indexOf('unlinkGoogleIdentity(');
+  assert.ok(passwordSaveIndex > 0 && unlinkIndex > passwordSaveIndex, 'the password must be saved before Google is unlinked, never after');
+  assert.match(create, /passwordSetAt: now/);
+  assert.match(create, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
+  assert.match(create, /account\.password\.created/);
+  assert.match(create, /await clearSession\(\);\s*redirect\('\/sign-in\?password=created'\)/);
 });
 
 test('every session-mutating form on the My Security page disables its submit button while its own action is pending, preventing a double-click from firing a duplicate request', () => {

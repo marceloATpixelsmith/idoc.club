@@ -46,6 +46,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/onboarding/actions.ts': { completeOnboarding: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/security/actions.ts': {
     beginAuthenticatorReplacement: 'session-boundary', beginGoogleIdentityLink: 'session-boundary',
+    createPasswordAndDisconnectGoogle: 'session-boundary',
     disconnectGoogleIdentity: 'session-boundary', forgetAllRememberedDevices: 'session-boundary',
     forgetThisDevice: 'session-boundary', logOutOtherSessions: 'session-boundary', logOutSession: 'session-boundary',
     regenerateRecoveryCodes: 'session-boundary',

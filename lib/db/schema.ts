@@ -31,6 +31,13 @@ export const users = idocSchema.table('users', {
   // to their current `email` value by this column's own migration.
   emailDisplay: varchar('email_display', { length: 255 }),
   passwordHash: text('password_hash').notNull(),
+  // Null means this account has never had a password its owner actually knows -- a Google-only
+  // signup, whose `passwordHash` above holds an unusable, never-revealed random value
+  // (lib/auth/google-account.ts) purely to satisfy the NOT NULL column above. Set whenever a real,
+  // member-chosen password is created: ordinary signup, self-service change, password reset, or
+  // creating a first password while disconnecting Google (app/(dashboard)/dashboard/security/actions.ts).
+  // Existing rows are backfilled by this column's own migration.
+  passwordSetAt: timestamp('password_set_at'),
   accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
   sessionVersion: integer('session_version').notNull().default(0),
   role: varchar('role', { length: 20 }).notNull().default('member'),

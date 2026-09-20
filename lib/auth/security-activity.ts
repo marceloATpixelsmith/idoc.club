@@ -9,6 +9,7 @@ export const SECURITY_ACTIVITY_LABELS: Record<string, string> = {
   'account.session.signed_in': 'Signed in',
   'account.session.signed_out': 'Signed out',
   'account.password.changed': 'Changed password',
+  'account.password.created': 'Created a password',
   'account.password_reset.completed': 'Reset password',
   'account.email.verified': 'Verified a new email address',
   'auth.mfa.authenticator.enrolled': 'Set up an authenticator app',

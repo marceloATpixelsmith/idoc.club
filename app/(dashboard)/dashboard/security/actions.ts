@@ -1,19 +1,22 @@
 'use server';
 
 import { z } from 'zod';
-import { passwordEntrySchema } from '@/lib/auth/password-policy';
+import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { validatedActionWithUser } from '@/lib/auth/middleware';
-import { clearSession, comparePasswords, getSession } from '@/lib/auth/session';
+import { clearSession, comparePasswords, getSession, hashPassword } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
+import { users } from '@/lib/db/schema';
 import {
   createImmediateGoogleUnlinkFreshEvidence,
   issueGoogleLinkFreshEvidence,
 } from '@/lib/auth/google-identity-link-evidence';
 import { unlinkGoogleIdentity } from '@/lib/auth/google-identity-linking';
+import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
 import { regenerateRecoveryCodesWithEvidence } from '@/lib/auth/mfa/recovery-regeneration';
@@ -147,5 +150,56 @@ export const disconnectGoogleIdentity = validatedActionWithUser(
     if (result.status === 'unlinked') return { success: 'Google account disconnected.' };
     if (result.status === 'not-linked') return { success: 'No Google account is connected.' };
     return { error: 'Add another sign-in method before disconnecting Google.' };
+  },
+);
+
+const createPasswordSchema = z.object({ newPassword: passwordSchema });
+
+// A Google-only account (google-account.ts: `passwordSetAt` stays null) has no real, known password
+// to satisfy disconnectGoogleIdentity's currentPassword check -- that control deliberately requires
+// an already-known password (see docs/21 AUTH-OAUTH-009), so a Google-only account cannot reach it at
+// all. This is the "add another sign-in method" the two account.ts controls above already gesture
+// at: it creates one. The password is saved first, before the Google identity is ever touched -- if
+// the unlink step then fails, the member still walks away with a working password rather than a
+// stranded account with neither credential usable.
+export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
+  createPasswordSchema,
+  async ({ newPassword }, _, user) => {
+    if ((await requireFreshStepUp(user, 'change-security-settings', '/dashboard/security')).required) return { stepUpRequired: true };
+    if (user.passwordSetAt) return { error: 'A password is already set for this account.' };
+    if ((await checkPasswordBreached(newPassword)).breached) {
+      await notifyWebmasterOfBreachedPasswordAttempt({ email: user.email, source: 'google-disconnect' });
+      return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      const [saved] = await tx.update(users).set({
+        passwordHash: newPasswordHash,
+        passwordSetAt: now,
+        sessionVersion: sql`${users.sessionVersion} + 1`,
+        updatedAt: now,
+      }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });
+      if (!saved) throw new Error('Your account changed. Sign in again.');
+      await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+        values(${user.id},'account.password.created','user',${String(user.id)},'google-disconnect-password-creation')`);
+      await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
+        values(${user.id},'password_changed',${user.email},${`password-created:${user.id}:${user.sessionVersion + 1}`})
+        on conflict (dedupe_key) where dedupe_key is not null do nothing`);
+    });
+
+    const result = await unlinkGoogleIdentity({
+      userId: String(user.id),
+      freshEvidence: createImmediateGoogleUnlinkFreshEvidence(user.id),
+    });
+    if (result.status !== 'unlinked' && result.status !== 'not-linked') {
+      // The password is already saved (and every device already signed out below); Google stays
+      // connected and the member can retry disconnecting with their new password from the same card.
+      return { error: 'Your password was saved, but Google could not be disconnected. Sign in with your new password and try again.' };
+    }
+    await consumeFreshStepUp();
+    await clearSession();
+    redirect('/sign-in?password=created');
   },
 );
