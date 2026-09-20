@@ -21,7 +21,7 @@ export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; use
           <input type="hidden" name="role" value={role.role} />
           <span className="text-sm">{role.role}</span>
           <input className="border p-1 text-xs" name="reason" placeholder="Reason (required)" required />
-          <button className="rounded border px-2 py-1 text-xs" disabled={revokePending} type="submit">Revoke</button>
+          <button className="rounded border bg-transparent px-2 py-1 text-xs" disabled={revokePending} type="submit">Revoke</button>
         </form>
       ))}
       {revokeState.error && <p className="text-sm text-red-400">{revokeState.error}</p>}

@@ -194,7 +194,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
           {TYPE_OPTIONS.map((option) => (
             <button
               aria-pressed={classification === option.value}
-              className={`cursor-pointer rounded-lg border p-4 text-left transition-all ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border hover:border-input'}`}
+              className={`cursor-pointer rounded-lg border p-4 text-left transition-all ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border bg-transparent hover:border-input'}`}
               key={option.value}
               onClick={() => { setClassification(option.value); setDetailsComplete(false); }}
               type="button"
@@ -375,7 +375,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
 
         {state.error ? <p className="text-sm text-red-400">{state.error}</p> : null}
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
+          <button className="cursor-pointer bg-transparent text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
           <Button className="flex-1" disabled={pending || !detailsComplete} size="lg" type="submit">
             {pending ? 'Saving…' : 'Continue to payment'}
           </Button>

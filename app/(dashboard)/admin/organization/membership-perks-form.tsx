@@ -40,7 +40,7 @@ export function MembershipPerksForm({ perks }: { perks: MembershipPerk[] }) {
               />
               <button
                 aria-label={`Remove perk ${index + 1}`}
-                className="rounded-md border px-3 text-sm disabled:opacity-50"
+                className="rounded-md border bg-transparent px-3 text-sm disabled:opacity-50"
                 disabled={labels.length <= 1}
                 onClick={() => removeRow(index)}
                 type="button"
@@ -50,7 +50,7 @@ export function MembershipPerksForm({ perks }: { perks: MembershipPerk[] }) {
             </li>
           ))}
         </ol>
-        <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setLabels((current) => [...current, ''])} type="button">
+        <button className="rounded-md border bg-transparent px-3 py-2 text-sm" onClick={() => setLabels((current) => [...current, ''])} type="button">
           Add perk
         </button>
         {state.error && <p aria-live="polite" className="text-sm text-red-500" role="alert">{state.error}</p>}

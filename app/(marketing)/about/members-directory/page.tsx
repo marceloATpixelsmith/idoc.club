@@ -88,7 +88,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
           <label className="text-sm">Federation<select className="mt-1 block w-full rounded-md border p-2" defaultValue={first(params.federation) ?? ''} name="federation"><option value="">All</option>{COUNTRY_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}</select></label>
           <label className="text-sm">IDOC Region<select className="mt-1 block w-full rounded-md border p-2" defaultValue={first(params.region) ?? ''} name="region"><option value="">All</option>{IDOC_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}</select></label>
           <label className="text-sm">Sort<select className="mt-1 block w-full rounded-md border p-2" defaultValue={first(params.sort) ?? 'name'} name="sort"><option value="name">Name (A–Z)</option><option value="country">Country</option><option value="region">IDOC Region</option></select></label>
-          <button className="self-end rounded-md border px-3 py-2 text-sm" type="submit">Apply filters</button>
+          <button className="self-end rounded-md border bg-transparent px-3 py-2 text-sm" type="submit">Apply filters</button>
         </form>
         {!listing || listing.rows.length === 0 ? <p className="mt-8 text-muted-foreground">No members match these filters.</p> : <>
           <p className="mt-6 text-sm text-muted-foreground">{listing.total} matching members</p>

@@ -35,7 +35,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
       <label className="text-sm">From <input className="block rounded-md border" defaultValue={report?.range.from ?? displayValue(filters.from)} name="from" type="date" /></label>
       <label className="text-sm">Through <input className="block rounded-md border" defaultValue={report?.range.to ?? displayValue(filters.to)} name="to" type="date" /></label>
       <label className="text-sm">Origin <select className="block rounded-md border" defaultValue={displayValue(filters.origin) ?? ''} name="origin"><option value="">All</option><option value="stripe">Stripe</option><option value="manual">Manual</option></select></label>
-      <button className="self-end rounded-md border px-4 py-2 text-sm" type="submit">Apply</button>
+      <button className="self-end rounded-md border bg-transparent px-4 py-2 text-sm" type="submit">Apply</button>
     </form>
     {error ? <p className="mt-8 text-sm text-red-500" role="alert">{error}</p> : report && <>
       <section className="mt-8" aria-label="Revenue summary">
