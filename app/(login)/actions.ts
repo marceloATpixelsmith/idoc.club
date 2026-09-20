@@ -223,6 +223,7 @@ export const updatePassword = validatedActionWithUser(
     await db.transaction(async (tx) => {
       const [changed] = await tx.update(users).set({
         passwordHash: newPasswordHash,
+        passwordSetAt: new Date(),
         sessionVersion: sql`${users.sessionVersion} + 1`,
         updatedAt: new Date(),
       }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });

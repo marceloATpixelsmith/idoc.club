@@ -175,7 +175,7 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
   }
   const passwordHash = await hashPassword(password);
   await db.transaction(async (tx) => {
-    const [updated] = await tx.update(users).set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
+    const [updated] = await tx.update(users).set({ passwordHash, passwordSetAt: new Date(), sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
       .where(and(eq(users.id, user.id), eq(users.email, pending.email), isNull(users.deletedAt),
         sql`${users.accountState} in ('active', 'onboarding')`)).returning({ id: users.id, sessionVersion: users.sessionVersion });
     if (!updated) throw new Error('Password reset target became unavailable.');

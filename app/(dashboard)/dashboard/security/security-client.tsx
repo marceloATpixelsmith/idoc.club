@@ -16,10 +16,10 @@ type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
 type DeleteState = { error?: string; success?: string };
 type ActivityLogEntry = { action: string; id: number; timestamp: string };
-type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; logs: ActivityLogEntry[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; deviceLabel: string | null; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
+type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; hasPassword: boolean; logs: ActivityLogEntry[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; deviceLabel: string | null; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
 const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
+export function SecurityClient({ currentDeviceRemembered, currentSessionId, hasPassword, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending, passwordDialog] = useFreshStepUpAction(updatePassword, {} as PasswordState);
   const [deleteState, deleteAction, isDeletePending, deleteDialog] = useFreshStepUpAction(deleteAccount, {} as DeleteState);
   const [replaceState, replaceAction, isReplacePending, replaceDialog] = useFreshStepUpAction(beginAuthenticatorReplacement, {});
@@ -33,7 +33,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
     <section className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-lg lg:text-2xl font-medium bold text-foreground mb-6">Security Settings</h1>
       <div className="mb-8 grid gap-8 lg:grid-cols-2">
-        <Card>
+        {hasPassword ? <Card>
           <CardHeader><CardTitle>Password</CardTitle></CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-muted-foreground">Changing your password logs you out on every device, including this one.</p><form className="space-y-4" action={passwordAction}>
@@ -47,10 +47,10 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, logs
               </Button>
             </form>
           </CardContent>
-        </Card>
+        </Card> : null}
 
         <Suspense fallback={null}>
-          <GoogleIdentityCard />
+          <GoogleIdentityCard hasPassword={hasPassword} />
         </Suspense>
       </div>
 
