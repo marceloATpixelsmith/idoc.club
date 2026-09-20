@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
@@ -41,10 +41,14 @@ export function GoogleIdentityCard({ hasPassword }: { hasPassword: boolean }) {
   // this card offers the one control that actually applies to it: create a password, which becomes
   // this account's new sign-in method as the same action disconnects Google.
   const needsPasswordToDisconnect = linked && !hasPassword;
-  // Once a code has been sent at least once, stay on the code+password step even if a later resend
-  // or a wrong/expired code submission clears/changes other state -- sendCodeState.success is only
-  // ever set (never reverts to undefined) once useActionState has recorded a successful send.
-  const codeSent = Boolean(sendCodeState.success);
+  // useActionState replaces sendCodeState wholesale on every dispatch, so a later resend that
+  // fails (e.g. rate-limited) would otherwise wipe sendCodeState.success and flip codeSent back to
+  // false -- unmounting the code+password form even though the member's already-sent code is still
+  // valid. Tracked as separate state, set once and never cleared, so it survives that case.
+  const [codeSent, setCodeSent] = useState(false);
+  useEffect(() => {
+    if (sendCodeState.success) setCodeSent(true);
+  }, [sendCodeState.success]);
   const error = linkState.error || unlinkState.error || createState.error || callbackState?.error;
   const success = linkState.success || unlinkState.success || callbackState?.success;
 
