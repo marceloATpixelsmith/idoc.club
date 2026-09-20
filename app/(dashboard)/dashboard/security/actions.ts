@@ -193,13 +193,16 @@ export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
       userId: String(user.id),
       freshEvidence: createImmediateGoogleUnlinkFreshEvidence(user.id),
     });
-    if (result.status !== 'unlinked' && result.status !== 'not-linked') {
-      // The password is already saved (and every device already signed out below); Google stays
-      // connected and the member can retry disconnecting with their new password from the same card.
-      return { error: 'Your password was saved, but Google could not be disconnected. Sign in with your new password and try again.' };
-    }
+    // The sessionVersion bump above already signs out every device -- including this one --
+    // regardless of how the unlink call below turns out, so this action always ends in a redirect
+    // to sign back in, never an inline error: returning one instead would let the member retry from
+    // a session this request has already invalidated, throwing 'User is not authenticated' out of
+    // validatedActionWithUser on the retry rather than failing gracefully.
     await consumeFreshStepUp();
     await clearSession();
-    redirect('/sign-in?password=created');
+    if (result.status === 'unlinked' || result.status === 'not-linked') redirect('/sign-in?password=created');
+    // Google stays connected; the member signs back in with the new password they just saved and
+    // retries disconnecting from a fresh session.
+    redirect('/sign-in?password=created&google=unlink-failed');
   },
 );

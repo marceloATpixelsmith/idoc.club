@@ -42,8 +42,8 @@ export default async function globalSetup() {
   for (const name of STATES) {
     const accountState = name === 'onboarding' ? 'onboarding' : name === 'suspended' ? 'suspended' : 'active';
     const [user] = await sql<{ id: number; session_version: number }[]>`
-      insert into idoc.users(email,password_hash,email_verified_at,account_state)
-      values(${`${name}@security.example.test`},'synthetic-not-a-usable-password',now(),${accountState})
+      insert into idoc.users(email,password_hash,password_set_at,email_verified_at,account_state)
+      values(${`${name}@security.example.test`},'synthetic-not-a-usable-password',now(),now(),${accountState})
       returning id,session_version`;
     // 'administrator-no-profile' is the never-onboarded-as-a-member administrator: an
     // administrator/super_admin is never itself a member, so this fixture exercises the real case

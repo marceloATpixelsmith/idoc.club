@@ -95,7 +95,14 @@ test('creating a password to disconnect Google requires fresh step-up, rejects a
   assert.match(create, /passwordSetAt: now/);
   assert.match(create, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
   assert.match(create, /account\.password\.created/);
-  assert.match(create, /await clearSession\(\);\s*redirect\('\/sign-in\?password=created'\)/);
+  // Every path out of this action, once the password has been saved, ends in clearSession() and a
+  // redirect -- never an inline error -- because the sessionVersion bump already invalidates the
+  // current session regardless of whether the Google unlink that follows succeeds. An inline error
+  // here would let the member retry from a session this request has already invalidated.
+  assert.match(create, /await consumeFreshStepUp\(\);\s*await clearSession\(\);/);
+  assert.match(create, /redirect\('\/sign-in\?password=created'\)/);
+  assert.match(create, /redirect\('\/sign-in\?password=created&google=unlink-failed'\)/);
+  assert.doesNotMatch(create.slice(unlinkIndex), /return \{ error:/, 'no inline error may be returned after the password is already saved -- the session is already invalidated by then');
 });
 
 test('every session-mutating form on the My Security page disables its submit button while its own action is pending, preventing a double-click from firing a duplicate request', () => {
