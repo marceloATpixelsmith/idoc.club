@@ -17,7 +17,7 @@ const CODE_LENGTH = 6;
 const MAX_VERIFY_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const RATE_LIMIT_PURPOSES: Record<EmailOtpPurpose, { issue: string; verify: string }> = {
-  google_disconnect_verification: { issue: 'email_otp_google_disconnect_verification', verify: 'otp_verify_google_disconnect' },
+  google_disconnect_verification: { issue: 'email_otp_google_disconnect', verify: 'otp_verify_google_disconnect' },
   login_verification: { issue: 'email_otp_login_verification', verify: 'otp_verify_login' },
   password_reset: { issue: 'email_otp_password_reset', verify: 'otp_verify_reset' },
   signup_verification: { issue: 'email_otp_signup_verification', verify: 'otp_verify_signup' },

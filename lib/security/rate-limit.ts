@@ -38,6 +38,7 @@ const IDENTIFIER_MAX_REQUESTS: Readonly<Record<string, number>> = {
   mfa_password_reset_verify: 5,
   mfa_recovery_code_verify: 5,
   mfa_step_up_verify: 5,
+  otp_verify_google_disconnect: 5,
   otp_verify_login: 5,
   otp_verify_reset: 5,
   otp_verify_signup: 5,
