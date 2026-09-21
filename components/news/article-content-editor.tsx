@@ -18,15 +18,15 @@ export function ArticleContentEditor({ initialHtml = '' }: { initialHtml?: strin
     <div>
       <label className="block text-sm font-medium" htmlFor="article-content-editor">Content</label>
       <div aria-label="Formatting controls" className="mt-1 flex flex-wrap gap-2" role="toolbar">
-        <button className="rounded border px-3 py-1" onClick={() => command('formatBlock', 'h2')} type="button">H2</button>
-        <button className="rounded border px-3 py-1" onClick={() => command('formatBlock', 'h3')} type="button">H3</button>
-        <button className="rounded border px-3 py-1" onClick={() => command('bold')} type="button"><strong>Bold</strong></button>
-        <button className="rounded border px-3 py-1 italic" onClick={() => command('italic')} type="button">Italic</button>
-        <button className="rounded border px-3 py-1" onClick={() => command('insertUnorderedList')} type="button">Bulleted list</button>
-        <button className="rounded border px-3 py-1" onClick={() => command('insertOrderedList')} type="button">Numbered list</button>
-        <button className="rounded border px-3 py-1" onClick={() => command('formatBlock', 'blockquote')} type="button">Quote</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('formatBlock', 'h2')} type="button">H2</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('formatBlock', 'h3')} type="button">H3</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('bold')} type="button"><strong>Bold</strong></button>
+        <button className="rounded border bg-transparent px-3 py-1 italic" onClick={() => command('italic')} type="button">Italic</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('insertUnorderedList')} type="button">Bulleted list</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('insertOrderedList')} type="button">Numbered list</button>
+        <button className="rounded border bg-transparent px-3 py-1" onClick={() => command('formatBlock', 'blockquote')} type="button">Quote</button>
         <button
-          className="rounded border px-3 py-1"
+          className="rounded border bg-transparent px-3 py-1"
           onClick={() => {
             const url = window.prompt('Link URL (https:// or mailto:)');
             if (url) command('createLink', url);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,14 @@ export function GoogleIdentityCard({ hasPassword }: { hasPassword: boolean }) {
   // this card offers the one control that actually applies to it: create a password, which becomes
   // this account's new sign-in method as the same action disconnects Google.
   const needsPasswordToDisconnect = linked && !hasPassword;
+  // useActionState replaces sendCodeState wholesale on every dispatch, so a later resend that
+  // fails (e.g. rate-limited) would otherwise wipe sendCodeState.success and flip codeSent back to
+  // false -- unmounting the code+password form even though the member's already-sent code is still
+  // valid. Tracked as separate state, set once and never cleared, so it survives that case.
+  const [codeSent, setCodeSent] = useState(false);
+  useEffect(() => {
+    if (sendCodeState.success) setCodeSent(true);
+  }, [sendCodeState.success]);
   const error = linkState.error || unlinkState.error || createState.error || callbackState?.error;
   const success = linkState.success || unlinkState.success || callbackState?.success;
 
@@ -52,42 +60,53 @@ export function GoogleIdentityCard({ hasPassword }: { hasPassword: boolean }) {
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
           {needsPasswordToDisconnect
-            ? 'A Google account is connected to your IDOC account. Send a verification code to your email, then create a password to sign in without Google and disconnect it.'
+            ? codeSent
+              ? 'Enter the verification code we emailed you, then choose a new password to sign in without Google.'
+              : 'A Google account is connected to your IDOC account. Send a verification code to your email to start creating a password and disconnecting Google.'
             : linked ? 'A Google account is connected to your IDOC account.' : 'Connect Google as an additional way to sign in to IDOC.'}
         </p>
         {needsPasswordToDisconnect ? (
-          <div className="space-y-4">
+          codeSent ? (
+            <div className="space-y-4">
+              <form action={createAction} className="space-y-4">
+                <CsrfField />
+                <div>
+                  <Label htmlFor="google-otp-code" className="mb-2">Verification Code</Label>
+                  <Input
+                    autoComplete="one-time-code"
+                    id="google-otp-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    minLength={6}
+                    name="otpCode"
+                    pattern="\d{6}"
+                    placeholder="6-digit code from your email"
+                    required
+                    type="text"
+                  />
+                </div>
+                <PasswordField autoComplete="new-password" id="google-new-password" label="New Password" maxLength={128} minLength={12} name="newPassword" required />
+                {error && <p className="text-red-400 text-sm">{error}</p>}
+                {success && <p className="text-green-400 text-sm">{success}</p>}
+                <Button type="submit" disabled={createPending} variant="outline">Create password and disconnect Google</Button>
+              </form>
+              <form action={sendCodeAction}>
+                <CsrfField />
+                <Button className="h-auto p-0 text-muted-foreground hover:text-foreground" disabled={sendCodePending} size="sm" type="submit" variant="link">
+                  {sendCodePending ? 'Resending…' : "Didn't get a code? Resend it"}
+                </Button>
+                {sendCodeState.error && <p className="text-red-400 text-sm mt-1">{sendCodeState.error}</p>}
+              </form>
+            </div>
+          ) : (
             <form action={sendCodeAction}>
               <CsrfField />
-              <Button type="submit" disabled={sendCodePending} variant="outline" size="sm">
+              <Button type="submit" disabled={sendCodePending} variant="outline">
                 {sendCodePending ? 'Sending…' : 'Send verification code'}
               </Button>
               {sendCodeState.error && <p className="text-red-400 text-sm mt-2">{sendCodeState.error}</p>}
-              {sendCodeState.success && <p className="text-green-400 text-sm mt-2">{sendCodeState.success}</p>}
             </form>
-            <form action={createAction} className="space-y-4">
-              <CsrfField />
-              <div>
-                <Label htmlFor="google-otp-code" className="mb-2">Verification Code</Label>
-                <Input
-                  autoComplete="one-time-code"
-                  id="google-otp-code"
-                  inputMode="numeric"
-                  maxLength={6}
-                  minLength={6}
-                  name="otpCode"
-                  pattern="\d{6}"
-                  placeholder="6-digit code from your email"
-                  required
-                  type="text"
-                />
-              </div>
-              <PasswordField autoComplete="new-password" id="google-new-password" label="New Password" maxLength={128} minLength={12} name="newPassword" required />
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              {success && <p className="text-green-400 text-sm">{success}</p>}
-              <Button type="submit" disabled={createPending} variant="outline">Create password and disconnect Google</Button>
-            </form>
-          </div>
+          )
         ) : (
           <form action={linked ? unlinkAction : linkAction} className="space-y-4">
             <CsrfField />

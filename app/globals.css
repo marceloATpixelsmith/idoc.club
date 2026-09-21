@@ -148,8 +148,8 @@
    * onboarding wizard reuses that same shell for its own ordinary app
    * buttons, which should still get this treatment.
    */
-  button:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary),
-  [data-slot='button']:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary) {
+  button:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-turnstile__retry),
+  [data-slot='button']:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-turnstile__retry) {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 700;
@@ -207,9 +207,15 @@
  * gold background. Cascade layers always lose to unlayered rules regardless
  * of selector specificity, so this doesn't need `!important`. The shared
  * Button component (data-slot="button") sets its own background per variant
- * in components/ui/button.tsx and is excluded here too.
+ * in components/ui/button.tsx and is excluded here too. `.idoc-auth-password__toggle`
+ * (the show/hide-password eye icon on every canonical auth page), `.idoc-auth-turnstile__retry`
+ * (the Turnstile-failed-to-load retry link, styled in components/turnstile-widget.css) and
+ * `.idoc-auth-recovery-codes__copy-button` (the MFA recovery-codes copy icon, styled in
+ * components/auth/canonical-reference.css) are excluded for the same reason: each sets its own
+ * transparent/surface background that would otherwise lose to this unlayered rule despite being
+ * more specific.
  */
-button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary) {
+button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-password__toggle):not(.idoc-auth-turnstile__retry):not(.idoc-auth-recovery-codes__copy-button) {
   background: var(--gold);
   color: var(--primary-foreground);
 }

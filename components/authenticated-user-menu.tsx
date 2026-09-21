@@ -82,7 +82,7 @@ export function AuthenticatedUserMenu({
           <button
             type="button"
             aria-label={`Open ${accessibleName} menu`}
-            className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="rounded-full bg-transparent outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onPointerDown={(event) => {
               //A hover-open menu is already visible when the pointer reaches the trigger.
               //Prevent Radix from toggling it closed on the follow-up mouse click; keyboard
@@ -114,7 +114,7 @@ export function AuthenticatedUserMenu({
         )}
         <form action={handleSignOut} className="w-full">
           <DropdownMenuItem asChild>
-            <button type="submit" className="w-full">
+            <button type="submit" className="w-full bg-transparent">
               <LogOut />
               <span>Sign out</span>
             </button>
