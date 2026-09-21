@@ -1,4 +1,2 @@
-[mcp_servers.pixelsmith_e2e_email]
-url = "https://pixelsmith-e2e-tools.vercel.app/mcp"
-bearer_token_env_var = "E2E_SERVICE_TOKEN"
-default_tools_approval_mode = "approve"
+[plugins."pixelsmith-e2e-email@pixelsmith-tools"]
+enabled = true
