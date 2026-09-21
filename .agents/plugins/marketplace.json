@@ -1,0 +1,22 @@
+{
+  "name": "pixelsmith-tools",
+  "interface": {
+    "displayName": "Pixelsmith tools"
+  },
+  "plugins": [
+    {
+      "name": "pixelsmith-e2e-email",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/marceloATpixelsmith/pixelsmith-e2e-tools.git",
+        "path": "./plugins/pixelsmith-e2e-email",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
