@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   listActiveSessions,
   registerSession,
+  sessionVersionIsCurrent,
   userHasPrivilegedRole,
 } from '../lib/auth/session-registry.ts';
 import {
@@ -71,6 +72,45 @@ test('active-session listing uses 7-day idle window for ordinary members and 30 
 
   assert.equal(MEMBER_SESSION_IDLE_SECONDS, 7 * 24 * 60 * 60);
   assert.equal(SESSION_IDLE_SECONDS, 30 * 60);
+});
+
+
+test('live account session-version changes invalidate previously issued lower-assurance sessions', async () => {
+  await resetIdoc();
+  const user = await createUser();
+
+  assert.equal(await sessionVersionIsCurrent(user.id, 0), true);
+
+  await sql`
+    update idoc.users
+    set session_version = session_version + 1
+    where id = ${user.id}
+  `;
+
+  assert.equal(await sessionVersionIsCurrent(user.id, 0), false,
+    'a session issued before a role/security version rotation must immediately lose authority');
+  assert.equal(await sessionVersionIsCurrent(user.id, 1), true);
+});
+
+test('pre-policy 12-hour ordinary-member rows keep the strict 30-minute active-session cutoff', async () => {
+  await resetIdoc();
+  const member = await createUser();
+  const now = new Date();
+  const legacySessionId = randomUUID();
+  const authenticatedAt = new Date(now.getTime() - 60 * 60 * 1000);
+
+  await registerSession({
+    sessionId: legacySessionId,
+    userId: member.id,
+    sessionVersion: 0,
+    authenticatedAt,
+    lastActivityAt: authenticatedAt,
+    absoluteExpiresAt: new Date(authenticatedAt.getTime() + SESSION_ABSOLUTE_SECONDS * 1000),
+  });
+
+  const active = await listActiveSessions(member.id, 0);
+  assert.ok(!active.some((session) => session.sessionId === legacySessionId),
+    'a pre-policy 12-hour row idle for one hour must not be shown as active under the new member policy');
 });
 
 test.after(async () => {
