@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **32 cases** — CI mapped 29, CI gaps 2, not applicable 1.
+Summary: **33 cases** — CI mapped 30, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -38,3 +38,4 @@ Summary: **32 cases** — CI mapped 29, CI gaps 2, not applicable 1.
 | LIVE-AUTH-030 | Live test environment is the intended staged deployment and evidence is revision-bound | gap | required | AUTH-OPERATIONS-011 |
 | LIVE-AUTH-031 | Cleanup and failure preservation are deterministic and auditable | gap | required | AUTH-OPERATIONS-011 |
 | LIVE-AUTH-032 | Invitation auth testing is explicitly not applicable to the current product model | na | N/A | AUTH-INVITE-001, AUTH-INVITE-002, AUTH-INVITE-003 |
+| LIVE-AUTH-033 | Ordinary member sessions use a 7-day idle timeout and 14-day absolute lifetime while privileged sessions retain strict limits | mapped | required | AUTH-SESSION-005, AUTH-SESSION-010 |

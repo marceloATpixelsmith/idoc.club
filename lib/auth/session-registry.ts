@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
-import { SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
+import { MEMBER_SESSION_ABSOLUTE_SECONDS, MEMBER_SESSION_IDLE_SECONDS, SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
 
 export type PersistedSession = {
   sessionId: string;
@@ -25,6 +25,31 @@ type NewPersistedSession = {
   absoluteExpiresAt: Date;
   deviceLabel?: string | null;
 };
+
+export async function userHasPrivilegedRole(userId: number): Promise<boolean> {
+  const rows = await db.execute<{ privileged: boolean }>(sql`
+    select exists(
+      select 1
+      from idoc.application_roles
+      where user_id = ${userId}
+        and revoked_at is null
+        and role in ('administrator', 'super_admin')
+    ) as privileged
+  `);
+  return Boolean(rows[0]?.privileged);
+}
+
+export async function sessionVersionIsCurrent(userId: number, sessionVersion: number): Promise<boolean> {
+  const rows = await db.execute<{ current: boolean }>(sql`
+    select exists(
+      select 1 from idoc.users
+      where id = ${userId}
+        and deleted_at is null
+        and session_version = ${sessionVersion}
+    ) as current
+  `);
+  return Boolean(rows[0]?.current);
+}
 
 export async function registerSession(input: NewPersistedSession) {
   await db.execute(sql`
@@ -154,18 +179,15 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
 }
 
 export async function listActiveSessions(userId: number, currentSessionVersion: number) {
-  // A session's own cookie stops being honored once it's been idle past SESSION_IDLE_SECONDS (see
-  // assertSessionFresh/registeredSessionIsValid) -- well before its absolute_expires_at, which is
-  // fixed at authentication time and stays up to SESSION_ABSOLUTE_SECONDS (12h) in the future
-  // regardless of activity. Filtering only on absolute_expires_at (as this used to) meant every
-  // earlier sign-in from the same real session lingered on this list, looking "active," for up to
-  // 12 hours after it had already gone idle-stale and stopped being usable by anyone -- a real
-  // production report from an account that had signed in and out repeatedly on one browser in a
-  // single day. last_activity_at is only ever advanced by touchSession, called from a request that
-  // actually presented that exact session's still-valid cookie, so this bound reflects genuine
-  // recent use, not merely "not yet past its fixed absolute deadline."
-  const idleCutoff = new Date(Date.now() - SESSION_IDLE_SECONDS * 1000);
-  return db.execute<PersistedSession>(sql`
+  // Active-session visibility uses the same role-specific idle policy as token validation:
+  // privileged Administrator/Super Admin sessions keep the strict 30-minute idle window, while
+  // ordinary member sessions remain active for up to 7 idle days. Role grants/revocations rotate
+  // sessionVersion elsewhere, so a user cannot retain a longer member session after becoming
+  // privileged. Filtering by last_activity_at prevents already-idle sessions from lingering in the
+  // security UI merely because their fixed absolute deadline has not yet arrived.
+  const privileged = await userHasPrivilegedRole(userId);
+  const now = Date.now();
+  const rows = await db.execute<PersistedSession>(sql`
     select
       session_id as "sessionId",
       user_id as "userId",
@@ -181,7 +203,16 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
       and session_version = ${currentSessionVersion}
       and revoked_at is null
       and absolute_expires_at > now()
-      and last_activity_at > ${idleCutoff.toISOString()}
     order by last_activity_at desc
   `);
+
+  return rows.filter((session) => {
+    const authenticatedAtMs = new Date(session.authenticatedAt).getTime();
+    const absoluteExpiresAtMs = new Date(session.absoluteExpiresAt).getTime();
+    const isExplicitMemberLifetime =
+      absoluteExpiresAtMs - authenticatedAtMs === MEMBER_SESSION_ABSOLUTE_SECONDS * 1000;
+    const idleSeconds =
+      !privileged && isExplicitMemberLifetime ? MEMBER_SESSION_IDLE_SECONDS : SESSION_IDLE_SECONDS;
+    return now - new Date(session.lastActivityAt).getTime() < idleSeconds * 1000;
+  });
 }

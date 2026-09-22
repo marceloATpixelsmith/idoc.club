@@ -3,6 +3,8 @@ import test from 'node:test';
 import { SignJWT } from 'jose';
 import {
   DEVELOPMENT_SESSION_COOKIE_NAME,
+  MEMBER_SESSION_ABSOLUTE_SECONDS,
+  MEMBER_SESSION_IDLE_SECONDS,
   PRODUCTION_SESSION_COOKIE_NAME,
   SESSION_ABSOLUTE_SECONDS,
   SESSION_IDLE_SECONDS,
@@ -76,6 +78,45 @@ test('absolute expiration is checked before idle expiration and cannot be bypass
   // lastActivityAt is "now" itself (maximally fresh) — absolute expiry still fails closed.
   const session = freshSession({ lastActivityAt: now.toISOString() }, authenticatedAt);
   assert.throws(() => assertSessionFresh(session, now), /Session absolute lifetime expired/);
+});
+
+
+// --- Ordinary-member lifetime policy ----------------------------------------------------------
+
+test('ordinary member session remains valid until the 7-day idle boundary', () => {
+  const authenticatedAt = new Date('2026-01-01T00:00:00.000Z');
+  const absoluteExpiresAt = new Date(authenticatedAt.getTime() + MEMBER_SESSION_ABSOLUTE_SECONDS * 1000).toISOString();
+  const session = freshSession({ lifetimePolicy: 'member', absoluteExpiresAt }, authenticatedAt);
+  const justInsideIdle = new Date(authenticatedAt.getTime() + (MEMBER_SESSION_IDLE_SECONDS - 1) * 1000);
+  assert.doesNotThrow(() => assertSessionFresh(session, justInsideIdle));
+
+  const atIdleBoundary = new Date(authenticatedAt.getTime() + MEMBER_SESSION_IDLE_SECONDS * 1000);
+  assert.throws(() => assertSessionFresh(session, atIdleBoundary), /Session idle lifetime expired/);
+});
+
+test('ordinary member session remains valid with activity until the 14-day absolute boundary', () => {
+  const authenticatedAt = new Date('2026-01-01T00:00:00.000Z');
+  const absoluteExpiresAt = new Date(authenticatedAt.getTime() + MEMBER_SESSION_ABSOLUTE_SECONDS * 1000).toISOString();
+  const justInsideAbsolute = new Date(authenticatedAt.getTime() + (MEMBER_SESSION_ABSOLUTE_SECONDS - 1) * 1000);
+  const session = freshSession({
+    lifetimePolicy: 'member',
+    absoluteExpiresAt,
+    lastActivityAt: justInsideAbsolute.toISOString(),
+  }, authenticatedAt);
+  assert.doesNotThrow(() => assertSessionFresh(session, justInsideAbsolute));
+
+  const atAbsoluteBoundary = new Date(authenticatedAt.getTime() + MEMBER_SESSION_ABSOLUTE_SECONDS * 1000);
+  assert.throws(() => assertSessionFresh(session, atAbsoluteBoundary), /Session absolute lifetime expired/);
+});
+
+test('ordinary member token round-trips with its explicit lifetime policy', async () => {
+  const authenticatedAt = new Date();
+  const session = freshSession({
+    lifetimePolicy: 'member',
+    absoluteExpiresAt: new Date(authenticatedAt.getTime() + MEMBER_SESSION_ABSOLUTE_SECONDS * 1000).toISOString(),
+  }, authenticatedAt);
+  const token = await signToken(session);
+  assert.deepEqual(await verifyToken(token), session);
 });
 
 // --- Idle activity refresh never slides the absolute deadline ---------------------------------
