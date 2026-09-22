@@ -24,7 +24,7 @@ function makeCatalog() {
     if (c.live.cleanup.length) s += "### Cleanup\n" + c.live.cleanup.map((x) => "- " + x).join("\n") + "\n\n";
     if (c.live.evidence.length) s += "### Evidence\n" + c.live.evidence.map((x) => "- " + x).join("\n") + "\n\n";
   }
-  return s;
+  return s.trimEnd() + "\n";
 }
 
 function makeCoverage() {
