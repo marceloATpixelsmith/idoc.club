@@ -92,7 +92,10 @@ function normalizeSessionPayload(payload: Record<string, unknown>): SessionData 
     typeof payload.sessionId !== 'string' ||
     typeof payload.authenticatedAt !== 'string' ||
     typeof payload.lastActivityAt !== 'string' ||
-    typeof payload.absoluteExpiresAt !== 'string'
+    typeof payload.absoluteExpiresAt !== 'string' ||
+    (payload.lifetimePolicy !== undefined &&
+      payload.lifetimePolicy !== 'privileged' &&
+      payload.lifetimePolicy !== 'member')
   ) {
     throw new Error('Unsupported session payload.');
   }
@@ -104,7 +107,9 @@ function normalizeSessionPayload(payload: Record<string, unknown>): SessionData 
     authenticatedAt: payload.authenticatedAt,
     lastActivityAt: payload.lastActivityAt,
     absoluteExpiresAt: payload.absoluteExpiresAt,
-    lifetimePolicy: payload.lifetimePolicy === 'member' ? 'member' : 'privileged',
+    ...(payload.lifetimePolicy === 'member' || payload.lifetimePolicy === 'privileged'
+      ? { lifetimePolicy: payload.lifetimePolicy }
+      : {}),
   };
 }
 
