@@ -8,12 +8,14 @@ const middleware = readFileSync('middleware.ts', 'utf8');
 const queries = readFileSync('lib/db/queries.ts', 'utf8');
 const actions = readFileSync('app/(login)/actions.ts', 'utf8');
 
-test('session lifetime matches the canonical 30-minute idle and 12-hour absolute bounds', () => {
-  assert.match(tokens, /SESSION_IDLE_SECONDS = 30 \* 60/);
-  assert.match(tokens, /SESSION_ABSOLUTE_SECONDS = 12 \* 60 \* 60/);
+test('session lifetime keeps privileged bounds strict while ordinary members use 7-day idle and 14-day absolute bounds', () => {
+  assert.match(tokens, /SESSION_IDLE_SECONDS = 30 \\* 60/);
+  assert.match(tokens, /SESSION_ABSOLUTE_SECONDS = 12 \\* 60 \\* 60/);
+  assert.match(tokens, /MEMBER_SESSION_IDLE_SECONDS = 7 \\* 24 \\* 60 \\* 60/);
+  assert.match(tokens, /MEMBER_SESSION_ABSOLUTE_SECONDS = 14 \\* 24 \\* 60 \\* 60/);
   assert.match(tokens, /Session idle lifetime expired/);
   assert.match(tokens, /Session absolute lifetime expired/);
-  assert.match(tokens, /absoluteExpiresAtMs !== authenticatedAtMs \+ SESSION_ABSOLUTE_SECONDS \* 1000/);
+  assert.match(tokens, /const lifetime = sessionLifetimeSeconds\(session\.lifetimePolicy\)/);
 });
 
 test('production session cookie uses host-only canonical security attributes', () => {
