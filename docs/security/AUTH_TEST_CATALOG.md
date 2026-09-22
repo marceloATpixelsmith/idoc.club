@@ -931,4 +931,3 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - If an invitation feature is introduced, update this catalog in the same change before release.
-
