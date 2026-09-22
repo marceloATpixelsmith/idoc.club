@@ -61,6 +61,11 @@ Both scripts refuse to run without `--confirm-staging` and refuse any email outs
 `@pixelsmith.space`; see `lib/db/staging-database-url.ts`. Never point `STAGING_POSTGRES_URL` at a
 real member's database or run this against a non-disposable account.
 
+This tooling is operator-only test infrastructure: it changes no product-facing auth behavior, adds
+no endpoint or user-reachable flow, and alters no LIVE-AUTH case's pass/fail criteria -- it only
+provisions and tears down the disposable privileged identity the already-canonical `requiresAdmin`
+cases above call for. No new canonical test case is warranted for it.
+
 ## Evidence rules
 
 For failures record the LIVE-AUTH ID, exact target hostname, role/account state, reproduction steps, expected result, actual result, relevant HTTP status/request path, screenshot/trace/log reference where useful, and retained disposable state.
