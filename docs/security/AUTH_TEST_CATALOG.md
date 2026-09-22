@@ -931,3 +931,35 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - If an invitation feature is introduced, update this catalog in the same change before release.
+
+## LIVE-AUTH-033 — Ordinary member sessions use a 7-day idle timeout and 14-day absolute lifetime while privileged sessions retain strict limits
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-SESSION-005, AUTH-SESSION-010
+- **CI coverage:** mapped — `tests/session-token-boundaries.test.ts`, `tests/session-lifetime-policy.integration.ts`, `tests/canonical-session-lifecycle.test.ts`
+- **Live:** required; email=no; admin=yes; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use disposable ordinary-member and Administrator/Super Admin test identities.
+
+### Steps
+1. Authenticate as an ordinary member and verify the issued session remains valid beyond the former 30-minute idle and 12-hour absolute windows, using controlled test-time/session evidence rather than waiting in real time.
+2. Verify the ordinary-member policy is 7 days idle and 14 days absolute, with activity refreshing only the idle timestamp and never the absolute deadline.
+3. Authenticate as an Administrator or Super Admin and verify the privileged session still uses the existing 30-minute idle and 12-hour absolute policy.
+4. Verify the Active sessions UI/listing applies the same role-specific idle policy and does not hide a still-valid ordinary-member session or retain an idle-expired privileged session.
+
+### PASS
+- Ordinary-member sessions use a 7-day idle limit and fixed 14-day absolute limit; privileged sessions remain 30-minute idle and fixed 12-hour absolute.
+- Role-specific active-session listing matches token validity and activity never extends the absolute deadline.
+
+### FAIL
+- An ordinary member is still forced out by the old 30-minute/12-hour policy, a privileged account receives the longer member lifetime, or active-session listing disagrees with actual token validity.
+
+### Cleanup
+- Sign out disposable sessions and remove any temporary privileged role/test state after evidence is captured.
+
+### Evidence
+- Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values.
+
