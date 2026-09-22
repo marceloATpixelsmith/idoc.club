@@ -21,6 +21,13 @@ on:
       - 'tests/security-e2e/**'
       - 'tests/*auth*'
       - 'tests/*security*'
+      - 'tests/auth/**'
+      - 'docs/security/**'
+      - 'scripts/validate-auth-test-matrix.mjs'
+      - 'scripts/generate-auth-test-docs.mjs'
+      - 'scripts/validate-auth-change-coverage.mjs'
+      - 'scripts/write-auth-ci-results.mjs'
+      - 'scripts/merge-auth-test-results.mjs'
       - 'app/(dashboard)/onboarding/**'
       - 'app/(dashboard)/account/**'
       - 'app/(dashboard)/admin/members/**'
@@ -53,12 +60,20 @@ jobs:
       PGOPTIONS: -c client_min_messages=warning
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with: { version: 10.28.1 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: node scripts/validate-auth-docs.mjs
+      - run: pnpm validate:auth-test-catalog
+      - name: Enforce auth test catalog coverage for sensitive changes
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/validate-auth-change-coverage.mjs
       - run: node scripts/validate-release-checklist.mjs
       - run: node scripts/check-whitespace.mjs
       - run: pnpm audit --audit-level=high
@@ -77,6 +92,14 @@ jobs:
           sudo apt-get clean
           pnpm exec playwright install --with-deps chromium
       - run: pnpm test:security
+      - name: Write synchronized auth CI results
+        run: pnpm write:auth-ci-results
+      - name: Upload auth CI results
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-ci-results
+          path: test-results/auth/auth-ci-results.json
+          retention-days: 30
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
