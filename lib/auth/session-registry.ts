@@ -167,16 +167,12 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
 }
 
 export async function listActiveSessions(userId: number, currentSessionVersion: number) {
-  // A session's own cookie stops being honored once it's been idle past SESSION_IDLE_SECONDS (see
-  // assertSessionFresh/registeredSessionIsValid) -- well before its absolute_expires_at, which is
-  // fixed at authentication time and stays up to SESSION_ABSOLUTE_SECONDS (12h) in the future
-  // regardless of activity. Filtering only on absolute_expires_at (as this used to) meant every
-  // earlier sign-in from the same real session lingered on this list, looking "active," for up to
-  // 12 hours after it had already gone idle-stale and stopped being usable by anyone -- a real
-  // production report from an account that had signed in and out repeatedly on one browser in a
-  // single day. last_activity_at is only ever advanced by touchSession, called from a request that
-  // actually presented that exact session's still-valid cookie, so this bound reflects genuine
-  // recent use, not merely "not yet past its fixed absolute deadline."
+  // Active-session visibility uses the same role-specific idle policy as token validation:
+  // privileged Administrator/Super Admin sessions keep the strict 30-minute idle window, while
+  // ordinary member sessions remain active for up to 7 idle days. Role grants/revocations rotate
+  // sessionVersion elsewhere, so a user cannot retain a longer member session after becoming
+  // privileged. Filtering by last_activity_at prevents already-idle sessions from lingering in the
+  // security UI merely because their fixed absolute deadline has not yet arrived.
   const privileged = await userHasPrivilegedRole(userId);
   const idleSeconds = privileged ? SESSION_IDLE_SECONDS : MEMBER_SESSION_IDLE_SECONDS;
   const idleCutoff = new Date(Date.now() - idleSeconds * 1000);
