@@ -13,6 +13,8 @@ import 'server-only';
 
 export const SESSION_IDLE_SECONDS = 30 * 60;
 export const SESSION_ABSOLUTE_SECONDS = 12 * 60 * 60;
+export const MEMBER_SESSION_IDLE_SECONDS = 7 * 24 * 60 * 60;
+export const MEMBER_SESSION_ABSOLUTE_SECONDS = 14 * 24 * 60 * 60;
 export const PRODUCTION_SESSION_COOKIE_NAME = '__Host-idoc-session';
 export const DEVELOPMENT_SESSION_COOKIE_NAME = 'idoc-session';
 export const LEGACY_SESSION_COOKIE_NAME = 'session';
@@ -23,8 +25,11 @@ export const LEGACY_SESSION_COOKIE_NAME = 'session';
 const signingKey = () => new TextEncoder().encode(authSecretRingForServer()[0]);
 const verificationKeys = () => authSecretRingForServer().map((key) => new TextEncoder().encode(key));
 
+export type SessionLifetimePolicy = 'privileged' | 'member';
+
 export type SessionData = {
   version: 2;
+  lifetimePolicy?: SessionLifetimePolicy;
   sessionId: string;
   user: { id: number; sessionVersion: number };
   authenticatedAt: string;
@@ -99,7 +104,14 @@ function normalizeSessionPayload(payload: Record<string, unknown>): SessionData 
     authenticatedAt: payload.authenticatedAt,
     lastActivityAt: payload.lastActivityAt,
     absoluteExpiresAt: payload.absoluteExpiresAt,
+    lifetimePolicy: payload.lifetimePolicy === 'member' ? 'member' : 'privileged',
   };
+}
+
+export function sessionLifetimeSeconds(policy: SessionLifetimePolicy = 'privileged') {
+  return policy === 'member'
+    ? { idle: MEMBER_SESSION_IDLE_SECONDS, absolute: MEMBER_SESSION_ABSOLUTE_SECONDS }
+    : { idle: SESSION_IDLE_SECONDS, absolute: SESSION_ABSOLUTE_SECONDS };
 }
 
 export function assertSessionFresh(session: SessionData, now = new Date()) {
@@ -111,11 +123,12 @@ export function assertSessionFresh(session: SessionData, now = new Date()) {
   if (![authenticatedAtMs, lastActivityAtMs, absoluteExpiresAtMs].every(Number.isFinite)) {
     throw new Error('Invalid session timestamps.');
   }
-  if (absoluteExpiresAtMs !== authenticatedAtMs + SESSION_ABSOLUTE_SECONDS * 1000) {
+  const lifetime = sessionLifetimeSeconds(session.lifetimePolicy);
+  if (absoluteExpiresAtMs !== authenticatedAtMs + lifetime.absolute * 1000) {
     throw new Error('Invalid absolute session lifetime.');
   }
   if (nowMs >= absoluteExpiresAtMs) throw new Error('Session absolute lifetime expired.');
-  if (nowMs - lastActivityAtMs >= SESSION_IDLE_SECONDS * 1000) throw new Error('Session idle lifetime expired.');
+  if (nowMs - lastActivityAtMs >= lifetime.idle * 1000) throw new Error('Session idle lifetime expired.');
   if (lastActivityAtMs < authenticatedAtMs || lastActivityAtMs > nowMs + 60_000) {
     throw new Error('Invalid session activity timestamp.');
   }
