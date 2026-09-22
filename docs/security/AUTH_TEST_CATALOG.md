@@ -962,4 +962,3 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values.
-
