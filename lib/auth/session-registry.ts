@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
-import { SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
+import { MEMBER_SESSION_IDLE_SECONDS, SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
 
 export type PersistedSession = {
   sessionId: string;
@@ -25,6 +25,19 @@ type NewPersistedSession = {
   absoluteExpiresAt: Date;
   deviceLabel?: string | null;
 };
+
+export async function userHasPrivilegedRole(userId: number): Promise<boolean> {
+  const rows = await db.execute<{ privileged: boolean }>(sql`
+    select exists(
+      select 1
+      from idoc.application_roles
+      where user_id = ${userId}
+        and revoked_at is null
+        and role in ('administrator', 'super_admin')
+    ) as privileged
+  `);
+  return Boolean(rows[0]?.privileged);
+}
 
 export async function registerSession(input: NewPersistedSession) {
   await db.execute(sql`
@@ -164,7 +177,9 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
   // single day. last_activity_at is only ever advanced by touchSession, called from a request that
   // actually presented that exact session's still-valid cookie, so this bound reflects genuine
   // recent use, not merely "not yet past its fixed absolute deadline."
-  const idleCutoff = new Date(Date.now() - SESSION_IDLE_SECONDS * 1000);
+  const privileged = await userHasPrivilegedRole(userId);
+  const idleSeconds = privileged ? SESSION_IDLE_SECONDS : MEMBER_SESSION_IDLE_SECONDS;
+  const idleCutoff = new Date(Date.now() - idleSeconds * 1000);
   return db.execute<PersistedSession>(sql`
     select
       session_id as "sessionId",
