@@ -1,0 +1,1688 @@
+{
+  "schemaVersion": 1,
+  "authority": "This file is the single source of truth for authentication/security test requirements shared by CI and live staging testing.",
+  "maintenanceRules": [
+    "Change a requirement here first; CI mappings and live pass/fail criteria must not be edited independently.",
+    "Any auth/security defect must map to an existing case or add a new LIVE-AUTH case, with CI regression coverage where technically possible and live coverage where deployment/provider behavior matters.",
+    "A live case with CI coverage=gap must state why repository CI cannot or does not yet cover it.",
+    "Invitation controls remain explicitly not-applicable until a real invitation feature is introduced."
+  ],
+  "cases": [
+    {
+      "id": "LIVE-AUTH-001",
+      "title": "Email/password signup succeeds and establishes the correct initial account state",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-IDENTITY-003",
+        "AUTH-EMAIL-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/email-identity-normalization.integration.ts",
+          "tests/auth-email-resend-safety.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Create a fresh Pixelsmith E2E mailbox.",
+          "Complete signup with valid required fields and a valid password.",
+          "Complete any real email verification/OTP step delivered to the mailbox.",
+          "Observe the post-signup destination and persisted account state."
+        ],
+        "pass": [
+          "Exactly one account is created for the normalized email identity.",
+          "The verification/OTP is accepted only once and the user lands in the expected onboarding/account state."
+        ],
+        "fail": [
+          "Signup creates duplicate identities, skips required verification, leaks sensitive data, or lands in an unauthorized state."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-002",
+      "title": "Signup rejects duplicate/invalid identities without account enumeration",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-IDENTITY-003",
+        "AUTH-ERROR-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/email-identity-normalization.integration.ts",
+          "tests/auth-error-classes.integration.ts",
+          "tests/rate-limit-normalization.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Attempt signup with invalid email syntax, whitespace/case variants of an existing email, and the exact existing email.",
+          "Compare UI and network responses for existing versus non-existing identities."
+        ],
+        "pass": [
+          "Invalid input is rejected; case/whitespace variants do not create a second identity; responses do not materially reveal whether an account already exists."
+        ],
+        "fail": [
+          "A duplicate account is created or response details enumerate account existence."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-003",
+      "title": "Password login accepts valid credentials and rejects invalid/unknown credentials safely",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-STORAGE-004",
+        "AUTH-ERROR-001",
+        "AUTH-RATE-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/password-hash.test.ts",
+          "tests/auth-error-classes.integration.ts",
+          "tests/rate-limit-normalization.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Login with valid credentials.",
+          "Try a wrong password for the same account.",
+          "Try an unknown email.",
+          "Repeat failed attempts enough to exercise throttling without high-volume load."
+        ],
+        "pass": [
+          "Valid login succeeds; invalid/unknown credentials fail with non-enumerating messaging; throttling eventually applies and legitimate access recovers according to policy."
+        ],
+        "fail": [
+          "Invalid credentials authenticate, account existence is disclosed, or rate limiting is bypassed by trivial normalization changes."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-004",
+      "title": "Google OAuth live flow preserves transaction binding and account-linking rules",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-OAUTH-002",
+        "AUTH-TRANSACTION-010",
+        "AUTH-IDENTITY-005"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/google-oauth.spec.ts",
+          "tests/identity-ownership.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Complete a real Google sign-in against staging.",
+          "Cancel/deny consent and verify return behavior.",
+          "Replay or alter callback/state parameters only within the disposable test flow.",
+          "Verify an existing password account is not silently linked to the wrong Google identity."
+        ],
+        "pass": [
+          "Successful OAuth creates/reuses only the intended identity; cancelled flow returns safely; tampered/replayed callbacks fail; no unintended account linking occurs."
+        ],
+        "fail": [
+          "State/callback replay succeeds, cancellation lands incorrectly, or Google identity becomes attached to the wrong account."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-005",
+      "title": "Logout and session invalidation prevent post-logout reuse",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-SESSION-002",
+        "AUTH-SESSION-009",
+        "AUTH-SESSION-010"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/sessions.spec.ts",
+          "tests/security-e2e/session-replay.spec.ts",
+          "tests/canonical-session-lifecycle.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Authenticate normally.",
+          "Open protected content in two tabs.",
+          "Logout in one tab.",
+          "Use browser back and direct protected URLs/API requests from the other tab."
+        ],
+        "pass": [
+          "The logged-out session is rejected by protected pages and APIs; cached/back navigation does not restore authorized data; logout state is consistent across tabs after revalidation."
+        ],
+        "fail": [
+          "A revoked/logged-out session can still access protected data or mutate state."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-006",
+      "title": "Anonymous and incomplete-auth sessions cannot access protected pages or APIs",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-FRAMEWORK-001",
+        "AUTH-API-004"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/auth-boundaries.spec.ts",
+          "tests/security-e2e/api-authorization-disclosure.spec.ts",
+          "tests/authorization-matrix.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Without authentication, request representative member, admin, and security pages directly.",
+          "Call representative protected APIs directly.",
+          "Repeat using a pending/incomplete authentication state where available."
+        ],
+        "pass": [
+          "UI routes redirect/deny appropriately and APIs independently return 401/403 without protected data."
+        ],
+        "fail": [
+          "Any protected resource is returned because a UI-only or middleware-only boundary was bypassed."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-007",
+      "title": "Unpaid/expired member access is restricted to the intended payment/membership flow",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/auth-boundaries.spec.ts",
+          "tests/security-e2e/dashboard-membership-tabs.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Authenticate as an unpaid/expired disposable member.",
+          "Confirm the first authenticated screen is the intended payment/membership state.",
+          "Directly request ordinary member dashboard routes and APIs.",
+          "After test payment/state transition, verify access updates."
+        ],
+        "pass": [
+          "Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly."
+        ],
+        "fail": [
+          "Protected member content is accessible before entitlement or the user is trapped behind an unnecessary/incorrect intermediate state."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-008",
+      "title": "Onboarding cannot be skipped or corrupted by direct navigation/query manipulation",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-TRANSACTION-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/auth-boundaries.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Create an onboarding-state account.",
+          "Try deep links to later dashboard/onboarding steps.",
+          "Test valid and invalid membership preselection query values.",
+          "Refresh/back during onboarding."
+        ],
+        "pass": [
+          "Required earlier state cannot be skipped; invalid query values are rejected/ignored safely; refresh/back preserves a coherent state."
+        ],
+        "fail": [
+          "Direct navigation grants access/state that should require a prior onboarding step."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-009",
+      "title": "Required TOTP enrollment cannot be bypassed and produces a usable factor",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-MFA-001",
+        "AUTH-MFA-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/production-mfa-finalization.integration.ts",
+          "tests/security-e2e/mfa-production-boundaries.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Use a disposable privileged identity that requires MFA enrollment.",
+          "Attempt protected navigation before enrollment completes.",
+          "Complete enrollment with the authenticator secret/QR provided by the application.",
+          "Verify the new TOTP factor on the next challenge."
+        ],
+        "pass": [
+          "Enrollment is mandatory for the applicable role; protected access remains blocked until completion; the enrolled factor works and no raw secret leaks after enrollment."
+        ],
+        "fail": [
+          "Enrollment is skippable or protected access is granted before factor activation."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-010",
+      "title": "Pending-MFA login state is isolated from fully authenticated authority",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-MFA-002",
+        "AUTH-MFA-006"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/canonical-mfa-runtime.test.ts",
+          "tests/security-e2e/mfa-production-boundaries.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Complete primary authentication for an MFA-required account but stop at the TOTP challenge.",
+          "Request protected dashboard/admin URLs and APIs directly.",
+          "Submit malformed, wrong, old, and then valid TOTP codes."
+        ],
+        "pass": [
+          "Before valid MFA, protected pages/APIs are denied and no full session is issued; invalid codes are inert; valid code upgrades to the intended authenticated state exactly once."
+        ],
+        "fail": [
+          "Pending MFA authority can access protected resources or an invalid/replayed code completes authentication."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-011",
+      "title": "Recovery codes are single-use, bound to the intended account, and regeneration invalidates old codes",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-MFA-006",
+        "AUTH-STORAGE-006"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/auth-recovery-adversarial.integration.ts",
+          "tests/mfa-store.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Use one recovery code on a disposable MFA account.",
+          "Attempt to reuse the same code.",
+          "Regenerate recovery codes after fresh step-up.",
+          "Attempt an old pre-regeneration code."
+        ],
+        "pass": [
+          "A recovery code succeeds once only; reuse fails; regeneration requires fresh authority and invalidates the prior set."
+        ],
+        "fail": [
+          "Any used/old code can be replayed or regeneration occurs without required step-up."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-012",
+      "title": "Remembered-device trust is scoped and does not bypass fresh step-up",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-REMEMBER-001",
+        "AUTH-REMEMBER-002",
+        "AUTH-REMEMBER-003",
+        "AUTH-REMEMBER-004"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/canonical-mfa-runtime.test.ts",
+          "tests/production-mfa-finalization.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Opt into trusted-device behavior on one browser.",
+          "Start a new session in that browser and in a separate browser/context.",
+          "Attempt a sensitive action requiring fresh step-up from the trusted browser.",
+          "Clear trust cookies and retry login."
+        ],
+        "pass": [
+          "Only the intended browser is remembered; clearing cookies removes local trust; remembered login never substitutes for fresh step-up on sensitive actions."
+        ],
+        "fail": [
+          "Trust spreads to another browser/account or suppresses required sensitive-action step-up."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-013",
+      "title": "Fresh MFA step-up automatically resumes the original programmed action exactly once",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-MFA-006",
+        "AUTH-TRANSACTION-003",
+        "AUTH-TRANSACTION-004"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/fresh-mfa-step-up.test.ts",
+          "tests/security-e2e/mfa-production-boundaries.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "For each sensitive action in the documented matrix, initiate the action without recent step-up.",
+          "Submit a wrong TOTP and verify no mutation.",
+          "Submit a valid TOTP once.",
+          "Do not click the original action a second time; inspect the resulting state/network activity.",
+          "Replay refresh/back/callback state after completion."
+        ],
+        "pass": [
+          "Wrong code is inert; valid TOTP causes the programmed original action to resume automatically exactly once; no second user click is needed; replay does not repeat the mutation."
+        ],
+        "fail": [
+          "Mutation happens before valid step-up, requires a second original click, executes twice, or can be replayed."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-014",
+      "title": "Password change enforces current authority and invalidates the old credential as designed",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-PASSWORD-005",
+        "AUTH-LIFECYCLE-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/account-security-management.test.ts",
+          "tests/password-security-hardening.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Attempt password change with incorrect current password/step-up state.",
+          "Complete a valid password change.",
+          "Logout and try both old and new passwords.",
+          "Check other active sessions against documented policy."
+        ],
+        "pass": [
+          "Unauthorized change is rejected; valid change succeeds; old password stops authenticating; new password works; session invalidation matches documented policy."
+        ],
+        "fail": [
+          "Password changes without required authority or the old password remains valid unexpectedly."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-015",
+      "title": "Password reset tokens are non-enumerating, single-use, expiring, and actually replace the credential",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-TRANSACTION-003",
+        "AUTH-STORAGE-005"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/password-reset-adversarial.integration.ts",
+          "tests/account-token-lifecycles.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Request a reset for a disposable account and for an unknown address.",
+          "Use the real email reset link once.",
+          "Attempt reuse and a modified token.",
+          "Request a second reset and check supersession behavior.",
+          "Verify old/new passwords after successful reset."
+        ],
+        "pass": [
+          "Request responses do not enumerate accounts; valid token works once; modified/reused/expired/superseded tokens fail; credential changes as expected."
+        ],
+        "fail": [
+          "Reset token can be replayed/modified, account existence leaks, or old credential remains usable contrary to policy."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-016",
+      "title": "Email change preserves identity uniqueness and requires the intended verification/step-up",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-IDENTITY-003",
+        "AUTH-IDENTITY-005"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/email-change.integration.ts",
+          "tests/email-identity-normalization.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Change a disposable account to a new E2E mailbox.",
+          "Attempt a duplicate existing address and case/whitespace equivalent.",
+          "Complete any real verification step.",
+          "Test login/identity behavior at old and new addresses."
+        ],
+        "pass": [
+          "Change requires intended authority/verification; duplicate normalized identities are rejected; resulting login identity is unambiguous."
+        ],
+        "fail": [
+          "Email can be changed to an existing normalized identity or without required verification/step-up."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-017",
+      "title": "Role boundaries and object ownership resist direct URL/API ID tampering",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-AUTHZ-005",
+        "AUTH-API-004"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/authorization-boundary-inventory.test.ts",
+          "tests/authorization-matrix.integration.ts",
+          "tests/authorization-privilege-boundaries.integration.ts",
+          "tests/security-e2e/api-authorization-disclosure.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "As a normal member, directly request admin routes/APIs.",
+          "As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.",
+          "Attempt self-elevation or role mutation outside permitted scope."
+        ],
+        "pass": [
+          "Every server-side boundary rejects unauthorized role/object access with 401/403 or equivalent safe denial; no protected data or mutation occurs."
+        ],
+        "fail": [
+          "Hidden UI is the only boundary, object ID substitution works, or a user can elevate privileges."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-018",
+      "title": "CSRF defenses reject forged state-changing requests without damaging the valid session",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-CSRF-003"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/csrf.spec.ts",
+          "tests/pending-flow-csrf-nonce.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Capture a legitimate state-changing request from a disposable account.",
+          "Replay it with missing/tampered CSRF material and with a forged Origin where applicable.",
+          "Then perform the legitimate action normally."
+        ],
+        "pass": [
+          "Forged requests are rejected before mutation; legitimate session remains valid; correct same-origin request succeeds."
+        ],
+        "fail": [
+          "Mutation succeeds with missing/tampered CSRF protections or the failed attack corrupts the legitimate session."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-019",
+      "title": "Session fixation, token tampering, stale-session replay, and revoked-session reuse fail closed",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-SESSION-002",
+        "AUTH-SESSION-009",
+        "AUTH-SESSION-010"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/session-registry-adversarial.integration.ts",
+          "tests/security-e2e/session-replay.spec.ts",
+          "tests/session-token-boundaries.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Capture pre-login and post-login session state.",
+          "Verify session rotation/authority transition.",
+          "Attempt safe replay of stale/revoked/tampered session material only on disposable accounts."
+        ],
+        "pass": [
+          "Authentication does not preserve attacker-controlled pre-auth authority; stale/revoked/tampered sessions are rejected by protected resources."
+        ],
+        "fail": [
+          "A stale, revoked, or tampered session grants authenticated authority."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-020",
+      "title": "Rate limits resist trivial identity/origin normalization bypass and recover according to policy",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-RATE-001",
+        "AUTH-RATE-004"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/rate-limit-normalization.integration.ts",
+          "tests/rate-limit-correlation.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Exercise failed login/reset/MFA attempts at a bounded rate on disposable identities.",
+          "Repeat using safe case/whitespace variants and controlled client contexts.",
+          "After the documented window/recovery mechanism, verify legitimate behavior resumes."
+        ],
+        "pass": [
+          "Limits activate without high-volume load, normalization variants do not trivially bypass them, and legitimate access recovers as designed."
+        ],
+        "fail": [
+          "Simple normalization changes reset protection or rate-limit failure exposes internal errors."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-021",
+      "title": "Turnstile/bot controls fail closed when required and cannot be bypassed by direct API calls",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-BOT-001",
+        "AUTH-BOT-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/turnstile-contract.test.ts",
+          "tests/turnstile-retry-restore.test.ts",
+          "tests/turnstile-widget-resilience.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Run the normal human flow.",
+          "Where safely possible, submit without/with invalid Turnstile proof or invoke the protected API directly.",
+          "Verify the UI recovers from a failed challenge without losing unrelated form state."
+        ],
+        "pass": [
+          "Required bot proof is enforced server-side; invalid/missing proof fails closed; normal challenge succeeds; retry UX remains usable."
+        ],
+        "fail": [
+          "API bypass skips required bot validation or provider/challenge failure silently allows the protected action."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-022",
+      "title": "Redirect and callback parameters cannot escape approved application destinations",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-TRANSACTION-010",
+        "AUTH-OAUTH-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/google-oauth.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Manipulate safe return/callback parameters with external, protocol-relative, encoded, and malformed destinations.",
+          "Complete/cancel auth flows using those values."
+        ],
+        "pass": [
+          "External/unapproved destinations are rejected or normalized to safe internal locations; auth transaction binding remains intact."
+        ],
+        "fail": [
+          "Authentication can redirect to an attacker-controlled external destination or callback manipulation changes account binding."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-023",
+      "title": "Server-side validation rejects request/input tampering independent of the UI",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-API-004",
+        "AUTH-AUTHZ-005"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/auth-authority-boundaries.integration.ts",
+          "tests/authorization-privilege-boundaries.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Using captured disposable-account requests, alter IDs, role values, membership type, extra fields, missing fields, wrong types, and bounded oversized/Unicode inputs.",
+          "Submit directly to the real staging endpoints."
+        ],
+        "pass": [
+          "Server validates authoritative values and rejects malformed/out-of-scope input without mutation or sensitive error disclosure."
+        ],
+        "fail": [
+          "Client-side-only validation can be bypassed to alter authority/state."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-024",
+      "title": "One-time auth operations resist replay and bounded concurrency races",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-TRANSACTION-003",
+        "AUTH-TRANSACTION-004",
+        "AUTH-MFA-006"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/mfa-store.integration.ts",
+          "tests/session-registry-adversarial.integration.ts",
+          "tests/mfa-replay-notifications.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Using disposable tokens/codes, issue two near-simultaneous submissions for a recovery code, reset token, invitation-like one-time token if applicable, or step-up continuation.",
+          "Observe persisted state and responses."
+        ],
+        "pass": [
+          "Exactly one operation wins when semantics are single-use; losing replay/race attempt is rejected; no duplicate mutation occurs."
+        ],
+        "fail": [
+          "Both concurrent/replayed operations succeed or state becomes inconsistent."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-025",
+      "title": "Cookies, HTTPS, caching, CSP/frame protections, and security headers match production expectations",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-SESSION-001",
+        "AUTH-TRANSPORT-001",
+        "AUTH-FRAMEWORK-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/security-e2e/cookies-and-headers.spec.ts",
+          "tests/content-security-policy.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Inspect staging responses and authenticated cookies in the browser/network panel.",
+          "Verify HTTPS redirect/enforcement, Secure/HttpOnly/SameSite attributes, CSP/frame policy, and sensitive-page cache behavior."
+        ],
+        "pass": [
+          "Security headers/cookie attributes match production policy; no mixed content or unsafe caching of authenticated content is observed."
+        ],
+        "fail": [
+          "Sensitive cookies lack required flags, HTTPS is bypassable, or protected responses are cacheable/embedable contrary to policy."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-026",
+      "title": "Security/audit evidence is recorded without secret/token leakage",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-AUDIT-002",
+        "AUTH-LOG-001",
+        "AUTH-LOG-003"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/auth-security-events.integration.ts",
+          "tests/security-event-log-attribution.integration.ts",
+          "tests/security-event-taxonomy.integration.ts",
+          "tests/audit-evidence.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Perform representative login failure, MFA/recovery, password/email change, role/security actions on disposable accounts.",
+          "Inspect the authorized audit/security activity view or logs available to the tester."
+        ],
+        "pass": [
+          "Expected security events are attributable and useful; passwords, TOTP secrets, recovery codes, session cookies, reset tokens, and mailbox credentials are absent."
+        ],
+        "fail": [
+          "Critical actions leave no expected evidence or secrets/tokens appear in logs/UI/network metadata."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-027",
+      "title": "Authentication dependencies and internal failures fail closed with safe user-facing errors",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-ERROR-001",
+        "AUTH-DEPENDENCY-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/auth-error-classes.integration.ts",
+          "tests/dependency-risk-register.test.ts",
+          "tests/google-oauth-failure-alerting.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Trigger only safe, bounded failure cases available in staging, such as invalid provider callback/state, malformed token, or intentionally unsupported input.",
+          "Observe UI, HTTP response, and retained auth state."
+        ],
+        "pass": [
+          "No protected action succeeds because of dependency/internal failure; user receives a safe actionable/generic message; no stack trace/SQL/provider secret leaks."
+        ],
+        "fail": [
+          "Failure becomes an authentication bypass, crashes the flow into inconsistent authority, or exposes sensitive internals."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-028",
+      "title": "Authorized adversarial sweep finds no bypass across auth, MFA, authorization, replay, CSRF, or identity binding",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-MFA-006",
+        "AUTH-CSRF-003",
+        "AUTH-SESSION-010"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/authorization-privilege-boundaries.integration.ts",
+          "tests/security-e2e/auth-boundaries.spec.ts",
+          "tests/security-e2e/mfa-production-boundaries.spec.ts",
+          "tests/security-e2e/csrf.spec.ts",
+          "tests/security-e2e/session-replay.spec.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "After the normal cases, deliberately replay/modify requests for authentication bypass, MFA/step-up bypass, privilege escalation, IDOR/BOLA, stale-session reuse, CSRF gaps, token/code replay, OAuth/account-link confusion, open redirect, enumeration, and client-side-only authorization.",
+          "Stay within disposable accounts, the designated staging hostname, and bounded request rates."
+        ],
+        "pass": [
+          "No adversarial attempt obtains unauthorized data, authority, or mutation; any finding is reproducible and recorded by the relevant specific LIVE-AUTH case."
+        ],
+        "fail": [
+          "Any unauthorized read/write/authority is achieved or a protection can be bypassed."
+        ],
+        "cleanup": [
+          "Do not perform denial-of-service, high-volume load, destructive actions on non-test data, third-party attacks, or testing outside the designated staging hostname."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-029",
+      "title": "Real transactional email dependency works end to end on staging",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-EMAIL-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/auth-email-resend-safety.integration.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Use the Pixelsmith E2E Email connector to create a mailbox.",
+          "Exercise signup/reset/email-change flows that cause the staged app itself to send mail.",
+          "Poll the mailbox, verify the intended message/link/code, and continue the real browser flow."
+        ],
+        "pass": [
+          "The staged app emits the expected real email and the received link/code successfully completes only the intended flow."
+        ],
+        "fail": [
+          "App reports success but no email arrives, wrong recipient/content is sent, or link/code fails/binds to the wrong purpose."
+        ],
+        "cleanup": [
+          "Delete the E2E mailbox only after the corresponding flow passes; preserve failed-flow mailboxes temporarily for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-030",
+      "title": "Live test environment is the intended staged deployment and evidence is revision-bound",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-OPERATIONS-011"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "gap",
+        "tests": [],
+        "rationale": "Deployment identity and live-host evidence are inherently operational; repository CI cannot prove which staged deployment Claude reached."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "Before destructive/live actions, record the exact hostname and reject localhost or *.vercel.app preview hosts unless the designated staged hostname itself is intentionally on that domain.",
+          "Record a revision/build identifier if the deployment exposes one; otherwise record test start time and hostname.",
+          "Confirm HTTPS and that disposable accounts are being used."
+        ],
+        "pass": [
+          "Tester is on the designated staged/live hostname and records enough deployment evidence to tie results to a specific deployed revision/window."
+        ],
+        "fail": [
+          "Tester cannot establish the intended deployment target or accidentally targets a preview/local/production dataset outside the authorized staging scope."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-031",
+      "title": "Cleanup and failure preservation are deterministic and auditable",
+      "risk": "medium",
+      "canonicalControls": [
+        "AUTH-OPERATIONS-011"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "gap",
+        "tests": [],
+        "rationale": "Cleanup of live external test identities/mailboxes is operational evidence, not a repository-only behavior."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data."
+        ],
+        "steps": [
+          "For passing cases, remove disposable accounts/sessions/mailboxes according to the runbook.",
+          "For failed cases, preserve only the minimum state needed for debugging and record what was retained.",
+          "Ensure test admin roles and temporary privileged state are removed."
+        ],
+        "pass": [
+          "No unnecessary disposable privileged state remains; failures retain enough bounded evidence for diagnosis; secrets are never stored in reports."
+        ],
+        "fail": [
+          "Temporary privilege/test accounts are left uncontrolled or failure evidence contains secrets."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-032",
+      "title": "Invitation auth testing is explicitly not applicable to the current product model",
+      "risk": "low",
+      "canonicalControls": [
+        "AUTH-INVITE-001",
+        "AUTH-INVITE-002",
+        "AUTH-INVITE-003"
+      ],
+      "applicability": "not-applicable",
+      "layers": {
+        "unit": false,
+        "integration": false,
+        "browser": false,
+        "live": false,
+        "adversarial": false
+      },
+      "ci": {
+        "coverage": "na",
+        "tests": [],
+        "rationale": "Current canonical auth evidence states there is no live invitation flow; privileged accounts are provisioned directly by Super Admin."
+      },
+      "live": {
+        "enabled": false,
+        "destructive": false,
+        "requiresEmail": false,
+        "requiresAdmin": false,
+        "preconditions": [],
+        "steps": [],
+        "pass": [
+          "No invitation flow exists in the deployed product model."
+        ],
+        "fail": [
+          "A new invitation flow is introduced without first changing this case to applicable and adding CI/live coverage."
+        ],
+        "cleanup": [],
+        "evidence": [
+          "If an invitation feature is introduced, update this catalog in the same change before release."
+        ]
+      }
+    }
+  ]
+}
