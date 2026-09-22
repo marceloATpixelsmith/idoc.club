@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
-import { MEMBER_SESSION_IDLE_SECONDS, SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
+import { MEMBER_SESSION_ABSOLUTE_SECONDS, MEMBER_SESSION_IDLE_SECONDS, SESSION_IDLE_SECONDS } from '@/lib/auth/session-tokens';
 
 export type PersistedSession = {
   sessionId: string;
@@ -37,6 +37,18 @@ export async function userHasPrivilegedRole(userId: number): Promise<boolean> {
     ) as privileged
   `);
   return Boolean(rows[0]?.privileged);
+}
+
+export async function sessionVersionIsCurrent(userId: number, sessionVersion: number): Promise<boolean> {
+  const rows = await db.execute<{ current: boolean }>(sql`
+    select exists(
+      select 1 from idoc.users
+      where id = ${userId}
+        and deleted_at is null
+        and session_version = ${sessionVersion}
+    ) as current
+  `);
+  return Boolean(rows[0]?.current);
 }
 
 export async function registerSession(input: NewPersistedSession) {
@@ -174,9 +186,8 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
   // privileged. Filtering by last_activity_at prevents already-idle sessions from lingering in the
   // security UI merely because their fixed absolute deadline has not yet arrived.
   const privileged = await userHasPrivilegedRole(userId);
-  const idleSeconds = privileged ? SESSION_IDLE_SECONDS : MEMBER_SESSION_IDLE_SECONDS;
-  const idleCutoff = new Date(Date.now() - idleSeconds * 1000);
-  return db.execute<PersistedSession>(sql`
+  const now = Date.now();
+  const rows = await db.execute<PersistedSession>(sql`
     select
       session_id as "sessionId",
       user_id as "userId",
@@ -192,7 +203,16 @@ export async function listActiveSessions(userId: number, currentSessionVersion: 
       and session_version = ${currentSessionVersion}
       and revoked_at is null
       and absolute_expires_at > now()
-      and last_activity_at > ${idleCutoff.toISOString()}
     order by last_activity_at desc
   `);
+
+  return rows.filter((session) => {
+    const authenticatedAtMs = new Date(session.authenticatedAt).getTime();
+    const absoluteExpiresAtMs = new Date(session.absoluteExpiresAt).getTime();
+    const isExplicitMemberLifetime =
+      absoluteExpiresAtMs - authenticatedAtMs === MEMBER_SESSION_ABSOLUTE_SECONDS * 1000;
+    const idleSeconds =
+      !privileged && isExplicitMemberLifetime ? MEMBER_SESSION_IDLE_SECONDS : SESSION_IDLE_SECONDS;
+    return now - new Date(session.lastActivityAt).getTime() < idleSeconds * 1000;
+  });
 }
