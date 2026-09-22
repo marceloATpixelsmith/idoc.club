@@ -10,11 +10,31 @@ const changed = execFileSync("git", ["diff", "--name-only", base + "...HEAD"], {
   .trim().split("\n").filter(Boolean);
 
 const sensitive = changed.filter((p) =>
-  /^app\/(\(login\)|api\/auth|\(dashboard\)\/dashboard\/security|\(dashboard\)\/admin\/security|\(dashboard\)\/account)/.test(p) ||
-  /^lib\/(auth|security|membership)\//.test(p) ||
-  /^components\/(security|turnstile-widget)/.test(p) ||
-  /^(middleware\.ts|next\.config\.ts|playwright\.security\.config\.ts)$/.test(p) ||
-  /^tests\/(security-e2e\/|.*(?:auth|security|mfa|session|csrf|oauth|turnstile|rate|password|recovery|authorization).*)/.test(p)
+  p.startsWith("app/(login)/") ||
+  p.startsWith("app/api/auth/") ||
+  p.startsWith("app/(dashboard)/dashboard/security/") ||
+  p.startsWith("app/(dashboard)/admin/security/") ||
+  p.startsWith("app/(dashboard)/onboarding/") ||
+  p.startsWith("app/(dashboard)/account/") ||
+  p.startsWith("app/(dashboard)/admin/members/") ||
+  p === "app/(dashboard)/layout.tsx" ||
+  p === "app/(dashboard)/dashboard/layout.tsx" ||
+  p.startsWith("app/api/user/") ||
+  p.startsWith("components/security/") ||
+  p === "components/turnstile-widget.tsx" ||
+  p.startsWith("lib/auth/") ||
+  p.startsWith("lib/security/") ||
+  p.startsWith("lib/membership/") ||
+  p.startsWith("lib/runtime/") ||
+  p.startsWith("lib/db/") ||
+  p === "middleware.ts" ||
+  p === "next.config.ts" ||
+  p === "package.json" ||
+  p === "pnpm-lock.yaml" ||
+  p.startsWith("tests/security-e2e/") ||
+  /^tests\/.*auth.*$/i.test(p) ||
+  /^tests\/.*security.*$/i.test(p) ||
+  p.startsWith("tests/auth/")
 );
 
 if (!sensitive.length) {
