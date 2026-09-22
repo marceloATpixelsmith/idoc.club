@@ -6,7 +6,7 @@
 
 CI and live staging are two execution layers for the same requirements. CI proves deterministic repository-controlled behavior; live staging proves deployment, browser, real-provider, real-email, cookie/domain, and operational behavior. Results must always use the same `LIVE-AUTH-###` IDs.
 
-A defect is not considered fully regression-covered until it is mapped to one of these IDs (or a new ID is added), has CI coverage where technically possible, and has live coverage when the failure depends on deployment/provider/runtime behavior.
+A defect is not fully regression-covered until it maps to one of these IDs (or a new ID is added), has CI coverage where technically possible, and has live coverage when the failure depends on deployment/provider/runtime behavior.
 
 ## LIVE-AUTH-001 — Email/password signup succeeds and establishes the correct initial account state
 
