@@ -44,8 +44,13 @@ async function main() {
       throw new Error(`Account for ${email} is in state "${user.account_state}", not "active". Complete onboarding/verification through the live app first.`);
     }
 
-    const [granter] = await sql<{ id: number }[]>`select id from idoc.users where id = ${grantedBy}`;
-    if (!granter) throw new Error(`--granted-by user id ${grantedBy} does not exist on this database.`);
+    const [granter] = await sql<{ id: number }[]>`
+      select u.id from idoc.users u
+      join idoc.application_roles ar on ar.user_id = u.id
+      where u.id = ${grantedBy} and ar.role = 'super_admin' and ar.revoked_at is null`;
+    if (!granter) {
+      throw new Error(`--granted-by user id ${grantedBy} does not hold an active super_admin grant. Role grants are Super-Admin-only (lib/membership/role-grants.ts); refusing to record an unauthorized actor in the audit trail.`);
+    }
 
     const [existing] = await sql<{ id: number }[]>`
       select id from idoc.application_roles where user_id = ${user.id} and role = ${role} and revoked_at is null`;
@@ -59,6 +64,12 @@ async function main() {
         insert into idoc.application_roles (user_id, role, granted_by)
         values (${user.id}, ${role}, ${grantedBy})
         returning id`;
+      // Mirrors lib/membership/role-grants.ts's grantApplicationRole: a privilege grant must not
+      // take effect inside an already-issued lower-assurance session (the one from the real signup
+      // login in LIVE-AUTH-001). Incrementing session_version invalidates every existing session for
+      // this user, so the LIVE-AUTH-009/010 pending-MFA/privileged-login cases exercise a genuine
+      // fresh login under the new role rather than silently inheriting it into a stale session.
+      await tx`update idoc.users set session_version = session_version + 1, updated_at = now() where id = ${user.id}`;
       await tx`
         insert into idoc.audit_log (actor_id, action, entity_type, entity_id, after_json, reason)
         values (

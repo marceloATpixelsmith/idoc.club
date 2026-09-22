@@ -58,6 +58,7 @@ async function main() {
           (select count(*) from idoc.support_conversation_administrators sca join idoc.support_conversations sc on sc.id = sca.conversation_id where (sca.administrator_user_id = ${uid} or sca.assigned_by_user_id = ${uid}) and sc.member_user_id <> ${uid}) +
           (select count(*) from idoc.support_administrator_read_cursors src join idoc.support_conversations sc on sc.id = src.conversation_id where src.administrator_user_id = ${uid} and sc.member_user_id <> ${uid}) +
           (select count(*) from idoc.support_category_defaults where administrator_user_id = ${uid} or updated_by = ${uid}) +
+          (select count(*) from idoc.support_messages sm join idoc.support_conversations sc on sc.id = sm.conversation_id where sm.author_user_id = ${uid} and sc.member_user_id <> ${uid}) +
           (select count(*) from idoc.profile_change_history where actor_id = ${uid} and (${profileId}::int is null or profile_id <> ${profileId}))
         )::text as total`;
       if (Number(foreign.total) > 0) {
