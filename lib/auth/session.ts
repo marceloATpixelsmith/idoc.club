@@ -8,6 +8,7 @@ import {
   registerSessionWithSignInAudit,
   revokeSession,
   touchSession,
+  sessionVersionIsCurrent,
   userHasPrivilegedRole,
 } from '@/lib/auth/session-registry';
 import { clearCsrfToken, issueCsrfToken } from '@/lib/security/csrf';
@@ -70,6 +71,7 @@ async function registeredSessionIsValid(session: SessionData, now = new Date()) 
   const record = await readActiveSession(session.sessionId, session.user.id);
   if (!record) return false;
   if (record.sessionVersion !== session.user.sessionVersion) return false;
+  if (!(await sessionVersionIsCurrent(session.user.id, session.user.sessionVersion))) return false;
   if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) return false;
   if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) return false;
   await touchSession(session.sessionId, session.user.id, now);
