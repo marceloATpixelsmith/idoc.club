@@ -62,7 +62,9 @@ test('a real Codex review finding: every cookie-refreshing GET also touches the 
 test('new authentication rotates to a distinct session identifier and fixed absolute deadline', () => {
   assert.match(session, /sessionId: randomUUID\(\)/);
   assert.match(session, /authenticatedAt: now\.toISOString\(\)/);
-  assert.match(session, /absoluteExpiresAt: new Date\(now\.getTime\(\) \+ SESSION_ABSOLUTE_SECONDS \* 1000\)/);
+  assert.match(session, /userHasPrivilegedRole\(user\.id!\)/);
+  assert.match(session, /lifetimePolicy === 'member' \? MEMBER_SESSION_ABSOLUTE_SECONDS : SESSION_ABSOLUTE_SECONDS/);
+  assert.match(session, /absoluteExpiresAt: new Date\(now\.getTime\(\) \+ absoluteSeconds \* 1000\)/);
 });
 
 test('the legacy pre-retrofit cookie is never accepted as authentication authority, only ever defensively cleared', () => {
