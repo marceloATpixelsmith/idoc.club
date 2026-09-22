@@ -8,6 +8,7 @@ import {
   registerSessionWithSignInAudit,
   revokeSession,
   touchSession,
+  userHasPrivilegedRole,
 } from '@/lib/auth/session-registry';
 import { clearCsrfToken, issueCsrfToken } from '@/lib/security/csrf';
 import 'server-only';
@@ -17,6 +18,8 @@ export {
   DEVELOPMENT_SESSION_COOKIE_NAME,
   LEGACY_SESSION_COOKIE_NAME,
   PRODUCTION_SESSION_COOKIE_NAME,
+  MEMBER_SESSION_ABSOLUTE_SECONDS,
+  MEMBER_SESSION_IDLE_SECONDS,
   SESSION_ABSOLUTE_SECONDS,
   SESSION_IDLE_SECONDS,
   assertSessionFresh,
@@ -31,6 +34,7 @@ export type { SessionData } from '@/lib/auth/session-tokens';
 
 import {
   LEGACY_SESSION_COOKIE_NAME,
+  MEMBER_SESSION_ABSOLUTE_SECONDS,
   SESSION_ABSOLUTE_SECONDS,
   SessionData,
   expiredSessionCookieOptions,
@@ -136,13 +140,16 @@ export async function rawCanonicalUserId(): Promise<number | null> {
 
 export async function setSession(user: NewUser) {
   const now = new Date();
+  const lifetimePolicy = await userHasPrivilegedRole(user.id!) ? 'privileged' : 'member';
+  const absoluteSeconds = lifetimePolicy === 'member' ? MEMBER_SESSION_ABSOLUTE_SECONDS : SESSION_ABSOLUTE_SECONDS;
   const session: SessionData = {
     version: 2,
+    lifetimePolicy,
     sessionId: randomUUID(),
     user: { id: user.id!, sessionVersion: user.sessionVersion ?? 0 },
     authenticatedAt: now.toISOString(),
     lastActivityAt: now.toISOString(),
-    absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_SECONDS * 1000).toISOString(),
+    absoluteExpiresAt: new Date(now.getTime() + absoluteSeconds * 1000).toISOString(),
   };
 
   // The single choke point every login path (password, email OTP, TOTP MFA, post-enrollment
