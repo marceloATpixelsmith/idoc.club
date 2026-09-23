@@ -33,6 +33,39 @@ For every case with `requiresEmail=true`:
 - never use `send_e2e_test_message` as a substitute for the application's own outbound email;
 - delete the mailbox only after the flow passes; preserve it temporarily when failure evidence depends on it.
 
+## Privileged (administrator/super_admin) test identities
+
+IDOC has no self-service role elevation (docs/07-administrator-and-operations-runbook.md:
+Organization Settings and role grants are Super-Admin-only, provisioned directly, not through an
+invitation flow). Cases with `live.requiresAdmin=true` (009-013, 017, 026, 033) therefore need a
+disposable privileged identity provisioned out of band before they can run live:
+
+1. Complete a real signup through the live app for a disposable `@pixelsmith.space` test address
+   (LIVE-AUTH-001), so account state, verification, and TOTP enrollment stay genuinely live-tested.
+2. Grant the role against staging: `node --conditions=react-server --import tsx
+   scripts/e2e-grant-privileged-role.ts --email=<addr> --role=administrator|super_admin
+   --granted-by=<real Super Admin user id> --confirm-staging`, with `STAGING_POSTGRES_URL` set to
+   staging's own database (never `POSTGRES_URL`/production). Records an `application_roles` row and
+   a matching `audit_log` entry tagged as automated test-tooling provisioning, so LIVE-AUTH-026's
+   audit-evidence check still sees a coherent, attributable trail.
+3. Run the applicable LIVE-AUTH cases.
+4. Tear the identity down: `node --conditions=react-server --import tsx
+   scripts/e2e-delete-test-account.ts --email=<addr> --confirm-staging` (add `--dry-run` first to
+   preview). This deletes only rows the test account owns -- its own sessions, MFA factors/codes,
+   role grants, profile/membership rows, and its own audit_log entries. If the account is ever
+   referenced on a row it does not own (verified someone else's professional role, authored real
+   content, recorded a real member's payment), the script aborts with no changes instead of touching
+   that row -- resolve that manually before re-running.
+
+Both scripts refuse to run without `--confirm-staging` and refuse any email outside
+`@pixelsmith.space`; see `lib/db/staging-database-url.ts`. Never point `STAGING_POSTGRES_URL` at a
+real member's database or run this against a non-disposable account.
+
+This tooling is operator-only test infrastructure: it changes no product-facing auth behavior, adds
+no endpoint or user-reachable flow, and alters no LIVE-AUTH case's pass/fail criteria -- it only
+provisions and tears down the disposable privileged identity the already-canonical `requiresAdmin`
+cases above call for. No new canonical test case is warranted for it.
+
 ## Evidence rules
 
 For failures record the LIVE-AUTH ID, exact target hostname, role/account state, reproduction steps, expected result, actual result, relevant HTTP status/request path, screenshot/trace/log reference where useful, and retained disposable state.
