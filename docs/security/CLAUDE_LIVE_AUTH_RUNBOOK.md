@@ -43,6 +43,15 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
   (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
   actually performed.
+- **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
+  `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
+  blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
+  the human operator using this account, on request from Claude at the right point in the run; Claude
+  independently verifies the resulting database state (identity row, session, audit_log entry) via
+  the read-only connector above rather than trusting the operator's report alone. The
+  adversarial/tamper/replay/cancel-deny portions of the same case do not need this account and are
+  run by Claude directly. Do not ask the operator which account to use -- use this one unless they
+  say otherwise.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
   -- query `idoc.application_roles` via the read-only connector above.
