@@ -178,7 +178,8 @@ export function ResourceDataTable({
     if (current.length === selected.length && current.every((value, index) => value === selected[index])) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete('column');
-    for (const id of selected) params.append('column', id);
+    if (!selected.length) params.append('column', '');
+    else for (const id of selected) params.append('column', id);
     router.replace(`${pathname}?${params}`, { scroll: false });
   }, [table.getState().columnVisibility]);
   useEffect(() => {

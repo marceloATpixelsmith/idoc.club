@@ -33,6 +33,14 @@ test('the administrator article table applies structured filters and bounded pag
   assert.equal(listing.total, 1);
   assert.equal(listing.pageSize, 10);
   assert.equal(listing.rows[0].title, 'Alpha');
+  const empty = await asAdmin(admin.id, () => listAdminArticles({
+    filters: JSON.stringify([{ id: 'status', operator: 'isEmpty', value: '' }]),
+  }));
+  const notEmpty = await asAdmin(admin.id, () => listAdminArticles({
+    filters: JSON.stringify([{ id: 'status', operator: 'isNotEmpty', value: '' }]),
+  }));
+  assert.equal(empty.total, 0);
+  assert.equal(notEmpty.total, 2);
 });
 
 test('a draft article is never publicly visible; publishing it makes it visible by slug and in the listing', async () => {

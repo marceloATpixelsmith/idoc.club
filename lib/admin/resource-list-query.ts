@@ -66,6 +66,12 @@ export function advancedListWhere(input: ResourceQuery, columns: Record<string, 
     if (!filter || typeof filter !== 'object' || typeof filter.id !== 'string') continue;
     const expression = columns[filter.id];
     if (!expression) continue;
+    if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty')
+      {
+      const value = client`coalesce((${client.unsafe(expression)})::text,'')`;
+      conditions.push(filter.operator === 'isEmpty' ? client`${value} = ''` : client`${value} <> ''`);
+      continue;
+      }
     const values = (Array.isArray(filter.value) ? filter.value : [filter.value])
       .filter((value): value is string => typeof value === 'string')
       .map((value) => value.slice(0, 200));
