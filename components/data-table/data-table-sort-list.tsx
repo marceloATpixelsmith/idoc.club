@@ -171,6 +171,7 @@ export function DataTableSortList<TData>({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            data-idoc-table-control
             variant="outline"
             className="font-normal"
             onKeyDown={onTriggerKeyDown}
@@ -189,10 +190,13 @@ export function DataTableSortList<TData>({
           </Button>
         </PopoverTrigger>
         <PopoverContent
+          data-idoc-table-panel
+          align="start"
+          sideOffset={8}
           aria-labelledby={labelId}
           aria-describedby={descriptionId}
           className={cn(
-            "flex w-full max-w-(--radix-popover-content-available-width) flex-col gap-3.5 p-4 sm:min-w-[380px]",
+            "flex w-[min(28rem,calc(100vw-2rem))] max-w-(--radix-popover-content-available-width) flex-col gap-3.5 p-4",
             className,
           )}
           {...props}
@@ -318,7 +322,7 @@ function DataTableSortItem({
         role="listitem"
         id={sortItemId}
         tabIndex={-1}
-        className="flex items-center gap-2"
+        className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/30 p-2"
         onKeyDown={onItemKeyDown}
       >
         <Popover open={showFieldSelector} onOpenChange={setShowFieldSelector}>
@@ -334,6 +338,7 @@ function DataTableSortItem({
             </Button>
           </PopoverTrigger>
           <PopoverContent
+            data-idoc-table-panel
             id={fieldListboxId}
             className="w-(--radix-popover-trigger-width) p-0"
           >
@@ -371,6 +376,7 @@ function DataTableSortItem({
             <SelectValue />
           </SelectTrigger>
           <SelectContent
+            data-idoc-table-panel
             id={directionListboxId}
             className="min-w-(--radix-select-trigger-width)"
           >

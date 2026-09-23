@@ -9,7 +9,6 @@ import { DataTable } from '@/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableFilterList } from '@/components/data-table/data-table-filter-list';
-import { DataTableFilterMenu } from '@/components/data-table/data-table-filter-menu';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
@@ -120,7 +119,6 @@ export function MembersTable({ filters, initialVisibleColumns, pageSize, rows, t
     <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableAdvancedToolbar table={table} className="mt-5 rounded-xl border bg-background p-3">
         <div className="flex min-w-64 flex-1 gap-2"><Input aria-label="Search member name or email" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applySearch(); }} placeholder="Search name or email…" type="search" value={search} /><Button onClick={applySearch} type="button">Search</Button></div>
-        <DataTableFilterMenu table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
         <DataTableFilterList table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
         <DataTableSortList table={table} />
         <Button asChild size="sm" variant="outline"><Link download href={`/api/admin/export/members?${exportParams}`}><Download />Export filtered CSV</Link></Button>
