@@ -15,3 +15,12 @@ test('saved multi-value status filters retain their existing union or exclusion 
   const previous = [{ filterId: 'saved', id: 'status', operator: 'inArray', value: ['active', 'expired'], variant: 'multiSelect' }];
   assert.deepEqual(parser.parse(JSON.stringify(previous)), previous);
 });
+
+test('a cleared select value leaves other filter rows intact after URL parsing', () => {
+  const parser = getFiltersStateParser(['status', 'country'], { status: 'select', country: 'select' });
+  const filters = [
+    { filterId: 'status-row', id: 'status', operator: 'eq', value: '', variant: 'select' },
+    { filterId: 'country-row', id: 'country', operator: 'eq', value: 'DE', variant: 'select' },
+  ] as const;
+  assert.deepEqual(parser.parse(JSON.stringify(filters)), filters);
+});

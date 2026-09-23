@@ -690,7 +690,7 @@ function onFilterInputRender<TData>({
           value={selectedValues}
           onValueChange={(value) => {
             onFilterUpdate(filter.filterId, {
-              value,
+              value: value ?? (multiple ? [] : ""),
             });
           }}
           multiple={multiple}
