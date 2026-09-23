@@ -79,11 +79,20 @@ ready-to-run SQL instead:
 4. At the end of the run (whether it passed or not), fill in `scripts/e2e-delete-test-account.sql`'s
    `{{TARGET_EMAILS}}` placeholder with every disposable `@pixelsmith.space` email created during
    this run (not just the privileged one) and deliver the resulting file to the operator alongside
-   the results JSON. It deletes only rows each account owns -- its own sessions, MFA factors/codes,
-   role grants, profile/membership rows, and its own audit_log entries -- and per account, not as one
-   all-or-nothing batch: if one account is ever referenced on a row it does not own (verified someone
-   else's professional role, authored real content, recorded a real member's payment), that account
-   alone is skipped with a warning and every other account in the list is still cleaned up.
+   the results JSON. It deletes every genuinely deletable row each account owns -- its own sessions,
+   MFA factors/codes, role grants, and membership rows -- and per account, not as one all-or-nothing
+   batch: if one account is ever referenced on a row it does not own (verified someone else's
+   professional role, authored real content, recorded a real member's payment), that account alone
+   is skipped with a warning and every other account in the list is still cleaned up. The account row
+   itself and its profile are **not** physically deleted -- `idoc.audit_log`/`idoc.profile_change_history`
+   are immutable by design (a database trigger unconditionally rejects updating or deleting them),
+   and the foreign keys referencing them block deleting their parent rows too, once any audited
+   action was ever recorded for the account. Instead the account is neutralized exactly like the
+   app's own self-service `deleteOwnAccount()` (`lib/membership/data-access.ts`): `account_state`
+   set to `deleted` and the login email permanently mangled, so it can never authenticate again and
+   the address becomes reusable. The immutable rows this leaves behind never contain secrets by
+   design (see Evidence rules below), so this is not a leak -- it is the same tradeoff every real
+   account deletion in this app already makes.
 
 Both the `.ts` and `.sql` forms refuse any email outside `@pixelsmith.space` and are otherwise kept
 in exact lockstep -- change one, change the other. Never point either at a real member's database or

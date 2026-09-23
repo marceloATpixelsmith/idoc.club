@@ -11,10 +11,26 @@
 --   psql "$STAGING_POSTGRES_URL" -f this-file.sql
 -- or paste directly into Render's dashboard SQL console for the staging instance.
 --
--- Strict scope, identical to the .ts version: only ever deletes rows a listed account actually
--- owns. If an account is referenced on a row it does not own (authored real content, recorded a
--- real member's payment, etc.), that ONE account is skipped with a warning -- everything else in
--- the list still gets cleaned up, and the whole script never aborts because of one bad account.
+-- Does NOT fully delete the account row. migration 0002 installs BEFORE UPDATE OR DELETE triggers
+-- on idoc.audit_log and idoc.profile_change_history that unconditionally reject any attempt to
+-- change or remove a row (idoc.support_messages has the identical trigger from migration 0039).
+-- Since audit_log.actor_id/profile_change_history.profile_id/support_messages.conversation_id all
+-- reference their parent with no cascade, any account that generated even one audited action (real
+-- signup, a profile edit, a login) can never have its users or profiles row physically deleted --
+-- the foreign key blocks it exactly as intentionally designed. Instead this neutralizes the account
+-- the same way the app's own self-service deleteOwnAccount() does (lib/membership/data-access.ts):
+-- every genuinely deletable row (sessions, MFA factors/codes, role grants, tokens, memberships,
+-- etc.) is removed outright, and the users row itself is soft-neutralized -- account_state set to
+-- 'deleted', the login email permanently mangled -- rather than deleted. The immutable audit trail
+-- this leaves behind never contains secrets by design (see the Evidence rules in the runbook), so
+-- leaving it in place is not a leak; it is the same tradeoff every real account deletion in this
+-- app already makes.
+--
+-- Strict scope, identical in spirit to the .ts version: only ever touches rows a listed account
+-- actually owns. If an account is referenced on a row it does not own (authored real content,
+-- recorded a real member's payment, etc.), that ONE account is skipped with a warning -- everything
+-- else in the list still gets cleaned up, and the whole script never aborts because of one bad
+-- account.
 --
 -- {{TARGET_EMAILS}} is replaced with a literal comma-separated SQL list of disposable test emails,
 -- e.g.: 'live-auth-001@pixelsmith.space','live-auth-009-admin@pixelsmith.space'
@@ -27,7 +43,7 @@ declare
   v_uid int;
   v_profile_id int;
   v_foreign_count int;
-  v_conversation record;
+  v_account_state text;
 begin
   for v_email in select unnest(array[{{TARGET_EMAILS}}]) loop
     begin
@@ -35,9 +51,13 @@ begin
         raise exception 'refusing: % is not a disposable @pixelsmith.space test address', v_email;
       end if;
 
-      select id into v_uid from idoc.users where lower(email) = lower(v_email);
+      select id, account_state into v_uid, v_account_state from idoc.users where lower(email) = lower(v_email);
       if v_uid is null then
         raise notice 'no account found for %; nothing to clean up', v_email;
+        continue;
+      end if;
+      if v_account_state = 'deleted' then
+        raise notice '% (user_id=%) is already neutralized; nothing further to do', v_email, v_uid;
         continue;
       end if;
 
@@ -65,15 +85,7 @@ begin
         raise exception '% (user_id=%) is referenced on at least one row it does not own (author, verifier, payment administrator, or support assignee for someone else); skipping -- clear that reference manually first', v_email, v_uid;
       end if;
 
-      -- the account's own support threads (already confirmed above it is not an assignee elsewhere)
-      for v_conversation in select id from idoc.support_conversations where member_user_id = v_uid loop
-        delete from idoc.support_messages where conversation_id = v_conversation.id;
-        delete from idoc.support_conversation_administrators where conversation_id = v_conversation.id;
-        delete from idoc.support_administrator_read_cursors where conversation_id = v_conversation.id;
-      end loop;
-      delete from idoc.support_conversations where member_user_id = v_uid;
-
-      -- profile-scoped rows the account owns
+      -- profile-scoped rows the account owns that are genuinely deletable (no immutability lock)
       if v_profile_id is not null then
         delete from idoc.seminar_registrations where profile_id = v_profile_id;
         delete from idoc.notification_outbox where profile_id = v_profile_id;
@@ -83,14 +95,14 @@ begin
         delete from idoc.renewal_preferences where profile_id = v_profile_id;
         delete from idoc.payments where profile_id = v_profile_id;
         delete from idoc.reconciliation_findings where profile_id = v_profile_id;
-        delete from idoc.profile_change_history where profile_id = v_profile_id;
         delete from idoc.professional_roles where profile_id = v_profile_id;
         delete from idoc.memberships where profile_id = v_profile_id;
-        -- onboarding_consents cascades automatically on profile delete
-        delete from idoc.profiles where id = v_profile_id;
+        -- profiles itself is not deleted: idoc.profile_change_history (immutable, migration 0002)
+        -- references profile_id with no cascade, so the foreign key blocks it whenever any profile
+        -- edit was ever recorded -- the same reason idoc.users below is neutralized, not deleted.
       end if;
 
-      -- user-scoped rows the account owns, without on delete cascade
+      -- user-scoped rows the account owns, genuinely deletable (no immutability lock)
       delete from idoc.application_roles where user_id = v_uid;
       delete from idoc.email_verification_tokens where user_id = v_uid;
       delete from idoc.account_delivery_outbox where user_id = v_uid;
@@ -99,13 +111,31 @@ begin
       delete from idoc.team_members where user_id = v_uid;
       delete from idoc.invitations where invited_by = v_uid;
       delete from idoc.activity_logs where user_id = v_uid;
-      delete from idoc.audit_log where actor_id = v_uid;
+      delete from idoc.auth_sessions where user_id = v_uid;
+      delete from idoc.mfa_enrollment_transactions where user_id = v_uid;
+      delete from idoc.mfa_challenge_transactions where user_id = v_uid;
+      delete from idoc.mfa_recovery_codes where user_id = v_uid;
+      delete from idoc.mfa_remembered_devices where user_id = v_uid;
+      delete from idoc.mfa_factors where user_id = v_uid;
+      delete from idoc.login_trusted_devices where user_id = v_uid;
+      delete from idoc.administrator_table_preferences where user_id = v_uid;
+      -- audit_log (own actions) is not deleted: immutable by design (migration 0002). It never
+      -- contains secrets, so leaving it is not a leak -- see the runbook's evidence rules.
 
-      -- everything else (auth_sessions, mfa_*, login_trusted_devices,
-      -- administrator_table_preferences) has on delete cascade on user_id and is removed by this
-      delete from idoc.users where id = v_uid;
+      -- neutralize the account itself, exactly like the app's own self-service
+      -- lib/membership/data-access.ts deleteOwnAccount(): permanently block login and free the
+      -- email for reuse, rather than physically deleting a row idoc.audit_log still references.
+      update idoc.users set
+        account_state = 'deleted',
+        deleted_at = now(),
+        email_display = concat(email, '-', id, '-deleted'),
+        email = concat(email, '-', id, '-deleted'),
+        updated_at = now()
+      where id = v_uid;
+      insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+      values (v_uid, 'account.deleted', 'user', v_uid::text, 'Automated disposable test-account cleanup for the live auth audit; see docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md.');
 
-      raise notice 'deleted % (user_id=%) and every row it owned', v_email, v_uid;
+      raise notice 'cleaned up % (user_id=%): removed every genuinely deletable row it owned and neutralized the account (immutable audit/profile-history rows and the profile row itself remain, as the schema requires)', v_email, v_uid;
     exception when others then
       raise warning 'skipped %: %', v_email, sqlerrm;
     end;
