@@ -26,7 +26,7 @@ type TurnstileSiteverifyResponse = {
 // or without this additional shape check. The `VERCEL_ENV` guard is pure defense-in-depth against a
 // copy-paste mistake ever landing this public value in Production's own env var, on top of the real
 // backstop being that Production's `TURNSTILE_SECRET_KEY` is never actually set to it.
-const CLOUDFLARE_TESTING_SECRET_KEY = '1x0000000000000000000000000000000AA';
+const CLOUDFLARE_ALWAYS_PASS_TESTING_KEY = '1x0000000000000000000000000000000AA';
 
 /** Verifies a Cloudflare Turnstile client token against trusted deployment and flow context.
  * Missing/misconfigured provider settings, provider failure, hostname mismatch, action mismatch,
@@ -59,7 +59,7 @@ export async function verifyTurnstile(
     if (!response.ok) return false;
 
     const result = await response.json() as TurnstileSiteverifyResponse;
-    if (secret === CLOUDFLARE_TESTING_SECRET_KEY && process.env.VERCEL_ENV !== 'production') {
+    if (secret === CLOUDFLARE_ALWAYS_PASS_TESTING_KEY && process.env.VERCEL_ENV !== 'production') {
       return result.success === true && result.hostname === 'example.com' && !result.action;
     }
     return result.success === true
