@@ -52,7 +52,7 @@ export async function getRevenueReport(input: RevenueFilters = {}) {
       coalesce(sum(amount_cents) filter (where source not in ('stripe_recurring','stripe_one_time','complimentary')),0)::int "manualCents"
       from idoc.payments where ${where} group by currency order by currency`),
     db.execute<{ currency: string; source: string; totalCents: number }>(sql`select currency,source,sum(amount_cents)::int "totalCents" from idoc.payments where ${where} group by currency,source order by currency,source`),
-    db.execute<{ currency: string; month: string; totalCents: number }>(sql`select currency,to_char(date_trunc('month',paid_at at time zone 'UTC'),'YYYY-MM') month,sum(amount_cents)::int "totalCents" from idoc.payments where ${where} group by currency,date_trunc('month',paid_at at time zone 'UTC') order by date_trunc('month',paid_at at time zone 'UTC'),currency`),
+    db.execute<{ currency: string; month: string; totalCents: number }>(sql`select currency,to_char(date_trunc('month',paid_at at time zone 'UTC'),'YYYY-MM') as "month",sum(amount_cents)::int "totalCents" from idoc.payments where ${where} group by currency,date_trunc('month',paid_at at time zone 'UTC') order by date_trunc('month',paid_at at time zone 'UTC'),currency`),
   ]);
   return { bySource: [...bySource], overTime: [...overTime], range, summary: [...summary] };
 }

@@ -582,7 +582,7 @@ error text to the registry. The operational event channel remains separate from 
 
 The administrator membership roster provides server-side search, status, expiration-range, federation, country, region, professional-type, sorting, pagination, and matching CSV export. The default view is active memberships. Browser-side column visibility and current-page selection do not grant authority or perform mutations; bulk actions remain unavailable until their account, billing, restoration, session, and audit policies are approved. Member detail uses the existing protected seminar-registration history and displays both current and past associations.
 
-The Revenue navigation item opens the protected recorded-payment report. Its currency-separated cards label gross recorded, Stripe, and manual revenue plus payment count; monthly values and the accessible chart represent persisted successful non-complimentary payment records, not refunds, adjustments, or net revenue.
+The Revenue navigation item opens the protected recorded-payment report. Its currency-separated cards label gross recorded, Stripe, and manual revenue plus payment count; monthly values and the accessible chart represent persisted successful non-complimentary payment records, not refunds, adjustments, or net revenue. The monthly aggregation query uses an explicitly quoted month alias; its database integration test covers the report load that previously failed with a SQL syntax error.
 
 ## Restricted CMS page operations
 
