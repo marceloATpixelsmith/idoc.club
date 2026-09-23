@@ -3,11 +3,22 @@ import { arg, hasFlag, requireDisposableTestEmail, validateStagingDatabaseUrl } 
 
 // Full teardown for one disposable @pixelsmith.space test account created during a live auth audit
 // (tests/auth/auth-test-matrix.json / docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md), run against the
-// real staging database. Deletes only rows the test account actually owns -- its own sessions, MFA
-// factors/codes, role grants, profile/membership/payment rows, verification/reset tokens, its own
-// support threads, and its own audit_log entries. This is a deliberate, test-only exception to
-// normal audit-log immutability: never run this against a real member or administrator account (the
-// @pixelsmith.space email guard exists specifically to make that impossible by accident).
+// real staging database. This is a plain-TypeScript mirror of scripts/e2e-delete-test-account.sql --
+// keep the two in exact lockstep; see that file for the full explanation of what it does and why.
+//
+// Does NOT fully delete the account row. migration 0002 installs BEFORE UPDATE OR DELETE triggers on
+// idoc.audit_log and idoc.profile_change_history that unconditionally reject any attempt to change
+// or remove a row (idoc.support_messages has the identical trigger from migration 0039). Since
+// audit_log.actor_id/profile_change_history.profile_id/support_messages.conversation_id all
+// reference their parent with no cascade, any account that generated even one audited action (real
+// signup, a profile edit, a login) can never have its users or profiles row physically deleted -- the
+// foreign key blocks it exactly as intentionally designed. Instead this neutralizes the account the
+// same way the app's own self-service deleteOwnAccount() does (lib/membership/data-access.ts): every
+// genuinely deletable row (sessions, MFA factors/codes, role grants, tokens, memberships, etc.) is
+// removed outright, and the users row itself is soft-neutralized -- account_state set to 'deleted',
+// the login email permanently mangled -- rather than deleted. The immutable audit trail this leaves
+// behind never contains secrets by design (see the Evidence rules in the runbook), so leaving it in
+// place is not a leak; it is the same tradeoff every real account deletion in this app already makes.
 //
 // Strict scope: this script touches ONLY rows owned by the test account -- it never deletes,
 // modifies, or nulls out any row belonging to someone else. If the test account is referenced
@@ -31,9 +42,14 @@ async function main() {
   const sql = postgres(stagingUrl, { max: 1, onnotice: () => {} });
   try {
     await sql.begin(async (tx) => {
-      const [user] = await tx<{ id: number }[]>`select id from idoc.users where lower(email) = lower(${email})`;
+      const [user] = await tx<{ id: number; account_state: string }[]>`
+        select id, account_state from idoc.users where lower(email) = lower(${email})`;
       if (!user) {
         console.log(`No account found for ${email}. Nothing to clean up.`);
+        return;
+      }
+      if (user.account_state === 'deleted') {
+        console.log(`${email} (user_id=${user.id}) is already neutralized. Nothing further to do.`);
         return;
       }
       const uid = user.id;
@@ -78,28 +94,17 @@ async function main() {
           union all select 'email_verification_tokens', count(*)::text from idoc.email_verification_tokens where user_id = ${uid}
           union all select 'account_tokens', count(*)::text from idoc.account_tokens where user_id = ${uid}
           union all select 'email_otp_codes', count(*)::text from idoc.email_otp_codes where user_id = ${uid} or (user_id is null and lower(email) = lower(${email}))
-          union all select 'audit_log (own actions)', count(*)::text from idoc.audit_log where actor_id = ${uid}
-          union all select 'profiles', count(*)::text from idoc.profiles where user_id = ${uid}
           union all select 'memberships', count(*)::text from idoc.memberships where profile_id = ${profileId}
           union all select 'professional_roles (own)', count(*)::text from idoc.professional_roles where profile_id = ${profileId}
-          union all select 'seminar_registrations (own)', count(*)::text from idoc.seminar_registrations where profile_id = ${profileId}
-          union all select 'support_conversations (own)', count(*)::text from idoc.support_conversations where member_user_id = ${uid}`;
+          union all select 'seminar_registrations (own)', count(*)::text from idoc.seminar_registrations where profile_id = ${profileId}`;
         console.log(`Dry run for ${email} (user_id=${uid}). Rows this account owns that WOULD be deleted:`);
         for (const row of counts) if (Number(row.n) > 0) console.log(`  ${row.table_name}: ${row.n}`);
+        console.log('  (plus: users row neutralized -- account_state=deleted, login email mangled, real deletion blocked by immutable audit_log/profile_change_history)');
         throw new Error('DRY_RUN_ROLLBACK'); // abort the transaction, nothing committed
       }
 
-      // --- The test account's own support threads (it is the member on these; already confirmed
-      // above that it is not an assignee on anyone else's). ---
-      const ownConversations = await tx<{ id: number }[]>`select id from idoc.support_conversations where member_user_id = ${uid}`;
-      for (const { id: conversationId } of ownConversations) {
-        await tx`delete from idoc.support_messages where conversation_id = ${conversationId}`;
-        await tx`delete from idoc.support_conversation_administrators where conversation_id = ${conversationId}`;
-        await tx`delete from idoc.support_administrator_read_cursors where conversation_id = ${conversationId}`;
-      }
-      await tx`delete from idoc.support_conversations where member_user_id = ${uid}`;
-
-      // --- Profile-scoped rows the account owns (must precede deleting the profile itself). ---
+      // --- Profile-scoped rows the account owns that are genuinely deletable (no immutability
+      // lock). profiles itself is not deleted -- see file header. ---
       if (profileId) {
         await tx`delete from idoc.seminar_registrations where profile_id = ${profileId}`;
         await tx`delete from idoc.notification_outbox where profile_id = ${profileId}`;
@@ -109,14 +114,11 @@ async function main() {
         await tx`delete from idoc.renewal_preferences where profile_id = ${profileId}`;
         await tx`delete from idoc.payments where profile_id = ${profileId}`;
         await tx`delete from idoc.reconciliation_findings where profile_id = ${profileId}`;
-        await tx`delete from idoc.profile_change_history where profile_id = ${profileId}`;
         await tx`delete from idoc.professional_roles where profile_id = ${profileId}`;
         await tx`delete from idoc.memberships where profile_id = ${profileId}`;
-        // onboarding_consents cascades automatically on profile delete.
-        await tx`delete from idoc.profiles where id = ${profileId}`;
       }
 
-      // --- User-scoped rows the account owns, without ON DELETE CASCADE. ---
+      // --- User-scoped rows the account owns, genuinely deletable (no immutability lock). ---
       await tx`delete from idoc.application_roles where user_id = ${uid}`;
       await tx`delete from idoc.email_verification_tokens where user_id = ${uid}`;
       await tx`delete from idoc.account_delivery_outbox where user_id = ${uid}`;
@@ -125,13 +127,31 @@ async function main() {
       await tx`delete from idoc.team_members where user_id = ${uid}`;
       await tx`delete from idoc.invitations where invited_by = ${uid}`;
       await tx`delete from idoc.activity_logs where user_id = ${uid}`;
-      await tx`delete from idoc.audit_log where actor_id = ${uid}`;
+      await tx`delete from idoc.auth_sessions where user_id = ${uid}`;
+      await tx`delete from idoc.mfa_enrollment_transactions where user_id = ${uid}`;
+      await tx`delete from idoc.mfa_challenge_transactions where user_id = ${uid}`;
+      await tx`delete from idoc.mfa_recovery_codes where user_id = ${uid}`;
+      await tx`delete from idoc.mfa_remembered_devices where user_id = ${uid}`;
+      await tx`delete from idoc.mfa_factors where user_id = ${uid}`;
+      await tx`delete from idoc.login_trusted_devices where user_id = ${uid}`;
+      await tx`delete from idoc.administrator_table_preferences where user_id = ${uid}`;
+      // audit_log (own actions) is not deleted: immutable by design. It never contains secrets, so
+      // leaving it is not a leak -- see the runbook's evidence rules.
 
-      // --- Everything else (auth_sessions, mfa_*, login_trusted_devices,
-      // administrator_table_preferences) has ON DELETE CASCADE on user_id and is removed by this. ---
-      await tx`delete from idoc.users where id = ${uid}`;
+      // --- Neutralize the account itself, exactly like the app's own self-service
+      // lib/membership/data-access.ts deleteOwnAccount(): permanently block login and free the
+      // email for reuse, rather than physically deleting a row idoc.audit_log still references. ---
+      await tx`update idoc.users set
+        account_state = 'deleted',
+        deleted_at = now(),
+        email_display = concat(email, '-', id, '-deleted'),
+        email = concat(email, '-', id, '-deleted'),
+        updated_at = now()
+        where id = ${uid}`;
+      await tx`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+        values (${uid}, 'account.deleted', 'user', ${String(uid)}, 'Automated disposable test-account cleanup for the live auth audit; see docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md.')`;
 
-      console.log(`Deleted ${email} (user_id=${uid}) and every row it owned.`);
+      console.log(`Cleaned up ${email} (user_id=${uid}): removed every genuinely deletable row it owned and neutralized the account (immutable audit/profile-history rows and the profile row itself remain, as the schema requires).`);
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'DRY_RUN_ROLLBACK') {
