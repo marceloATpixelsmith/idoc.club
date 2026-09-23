@@ -162,11 +162,12 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
 }
 
-export async function exportAdminMembers(input: MemberFilters = {}) {
+export async function exportAdminMembers(input: MemberFilters = {}, selectedUserIds?: number[]) {
   const actor = await authorize();
   const { effectiveStatus, filters, order, where } = queryParts(input);
-  const rows = await db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types)=1 then roles.role_types[1] else null end "membershipType" ${from} where ${where} order by ${order} limit ${MEMBER_EXPORT_LIMIT + 1}`);
+  const selectedWhere = selectedUserIds?.length ? sql` and u.id in (${sql.join(selectedUserIds.map((id) => sql`${id}`), sql`,`)})` : sql``;
+  const rows = await db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types)=1 then roles.role_types[1] else null end "membershipType" ${from} where ${where}${selectedWhere} order by ${order} limit ${MEMBER_EXPORT_LIMIT + 1}`);
   if (rows.length > MEMBER_EXPORT_LIMIT) throw new Error(`Export exceeds the safe limit of ${MEMBER_EXPORT_LIMIT} members. Narrow the filters and retry.`);
-  await db.insert(auditLog).values({ action: 'admin.memberships.exported', actorId: actor.id, afterJson: { filters, resultCount: rows.length }, entityId: 'membership-filtered-results', entityType: 'export' });
+  await db.insert(auditLog).values({ action: 'admin.memberships.exported', actorId: actor.id, afterJson: { filters, resultCount: rows.length, selectedCount: selectedUserIds?.length ?? null }, entityId: 'membership-filtered-results', entityType: 'export' });
   return [...rows];
 }

@@ -2,6 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
+import { advancedListWhere, listDate, listOrder, listPage, listPageSize } from '@/lib/admin/resource-list-query';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
@@ -23,7 +24,6 @@ export const NEWS_SUBTITLE_MAX_LENGTH = 300;
 export const NEWS_SLUG_MAX_LENGTH = 160;
 export const NEWS_CONTENT_MAX_LENGTH = 20_000;
 const PUBLIC_PAGE_SIZE = 10;
-const ADMIN_PAGE_SIZE = 20;
 
 export class NewsValidationError extends Error {
   constructor(message: string) {
@@ -100,32 +100,23 @@ function validateFields(input: ArticleInput) {
 export async function listAdminArticles(input: Record<string, string | string[] | undefined>) {
   await requireNewsAdministrator();
   const firstValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
-  const page = Math.max(1, Number.parseInt(firstValue(input.page) ?? '1', 10) || 1);
+  const page = listPage(input);
   const statusValue = firstValue(input.status);
   const status: NewsStatus | null = NEWS_STATUSES.includes(statusValue as NewsStatus) ? (statusValue as NewsStatus) : null;
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
-  const sortValue = firstValue(input.sort) ?? '';
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromValue) ? fromValue : null;
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(toValue) ? toValue : null;
-  const sort = ['publication', 'title', 'status', 'updated'].includes(sortValue) ? sortValue : 'publication';
-  const direction = firstValue(input.direction) === 'asc' ? 'asc' : 'desc';
-  const limit = ADMIN_PAGE_SIZE;
+  const from = listDate(fromValue);
+  const to = listDate(toValue);
+  const order = listOrder(input, { publication: 'publication_date', title: 'title', status: 'status', updated: 'updated_at' }, 'publication');
+  const advancedWhere = advancedListWhere(input, { title: 'title', status: 'status' }, NEWS_STATUSES);
+  const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select id,slug,title,subtitle,status,publication_date,published_at,updated_at from idoc.news_articles
+  const rows = await client`select id,slug,title,subtitle,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
     where (${status}::text is null or status=${status}) and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
-    and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day'))
-    order by case when ${sort}='publication' and ${direction}='asc' then publication_date end asc,
-      case when ${sort}='publication' and ${direction}='desc' then publication_date end desc,
-      case when ${sort}='title' and ${direction}='asc' then title end asc,
-      case when ${sort}='title' and ${direction}='desc' then title end desc,
-      case when ${sort}='status' and ${direction}='asc' then status end asc,
-      case when ${sort}='status' and ${direction}='desc' then status end desc,
-      case when ${sort}='updated' and ${direction}='asc' then updated_at end asc,
-      case when ${sort}='updated' and ${direction}='desc' then updated_at end desc,
-      publication_date desc,id desc limit ${limit + 1} offset ${offset}`;
-  return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
+    and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
+    order by ${order} limit ${limit + 1} offset ${offset}`;
+  return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
 }
 
 export async function getAdminArticle(value: unknown) {

@@ -6,7 +6,7 @@ function escapeCsvField(value: unknown): string {
   const raw = value instanceof Date ? value.toISOString() : typeof value === 'object' ? JSON.stringify(value) : String(value);
   // A quoted cell is still executable in Excel/LibreOffice. Prefix formula-like values with an
   // apostrophe so exported member-controlled fields are always treated as text.
-  const text = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  const text = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

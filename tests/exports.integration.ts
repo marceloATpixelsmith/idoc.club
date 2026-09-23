@@ -6,6 +6,7 @@ import { GET as exportAuditLog } from '../app/api/admin/export/audit-log/route.t
 import { GET as exportMembers } from '../app/api/admin/export/members/route.ts';
 import { GET as exportNotifications } from '../app/api/admin/export/notifications/route.ts';
 import { GET as exportPayments } from '../app/api/admin/export/payments/route.ts';
+import { GET as exportSelectedReports } from '../app/api/admin/export/selected-reports/route.ts';
 import {
   adminUser, closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql,
 } from './postgres-harness.ts';
@@ -130,6 +131,49 @@ test('the members export route returns CSV with the correct headers for an admin
   assert.match(response.headers.get('Content-Disposition') ?? '', /attachment; filename="members\.csv"/);
   const body = await response.text();
   assert.match(body, /firstName,lastName,email,status,validUntil/);
+});
+
+test('selected member export rechecks the selected user IDs and records an audit entry', async () => {
+  const admin = await adminUser();
+  const included = await createUser();
+  const excluded = await createUser();
+  for (const member of [included, excluded])
+    {
+    const profile = await createProfile(member.id);
+    await createMembership(profile.id, true);
+    }
+  const response = await asAdministration(admin.id, () => exportMembers(
+    new Request(`https://idoc.club/api/admin/export/members?selectedUserId=${included.id}`),
+  ));
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, new RegExp(included.email));
+  assert.doesNotMatch(body, new RegExp(excluded.email));
+  const [audit] = await sql<{ after_json: { resultCount: number; selectedCount: number } }[]>`select after_json from idoc.audit_log where action='admin.memberships.exported' order by id desc limit 1`;
+  assert.equal(audit.after_json.resultCount, 1);
+  assert.equal(audit.after_json.selectedCount, 1);
+  const invalid = await asAdministration(admin.id, () => exportMembers(new Request('https://idoc.club/api/admin/export/members?selectedUserId=0')));
+  assert.equal(invalid.status, 400);
+});
+
+test('selected report export re-fetches rows, enforces administration, and audits the result', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  const [included] = await sql<{ id: number }[]>`insert into idoc.reconciliation_findings (kind,profile_id,summary)
+    values ('status_conflict',${profile.id},'Example mismatch') returning id`;
+  await sql`insert into idoc.reconciliation_findings (kind,profile_id,summary)
+    values ('status_conflict',${profile.id},'Other mismatch')`;
+  const url = `https://idoc.club/api/admin/export/selected-reports?table=reconciliation&id=${included.id}`;
+  const forbidden = await asAdministration(member.id, () => exportSelectedReports(new Request(url)));
+  assert.equal(forbidden.status, 401);
+  const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(url)));
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /Example mismatch/);
+  assert.doesNotMatch(body, /Other mismatch/);
+  const [audit] = await sql<{ after_json: { resultCount: number; table: string } }[]>`select after_json from idoc.audit_log where action='admin.selected_report.exported' order by id desc limit 1`;
+  assert.deepEqual(audit.after_json, { resultCount: 1, selectedCount: 1, table: 'reconciliation' });
 });
 
 test('the payments export route rejects a plain administrator with a 401, and succeeds for a Super Admin', async () => {

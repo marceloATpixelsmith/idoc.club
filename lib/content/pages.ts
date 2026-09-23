@@ -4,6 +4,7 @@ import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import { getSession } from '@/lib/auth/session';
 import { client } from '@/lib/db/drizzle';
+import { advancedListWhere, listOrder, listPage, listPageSize } from '@/lib/admin/resource-list-query';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
@@ -32,9 +33,27 @@ function fields(input: Input) {
     summary: z.string().trim().max(500).transform(v => v || null).parse(input.summary), title };
 }
 export async function listAdminContentPages(input: Record<string, string | string[] | undefined>) {
-  await admin(); const one = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] : v; const page = Math.max(1, Number.parseInt(one(input.page) ?? '1', 10) || 1); const q = (one(input.q) ?? '').trim().slice(0, 100); const statusValue = one(input.status) ?? ''; const status = CONTENT_STATUSES.includes(statusValue as never) ? statusValue : null; const audienceValue = one(input.audience) ?? ''; const audience = CONTENT_AUDIENCES.includes(audienceValue as never) ? audienceValue : null; const sortValue = one(input.sort) ?? ''; const sort = ['title', 'status', 'updated'].includes(sortValue) ? sortValue : 'updated'; const direction = one(input.direction) === 'asc' ? 'asc' : 'desc'; const offset = (page - 1) * 20;
-  const rows = await client`select p.*,coalesce(string_agg(a.audience,',' order by a.audience),'') audiences from idoc.content_pages p left join idoc.content_page_audiences a on a.page_id=p.id where (${q}='' or p.title ilike ${`%${q}%`} or p.slug ilike ${`%${q}%`}) and (${status}::text is null or p.status=${status}) and (${audience}::text is null or exists(select 1 from idoc.content_page_audiences x where x.page_id=p.id and x.audience=${audience})) group by p.id order by case when ${sort}='title' and ${direction}='asc' then p.title end asc,case when ${sort}='title' and ${direction}='desc' then p.title end desc,case when ${sort}='status' and ${direction}='asc' then p.status end asc,case when ${sort}='status' and ${direction}='desc' then p.status end desc,case when ${sort}='updated' and ${direction}='asc' then p.updated_at end asc,p.updated_at desc,p.id desc limit 21 offset ${offset}`;
-  return { hasNext: rows.length > 20, page, rows: rows.slice(0, 20) };
+  await admin();
+  const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? '';
+  const page = listPage(input);
+  const pageSize = listPageSize(input);
+  const q = one(input.q).trim().slice(0, 100);
+  const statusValue = one(input.status);
+  const status = CONTENT_STATUSES.includes(statusValue as never) ? statusValue : null;
+  const audienceValue = one(input.audience);
+  const audience = CONTENT_AUDIENCES.includes(audienceValue as never) ? audienceValue : null;
+  const order = listOrder(input, { title: 'p.title', status: 'p.status', updated: 'p.updated_at' }, 'updated', 'p.id');
+  const advancedWhere = advancedListWhere(input, { title: 'p.title', status: 'p.status' }, CONTENT_STATUSES);
+  const offset = (page - 1) * pageSize;
+  const rows = await client`select p.id,p.slug,p.title,p.status,p.updated_at,p.audience_mode,
+    coalesce(string_agg(a.audience,',' order by a.audience),'') audiences,count(*) over()::int total_count
+    from idoc.content_pages p left join idoc.content_page_audiences a on a.page_id=p.id
+    where (${q}='' or p.title ilike ${`%${q}%`} or p.slug ilike ${`%${q}%`})
+    and (${status}::text is null or p.status=${status})
+    and (${audience}::text is null or exists(select 1 from idoc.content_page_audiences x where x.page_id=p.id and x.audience=${audience}))
+    and (${advancedWhere}) group by p.id
+    order by ${order} limit ${pageSize + 1} offset ${offset}`;
+  return { hasNext: rows.length > pageSize, page, pageSize, rows: rows.slice(0, pageSize), total: Number(rows[0]?.total_count ?? 0) };
 }
 export async function getAdminContentPage(value: unknown) { await admin(); const id = idSchema.safeParse(value); if (!id.success) return null; const [page] = await client`select p.*,coalesce(array_agg(a.audience) filter(where a.audience is not null),'{}') audiences from idoc.content_pages p left join idoc.content_page_audiences a on a.page_id=p.id where p.id=${id.data} group by p.id`; return page ?? null; }
 async function revision(sql: TransactionSql<Record<string, never>>, id: number, actorId: number) { await sql`insert into idoc.content_page_revisions(page_id,revision_number,snapshot_json,created_by_user_id) select p.id,coalesce((select max(revision_number)+1 from idoc.content_page_revisions where page_id=p.id),1),jsonb_build_object('slug',p.slug,'title',p.title,'summary',p.summary,'contentHtml',p.content_html,'status',p.status,'audienceMode',p.audience_mode,'publishAt',p.publish_at,'seoTitle',p.seo_title,'seoDescription',p.seo_description,'audiences',(select jsonb_agg(audience order by audience) from idoc.content_page_audiences where page_id=p.id)),${actorId} from idoc.content_pages p where p.id=${id}`; }

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
@@ -35,35 +36,21 @@ export default async function AdminReconciliationPage() {
       )}
     </section>
 
-    <section className="mt-8 overflow-x-auto">
+    <section className="mt-8">
       <h2 className="font-medium text-foreground">Current findings</h2>
-      <table className="mt-2 min-w-full border text-sm">
-        <thead>
-          <tr className="border-b bg-surface text-left">
-            <th className="p-2">Kind</th>
-            <th className="p-2">Summary</th>
-            <th className="p-2">Member</th>
-            <th className="p-2">Detected</th>
-          </tr>
-        </thead>
-        <tbody>
-          {findings.length === 0 && (
-            <tr><td className="p-2 text-muted-foreground" colSpan={4}>No findings from the last run.</td></tr>
-          )}
-          {findings.map((finding) => (
-            <tr key={finding.id} className="border-b align-top">
-              <td className="p-2">{KIND_LABELS[finding.kind] ?? finding.kind}</td>
-              <td className="p-2">{finding.summary}</td>
-              <td className="p-2">
-                {finding.profileId
-                  ? <Link className="text-primary underline underline-offset-4 hover:opacity-80" href={`/admin/members?profileId=${finding.profileId}`}>View member</Link>
-                  : '—'}
-              </td>
-              <td className="p-2">{finding.createdAt.toISOString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <AdminReadOnlyTable
+        columns={[{ id: 'kind', label: 'Kind' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+        empty="No findings from the last run."
+        rows={findings.map((finding) => ({
+          id: String(finding.id), kind: KIND_LABELS[finding.kind] ?? finding.kind,
+          summary: finding.summary, member: finding.profileId ? 'View member' : '—',
+          link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
+          detected: finding.createdAt.toISOString(),
+        }))}
+        searchLabel="Search reconciliation findings"
+        statusColumn="kind"
+        tableType="reconciliation"
+      />
     </section>
   </main>;
 }

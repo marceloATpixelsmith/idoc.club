@@ -1,20 +1,19 @@
 import { notFound } from 'next/navigation';
 import { AdminNavigation } from '@/components/admin-navigation';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { requireAdministrator } from '@/lib/membership/authorization';
+import { AuthorizationError, requireAdministrator, type Actor } from '@/lib/membership/authorization';
 import { adminUnreadCount } from '@/lib/support/inbox';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const actor = await requireAccountAccess('administration');
-  const unreadCount = await adminUnreadCount();
-
+  let actor: Actor;
   try {
+    actor = await requireAccountAccess('administration');
     requireAdministrator(actor);
-  } catch {
-    //Authorization failures are classified here before React Server Components serialize them.
-    //This produces the branded 404 for every admin URL without exposing authorization details.
-    notFound();
+  } catch (error) {
+    if (error instanceof AuthorizationError) notFound();
+    throw error;
   }
+  const unreadCount = await adminUnreadCount();
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-7xl flex-col lg:flex-row">

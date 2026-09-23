@@ -4,7 +4,7 @@
 
 ## Admin dashboard authorization boundary
 
-The authenticated menu and Admin Dashboard receive only server-derived capability booleans. Regular members receive neither the Admin Dashboard menu item nor administrator data. Administrator and Super-Admin navigation sections are presentation only: the root admin layout rechecks Administrator authority, Super-Admin-only route layouts independently recheck Super Admin authority, and rejected direct URLs use the standard branded not-found response without disclosing that a restricted resource exists.
+The authenticated menu and Admin Dashboard receive only server-derived capability booleans. Regular members receive neither the Admin Dashboard menu item nor administrator data. Administrator and Super-Admin navigation sections are presentation only: the root admin layout rechecks Administrator authority before fetching navigation counts, Super-Admin-only route layouts independently recheck Super Admin authority, and rejected direct URLs use the standard branded not-found response without disclosing that a restricted resource exists. Only an expected AuthorizationError is mapped to not-found; infrastructure errors continue to surface as failures for diagnosis. Selected-member and selected-report CSV exports re-authorize on the server, validate bounded record IDs, re-fetch the records, and audit the resulting row count; browser row selection alone is never export authority.
 
 The automated acceptance evidence for these controls is defined in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). The gate combines database adversarial invariants with an isolated real-browser HTTP boundary and is required for authentication/account-security changes.
 

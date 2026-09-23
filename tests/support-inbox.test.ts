@@ -96,7 +96,7 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /persistTablePreferences\('support'/);
   assert.match(table, /params\.delete\('page'\)/);
   assert.match(loading, /aria-busy="true"/);
-  assert.match(error, /role|unavailable/);
+  assert.match(error, /AdminErrorState/);
 });
 
 test('assignment and workflow audit events exclude support bodies', () => {

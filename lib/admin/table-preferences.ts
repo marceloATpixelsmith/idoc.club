@@ -24,9 +24,9 @@ const schemas = {
     status: z.enum(['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']).optional(),
   }).strict(),
   support: z.object({ columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), category: text(30), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(255), sort: text(1000), status: text(30) }).strict(),
-  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), direction, from: date, pageSize, q: text(), sort: z.enum(['title', 'status', 'publication', 'updated']).optional(), status: text(30), to: date }).strict(),
-  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), direction, from: date, membershipRequirement: text(30), pageSize, q: text(), sort: z.enum(['title', 'date', 'status', 'registrations']).optional(), status: text(30), to: date }).strict(),
-  content_pages: z.object({ audience: text(30), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), direction, pageSize, publicationState: text(30), q: text(), sort: z.enum(['title', 'status', 'updated']).optional(), status: text(30) }).strict(),
+  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
+  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
+  content_pages: z.object({ audience: text(30), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, publicationState: text(30), q: text(), sort: text(1000), status: text(30) }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;
 
 export type TablePreferenceState = Record<string, string | string[] | number | undefined>;

@@ -4,7 +4,7 @@ import { AuthorizationError } from '../lib/membership/authorization.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import {
   archiveArticle, createArticle, deleteArticle, getAdminArticle, getPublicArticleBySlug,
-  listPublicArticles, NewsValidationError, publishArticle, publishScheduledArticles,
+  listAdminArticles, listPublicArticles, NewsValidationError, publishArticle, publishScheduledArticles,
   scheduleArticle, unpublishArticle, updateArticle,
 } from '../lib/news/articles.ts';
 import { adminUser, asAdmin, closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts';
@@ -21,6 +21,19 @@ function article(overrides: Partial<{ contentHtml: string; publicationDate: stri
     ...overrides,
   };
 }
+
+test('the administrator article table applies structured filters and bounded pagination on the server', async () => {
+  const admin = await adminUser();
+  await asAdmin(admin.id, () => createArticle(article({ slug: 'alpha', title: 'Alpha', status: 'published' })));
+  await asAdmin(admin.id, () => createArticle(article({ slug: 'beta', title: 'Beta', status: 'draft' })));
+  const listing = await asAdmin(admin.id, () => listAdminArticles({
+    filters: JSON.stringify([{ id: 'status', operator: 'inArray', value: ['published'] }]),
+    pageSize: '10', sort: JSON.stringify([{ id: 'title', desc: false }]),
+  }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.pageSize, 10);
+  assert.equal(listing.rows[0].title, 'Alpha');
+});
 
 test('a draft article is never publicly visible; publishing it makes it visible by slug and in the listing', async () => {
   const admin = await adminUser();
