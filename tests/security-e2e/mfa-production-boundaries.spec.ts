@@ -174,12 +174,17 @@ function stripDevOnlyDebugFlightChunks(html: string): string {
     try { decodedByPush.push(JSON.parse(`"${match[1]}"`)); } catch { decodedByPush.push(''); }
   }
 
+  // Flight rows can be split between pushes, including in the middle of the
+  // debug row's "env":"Server" marker. Reassemble the stream before finding
+  // debug rows and their referenced values. A new row at a push boundary can
+  // also omit the previous push's trailing newline.
+  const decoded = decodedByPush.reduce((stream, chunk) =>
+    stream + (stream && !stream.endsWith('\n') && /^[0-9a-f]+:/.test(chunk) ? '\n' : '') + chunk, '');
+
   const byId = new Map<string, string>();
-  for (const decoded of decodedByPush) {
-    for (const row of decoded.split('\n')) {
-      const match = row.match(/^([0-9a-f]+):([\s\S]*)$/);
-      if (match) byId.set(match[1], match[2]);
-    }
+  for (const row of decoded.split('\n')) {
+    const match = row.match(/^([0-9a-f]+):([\s\S]*)$/);
+    if (match) byId.set(match[1], match[2]);
   }
   const excluded = new Set<string>();
   const queue: string[] = [];
@@ -194,14 +199,15 @@ function stripDevOnlyDebugFlightChunks(html: string): string {
     }
   }
 
-  let pushIndex = 0;
+  const cleaned = decoded.split('\n').filter((row) => {
+    const match = row.match(/^([0-9a-f]+):/);
+    return !match || !excluded.has(match[1]);
+  }).join('\n');
+  let firstPush = true;
   return html.replace(pushPattern, (full) => {
-    const decoded = decodedByPush[pushIndex++];
-    const cleaned = decoded.split('\n').filter((row) => {
-      const match = row.match(/^([0-9a-f]+):/);
-      return !match || !excluded.has(match[1]);
-    }).join('\n');
-    return full.replace(/\[1,"(?:[^"\\]|\\.)*"\]/, `[1,${JSON.stringify(cleaned)}]`);
+    const payload = firstPush ? cleaned : '';
+    firstPush = false;
+    return full.replace(/\[1,"(?:[^"\\]|\\.)*"\]/, `[1,${JSON.stringify(payload)}]`);
   });
 }
 
@@ -232,6 +238,16 @@ test('stripDevOnlyDebugFlightChunks resolves a debug-row reference into a value 
   const secondTag = `<script>self.__next_f.push([1,${JSON.stringify('9:J{"name":"","start":1,"end":2,"env":"Server","owner":"$2","value":"$@8"}')}])</script>`;
   const cleaned = stripDevOnlyDebugFlightChunks(firstTag + secondTag);
   expect(cleaned).not.toContain(crossChunkDebugValue);
+});
+
+test('stripDevOnlyDebugFlightChunks recognizes a debug row split across pushes without removing rendered data', () => {
+  const debugValue = 'dev-only-split-row-secret';
+  const realValue = 'rendered-value-must-remain';
+  const firstTag = `<script>self.__next_f.push([1,${JSON.stringify('2:J{"env":"')}])</script>`;
+  const secondTag = `<script>self.__next_f.push([1,${JSON.stringify('Server","value":"$@3"}\n3:[["id",null,"' + debugValue + '"]]\n4:["$","$L5",null,{"value":"' + realValue + '"}]')}])</script>`;
+  const cleaned = stripDevOnlyDebugFlightChunks(firstTag + secondTag);
+  expect(cleaned).not.toContain(debugValue);
+  expect(cleaned).toContain(realValue);
 });
 
 // AUTH-API-003: "Trusted MFA results MAY contain internal factor and failure detail, while client
