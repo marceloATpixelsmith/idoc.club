@@ -93,6 +93,8 @@ export function ResourceDataTable({
   const [error, setError] = useState('');
   const suppressPersistence = useRef(false);
   const syncingUrl = useRef(false);
+  const advancedFilterKey = `${searchParams.get('filters') ?? ''}\u0000${searchParams.get('joinOperator') ?? ''}`;
+  const previousAdvancedFilter = useRef(advancedFilterKey);
   const optional = useMemo(() => config.columns.filter(({ id }) => id !== 'title').map(({ id }) => id), [config]);
   const initialVisibility = useMemo<VisibilityState>(() => {
     const explicit = searchParams.getAll('column');
@@ -154,6 +156,14 @@ export function ResourceDataTable({
 
   useEffect(() => setSearch(searchParams.get('q') ?? ''), [searchParams]);
   useEffect(() => { table.resetRowSelection(); }, [searchParams, table]);
+  useEffect(() => {
+    if (previousAdvancedFilter.current === advancedFilterKey) return;
+    previousAdvancedFilter.current = advancedFilterKey;
+    if (!searchParams.has('page')) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('page');
+    router.replace(`${pathname}?${params}`, { scroll: false });
+  }, [advancedFilterKey]);
   const urlColumns = searchParams.getAll('column').join('\u0000');
   useEffect(() => {
     const selected = searchParams.getAll('column');

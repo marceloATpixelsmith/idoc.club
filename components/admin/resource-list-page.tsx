@@ -78,6 +78,16 @@ export async function ResourceListPage({ query, tableType }: { query: Query; tab
       updated: new Date(String(row.updated_at)).toLocaleString(),
     }));
     }
+  if (page > 1 && !rows.length)
+    {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      {
+      if (key === 'page' || value === undefined) continue;
+      for (const entry of Array.isArray(value) ? value : [value]) params.append(key, entry);
+      }
+    redirect(`${config.path}?${params}`);
+    }
   return <main className="space-y-6 px-5 py-8 lg:px-8">
     <header className="flex items-center justify-between gap-4"><div><h1 className="text-2xl font-semibold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href={`${config.path}/new`}>{config.create}</Link></header>
     <ResourceDataTable page={page} pageSize={pageSize} rows={rows} tableType={tableType} total={total} />

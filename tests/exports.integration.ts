@@ -170,7 +170,7 @@ test('selected report export re-fetches rows, enforces administration, and audit
   const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(url)));
   assert.equal(response.status, 200);
   const body = await response.text();
-  assert.match(body, /^\uFEFFkind,summary,createdAt\r?\n/);
+  assert.match(body, /^kind,summary,createdAt\r?\n/);
   assert.match(body, /Example mismatch/);
   assert.doesNotMatch(body, /Other mismatch/);
   const [audit] = await sql<{ after_json: { resultCount: number; table: string } }[]>`select after_json from idoc.audit_log where action='admin.selected_report.exported' order by id desc limit 1`;

@@ -70,7 +70,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
         </aside>
       </section>
 
-      <section>
+      <section id="registrations">
         <h2 className="mb-3 text-lg font-semibold">Registrations</h2>
         <form className="mb-3 grid gap-3 md:grid-cols-4" method="get">
           <input className="border p-2" defaultValue={Array.isArray(query.q) ? query.q[0] : query.q} name="q" placeholder="Search member name or email" />
