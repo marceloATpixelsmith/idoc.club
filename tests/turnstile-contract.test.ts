@@ -9,7 +9,7 @@ const originalSecret = process.env.TURNSTILE_SECRET_KEY;
 const originalBaseUrl = process.env.BASE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
 const originalVercelEnv = process.env.VERCEL_ENV;
-const CLOUDFLARE_TESTING_SECRET_KEY = '1x0000000000000000000000000000000AA';
+const CLOUDFLARE_ALWAYS_PASS_TESTING_KEY = '1x0000000000000000000000000000000AA';
 
 function configure() {
   process.env.TURNSTILE_SECRET_KEY = 't'.repeat(32);
@@ -169,7 +169,7 @@ test('an "unknown" remote IP sentinel is never forwarded to the provider as thou
 });
 
 test('the Cloudflare testing secret is accepted, but only outside Production and only in its exact fixed response shape', async () => {
-  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_TESTING_SECRET_KEY;
+  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_ALWAYS_PASS_TESTING_KEY;
   process.env.BASE_URL = 'https://staging.idoc.club';
   delete process.env.VERCEL_ENV;
   // Cloudflare's real siteverify response for the testing dummy token: fixed hostname, no action.
@@ -182,7 +182,7 @@ test('the Cloudflare testing secret is accepted, but only outside Production and
 });
 
 test('the Cloudflare testing secret exception never activates in Production, even with the exact fixed response shape', async () => {
-  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_TESTING_SECRET_KEY;
+  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_ALWAYS_PASS_TESTING_KEY;
   process.env.BASE_URL = 'https://idoc.club';
   process.env.VERCEL_ENV = 'production';
   respond({ hostname: 'example.com', success: true });
@@ -190,7 +190,7 @@ test('the Cloudflare testing secret exception never activates in Production, eve
 });
 
 test('the Cloudflare testing secret exception still fails closed on anything other than the exact fixed shape', async () => {
-  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_TESTING_SECRET_KEY;
+  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_ALWAYS_PASS_TESTING_KEY;
   process.env.BASE_URL = 'https://staging.idoc.club';
   process.env.VERCEL_ENV = 'preview';
   for (const payload of [
