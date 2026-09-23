@@ -28,25 +28,22 @@ export async function GET(request: Request) {
       const rows = await db.select({
         attemptCount: notificationOutbox.attemptCount,
         createdAt: notificationOutbox.createdAt,
-        id: notificationOutbox.id,
         kind: notificationOutbox.kind,
         lastErrorCode: notificationOutbox.lastErrorCode,
         sentAt: notificationOutbox.sentAt,
       }).from(notificationOutbox).where(inArray(notificationOutbox.id, ids));
       resultCount = rows.length;
-      csv = toCsv(rows, ['id', 'kind', 'createdAt', 'sentAt', 'attemptCount', 'lastErrorCode']);
+      csv = toCsv(rows, ['kind', 'createdAt', 'sentAt', 'attemptCount', 'lastErrorCode']);
       }
     else
       {
       const rows = await db.select({
         createdAt: reconciliationFindings.createdAt,
-        id: reconciliationFindings.id,
         kind: reconciliationFindings.kind,
-        profileId: reconciliationFindings.profileId,
         summary: reconciliationFindings.summary,
       }).from(reconciliationFindings).where(inArray(reconciliationFindings.id, ids));
       resultCount = rows.length;
-      csv = toCsv(rows, ['id', 'kind', 'summary', 'profileId', 'createdAt']);
+      csv = toCsv(rows, ['kind', 'summary', 'createdAt']);
       }
     await db.insert(auditLog).values({
       action: 'admin.selected_report.exported', actorId: actor.id,
