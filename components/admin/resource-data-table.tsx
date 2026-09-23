@@ -112,6 +112,7 @@ export function ResourceDataTable({
       ...config.columns.map(({ id, label }): ColumnDef<ResourceRow> => ({
         id,
         accessorFn: (row) => row[id] ?? '',
+        enableHiding: id !== 'title',
         enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'registrations'].includes(id),
         enableColumnFilter: id === 'title' || id === 'status',
         header: header(label),
@@ -133,9 +134,10 @@ export function ResourceDataTable({
     ];
   }, [config, tableType]);
   const initialSorting = useMemo(() => {
+    const value = searchParams.get('sort') ?? '';
     try
       {
-      const parsed: unknown = JSON.parse(searchParams.get('sort') ?? '[]');
+      const parsed: unknown = JSON.parse(value || '[]');
       if (Array.isArray(parsed) && parsed.length && config.columns.some(({ id }) => id === parsed[0]?.id))
         {
         return parsed;
@@ -144,7 +146,9 @@ export function ResourceDataTable({
     catch
       {
       }
-    return [{ desc: true, id: tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated' }];
+    const legacy = ['title', 'status', 'publication', 'updated', 'date', 'registrations'].includes(value)
+      && config.columns.some(({ id }) => id === value) ? value : '';
+    return [{ desc: searchParams.get('direction') !== 'asc', id: legacy || (tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated') }];
   }, []);
   const { table, debounceMs, shallow, throttleMs } = useDataTable({
     columns, data: rows, enableAdvancedFilter: true, getRowId: (row) => String(row.id),

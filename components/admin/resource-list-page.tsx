@@ -39,6 +39,21 @@ export async function ResourceListPage({ query, tableType }: { query: Query; tab
       redirect(`${config.path}?${params}`);
       }
     }
+  const legacySort = Array.isArray(query.sort) ? query.sort[0] : query.sort;
+  const legacyDirection = Array.isArray(query.direction) ? query.direction[0] : query.direction;
+  const sortable = tableType === 'news' ? ['publication', 'title', 'status', 'updated']
+    : tableType === 'seminars' ? ['date', 'title', 'status', 'registrations'] : ['title', 'status', 'updated'];
+  if ((legacySort && sortable.includes(legacySort)) || (!legacySort && legacyDirection === 'asc'))
+    {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      {
+      if (key === 'sort' || key === 'direction' || value === undefined) continue;
+      for (const entry of Array.isArray(value) ? value : [value]) params.append(key, entry);
+      }
+    params.set('sort', JSON.stringify([{ id: legacySort || (tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated'), desc: legacyDirection !== 'asc' }]));
+    redirect(`${config.path}?${params}`);
+    }
   let rows: ResourceRow[];
   let page: number;
   let pageSize: number;
