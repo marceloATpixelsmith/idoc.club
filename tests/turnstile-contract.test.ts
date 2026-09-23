@@ -209,3 +209,25 @@ test('a real secret is never granted the testing exception, even if the provider
   respond({ hostname: 'example.com', success: true });
   assert.equal(await verifyTurnstile('token', '203.0.113.10', 'signup'), false);
 });
+
+test('the testing secret exception is a positive allow-list of staging.idoc.club, not merely "VERCEL_ENV is not production"', async () => {
+  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_ALWAYS_PASS_TESTING_KEY;
+  process.env.VERCEL_ENV = 'preview';
+  respond({ hostname: 'example.com', success: true });
+  for (const baseUrl of ['https://some-other-preview.vercel.app', 'https://idoc.club', 'https://not-staging.idoc.club']) {
+    process.env.BASE_URL = baseUrl;
+    assert.equal(await verifyTurnstile('XXXX.DUMMY.TOKEN.XXXX', '203.0.113.10', 'signup'), false, `BASE_URL=${baseUrl}`);
+  }
+  // Same secret, same non-Production VERCEL_ENV, but now the expected staging hostname: accepted.
+  process.env.BASE_URL = 'https://staging.idoc.club';
+  respond({ hostname: 'example.com', success: true });
+  assert.equal(await verifyTurnstile('XXXX.DUMMY.TOKEN.XXXX', '203.0.113.10', 'signup'), true);
+});
+
+test('the testing secret exception never activates on the staging hostname when VERCEL_ENV is production, closing the "unset/unexpected VERCEL_ENV" gap', async () => {
+  process.env.TURNSTILE_SECRET_KEY = CLOUDFLARE_ALWAYS_PASS_TESTING_KEY;
+  process.env.BASE_URL = 'https://staging.idoc.club';
+  process.env.VERCEL_ENV = 'production';
+  respond({ hostname: 'example.com', success: true });
+  assert.equal(await verifyTurnstile('XXXX.DUMMY.TOKEN.XXXX', '203.0.113.10', 'signup'), false);
+});
