@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
 import { listNotificationHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
@@ -30,36 +31,20 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
     <h1 className="text-2xl font-semibold">Notification delivery history</h1>
     <Link className="mt-2 inline-block underline text-sm" href="/admin/members">← Search members</Link>
     {!history && <p className="mt-4 text-sm text-foreground">Search for a member on the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link> to view their notification history.</p>}
-    {history && (
-      <section className="mt-8 overflow-x-auto">
-        <table className="min-w-full border text-sm">
-          <thead>
-            <tr className="border-b bg-surface text-left">
-              <th className="p-2">Kind</th>
-              <th className="p-2">Created</th>
-              <th className="p-2">Sent</th>
-              <th className="p-2">Attempts</th>
-              <th className="p-2">Last error</th>
-              <th className="p-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 && (
-              <tr><td className="p-2 text-muted-foreground" colSpan={6}>No notifications on file for this member.</td></tr>
-            )}
-            {history.map((row) => (
-              <tr key={row.id} className="border-b">
-                <td className="p-2">{KIND_LABELS[row.kind] ?? row.kind}</td>
-                <td className="p-2">{row.createdAt.toISOString()}</td>
-                <td className="p-2">{row.sentAt ? row.sentAt.toISOString() : '—'}</td>
-                <td className="p-2">{row.attemptCount}</td>
-                <td className="p-2">{row.lastErrorCode ?? '—'}</td>
-                <td className="p-2">{outcome(row)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    )}
+    {history && <section className="mt-8">
+      <AdminReadOnlyTable
+        key={profileId}
+        columns={[{ id: 'kind', label: 'Kind' }, { id: 'created', label: 'Created' }, { id: 'sent', label: 'Sent' }, { id: 'attempts', label: 'Attempts' }, { id: 'lastError', label: 'Last error' }, { id: 'status', label: 'Status' }]}
+        empty="No notifications on file for this member."
+        rows={history.map((row) => ({
+          id: String(row.id), kind: KIND_LABELS[row.kind] ?? row.kind,
+          created: row.createdAt.toISOString(), sent: row.sentAt ? row.sentAt.toISOString() : '—',
+          attempts: String(row.attemptCount), lastError: row.lastErrorCode ?? '—', status: outcome(row),
+        }))}
+        searchLabel="Search notification history"
+        statusColumn="status"
+        tableType="notifications"
+      />
+    </section>}
   </main>;
 }

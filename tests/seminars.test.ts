@@ -161,16 +161,18 @@ test('the admin edit page offers Publish, Cancel, and Move-to-draft quick action
 
 test('the admin seminar list page supports search and status filtering', () => {
   const adminListPage = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
-  assert.match(adminListPage, /name="q"/);
-  assert.match(adminListPage, /name="status"/);
+  const sharedTable = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
+  assert.match(adminListPage, /ResourceListPage/);
+  assert.match(sharedTable, /Search seminar title or location/);
+  assert.match(sharedTable, /Filter by status/);
 });
 
-test('the admin seminar table provides Tablecn-style date, sorting, pagination, and visibility controls', () => {
+test('the admin seminar table provides Dice UI date, sorting, pagination, and visibility controls', () => {
   const page = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
-  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
-  for (const value of ['name="from"', 'name="to"', 'ActiveFilterChips', 'ColumnVisibility', 'sortHref', 'page']) assert.match(page, new RegExp(value));
-  assert.match(controls, /Clear all/);
-  assert.match(seminarsSource, /s\.seminar_date desc,s\.id desc/);
+  const table = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
+  assert.match(page, /ResourceListPage/);
+  for (const value of ['DataTableFilterMenu', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
+  assert.match(seminarsSource, /date: 's\.seminar_date'/);
 });
 
 test('Seminars is removed from the member dashboard and retained on the public website', () => {

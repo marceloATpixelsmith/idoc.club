@@ -501,14 +501,17 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Steps
 1. As a normal member, directly request admin routes/APIs.
-2. As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.
-3. Attempt self-elevation or role mutation outside permitted scope.
+2. Verify an unauthorized visit to /admin and a Super Admin-only admin page renders a safe denial instead of a generic retry screen.
+3. As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.
+4. Attempt self-elevation or role mutation outside permitted scope.
 
 ### PASS
 - Every server-side boundary rejects unauthorized role/object access with 401/403 or equivalent safe denial; no protected data or mutation occurs.
+- An unauthorized administrator page visit has a safe denial with no protected navigation data, while an authorized administrator can load the page.
 
 ### FAIL
 - Hidden UI is the only boundary, object ID substitution works, or a user can elevate privileges.
+- An authorization denial renders the generic runtime error and retry screen, or hides a real data-loading failure as an access denial.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.

@@ -381,6 +381,13 @@ test('the admin seminar list supports search and status filtering', async () => 
   const { rows: searched } = await asAdmin(admin.id, () => listAdminSeminars({ q: 'Beta' }));
   assert.equal(searched.length, 1);
   assert.equal(searched[0].title, 'Beta Workshop');
+  const filtered = await asAdmin(admin.id, () => listAdminSeminars({
+    filters: JSON.stringify([{ id: 'status', operator: 'inArray', value: ['draft'] }]),
+    pageSize: '10', sort: JSON.stringify([{ id: 'title', desc: false }]),
+  }));
+  assert.equal(filtered.total, 1);
+  assert.equal(filtered.pageSize, 10);
+  assert.equal(filtered.rows[0].title, 'Beta Workshop');
 });
 
 test('past seminars only ever show this member\'s own registration history, and canceled seminars they never registered for do not leak into their current list', async () => {

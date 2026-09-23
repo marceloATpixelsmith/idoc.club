@@ -1,4 +1,5 @@
 import 'server-only';
+import { advancedListWhere, listDate, listOrder, listPage, listPageSize } from '@/lib/admin/resource-list-query';
 
 import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
@@ -13,7 +14,6 @@ export const SEMINAR_TITLE_MAX_LENGTH = 200;
 export const SEMINAR_DESCRIPTION_MAX_LENGTH = 10_000;
 export const SEMINAR_LOCATION_MAX_LENGTH = 2000;
 export const SEMINAR_MAX_PRICE_CENTS = 100_000_00;
-const ADMIN_PAGE_SIZE = 20;
 
 export class SeminarValidationError extends Error {
   constructor(message: string) {
@@ -99,34 +99,28 @@ export async function listEnabledSeminarPaymentMethods() {
 export async function listAdminSeminars(input: Record<string, string | string[] | undefined>) {
   await requireSeminarAdministrator();
   const firstValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
-  const page = Math.max(1, Number.parseInt(firstValue(input.page) ?? '1', 10) || 1);
+  const page = listPage(input);
   const statusValue = firstValue(input.status);
   const status: SeminarStatus | null = SEMINAR_STATUSES.includes(statusValue as SeminarStatus) ? (statusValue as SeminarStatus) : null;
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
-  const sortValue = firstValue(input.sort) ?? '';
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromValue) ? fromValue : null;
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(toValue) ? toValue : null;
-  const sort = ['date', 'title', 'status', 'registrations'].includes(sortValue) ? sortValue : 'date';
-  const direction = firstValue(input.direction) === 'asc' ? 'asc' : 'desc';
-  const limit = ADMIN_PAGE_SIZE;
+  const from = listDate(fromValue);
+  const to = listDate(toValue);
+  const order = listOrder(input, {
+    date: 's.seminar_date', title: 's.title', status: 's.status',
+    registrations: '(select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
+  }, 'date', 's.id');
+  const advancedWhere = advancedListWhere(input, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
+  const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select s.id,s.title,s.status,s.seminar_date,s.start_time,s.capacity,s.payment_method_canonical_id,
+  const rows = await client`select s.id,s.title,s.status,s.seminar_date,s.start_time,s.capacity,s.payment_method_canonical_id,count(*) over()::int total_count,
     (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
     from idoc.seminars s
     where (${status}::text is null or s.status=${status}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
-    and (${from}::date is null or s.seminar_date>=${from}::date) and (${to}::date is null or s.seminar_date<=${to}::date)
-    order by case when ${sort}='date' and ${direction}='asc' then s.seminar_date end asc,
-      case when ${sort}='date' and ${direction}='desc' then s.seminar_date end desc,
-      case when ${sort}='title' and ${direction}='asc' then s.title end asc,
-      case when ${sort}='title' and ${direction}='desc' then s.title end desc,
-      case when ${sort}='status' and ${direction}='asc' then s.status end asc,
-      case when ${sort}='status' and ${direction}='desc' then s.status end desc,
-      case when ${sort}='registrations' and ${direction}='asc' then (select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') end asc,
-      case when ${sort}='registrations' and ${direction}='desc' then (select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') end desc,
-      s.seminar_date desc,s.id desc limit ${limit + 1} offset ${offset}`;
-  return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
+    and (${from}::date is null or s.seminar_date>=${from}::date) and (${to}::date is null or s.seminar_date<=${to}::date) and (${advancedWhere})
+    order by ${order} limit ${limit + 1} offset ${offset}`;
+  return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
 }
 
 export type AdminSeminarRow = {

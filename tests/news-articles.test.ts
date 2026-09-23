@@ -70,12 +70,13 @@ test('the public listing page has an explicit empty state and pagination', () =>
   assert.match(listPage, /hasNext/);
 });
 
-test('the admin article table provides Tablecn-style date, sorting, pagination, and visibility controls', () => {
+test('the admin article table uses the shared Dice UI resource controls and server sorting', () => {
   const page = readFileSync('app/(dashboard)/admin/news/page.tsx', 'utf8');
-  const controls = readFileSync('components/admin/table-controls.tsx', 'utf8');
-  for (const value of ['name="from"', 'name="to"', 'ActiveFilterChips', 'ColumnVisibility', 'sortLink', 'Pagination']) assert.match(page, new RegExp(value));
-  assert.match(controls, /Clear all/);
-  assert.match(source, /publication_date desc,id desc/);
+  const table = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
+  assert.match(page, /ResourceListPage/);
+  for (const value of ['DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'Export selected CSV']) assert.match(table, new RegExp(value));
+  assert.match(source, /listOrder\(input/);
+  assert.match(source, /publication: 'publication_date'/);
 });
 
 test('article HTML is only ever rendered through the one sanitizing view component', () => {

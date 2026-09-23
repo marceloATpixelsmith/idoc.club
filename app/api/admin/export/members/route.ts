@@ -8,9 +8,15 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const filters = Object.fromEntries(url.searchParams) as MemberFilters;
-    const rows = await exportAdminMembers(filters);
+    const rawSelected = url.searchParams.getAll('selectedUserId');
+    if (rawSelected.length > 100 || rawSelected.some((value) => !/^[1-9]\d{0,9}$/.test(value) || Number(value) > 2_147_483_647)) {
+      return Response.json({ error: 'Select no more than 100 valid member rows.' }, { status: 400 });
+    }
+    const selectedUserIds = rawSelected.length ? [...new Set(rawSelected.map(Number))] : undefined;
+    const rows = await exportAdminMembers(filters, selectedUserIds);
     return new Response(`\uFEFF${toCsv(rows, ['profileId', 'firstName', 'lastName', 'email', 'status', 'validUntil', 'membershipType', 'federation', 'country', 'region'])}`, {
       headers: {
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': 'attachment; filename="members.csv"',
         'Content-Type': 'text/csv; charset=utf-8',
       },

@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation';
 import { requireAccountAccess } from '@/lib/membership/data-access';
-import { requireSuperAdmin } from '@/lib/membership/authorization';
+import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authorization';
 
 export default async function SupportDefaultsLayout({ children }: { children: React.ReactNode }) {
-  const actor = await requireAccountAccess('administration');
   try {
+    const actor = await requireAccountAccess('administration');
     requireSuperAdmin(actor);
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof AuthorizationError) notFound();
+    throw error;
   }
   return children;
 }
