@@ -16,7 +16,33 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 ## Known staging environment facts
 
-- Staging hostname: `redesign.idoc.club`.
+- Staging hostname: `staging.idoc.club` (a dedicated Vercel Preview deployment on the `staging`
+  branch, built specifically for this audit -- `redesign.idoc.club` is production; never target it).
+  `staging.idoc.club` uses Cloudflare Turnstile always-pass testing keys scoped to the `staging`
+  branch, so automated signup/reset flows can complete Turnstile without weakening real bot
+  protection on production. This requires `lib/auth/turnstile.ts`'s narrow, explicit exception
+  (docs/21 AUTH-TURNSTILE-006) for Cloudflare's own fixed testing-secret response shape --
+  the client widget alone auto-passing is not sufficient, since the app's server-side
+  `verifyTurnstile` independently binds every token to the real hostname/action by design and
+  Cloudflare's testing-key response can never satisfy that binding on its own. Do not remove that
+  exception (or revert staging to a real Turnstile widget) without re-checking this file: a prior
+  version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
+  needed a human to solve it manually, one flow at a time.
+- **The staging and production deployments currently share the same Postgres database** (one
+  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) --
+  contrary to `docs/07` §15's general "staging must use its own non-production database" rule.
+  This is a known, operator-confirmed condition (not yet remediated with a separate staging
+  database), not an oversight of this runbook. Practical consequences for this audit:
+  - Every disposable test account, adversarial request, and piece of test data created during a
+    live-auth run lands in the real production database alongside genuine member data.
+  - The read-only `query_render_postgres` connector below is querying the **same** database
+    production reads/writes -- a query result may include real member rows, not just test rows.
+  - End-of-run cleanup (`scripts/e2e-delete-test-account.sql`) is not optional cosmetic tidying
+    here -- it is removing real rows from the production database. Treat every disposable
+    `@pixelsmith.space` account created during a run as required cleanup, not best-effort.
+  - Prefer the least invasive adversarial techniques that still validate the control (e.g. avoid
+    bulk/high-count operations even where the case would otherwise tolerate them), since there is
+    no environment isolation backstopping a mistake.
 - Staging's Postgres is reachable **read-only** from Claude Code's sandboxed session via the Render
   MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`,
   `workspaceId` `tea-d3c3eq7diees7392talg`; the app schema inside it is `idoc`). Useful for
@@ -24,6 +50,15 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
   (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
   actually performed.
+- **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
+  `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
+  blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
+  the human operator using this account, on request from Claude at the right point in the run; Claude
+  independently verifies the resulting database state (identity row, session, audit_log entry) via
+  the read-only connector above rather than trusting the operator's report alone. The
+  adversarial/tamper/replay/cancel-deny portions of the same case do not need this account and are
+  run by Claude directly. Do not ask the operator which account to use -- use this one unless they
+  say otherwise.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
   -- query `idoc.application_roles` via the read-only connector above.
