@@ -83,7 +83,6 @@ export const GOOGLE_OIDC_PROVIDER = {
 
 export const GOOGLE_OAUTH_ENV = {
   clientId: 'GOOGLE_OAUTH_CLIENT_ID',
-  clientSecret: 'GOOGLE_OAUTH_CLIENT_SECRET',
   clientSecretActiveVersion: 'GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION',
   clientSecretVersions: 'GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS',
   redirectUri: 'GOOGLE_OAUTH_REDIRECT_URI',
@@ -160,10 +159,11 @@ function validRedirectUri(value: string): string {
 // wrong (rollback), and removing an old one once confident it is no longer needed (retirement) --
 // all without ever needing to re-enter or rediscover a secret value to do so, and the app only ever
 // sends the one active version to Google (there is no "try several" verification the way a signing
-// key ring needs, since the app is never the one validating this credential). A deployment that
-// never rotates needs nothing new: GOOGLE_OAUTH_CLIENT_SECRET alone is returned as an implicit
-// single-version ring, unchanged from before this row existed.
-// GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS + _ACTIVE_VERSION is the opt-in rotation-ready form.
+// key ring needs, since the app is never the one validating this credential).
+// GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS + _ACTIVE_VERSION is mandatory: a JSON object mapping each
+// version label to its secret, plus the label currently active. A deployment that never rotates
+// still configures a single-entry map -- there is no implicit single-secret fallback, so this is
+// always auditable rotation evidence, never silently bypassable.
 // google-oidc-secret-audit.ts provides the secret-free audit record of when the active version last
 // changed. The Super Admin security operation calls it after a real cutover/sign-in; a CLI remains
 // available as a non-browser operational fallback.
@@ -172,29 +172,8 @@ export function googleOauthClientSecretVersions(env: NodeJS.ProcessEnv = process
   return { activeVersion: version, versions };
 }
 
-/** Requires the explicit rotation-ready ring. The legacy single-secret form deliberately receives
- * an implicit `v1` only for runtime compatibility; it is not auditable rotation evidence. */
-export function explicitGoogleOauthClientSecretVersions(
-  env: NodeJS.ProcessEnv = process.env,
-): { activeVersion: string; versions: ReadonlyMap<string, string> } {
-  if (
-    !env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim()
-    || !env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()
-  ) throw new GoogleOidcError('configuration');
-  return googleOauthClientSecretVersions(env);
-}
-
 function googleOauthClientSecret(env: NodeJS.ProcessEnv): { secret: string; version: string; versions: ReadonlyMap<string, string> } {
-  const versionsRaw = env[GOOGLE_OAUTH_ENV.clientSecretVersions]?.trim();
-  if (!versionsRaw) {
-    // A lone GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION with no matching VERSIONS map is not "use
-    // the legacy secret" -- it is a botched or partial rotation deploy (the ring was removed, or
-    // never added, while the pointer still names a version) and must fail closed rather than
-    // silently authenticating with a possibly-obsolete or revoked credential.
-    if (env[GOOGLE_OAUTH_ENV.clientSecretActiveVersion]?.trim()) throw new GoogleOidcError('configuration');
-    const secret = required(env, GOOGLE_OAUTH_ENV.clientSecret);
-    return { secret, version: 'v1', versions: new Map([['v1', secret]]) };
-  }
+  const versionsRaw = required(env, GOOGLE_OAUTH_ENV.clientSecretVersions);
   let serialized: unknown;
   try { serialized = JSON.parse(versionsRaw); } catch { throw new GoogleOidcError('configuration'); }
   if (!serialized || Array.isArray(serialized) || typeof serialized !== 'object') throw new GoogleOidcError('configuration');

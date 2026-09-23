@@ -190,7 +190,9 @@
         "coverage": "mapped",
         "tests": [
           "tests/security-e2e/google-oauth.spec.ts",
-          "tests/identity-ownership.integration.ts"
+          "tests/identity-ownership.integration.ts",
+          "tests/google-oauth-secret-rotation.test.ts",
+          "tests/google-oauth-secret-audit.integration.ts"
         ],
         "rationale": ""
       },

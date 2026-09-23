@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  explicitGoogleOauthClientSecretVersions,
   GoogleOidcError,
   googleOauthClientSecretVersions,
   loadGoogleOidcConfig,
@@ -10,8 +9,9 @@ import {
 // AUTH-SECRET-004: "OAuth client secrets MUST support verified bounded-overlap replacement,
 // rollback, retirement and audit without client exposure." These tests drive the real production
 // loadGoogleOidcConfig()/googleOauthClientSecretVersions() config parsing -- not a reimplementation
-// -- proving the opt-in versioned rotation ring resolves, rolls back, and fails closed correctly,
-// while a deployment that never rotates sees identical behavior to before this row existed.
+// -- proving the mandatory versioned rotation ring resolves, rolls back, and fails closed correctly.
+// There is no legacy single-secret fallback: GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS +
+// _ACTIVE_VERSION are always required, so every deployment's config is auditable rotation evidence.
 
 const base: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
@@ -19,16 +19,25 @@ const base: NodeJS.ProcessEnv = {
   GOOGLE_OAUTH_REDIRECT_URI: 'https://idoc.club/api/auth/google/callback',
 };
 
-test('a plain GOOGLE_OAUTH_CLIENT_SECRET (no rotation config) resolves as an implicit single-version ring, unchanged from before', () => {
-  const config = loadGoogleOidcConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' });
+test('a deployment that never rotates still configures a single-entry versions map', () => {
+  const environment = {
+    ...base,
+    GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS: JSON.stringify({ v1: 'plain-secret-value' }),
+    GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v1',
+  };
+  const config = loadGoogleOidcConfig(environment);
   assert.equal(config.clientSecret, 'plain-secret-value');
   assert.equal(config.clientSecretVersion, 'v1');
-  assert.deepEqual([...googleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value' }).versions], [['v1', 'plain-secret-value']]);
+  assert.deepEqual([...googleOauthClientSecretVersions(environment).versions], [['v1', 'plain-secret-value']]);
 });
 
-test('rotation evidence rejects the legacy implicit v1 form because it is not an explicit versioned cutover', () => {
+test('missing GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS fails closed -- there is no implicit single-secret fallback', () => {
   assert.throws(
-    () => explicitGoogleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'legacy-secret' }),
+    () => loadGoogleOidcConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v1' }),
+    (error: unknown) => error instanceof GoogleOidcError && error.code === 'configuration',
+  );
+  assert.throws(
+    () => googleOauthClientSecretVersions({ ...base, GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v1' }),
     (error: unknown) => error instanceof GoogleOidcError,
   );
 });
@@ -72,13 +81,6 @@ test('the rotation ring fails closed on malformed JSON, non-object shapes, empty
       (error: unknown) => error instanceof GoogleOidcError && error.code === 'configuration',
     );
   }
-});
-
-test('an active-version pointer with no matching versions map fails closed rather than silently falling back to the legacy single secret', () => {
-  assert.throws(
-    () => loadGoogleOidcConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: 'plain-secret-value', GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v2' }),
-    (error: unknown) => error instanceof GoogleOidcError && error.code === 'configuration',
-  );
 });
 
 test('the rotation ring requires an explicit active version and rejects a malformed version label', () => {

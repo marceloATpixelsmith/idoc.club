@@ -46,7 +46,8 @@ export default defineConfig({
       // checked against Google, since GOOGLE_OIDC_TEST_PROVIDER_BASE_URL below points the app at the
       // mock IdP (tests/security-e2e/google-mock-idp.ts) instead of the real Google endpoints.
       GOOGLE_OAUTH_CLIENT_ID: 'security-e2e-test-client-id',
-      GOOGLE_OAUTH_CLIENT_SECRET: 'security-e2e-test-client-secret',
+      GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS: JSON.stringify({ v1: 'security-e2e-test-client-secret' }),
+      GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v1',
       GOOGLE_OAUTH_REDIRECT_URI: 'http://127.0.0.1:3100/api/auth/google/callback',
       GOOGLE_OIDC_TEST_PROVIDER_BASE_URL: GOOGLE_MOCK_IDP_URL,
     },

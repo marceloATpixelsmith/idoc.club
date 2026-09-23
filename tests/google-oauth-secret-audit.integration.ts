@@ -80,19 +80,14 @@ test('the production operation records the server-configured active version with
   }
 });
 
-test('the production operation rejects the legacy implicit v1 form without writing evidence', async () => {
+test('the production operation rejects a missing rotation ring without writing evidence', async () => {
   const operator = await createUser();
-  process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'legacy-secret-with-no-explicit-version-ring';
   delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS;
   delete process.env.GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION;
-  try {
-    await assert.rejects(() => recordActiveGoogleOauthSecretRotation(operator.id));
-    const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.audit_log
-      where action='auth.oauth.google.client_secret.rotated'`;
-    assert.equal(count, 0);
-  } finally {
-    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  }
+  await assert.rejects(() => recordActiveGoogleOauthSecretRotation(operator.id));
+  const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.audit_log
+    where action='auth.oauth.google.client_secret.rotated'`;
+  assert.equal(count, 0);
 });
 
 test('concurrent and repeated production-operation calls create exactly one row per active version', async () => {
