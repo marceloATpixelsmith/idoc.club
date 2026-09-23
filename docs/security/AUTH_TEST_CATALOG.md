@@ -102,7 +102,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005
-- **CI coverage:** mapped — `tests/security-e2e/google-oauth.spec.ts`, `tests/identity-ownership.integration.ts`
+- **CI coverage:** mapped — `tests/security-e2e/google-oauth.spec.ts`, `tests/identity-ownership.integration.ts`, `tests/google-oauth-secret-rotation.test.ts`, `tests/google-oauth-secret-audit.integration.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
