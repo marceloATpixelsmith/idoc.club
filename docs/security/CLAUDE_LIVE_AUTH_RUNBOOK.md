@@ -14,6 +14,20 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
+## Known staging environment facts
+
+- Staging hostname: `redesign.idoc.club`.
+- Staging's Postgres is reachable **read-only** from Claude Code's sandboxed session via the Render
+  MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`,
+  `workspaceId` `tea-d3c3eq7diees7392talg`; the app schema inside it is `idoc`). Useful for
+  verification queries (confirming target/revision, checking a grant landed, session-policy
+  inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
+  (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
+  actually performed.
+- Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
+  (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
+  -- query `idoc.application_roles` via the read-only connector above.
+
 ## Execution order
 
 1. Run `LIVE-AUTH-030` first to establish deployed target/revision evidence.
@@ -38,28 +52,42 @@ For every case with `requiresEmail=true`:
 IDOC has no self-service role elevation (docs/07-administrator-and-operations-runbook.md:
 Organization Settings and role grants are Super-Admin-only, provisioned directly, not through an
 invitation flow). Cases with `live.requiresAdmin=true` (009-013, 017, 026, 033) therefore need a
-disposable privileged identity provisioned out of band before they can run live:
+disposable privileged identity provisioned out of band before they can run live.
+
+**Claude Code's sandboxed session cannot write to the staging database itself.** Raw Postgres TCP
+egress is blocked at the network level, and the one read path that does work (Render's own
+`query_render_postgres` MCP tool) is explicitly read-only by design -- confirmed by testing both
+directly. There is no plugin, connector, or workaround that grants write access from inside the
+sandbox; do not keep re-attempting one. Both `scripts/e2e-grant-privileged-role.ts` and
+`scripts/e2e-delete-test-account.ts` remain the canonical, tested implementations of this logic (run
+them yourself from an environment with real Postgres write access, e.g. locally or from CI, if you
+have one) -- but when Claude itself runs the audit, role provisioning and cleanup are handed off as
+ready-to-run SQL instead:
 
 1. Complete a real signup through the live app for a disposable `@pixelsmith.space` test address
    (LIVE-AUTH-001), so account state, verification, and TOTP enrollment stay genuinely live-tested.
-2. Grant the role against staging: `node --conditions=react-server --import tsx
-   scripts/e2e-grant-privileged-role.ts --email=<addr> --role=administrator|super_admin
-   --granted-by=<real Super Admin user id> --confirm-staging`, with `STAGING_POSTGRES_URL` set to
-   staging's own database (never `POSTGRES_URL`/production). Records an `application_roles` row and
-   a matching `audit_log` entry tagged as automated test-tooling provisioning, so LIVE-AUTH-026's
-   audit-evidence check still sees a coherent, attributable trail.
+2. Fill in `scripts/e2e-grant-privileged-role.sql`'s `{{TARGET_EMAIL}}`, `{{TARGET_ROLE}}`, and
+   `{{GRANTED_BY_USER_ID}}` placeholders with real values (see "Known staging environment facts"
+   above for the granter id) and hand the resulting SQL to the operator to run against staging with
+   an actual write-capable Postgres client (`psql "$STAGING_POSTGRES_URL" -f <file>`, or pasted into
+   Render's dashboard SQL console). Wait for confirmation it ran before continuing -- do not guess
+   that it succeeded. It records an `application_roles` row and a matching `audit_log` entry tagged
+   as automated test-tooling provisioning, so LIVE-AUTH-026's audit-evidence check still sees a
+   coherent, attributable trail, and increments `session_version` so the grant only takes effect
+   through a genuine fresh login (mirrors `lib/membership/role-grants.ts` exactly).
 3. Run the applicable LIVE-AUTH cases.
-4. Tear the identity down: `node --conditions=react-server --import tsx
-   scripts/e2e-delete-test-account.ts --email=<addr> --confirm-staging` (add `--dry-run` first to
-   preview). This deletes only rows the test account owns -- its own sessions, MFA factors/codes,
-   role grants, profile/membership rows, and its own audit_log entries. If the account is ever
-   referenced on a row it does not own (verified someone else's professional role, authored real
-   content, recorded a real member's payment), the script aborts with no changes instead of touching
-   that row -- resolve that manually before re-running.
+4. At the end of the run (whether it passed or not), fill in `scripts/e2e-delete-test-account.sql`'s
+   `{{TARGET_EMAILS}}` placeholder with every disposable `@pixelsmith.space` email created during
+   this run (not just the privileged one) and deliver the resulting file to the operator alongside
+   the results JSON. It deletes only rows each account owns -- its own sessions, MFA factors/codes,
+   role grants, profile/membership rows, and its own audit_log entries -- and per account, not as one
+   all-or-nothing batch: if one account is ever referenced on a row it does not own (verified someone
+   else's professional role, authored real content, recorded a real member's payment), that account
+   alone is skipped with a warning and every other account in the list is still cleaned up.
 
-Both scripts refuse to run without `--confirm-staging` and refuse any email outside
-`@pixelsmith.space`; see `lib/db/staging-database-url.ts`. Never point `STAGING_POSTGRES_URL` at a
-real member's database or run this against a non-disposable account.
+Both the `.ts` and `.sql` forms refuse any email outside `@pixelsmith.space` and are otherwise kept
+in exact lockstep -- change one, change the other. Never point either at a real member's database or
+run either against a non-disposable account.
 
 This tooling is operator-only test infrastructure: it changes no product-facing auth behavior, adds
 no endpoint or user-reachable flow, and alters no LIVE-AUTH case's pass/fail criteria -- it only
@@ -77,6 +105,12 @@ Never record passwords, TOTP secrets, recovery codes, session cookies, reset tok
 Create `test-results/auth/auth-live-results.json` conforming to `docs/security/auth-live-results.schema.json`.
 
 Also provide a concise human report grouped into PASS, FAIL, BLOCKED, and NOT APPLICABLE, using the `LIVE-AUTH-###` ID in every entry.
+
+If any disposable `@pixelsmith.space` account was created during the run, also deliver the filled-in
+cleanup SQL (see "Privileged (administrator/super_admin) test identities" above -- the same
+hand-off applies whether or not any case needed a privileged identity) as a file, and say so plainly
+in the report: cleanup is not done until the operator actually runs it. Never claim disposable state
+was removed unless you have direct confirmation the SQL was executed.
 
 If `test-results/auth/auth-ci-results.json` is available for the same revision, run:
 
