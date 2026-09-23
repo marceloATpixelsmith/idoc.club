@@ -215,9 +215,50 @@
  * transparent/surface background that would otherwise lose to this unlayered rule despite being
  * more specific.
  */
-button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-password__toggle):not(.idoc-auth-turnstile__retry):not(.idoc-auth-recovery-codes__copy-button) {
+button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-password__toggle):not(.idoc-auth-turnstile__retry):not(.idoc-auth-recovery-codes__copy-button):not(:where([data-idoc-table-panel] *)) {
   background: var(--gold);
   color: var(--primary-foreground);
+}
+
+[data-idoc-table-control],
+[data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)) {
+  background: var(--surface-raised);
+  border: 1px solid var(--input);
+  color: var(--foreground);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+[data-idoc-table-control] svg {
+  color: currentColor;
+  opacity: 0.85;
+}
+
+[data-idoc-table-control]:hover,
+[data-idoc-table-control][data-state='open'],
+[data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)):hover {
+  background: var(--accent);
+  border-color: rgb(211 175 55 / 45%);
+}
+
+[data-idoc-table-panel] {
+  background: var(--surface-raised);
+  border: 1px solid rgb(211 175 55 / 40%);
+  box-shadow: var(--shadow-deep), 0 0 0 1px rgb(211 175 55 / 12%);
+}
+
+[data-idoc-table-panel] [data-slot='select-trigger'],
+[data-idoc-table-panel] button:not([data-slot='button']):not(:where([data-slot='calendar'] *)) {
+  background: var(--surface);
+  color: var(--foreground);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+[data-idoc-table-panel] [data-slot='command-item']:hover {
+  background: var(--accent);
 }
 
 @utility eyebrow {

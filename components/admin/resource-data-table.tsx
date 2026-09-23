@@ -11,7 +11,6 @@ import { DataTable } from '@/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableFilterList } from '@/components/data-table/data-table-filter-list';
-import { DataTableFilterMenu } from '@/components/data-table/data-table-filter-menu';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Button } from '@/components/ui/button';
@@ -252,7 +251,6 @@ export function ResourceDataTable({
     <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableAdvancedToolbar className="mt-5 rounded-xl border bg-background p-3" table={table}>
         <div className="flex min-w-64 flex-1 gap-2"><Input aria-label={config.searchLabel} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') update({ q: search.trim() }); }} placeholder="Search…" type="search" value={search} /><Button onClick={() => update({ q: search.trim() })} type="button">Search</Button></div>
-        <DataTableFilterMenu table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
         <DataTableFilterList table={table} debounceMs={debounceMs} shallow={shallow} throttleMs={throttleMs} />
         <DataTableSortList table={table} />
         <select aria-label="Filter by status" className="h-9 rounded-md border bg-background px-2 text-sm" onChange={(event) => update({ status: event.target.value })} value={searchParams.get('status') ?? ''}><option value="">All statuses</option>{config.statuses.map(({ label, value }) => <option key={value} value={value}>{label}</option>)}</select>
