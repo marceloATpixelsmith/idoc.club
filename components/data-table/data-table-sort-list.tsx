@@ -64,6 +64,7 @@ export function DataTableSortList<TData>({
   const addButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const sorting = table.getState().sorting;
+  const visibility = table.getState().columnVisibility;
   const onSortingChange = table.setSorting;
 
   const { columnLabels, columns } = React.useMemo(() => {
@@ -72,7 +73,7 @@ export function DataTableSortList<TData>({
     const availableColumns: { id: string; label: string }[] = [];
 
     for (const column of table.getAllColumns()) {
-      if (!column.getCanSort()) continue;
+      if (!column.getCanSort() || !column.getIsVisible()) continue;
 
       const label = column.columnDef.meta?.label ?? column.id;
       labels.set(column.id, label);
@@ -82,11 +83,12 @@ export function DataTableSortList<TData>({
       }
     }
 
+    availableColumns.sort((a, b) => a.label.localeCompare(b.label, 'en'));
     return {
       columnLabels: labels,
       columns: availableColumns,
     };
-  }, [sorting, table]);
+  }, [sorting, table, visibility]);
 
   const onSortAdd = React.useCallback(() => {
     const firstColumn = columns[0];
@@ -331,16 +333,16 @@ function DataTableSortItem({
               id={fieldTriggerId}
               aria-controls={fieldListboxId}
               variant="outline"
-              className="w-44 justify-between rounded font-normal"
+              className="w-52 justify-between rounded font-normal"
             >
-              <span className="truncate">{columnLabels.get(sort.id)}</span>
+              <span className="truncate">{columnLabels.get(sort.id) ?? 'Hidden field'}</span>
               <ChevronsUpDown className="opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent
             data-idoc-table-panel
             id={fieldListboxId}
-            className="w-(--radix-popover-trigger-width) p-0"
+            className="w-64 max-w-[calc(100vw-2rem)] p-0"
           >
             <Command>
               <CommandInput placeholder="Search fields..." />

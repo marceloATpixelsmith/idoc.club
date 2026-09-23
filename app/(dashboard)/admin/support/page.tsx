@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { listAdminConversations, listEligibleAdministrators, type SupportSearchParams } from '@/lib/support/inbox';
 import { SupportInboxTable } from './support-inbox-table';
 
-const TABLE_KEYS = ['q', 'category', 'status', 'assigned', 'filters', 'joinOperator', 'sort', 'direction', 'page', 'pageSize', 'column'];
+const TABLE_KEYS = ['q', 'category', 'status', 'assigned', 'filters', 'joinOperator', 'sort', 'direction', 'page', 'pageSize', 'column', 'columnOrder'];
 
 export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<SupportSearchParams> }) {
   const params = await searchParams;

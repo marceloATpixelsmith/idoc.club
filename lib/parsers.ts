@@ -1,10 +1,11 @@
 import { createParser } from "nuqs/server";
 import { z } from "zod";
 
-import { dataTableConfig } from "@/config/data-table";
+import { dataTableConfig } from "../config/data-table.ts";
 import type {
   ExtendedColumnFilter,
   ExtendedColumnSort,
+  FilterVariant,
 } from "@/types/data-table";
 
 const sortingItemSchema = z.object({
@@ -60,6 +61,7 @@ export type FilterItemSchema = z.infer<typeof filterItemSchema>;
 
 export const getFiltersStateParser = <TData>(
   columnIds?: string[] | Set<string>,
+  columnVariants?: Record<string, FilterVariant | undefined>,
 ) => {
   const validKeys = columnIds
     ? columnIds instanceof Set
@@ -79,7 +81,15 @@ export const getFiltersStateParser = <TData>(
           return null;
         }
 
-        return result.data as ExtendedColumnFilter<TData>[];
+        return result.data.map((filter) => {
+          if (columnVariants?.[filter.id] !== 'select' || filter.variant !== 'multiSelect') return filter;
+          const values = Array.isArray(filter.value) ? filter.value.filter(Boolean) : [filter.value].filter(Boolean);
+          if (values.length > 1) return filter;
+          return {
+            ...filter, variant: 'select' as const, value: values[0] ?? '',
+            operator: filter.operator === 'notInArray' ? 'ne' as const : 'eq' as const,
+          };
+        }) as ExtendedColumnFilter<TData>[];
       } catch {
         return null;
       }
