@@ -87,6 +87,11 @@ store. “Existing evidence” is deliberately candid when it is only source ins
    200 instead. Confirmed with a real dev-server request, then fixed by keeping that read synchronous and
    unwrapped, accepting the app-wide loss of the (experimental, opt-in) PPR static shell as the explicit
    tradeoff for guaranteed-correct authorization/CSRF behavior. See docs/22 for the full evidence detail.
+   **Known gap found in a later session (unresolved):** the "removed CSRF cookie" half of the two-test
+   behavioral claim above does not actually hold in a real browser -- see docs/22's row for this control
+   for the full explanation. The tampered-token half and the underlying `requireCsrfToken` validation
+   itself remain proven; only that one specific behavioral test (`tests/security-e2e/csrf.spec.ts:134`,
+   now `test.fixme`) needs redesigning.
 5. **Credential and key lifecycle — AUTH-STORAGE-005, AUTH-STORAGE-006, AUTH-CRYPTO-003,
    AUTH-OPERATIONS-005, AUTH-SECRET-001, AUTH-CRYPTO-004, AUTH-DEPENDENCY-001. COMPLETE — all seven
    controls verified; AUTH-SECRET-004 narrowed but remains open (see its row above).** TEST and
