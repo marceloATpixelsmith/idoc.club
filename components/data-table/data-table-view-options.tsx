@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { getDefaultColumnOrder } from "@/lib/data-table";
 
 interface DataTableViewOptionsProps<TData>
   extends React.ComponentProps<typeof PopoverContent> {
@@ -33,6 +34,7 @@ export function DataTableViewOptions<TData>({
   ...props
 }: DataTableViewOptionsProps<TData>) {
   const [savedOrder, setSavedOrder] = useQueryState('columnOrder', parseAsArrayOf(parseAsString, ',').withOptions({ shallow: true }));
+  const previousSavedOrder = React.useRef(savedOrder);
   const currentOrder = table.getState().columnOrder;
   const columns = table.getAllColumns()
     .filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide())
@@ -44,11 +46,16 @@ export function DataTableViewOptions<TData>({
     });
 
   React.useEffect(() => {
-    if (!savedOrder?.length) return;
+    if (!savedOrder?.length) {
+      if (previousSavedOrder.current?.length) table.setColumnOrder(getDefaultColumnOrder(table.getAllColumns().map((column) => column.columnDef)));
+      previousSavedOrder.current = savedOrder;
+      return;
+    }
     const ids = new Set(table.getAllColumns().map((column) => column.id));
     const ordered = [...new Set(savedOrder.filter((id) => ids.has(id)))];
     const next = [...ordered, ...table.getState().columnOrder.filter((id) => !ordered.includes(id))];
     if (next.join(',') !== table.getState().columnOrder.join(',')) table.setColumnOrder(next);
+    previousSavedOrder.current = savedOrder;
   }, [savedOrder, table]);
 
   function toggleColumn(column: (typeof columns)[number]) {

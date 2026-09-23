@@ -361,7 +361,8 @@ function DataTableFilterItem<TData>({
   const inputId = `${filterItemId}-input`;
 
   const columnMeta = column?.columnDef.meta;
-  const filterOperators = getFilterOperators(filter.variant);
+  const filterOperators = getFilterOperators(filter.variant).filter((operator) =>
+    columnMeta?.allowEmptyFilter !== false || (operator.value !== 'isEmpty' && operator.value !== 'isNotEmpty'));
 
   const onItemKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {

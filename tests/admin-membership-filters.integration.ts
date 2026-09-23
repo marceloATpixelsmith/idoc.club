@@ -62,3 +62,18 @@ test('membership filters apply selectable country, federation, region, status ex
   }));
   assert.deepEqual(combined.rows.map((row) => row.profileId).sort(), [firstProfile.id, secondProfile.id].sort());
 });
+
+test('descending member-name sorting reverses first names when last names match', async () => {
+  const admin = await adminUser();
+  const alice = await createUser();
+  const aliceProfile = await createProfile(alice.id);
+  await createMembership(aliceProfile.id);
+  await sql`update idoc.profiles set first_name='Alice',last_name='Smith' where id=${aliceProfile.id}`;
+  const zoe = await createUser();
+  const zoeProfile = await createProfile(zoe.id);
+  await createMembership(zoeProfile.id);
+  await sql`update idoc.profiles set first_name='Zoe',last_name='Smith' where id=${zoeProfile.id}`;
+
+  const listing = await asAdmin(admin.id, () => listAdminMembers({ sort: JSON.stringify([{ id: 'name', desc: true }]) }));
+  assert.deepEqual(listing.rows.map((row) => row.profileId), [zoeProfile.id, aliceProfile.id]);
+});

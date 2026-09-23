@@ -11,6 +11,7 @@ declare module "@tanstack/react-table" {
     label?: string;
     placeholder?: string;
     variant?: FilterVariant;
+    allowEmptyFilter?: boolean;
     options?: Option[];
     range?: [number, number];
     unit?: string;

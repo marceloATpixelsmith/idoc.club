@@ -29,6 +29,7 @@ import {
 import * as React from "react";
 
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
+import { getDefaultColumnOrder } from "@/lib/data-table";
 import { getSortingStateParser } from "@/lib/parsers";
 import type { ExtendedColumnSort, QueryKeys } from "@/types/data-table";
 
@@ -116,13 +117,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialState?.columnVisibility ?? {});
-  const defaultColumnOrder = React.useMemo(() => {
-    const fixed = columns.filter((column) => column.enableHiding === false && column.id !== 'actions').map((column) => column.id ?? ('accessorKey' in column ? String(column.accessorKey) : ''));
-    const movable = columns.filter((column) => column.enableHiding !== false && column.id !== 'actions')
-      .sort((a, b) => (a.meta?.label ?? a.id ?? '').localeCompare(b.meta?.label ?? b.id ?? '', 'en'))
-      .map((column) => column.id ?? ('accessorKey' in column ? String(column.accessorKey) : ''));
-    return [...fixed, ...movable, ...(columns.some((column) => column.id === 'actions') ? ['actions'] : [])].filter(Boolean);
-  }, [columns]);
+  const defaultColumnOrder = React.useMemo(() => getDefaultColumnOrder(columns), [columns]);
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>(initialState?.columnOrder ?? defaultColumnOrder);
 
   const [page, setPage] = useQueryState(

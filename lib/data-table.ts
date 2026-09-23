@@ -1,4 +1,4 @@
-import type { Column } from "@tanstack/react-table";
+import type { Column, ColumnDef } from "@tanstack/react-table";
 import type React from "react";
 
 import { dataTableConfig } from "@/config/data-table";
@@ -7,6 +7,14 @@ import type {
   FilterOperator,
   FilterVariant,
 } from "@/types/data-table";
+
+export function getDefaultColumnOrder<TData>(columns: ColumnDef<TData>[]): string[] {
+  const id = (column: ColumnDef<TData>) => column.id ?? ('accessorKey' in column ? String(column.accessorKey) : '');
+  const fixed = columns.filter((column) => column.enableHiding === false && column.id !== 'actions').map(id);
+  const movable = columns.filter((column) => column.enableHiding !== false && column.id !== 'actions')
+    .sort((a, b) => (a.meta?.label ?? id(a)).localeCompare(b.meta?.label ?? id(b), 'en')).map(id);
+  return [...fixed, ...movable, ...(columns.some((column) => column.id === 'actions') ? ['actions'] : [])].filter(Boolean);
+}
 
 export function getColumnPinningStyle<TData>({
   column,

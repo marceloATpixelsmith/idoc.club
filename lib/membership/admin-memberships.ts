@@ -177,7 +177,10 @@ function queryParts(raw: MemberFilters) {
         : field === 'expires' ? sql`m.valid_until` : field === 'lastPayment' ? sql`payment.last_payment_at`
           : field === 'updated' ? sql`greatest(u.updated_at,p.updated_at,coalesce(m.updated_at,p.updated_at))` : sql`p.last_name`;
   const sorts = filters.sorts.length ? filters.sorts : [{ id: filters.sort, desc: filters.direction === 'desc' }];
-  const order = sql`${sql.join(sorts.map(({ id, desc }) => sql`${sortExpression(id)} ${desc ? sql`desc` : sql`asc`} nulls last`), sql`, `)}, p.first_name, coalesce(p.id,u.id), u.id`;
+  const order = sql`${sql.join(sorts.flatMap(({ id, desc }) => [
+    sql`${sortExpression(id)} ${desc ? sql`desc` : sql`asc`} nulls last`,
+    ...(id === 'name' ? [sql`p.first_name ${desc ? sql`desc` : sql`asc`} nulls last`] : []),
+  ]), sql`, `)}, p.first_name, coalesce(p.id,u.id), u.id`;
   return { effectiveStatus, filters, order, where: sql.join(conditions, sql` and `) };
 }
 
