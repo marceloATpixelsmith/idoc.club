@@ -333,7 +333,7 @@ function DataTableSortItem({
               id={fieldTriggerId}
               aria-controls={fieldListboxId}
               variant="outline"
-              className="w-44 justify-between rounded font-normal"
+              className="w-52 justify-between rounded font-normal"
             >
               <span className="truncate">{columnLabels.get(sort.id) ?? 'Hidden field'}</span>
               <ChevronsUpDown className="opacity-50" />
@@ -342,7 +342,7 @@ function DataTableSortItem({
           <PopoverContent
             data-idoc-table-panel
             id={fieldListboxId}
-            className="w-(--radix-popover-trigger-width) p-0"
+            className="w-64 max-w-[calc(100vw-2rem)] p-0"
           >
             <Command>
               <CommandInput placeholder="Search fields..." />

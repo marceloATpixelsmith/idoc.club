@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getPrivateMember, listAdminPaymentHistory, listAuditHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { listAdminMembers, MemberFilterRangeError, type MemberFilters } from '@/lib/membership/admin-memberships';
 import { requireAdministrator } from '@/lib/membership/authorization';
@@ -29,9 +30,25 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
   const params = await searchParams;
-  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder'];
+  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
   const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
   const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
+  if (savedPreferences) {
+    const savedQuery = preferenceQuery(savedPreferences);
+    if (Object.keys(savedQuery).length) {
+      const savedParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) for (const entry of Array.isArray(value) ? value : [value]) savedParams.append(key, String(entry));
+      }
+      for (const [key, value] of Object.entries(savedQuery)) {
+        if (Array.isArray(value)) {
+          if (!value.length && key === 'column') savedParams.append(key, '');
+          else for (const entry of value) savedParams.append(key, entry);
+        } else savedParams.set(key, value);
+      }
+      redirect(`/admin/members?${savedParams}`);
+    }
+  }
   const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
   const visibleColumns = params.column ? (Array.isArray(params.column) ? params.column : [params.column]) : Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
   const { profileId: profileIdParam } = params;

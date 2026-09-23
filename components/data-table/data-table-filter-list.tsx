@@ -106,7 +106,7 @@ export function DataTableFilterList<TData>({
 
   const [filters, setFilters] = useQueryState(
     table.options.meta?.queryKeys?.filters ?? "filters",
-    getFiltersStateParser<TData>(columns.map((field) => field.id))
+    getFiltersStateParser<TData>(columns.map((field) => field.id), Object.fromEntries(columns.map((field) => [field.id, field.columnDef.meta?.variant])))
       .withDefault([])
       .withOptions({
         clearOnDefault: true,
@@ -442,7 +442,7 @@ function DataTableFilterItem<TData>({
             <Button
               aria-controls={fieldListboxId}
               variant="outline"
-              className="w-32 justify-between rounded font-normal"
+              className="w-48 justify-between rounded font-normal"
             >
               <span className="truncate">
                 {columns.find((column) => column.id === filter.id)?.columnDef
@@ -455,7 +455,7 @@ function DataTableFilterItem<TData>({
             data-idoc-table-panel
             id={fieldListboxId}
             align="start"
-            className="w-40 p-0"
+            className="w-64 max-w-[calc(100vw-2rem)] p-0"
           >
             <Command>
               <CommandInput placeholder="Search fields..." />
@@ -711,7 +711,7 @@ function onFilterInputRender<TData>({
               />
             </Button>
           </FacetedTrigger>
-          <FacetedContent data-idoc-table-panel id={inputListboxId} className="w-[200px]">
+          <FacetedContent data-idoc-table-panel id={inputListboxId} className="w-[min(22rem,calc(100vw-2rem))]">
             <FacetedInput
               aria-label={`Search ${columnMeta?.label} options`}
               placeholder={columnMeta?.placeholder ?? "Search options..."}
