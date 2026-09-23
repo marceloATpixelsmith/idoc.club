@@ -100,7 +100,8 @@ export function DataTableFilterList<TData>({
   const columns = React.useMemo(() => {
     return table
       .getAllColumns()
-      .filter((column) => column.columnDef.enableColumnFilter);
+      .filter((column) => column.columnDef.enableColumnFilter)
+      .sort((a, b) => (a.columnDef.meta?.label ?? a.id).localeCompare(b.columnDef.meta?.label ?? b.id, 'en'));
   }, [table]);
 
   const [filters, setFilters] = useQueryState(

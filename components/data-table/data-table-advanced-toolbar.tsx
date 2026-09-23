@@ -9,10 +9,12 @@ import { cn } from "@/lib/utils";
 interface DataTableAdvancedToolbarProps<TData>
   extends React.ComponentProps<"div"> {
   table: Table<TData>;
+  trailingAction?: React.ReactNode;
 }
 
 export function DataTableAdvancedToolbar<TData>({
   table,
+  trailingAction,
   children,
   className,
   ...props
@@ -30,6 +32,7 @@ export function DataTableAdvancedToolbar<TData>({
       <div className="flex flex-1 flex-wrap items-center gap-2">{children}</div>
       <div className="flex items-center gap-2">
         <DataTableViewOptions table={table} align="end" />
+        {trailingAction}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import {
   type ColumnFiltersState,
+  type ColumnOrderState,
   getCoreRowModel,
   getFacetedMinMaxValues,
   getFacetedRowModel,
@@ -115,6 +116,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialState?.columnVisibility ?? {});
+  const defaultColumnOrder = React.useMemo(() => {
+    const fixed = columns.filter((column) => column.enableHiding === false && column.id !== 'actions').map((column) => column.id ?? ('accessorKey' in column ? String(column.accessorKey) : ''));
+    const movable = columns.filter((column) => column.enableHiding !== false && column.id !== 'actions')
+      .sort((a, b) => (a.meta?.label ?? a.id ?? '').localeCompare(b.meta?.label ?? b.id ?? '', 'en'))
+      .map((column) => column.id ?? ('accessorKey' in column ? String(column.accessorKey) : ''));
+    return [...fixed, ...movable, ...(columns.some((column) => column.id === 'actions') ? ['actions'] : [])].filter(Boolean);
+  }, [columns]);
+  const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>(initialState?.columnOrder ?? defaultColumnOrder);
 
   const [page, setPage] = useQueryState(
     pageKey,
@@ -278,6 +287,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       pagination,
       sorting,
       columnVisibility,
+      columnOrder,
       rowSelection,
       columnFilters,
     },
@@ -291,6 +301,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

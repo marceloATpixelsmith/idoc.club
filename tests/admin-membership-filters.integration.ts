@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { listAdminMembers } from '../lib/membership/admin-memberships.ts';
-import { asAdmin, adminUser, closeHarness, createMembership, createProfile, createUser, resetIdoc } from './postgres-harness.ts';
+import { asAdmin, adminUser, closeHarness, createMembership, createProfile, createUser, judgeRole, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -20,4 +20,45 @@ test('admin member search: an array-valued (repeated-key) query parameter is tre
   assert.equal(listing.filters.country, 'DE');
   assert.equal(listing.filters.status, 'active');
   assert.ok(listing.rows.some((row) => row.profileId === profile.id));
+});
+
+test('membership filters apply selectable country, federation, region, status exclusions and multiple sort priorities to real rows', async () => {
+  const admin = await adminUser();
+  const first = await createUser();
+  const firstProfile = await createProfile(first.id, [judgeRole]);
+  await createMembership(firstProfile.id);
+  await sql`update idoc.profiles set last_name='Zulu' where id=${firstProfile.id}`;
+  const second = await createUser();
+  const secondProfile = await createProfile(second.id, [judgeRole]);
+  await createMembership(secondProfile.id);
+  await sql`update idoc.profiles set last_name='Alpha' where id=${secondProfile.id}`;
+  const expired = await createUser();
+  const expiredProfile = await createProfile(expired.id, [judgeRole]);
+  await createMembership(expiredProfile.id, false);
+  await sql`update idoc.profiles set country_code='PL' where id=${expiredProfile.id}`;
+  await sql`update idoc.professional_roles set national_federation_country_code='PL',idoc_region='Central & Eastern Europe' where profile_id=${expiredProfile.id}`;
+
+  const listed = await asAdmin(admin.id, () => listAdminMembers({
+    filters: JSON.stringify([
+      { id: 'country', operator: 'eq', value: 'DE' },
+      { id: 'federation', operator: 'eq', value: 'DE' },
+      { id: 'region', operator: 'eq', value: 'Western Europe & Africa' },
+    ]),
+    sort: JSON.stringify([{ id: 'federation', desc: false }, { id: 'name', desc: true }]),
+  }));
+  assert.deepEqual(listed.rows.map((row) => row.profileId), [firstProfile.id, secondProfile.id]);
+
+  const excluded = await asAdmin(admin.id, () => listAdminMembers({ filters: JSON.stringify([
+    { id: 'status', operator: 'notInArray', value: ['active'] },
+    { id: 'country', operator: 'eq', value: 'PL' },
+  ]) }));
+  assert.deepEqual(excluded.rows.map((row) => row.profileId), [expiredProfile.id]);
+
+  const combined = await asAdmin(admin.id, () => listAdminMembers({
+    filters: JSON.stringify([
+      { id: 'country', operator: 'eq', value: 'PL' },
+      { id: 'federation', operator: 'eq', value: 'DE' },
+    ]), joinOperator: 'or', status: 'active',
+  }));
+  assert.deepEqual(combined.rows.map((row) => row.profileId).sort(), [firstProfile.id, secondProfile.id].sort());
 });

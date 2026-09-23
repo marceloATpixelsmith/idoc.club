@@ -18,7 +18,8 @@ test('member pagination preserves every normalized active filter while replacing
 test('membership roster presents the requested active, expired, and archived views', () => {
   assert.match(memberQueries, /\['active', 'expired', 'archived', 'without_active'/);
   assert.match(memberQueries, /m\.status = 'archived'/);
-  for (const status of ['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']) assert.match(memberTable, new RegExp(`value: '${status}'`));
+  for (const status of ['active', 'expired', 'archived', 'administrator', 'super_admin', 'onboarding', 'test']) assert.match(memberTable, new RegExp(`value: '${status}'`));
+  assert.doesNotMatch(memberTable.split('const STATUS_OPTIONS = ')[1].split('const TYPE_OPTIONS = ')[0], /without_active/);
 });
 
 test('membership roster composes the official Dice UI controls and a real selected-row action bar', () => {

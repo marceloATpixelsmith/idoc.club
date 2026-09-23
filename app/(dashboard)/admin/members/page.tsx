@@ -29,7 +29,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
   const params = await searchParams;
-  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize'];
+  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder'];
   const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
   const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
   const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
@@ -56,7 +56,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <h1 className="text-2xl font-semibold">Members</h1>
     <nav className="mt-4 flex gap-4 text-sm" aria-label="Membership views"><Link className="underline" href="/admin/members?status=active">Active</Link><Link className="underline" href="/admin/members?status=expired">Expired</Link><Link className="underline" href="/admin/members?status=archived">Archived</Link><Link className="underline" href="/admin/revenue">Revenue dashboard</Link></nav>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
-    <MembersTable defaultActive={!hasUrlState && !savedPreferences} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
+    <MembersTable defaultActive={!hasUrlState && !savedPreferences} initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (
       <>
         <section className="mt-8 max-w-2xl border rounded-lg p-4">

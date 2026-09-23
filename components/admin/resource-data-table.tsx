@@ -200,6 +200,7 @@ export function ResourceDataTable({
     const params = new URLSearchParams(searchParams.toString());
     const preferences: TablePreferenceState = {
       columns: optional.filter((id) => table.getState().columnVisibility[id] !== false),
+      columnOrder: params.get('columnOrder') ?? undefined,
       direction: params.get('direction') ?? undefined,
       filters: params.get('filters') ?? undefined,
       joinOperator: params.get('joinOperator') ?? undefined,
