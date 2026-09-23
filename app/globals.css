@@ -221,7 +221,7 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 }
 
 [data-idoc-table-control],
-[data-idoc-table-panel] [data-slot='button'] {
+[data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)) {
   background: var(--surface-raised);
   border: 1px solid var(--input);
   color: var(--foreground);
@@ -237,7 +237,7 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 
 [data-idoc-table-control]:hover,
 [data-idoc-table-control][data-state='open'],
-[data-idoc-table-panel] [data-slot='button']:hover {
+[data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)):hover {
   background: var(--accent);
   border-color: rgb(211 175 55 / 45%);
 }
@@ -249,7 +249,7 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 }
 
 [data-idoc-table-panel] [data-slot='select-trigger'],
-[data-idoc-table-panel] button:not([data-slot='button']) {
+[data-idoc-table-panel] button:not([data-slot='button']):not(:where([data-slot='calendar'] *)) {
   background: var(--surface);
   color: var(--foreground);
   font-weight: 500;
