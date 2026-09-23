@@ -138,10 +138,7 @@ test('the same real profile-update Server Action rejects the submission when the
   const profileForm = page.locator('form').filter({ has: page.locator('input[name="firstName"]') });
   await context.clearCookies({ name: 'idoc-csrf' });
   await profileForm.locator('button[type="submit"]').click();
-  // Same shared-dev-server rationale as the timeout comment on the preceding test, but this one
-  // runs immediately after that test's own full round trip (route interception, tampered POST,
-  // rejection) on the same single Node dev-server process, so it has observably needed more
-  // headroom in practice than the 15s that suffices for the preceding test alone.
-  await expect(page.locator('text=session security check failed')).toBeVisible({ timeout: 30_000 });
+  // See the timeout comment on the preceding test -- same shared-dev-server rationale.
+  await expect(page.locator('text=session security check failed')).toBeVisible({ timeout: 15_000 });
   await context.close();
 });
