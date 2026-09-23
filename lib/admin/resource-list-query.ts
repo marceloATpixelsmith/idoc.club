@@ -32,9 +32,10 @@ export function listOrder(input: ResourceQuery, expressions: Record<string, stri
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed))
       {
-      clauses = parsed.slice(0, 3).filter((item): item is { desc: boolean; id: string } =>
+      clauses = parsed.filter((item): item is { desc: boolean; id: string } =>
         item && typeof item === 'object' && typeof item.id === 'string'
-        && Object.hasOwn(expressions, item.id) && typeof item.desc === 'boolean');
+        && Object.hasOwn(expressions, item.id) && typeof item.desc === 'boolean')
+        .slice(0, Object.keys(expressions).length);
       }
     }
   catch
