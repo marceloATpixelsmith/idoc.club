@@ -49,7 +49,7 @@ test('membership filters apply selectable country, federation, region, status ex
   assert.deepEqual(listed.rows.map((row) => row.profileId), [firstProfile.id, secondProfile.id]);
 
   const excluded = await asAdmin(admin.id, () => listAdminMembers({ filters: JSON.stringify([
-    { id: 'status', operator: 'notInArray', value: ['active'] },
+    { id: 'status', operator: 'ne', value: 'active' },
     { id: 'country', operator: 'eq', value: 'PL' },
   ]) }));
   assert.deepEqual(excluded.rows.map((row) => row.profileId), [expiredProfile.id]);
