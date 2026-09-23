@@ -57,6 +57,12 @@ GOOGLE_OAUTH_CLIENT_SECRET
 GOOGLE_OAUTH_REDIRECT_URI
 ```
 
+AUTH-SECRET-004 (see `docs/22-canonical-auth-evidence-matrix.md`) later replaced the plain
+`GOOGLE_OAUTH_CLIENT_SECRET` variable with a mandatory rotation-ready ring,
+`GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS` + `GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION`; there is no
+implicit single-secret fallback in IDOC's actual deployed contract. See
+`docs/07-administrator-and-operations-runbook.md` §15.1 for the current operational contract.
+
 IDOC's canonical provider flow uses:
 
 - start route `/api/auth/google/start`;

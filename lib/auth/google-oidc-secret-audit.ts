@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { explicitGoogleOauthClientSecretVersions } from './google-oidc-reference';
+import { googleOauthClientSecretVersions } from './google-oidc-reference';
 
 const ROTATION_ACTION = 'auth.oauth.google.client_secret.rotated';
 const ROTATION_ENTITY_ID = 'google-oauth-client-secret';
@@ -38,7 +38,7 @@ export type GoogleOauthSecretRotationEvidence = {
 export async function recordActiveGoogleOauthSecretRotation(
   actorId: number,
 ): Promise<GoogleOauthSecretRotationEvidence> {
-  const { activeVersion } = explicitGoogleOauthClientSecretVersions();
+  const { activeVersion } = googleOauthClientSecretVersions();
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ROTATION_ACTION}))`);
     const rows = await tx.execute<{

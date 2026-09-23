@@ -143,7 +143,8 @@ test('the sign-up page surfaces a Google failure inline instead of silently drop
 
 test('deployment environment contract uses the canonical variable names', () => {
   assert.match(env, /^GOOGLE_OAUTH_CLIENT_ID=/m);
-  assert.match(env, /^GOOGLE_OAUTH_CLIENT_SECRET=/m);
+  assert.match(env, /^GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS=/m);
+  assert.match(env, /^GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION=/m);
   assert.match(env, /^GOOGLE_OAUTH_REDIRECT_URI=/m);
 });
 
