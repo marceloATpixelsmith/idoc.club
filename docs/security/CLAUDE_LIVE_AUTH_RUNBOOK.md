@@ -20,7 +20,14 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   branch, built specifically for this audit -- `redesign.idoc.club` is production; never target it).
   `staging.idoc.club` uses Cloudflare Turnstile always-pass testing keys scoped to the `staging`
   branch, so automated signup/reset flows can complete Turnstile without weakening real bot
-  protection on production.
+  protection on production. This requires `lib/auth/turnstile.ts`'s narrow, explicit exception
+  (docs/21 AUTH-TURNSTILE-006) for Cloudflare's own fixed testing-secret response shape --
+  the client widget alone auto-passing is not sufficient, since the app's server-side
+  `verifyTurnstile` independently binds every token to the real hostname/action by design and
+  Cloudflare's testing-key response can never satisfy that binding on its own. Do not remove that
+  exception (or revert staging to a real Turnstile widget) without re-checking this file: a prior
+  version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
+  needed a human to solve it manually, one flow at a time.
 - **The staging and production deployments currently share the same Postgres database** (one
   `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) --
   contrary to `docs/07` §15's general "staging must use its own non-production database" rule.
