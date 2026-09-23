@@ -12,6 +12,9 @@
 /test-results
 /.security-e2e
 
+# Claude Code live-audit scratch tooling (throwaway scripts/logs, never project source).
+/.scratch-audit
+
 # next.js
 /.next/
 /out/
