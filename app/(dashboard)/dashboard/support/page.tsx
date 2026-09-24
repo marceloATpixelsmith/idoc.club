@@ -1,11 +1,28 @@
 import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { SupportForm } from '@/components/support/support-form';
+import { AuthorizationError } from '@/lib/membership/authorization';
 import { CATEGORY_LABELS, listOwnConversations, STATUS_LABELS, SUPPORT_CATEGORIES } from '@/lib/support/inbox';
 import { createSupportConversation } from './actions';
 
 export default async function MemberSupportPage() {
-  const conversations = await listOwnConversations();
+  // listOwnConversations() -> requireSupportMember() already enforces the correct policy (entitled
+  // member, never an administrator -- they have their own admin support inbox instead). Left
+  // uncaught, that AuthorizationError propagated straight into Next.js's generic error boundary for
+  // an unpaid/non-entitled member instead of a clean redirect -- the same class of gap fixed in
+  // dashboard/layout.tsx (AUTH-AUTHZ-009), just triggered by this page's own deeper permission
+  // check rather than session validity. profile/page.tsx and security/page.tsx avoid this by
+  // proactively re-checking entitlement themselves before rendering; this page instead catches the
+  // failure reactively, matching admin/layout.tsx's pattern, so the entitled/non-admin policy stays
+  // defined in exactly one place (requireSupportMember) rather than being re-derived a third time.
+  let conversations;
+  try {
+    conversations = await listOwnConversations();
+  } catch (error) {
+    if (error instanceof AuthorizationError) redirect('/dashboard');
+    throw error;
+  }
   return <div className="space-y-8 py-6 px-5 lg:px-8"><header><h1 className="text-2xl font-semibold">Support</h1><p className="text-muted-foreground">Ask the IDOC team for help and follow your conversations.</p></header>
     <section className="rounded-lg border p-5"><h2 className="mb-4 text-lg font-bold uppercase tracking-wider text-gold">New conversation</h2>
       <SupportForm action={createSupportConversation} pendingLabel="Sending" submitLabel="Start conversation">

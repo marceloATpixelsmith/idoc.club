@@ -99,11 +99,30 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
     return { token: await forgeToken({ sessionId, userId: user.id, sessionVersion: 0, now }) };
   });
 
-  const context = await browser.newContext();
-  await context.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
-  const identity = await context.request.get('/api/user');
+  const identityContext = await browser.newContext();
+  await identityContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
+  const identity = await identityContext.request.get('/api/user');
   expect(await identity.json()).toBeNull();
-  await context.close();
+  await identityContext.close();
+
+  // This is exactly the case app/(dashboard)/dashboard/layout.tsx's AuthorizationError handling
+  // covers: the cookie is validly signed (middleware's verifyToken succeeds, so this never hits
+  // middleware's own /sign-in redirect), but the session it names is revoked in the registry --
+  // requireAccountAccess() only discovers that deeper, inside the dashboard layout itself. Before
+  // that catch existed, this fell through uncaught into Next.js's generic error boundary instead
+  // of a clean redirect; confirmed against real production crashes since 2026-08-27.
+  const dashboardContext = await browser.newContext();
+  await dashboardContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
+  const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
+  expect(dashboard.status()).toBe(307);
+  // Unlike middleware.ts's NextResponse.redirect(new URL(path, request.url)) (an absolute URL,
+  // asserted on below in the legacy-cookie test via new URL(...).pathname), this redirect() call
+  // is a page-level next/navigation call from inside the dashboard layout's RSC render. Confirmed
+  // empirically against this dev server: Next still uses a 307 for a GET navigation here, but the
+  // Location header it emits is the bare relative path with no scheme/host, so new URL() on it
+  // alone throws (Invalid URL) rather than parsing -- assert on the raw header value instead.
+  expect(dashboard.headers().location).toBe('/sign-in');
+  await dashboardContext.close();
 });
 
 test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template session shape, under its old cookie name) never authenticates', async ({ browser }) => {

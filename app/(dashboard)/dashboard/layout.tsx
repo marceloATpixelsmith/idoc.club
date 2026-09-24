@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation';
 import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
+import { AuthorizationError } from '@/lib/membership/authorization';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { DashboardTabs } from './dashboard-tabs';
@@ -12,7 +14,20 @@ export default async function DashboardLayout({
 }) {
   const user = await getUser();
   const onboarding = user?.accountState === 'onboarding';
-  const actor = await requireAccountAccess(onboarding ? 'onboarding' : 'profile');
+  // A cookie can be present but no longer valid server-side (revoked, stale, or otherwise
+  // rejected -- middleware only checks that a canonical cookie exists, not that the session it
+  // names is still registered/valid). Left uncaught, that threw straight into the generic
+  // Next.js error boundary instead of prompting the member to sign back in -- confirmed in
+  // production runtime errors since 2026-08-27 (LIVE-AUTH-019 finding). /admin/layout.tsx already
+  // handles its own equivalent case (notFound(), since hiding admin route existence is the right
+  // call there); a normal member-facing page should instead redirect to sign back in.
+  let actor;
+  try {
+    actor = await requireAccountAccess(onboarding ? 'onboarding' : 'profile');
+  } catch (error) {
+    if (error instanceof AuthorizationError) redirect('/sign-in');
+    throw error;
+  }
   const privileged = isPrivilegedActor(actor);
   // An administrator/super_admin is never a member and must never be gated by membership payment
   // status -- whether or not they even have a member profile at all (in which case the profile's
