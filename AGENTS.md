@@ -8,6 +8,8 @@ For every GPT collaboration task—including planning, writing Codex prompts, pa
 
 For every pull request, read `docs/26-ci-risk-classification-and-agent-merge-policy.md`. Classify the changed files before merging. The fast PR check is sufficient only for changes explicitly listed as low risk. If the policy requires a full workflow, run it against the current PR revision and do not merge until it passes.
 
+For every task that merges into `main`, investigates a difference between `staging.idoc.club` and `redesign.idoc.club`, or otherwise touches deployment branches or environment configuration, read and follow the "Branch, environment, and deployment workflow" section of `docs/07-administrator-and-operations-runbook.md`.
+
 When code changes membership rules, member fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing, update the corresponding document in `docs/` in the same pull request. Keep `docs/08-product-roadmap-and-functional-requirements.md` aligned when scope, sequencing, or release gates change.
 
 Do not treat generated Word or PDF files as the source of truth.

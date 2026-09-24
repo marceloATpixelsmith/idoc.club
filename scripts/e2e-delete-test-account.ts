@@ -35,7 +35,6 @@ async function main() {
   const dryRun = hasFlag('dry-run');
   const stagingUrl = validateStagingDatabaseUrl(
     process.env.STAGING_POSTGRES_URL,
-    process.env.POSTGRES_URL,
     hasFlag('confirm-staging'),
   ).toString();
 
