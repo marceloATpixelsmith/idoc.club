@@ -23,7 +23,7 @@ const schemas = {
     pageSize, q: text(), region: text(40), sort: text(1000), columnOrder: text(500), joinOperator: z.enum(['and', 'or']).optional(),
     status: z.enum(['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']).optional(),
   }).strict(),
-  support: z.object({ columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: text(30), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(255), sort: text(1000), status: text(30) }).strict(),
+  support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: text(30), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(255), sort: text(1000), status: text(30) }).strict(),
   news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
   seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
   content_pages: z.object({ audience: text(30), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, publicationState: text(30), q: text(), sort: text(1000), status: text(30) }).strict(),
@@ -71,11 +71,16 @@ export async function resetTablePreferences(tableInput: unknown): Promise<void> 
   await db.delete(administratorTablePreferences).where(and(eq(administratorTablePreferences.userId, actor.id), eq(administratorTablePreferences.tableIdentifier, table)));
 }
 
+// 'filters'/'joinOperator' may still be present in preferences saved before the advanced
+// filter-builder UI was removed; they are never replayed into the URL so a stale, invisible
+// advanced-filter condition can't silently narrow results the current toolbar shows as unfiltered.
+const LEGACY_ADVANCED_FILTER_KEYS = new Set(['filters', 'joinOperator']);
+
 export function preferenceQuery(preferences: TablePreferenceState | null): Record<string, string | string[]> {
   if (!preferences) return {};
   const query: Record<string, string | string[]> = {};
   for (const [key, value] of Object.entries(preferences)) {
-    if (value === undefined) continue;
+    if (value === undefined || LEGACY_ADVANCED_FILTER_KEYS.has(key)) continue;
     if (key === 'columns' && Array.isArray(value)) query.column = value;
     else query[key] = String(value);
   }

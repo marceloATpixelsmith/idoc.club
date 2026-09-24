@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { z } from 'zod';
+import { listDate } from '@/lib/admin/resource-list-query';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, isAdministrator, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
@@ -161,6 +162,8 @@ export async function listAdminConversations(input: SupportSearchParams) {
   const status: string | null = SUPPORT_STATUSES.includes(statusValue as never) ? statusValue ?? null : null;
   const assigned = assignedValue === 'unassigned' ? -1 : (assignedValue ? await resolveEligibleAdministrator(assignedValue) : null);
   const search = (searchValue ?? '').trim().slice(0, 100);
+  const activityFrom = listDate(firstSearchValue(input.activityFrom) ?? '');
+  const activityTo = listDate(firstSearchValue(input.activityTo) ?? '');
   type AdvancedFilter = { id?: string; operator?: string; value?: string | string[] };
   let advancedFilters: AdvancedFilter[] = [];
   try { const parsed = JSON.parse(firstSearchValue(input.filters) ?? '[]'); if (Array.isArray(parsed)) advancedFilters = parsed.slice(0, 20); } catch { /* Invalid URL state is ignored. */ }
@@ -233,6 +236,8 @@ export async function listAdminConversations(input: SupportSearchParams) {
     and (${assigned}::int is null or (${assigned}=-1 and not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id))
       or exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id=${assigned}))
     and (${search}='' or c.subject ilike ${`%${escapeLike(search)}%`} escape '\\' or u.email ilike ${`%${escapeLike(search)}%`} escape '\\' or concat_ws(' ',p.first_name,p.last_name) ilike ${`%${escapeLike(search)}%`} escape '\\')
+    and (${activityFrom}::date is null or (c.updated_at at time zone 'UTC')::date>=${activityFrom}::date)
+    and (${activityTo}::date is null or (c.updated_at at time zone 'UTC')::date<=${activityTo}::date)
     and (${advancedWhere}) order by ${client.unsafe(order.join(', '))} limit ${pageSize + 1} offset ${offset}`;
   return { page, pageSize, rows: rows.slice(0, pageSize), total: rows[0]?.total_count ?? 0, hasNext: rows.length > pageSize };
 }

@@ -76,7 +76,11 @@ export function DataTableFacetedFilter<TData, TValue>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="border-dashed font-normal">
+        <Button
+          data-idoc-table-control
+          variant="outline"
+          className="border-dashed font-normal"
+        >
           {selectedValues?.size > 0 ? (
             <div
               role="button"
@@ -129,7 +133,11 @@ export function DataTableFacetedFilter<TData, TValue>({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-50 p-0" align="start">
+      <PopoverContent
+        data-idoc-table-panel
+        className="w-50 p-0"
+        align="start"
+      >
         <Command>
           <CommandInput placeholder={title} />
           <CommandList className="max-h-full">

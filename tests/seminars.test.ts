@@ -164,14 +164,15 @@ test('the admin seminar list page supports search and status filtering', () => {
   const sharedTable = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
   assert.match(adminListPage, /ResourceListPage/);
   assert.match(sharedTable, /Search seminar title or location/);
-  assert.match(sharedTable, /Filter by status/);
+  assert.match(sharedTable, /variant: 'select'/);
 });
 
 test('the admin seminar table provides Dice UI date, sorting, pagination, and visibility controls', () => {
   const page = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
   const table = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
   assert.match(page, /ResourceListPage/);
-  for (const value of ['DataTableFilterList', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
+  for (const value of ['DataTableToolbar', 'DataTableSortList', 'pageSizeOptions', 'DateRangeFilter', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
+  assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
   assert.match(seminarsSource, /date: 's\.seminar_date'/);
 });
 

@@ -175,7 +175,11 @@ export function DataTableDateFilter<TData>({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="border-dashed font-normal">
+        <Button
+          data-idoc-table-control
+          variant="outline"
+          className="border-dashed font-normal"
+        >
           {hasValue ? (
             <div
               role="button"
@@ -192,7 +196,7 @@ export function DataTableDateFilter<TData>({
           {label}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent data-idoc-table-panel className="w-auto p-0" align="start">
         {multiple ? (
           <Calendar
             autoFocus
