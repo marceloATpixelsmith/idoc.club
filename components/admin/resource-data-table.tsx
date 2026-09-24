@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import { X } from 'lucide-react';
+import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useDataTable } from '@/hooks/use-data-table';
@@ -127,10 +128,16 @@ export function ResourceDataTable({
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, header: 'Actions',
-        cell: ({ row }) => <div className="flex gap-3 whitespace-nowrap">
-          <Link className="underline" href={`${config.path}/${row.original.id}`}>Edit</Link>
-          {tableType !== 'seminars' && <Link className="underline" href={`${config.path}/${row.original.id}/preview`}>Preview</Link>}
-          {tableType === 'seminars' && <Link className="underline" href={`${config.path}/${row.original.id}#registrations`}>Registrations</Link>}
+        cell: ({ row }) => <div className="flex items-center gap-1">
+          <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
+          </Button>
+          {tableType !== 'seminars' && <Button asChild aria-label="Preview" size="icon-sm" title="Preview" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}/preview`}><Eye aria-hidden="true" /></Link>
+          </Button>}
+          {tableType === 'seminars' && <Button asChild aria-label="Registrations" size="icon-sm" title="Registrations" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}#registrations`}><ClipboardList aria-hidden="true" /></Link>
+          </Button>}
         </div>,
       },
     ];
