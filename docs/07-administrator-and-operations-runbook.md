@@ -84,30 +84,32 @@ Two long-lived branches drive the two live Vercel deployments referenced through
 
 | Branch | Vercel environment | Domain | Purpose |
 |---|---|---|---|
-| `main` | Production | `redesign.idoc.club` today; becomes `idoc.club`/`www.idoc.club` at the go-live domain cutover (§ "Stripe payment production readiness" below) | The real deployment. Protected by the Codex review gate above. |
-| `staging` | Preview (a dedicated, always-on Preview deployment, not an ephemeral per-PR one) | `staging.idoc.club` | UAT, migration rehearsal, and the Claude Code Cloud live-auth audit (`docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md`). |
+| `staging` | Preview (a dedicated, always-on Preview deployment, not an ephemeral per-PR one) | `staging.idoc.club` | Where every change is verified before it ships: UAT, migration rehearsal, and the Claude Code Cloud live-auth audit (`docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md`). |
+| `main` | Production | `redesign.idoc.club` today; becomes `idoc.club`/`www.idoc.club` at the go-live domain cutover (§ "Stripe payment production readiness" below) | The real deployment. Protected by the Codex review gate above. Receives only reviewed promotions from `staging`, never a feature branch directly. |
 
 **The database is intentionally shared, not separated.** `staging.idoc.club` and `redesign.idoc.club` read/write the *same* Render PostgreSQL instance (`POSTGRES_URL` with `target: ["production", "preview"]`, no `gitBranch` override) — a deliberate decision to avoid paying for a second Render Postgres instance, not an oversight or a temporary gap. Every other secret (Turnstile, MFA keys, Brevo, `AUTH_SECRET`, etc.) remains distinct per environment; see §15.1 below for the full inventory and which row carries this specific exception. Because of the shared database:
 
 - Any account, membership, or test data created against `staging.idoc.club` is real production data. Clean it up (see `docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md`'s cleanup rules); don't treat it as disposable.
 - A migration must be safe to run once and land identically whichever branch happens to deploy it first — `main` and `staging` share one `idoc.__drizzle_migrations` ledger.
 
-### The rule: `main` is the trunk, `staging` tracks it
+### The rule: `staging` is the gate, `main` only receives promotions
 
-`staging` must never be missing a commit that's already on `main` — otherwise "is this fix on staging yet?" has no reliable answer, which is what caused the original confusion this section exists to resolve. Concretely:
+`main` must never gain a commit that `staging` hasn't already carried — otherwise "has this actually been verified?" has no reliable answer. Concretely:
 
-1. **All ordinary feature/fix work branches off `main`, and its PR targets `main`.** This is what the Codex review gate above protects, and it's what deploys to `redesign.idoc.club`.
-2. **Immediately after a PR merges into `main`, fast-forward `staging` to match `main`** (merge `main` into `staging`, or a plain fast-forward if `staging` carries no unmerged commits of its own). Do this before treating the change as done, not as a separate later pass.
-3. **`staging` is never a normal PR target.** The only legitimate reason to push directly to `staging` without first landing on `main` is a short-lived migration-rehearsal or audit-fixture branch meant to be thrown away. If it turns out to be a real fix, open a normal PR against `main` for it and then re-sync `staging` per step 2 — don't leave it staging-only.
-4. **Before relying on a staging observation** (a live-auth run, a UAT signoff, "does staging show the fix yet") confirm `staging` and `main` are actually in sync: `git log origin/main..origin/staging` and `git log origin/staging..origin/main` should both be empty, modulo a rehearsal branch in flight per step 3. If either is non-empty, sync first — don't debug an application discrepancy that's actually just branch drift.
+1. **All ordinary feature/fix work branches off `staging`, and its PR targets `staging`.** Nothing goes to `redesign.idoc.club` without first being reachable at `staging.idoc.club`.
+2. **Verify the change on `staging.idoc.club`** — UAT, a migration rehearsal, or a Claude Code live-auth run, as the change warrants — before it goes any further.
+3. **Promote by opening a `staging` → `main` pull request once the change is verified.** This promotion PR still goes through the Codex review gate protecting `main` above; promotion is a deliberate, reviewed step, not an automatic sync. Merging it is what actually ships the change to `redesign.idoc.club`.
+4. **`main` is never a direct target for feature work.** The only exception is a genuine production emergency that cannot wait for a staging cycle — and even then, merge the same fix into `staging` immediately afterward so `staging` doesn't fall behind what's already live.
+5. **`git log origin/main..origin/staging` showing commits is normal**, not drift — it's the backlog of changes verified on staging and awaiting deliberate promotion. `git log origin/staging..origin/main` showing anything, on the other hand, means something reached production without ever passing through staging; treat that as the anomaly to investigate and, if it wasn't an authorized emergency hotfix, back-merge it into `staging` right away.
 
-As of 24 September 2026 `main` and `staging` have diverged (`main` carries commits `staging` lacks and vice versa) from before this policy existed. This document defines the policy going forward; the one-time reconciliation — merge `staging`'s unique commits into `main` through a normal reviewed PR, then fast-forward `staging` to `main` — is a separate, outstanding piece of work, not something to infer has already happened.
+Before this policy existed, work had been merged directly into both branches independently: as of 24 September 2026, 16 commits had reached `main` without ever passing through `staging` (process debt from before this policy, not something to redo), and 8 commits were verified on `staging` but never promoted (normal backlog, just overdue). The one-time reconciliation is: (a) merge those 16 main-only commits into `staging` so `staging` reflects everything already live, then (b) open the overdue `staging` → `main` promotion PR for the 8 staging-only commits so they actually ship. Once both land, the branches are aligned and the policy above governs from there.
 
-### Claude's responsibility specifically
+### Claude's and the operator's responsibility specifically
 
-- When a task's own PR merges into `main`, sync `staging` (step 2 above) before ending the task — don't leave it as an implied follow-up for someone else.
-- When asked to investigate "staging doesn't show X" or "staging and redesign disagree," check branch drift first (`git log origin/main..origin/staging` and the reverse) before looking for an application bug.
-- Never push a fix directly to `staging` to make a UAT or live-auth run pass. Fix forward on `main` through the normal PR/review gate, then sync `staging` from it.
+- Branch feature/fix work off `staging` and target `staging` with the PR — not `main` — unless the task is an explicitly declared production emergency.
+- Never promote `staging` into `main` without the change actually having been verified on `staging.idoc.club` first. Promotion is deliberate; don't fast-forward or auto-sync it.
+- When asked to investigate "redesign doesn't show X" or "staging and redesign disagree," first check whether the change was ever promoted (`git log origin/main..origin/staging`) before looking for an application bug.
+- If a genuine hotfix must go straight to `main`, back-merge it into `staging` in the same task so `staging` doesn't drift out of sync with what's already live.
 
 # 1. Purpose
 
