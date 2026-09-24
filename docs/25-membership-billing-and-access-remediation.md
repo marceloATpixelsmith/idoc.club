@@ -198,7 +198,7 @@ to this behavior and does not replace the real test-mode signoff below.
 
 ## 8. Required real Stripe test-mode signoff
 
-Automated injected clients do not replace this gate. In an isolated staging database and Stripe test mode, verify:
+Automated injected clients do not replace this gate. Against the `staging.idoc.club` deployment in Stripe test mode (staging deliberately shares production's database rather than an isolated one — see `docs/07` "Branch, environment, and deployment workflow" — so treat every payment/entitlement row created here with the same cleanup discipline as any other staging test data), verify:
 
 - both first-payment modes and all subscribed webhook events;
 - the one Product appears correctly in Checkout without two member-facing plans;
