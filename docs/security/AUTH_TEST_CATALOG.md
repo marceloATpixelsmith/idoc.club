@@ -205,10 +205,10 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 4. After test payment/state transition, verify access updates.
 
 ### PASS
-- Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly.
+- Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation to any entitlement-gated member route/API produces a clean redirect or safe denial -- never an uncaught error/generic error boundary, which fails to grant access but also fails to redirect the member anywhere useful.
 
 ### FAIL
-- Protected member content is accessible before entitlement or the user is trapped behind an unnecessary/incorrect intermediate state.
+- Protected member content is accessible before entitlement, the user is trapped behind an unnecessary/incorrect intermediate state, OR direct navigation to an entitlement-gated route surfaces an uncaught error/generic error boundary instead of a clean redirect.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.

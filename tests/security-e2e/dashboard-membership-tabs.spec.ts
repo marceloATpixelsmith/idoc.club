@@ -82,6 +82,12 @@ test('a not-yet-entitled member is sent straight to the pricing page, no interme
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
   await expect(page).toHaveURL(/\/pricing$/);
+  // Regression: dashboard/support/page.tsx's listOwnConversations() -> requireAccountAccess('member')
+  // throws AuthorizationError for a non-entitled member; left uncaught, that crashed into Next.js's
+  // generic error boundary instead of redirecting, unlike profile/security which proactively check
+  // entitlement themselves before rendering (AUTH-AUTHZ-010).
+  await page.goto('/dashboard/support');
+  await expect(page).toHaveURL(/\/pricing$/);
   await page.goto('/seminars');
   await expect(page).toHaveURL(/\/seminars$/);
   await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();
