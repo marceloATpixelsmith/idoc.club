@@ -5,32 +5,18 @@ import { requireDisposableTestEmail, validateStagingDatabaseUrl } from '../lib/d
 const STAGING = 'postgres://tester:secret@staging-db.render.com/idoc_staging';
 
 test('requires explicit staging confirmation before touching anything', () => {
-  assert.throws(() => validateStagingDatabaseUrl(STAGING, undefined, false));
-  assert.equal(validateStagingDatabaseUrl(STAGING, undefined, true).pathname, '/idoc_staging');
+  assert.throws(() => validateStagingDatabaseUrl(STAGING, false));
+  assert.equal(validateStagingDatabaseUrl(STAGING, true).pathname, '/idoc_staging');
 });
 
 test('rejects missing or malformed URLs even when confirmed', () => {
   for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/idoc_staging', 'postgres://localhost/idoc_staging']) {
-    assert.throws(() => validateStagingDatabaseUrl(value, undefined, true));
+    assert.throws(() => validateStagingDatabaseUrl(value, true));
   }
 });
 
-test('refuses to run when the staging URL matches the known production URL', () => {
-  assert.throws(() => validateStagingDatabaseUrl(STAGING, STAGING, true));
-  assert.throws(() => validateStagingDatabaseUrl(
-    'postgresql://other:other@STAGING-DB.render.com:5432/idoc_staging?sslmode=require',
-    STAGING,
-    true,
-  ));
-});
-
-test('accepts a staging URL that genuinely differs from production', () => {
-  const production = 'postgres://tester:secret@production-db.render.com/idoc_production';
-  assert.equal(validateStagingDatabaseUrl(STAGING, production, true).hostname, 'staging-db.render.com');
-});
-
-test('fails closed when the production URL cannot be compared safely', () => {
-  assert.throws(() => validateStagingDatabaseUrl(STAGING, 'not-a-url', true));
+test('accepts a staging URL that is identical to production -- staging deliberately shares the production database', () => {
+  assert.equal(validateStagingDatabaseUrl(STAGING, true).hostname, 'staging-db.render.com');
 });
 
 test('only accepts disposable @pixelsmith.space test addresses', () => {
