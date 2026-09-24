@@ -8,7 +8,7 @@ import { getOwnPaymentMethodSummary } from '@/lib/payments/stripe';
 import { MembershipCard } from './membership-card';
 import { PaymentMethodCard } from './payment-method-card';
 import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
-import { getUser } from '@/lib/db/queries';
+import { getAccountStateUser } from '@/lib/db/queries';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -37,7 +37,7 @@ function daysUntil(validUntil: string, today: string): number {
  * onboarding-state account, which left uncaught crashed into Next.js's generic error boundary
  * instead of redirecting). */
 export default async function DashboardMembershipPage() {
-  const user = await getUser();
+  const user = await getAccountStateUser();
   if (!user || user.accountState === 'onboarding') redirect('/dashboard');
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
   // page to see their status and pay/renew, not just currently-entitled members (docs/02's
