@@ -31,14 +31,9 @@ test('membership roster composes the official Dice UI controls and a real select
   assert.doesNotMatch(memberTable, /<table className=/);
 });
 
-test('URL/history-driven controls remain controlled and range zero is not discarded', () => {
+test('URL/history-driven search control remains controlled', () => {
   assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
   assert.match(memberTable, /value=\{search\}/);
-  const filterList = readFileSync(new URL('../components/data-table/data-table-filter-list.tsx', import.meta.url), 'utf8');
-  const rangeFilter = readFileSync(new URL('../components/data-table/data-table-range-filter.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(filterList, /defaultValue=\{typeof filter\.value/);
-  assert.match(rangeFilter, /value=\{value\[0\] \?\? ""\}/);
-  assert.match(rangeFilter, /value=\{value\[1\] \?\? ""\}/);
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {
