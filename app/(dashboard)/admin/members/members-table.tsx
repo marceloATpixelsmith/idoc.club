@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import { Archive, CircleCheck, CircleX, Clock3, Download, FlaskConical, Gavel, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
+import { Archive, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Gavel, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
-import { getDefaultColumnOrder } from '@/lib/data-table';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
 import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries';
 import { IDOC_REGIONS } from '@/lib/membership/validation';
@@ -83,7 +82,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, header: 'Actions', cell: ({ row }) => <div className="flex flex-wrap gap-2">{row.original.profileId && <><Link className="underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>Edit</Link><Link className="underline" href={`/admin/payments?profileId=${row.original.profileId}`}>Payment</Link></>}<a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>Email</a></div> },
+    { id: 'actions', enableHiding: true, enableSorting: false, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`/admin/payments?profileId=${row.original.profileId}`}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname, searchParams]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   const { table } = useDataTable({
@@ -155,7 +154,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     router.push(`${pathname}?${params}`);
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  const reset = async () => { await fetch('/api/admin/table-preferences/memberships', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); table.setColumnOrder(getDefaultColumnOrder(columns)); table.resetRowSelection(); router.push(`${pathname}?status=active`); };
   const exportParams = new URLSearchParams(searchParams.toString()); exportParams.delete('page'); exportParams.delete('profileId'); exportParams.delete('column');
   const selected = table.getSelectedRowModel().rows.length;
   const selectedExportParams = new URLSearchParams(exportParams.toString());
@@ -178,7 +176,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
       >
         <DataTableSortList table={table} />
         <Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>
-        <Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button>
       </DataTableToolbar>
       <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching members</p>
     </DataTable>

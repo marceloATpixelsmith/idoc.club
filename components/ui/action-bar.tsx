@@ -202,6 +202,7 @@ function ActionBar(props: ActionBarProps) {
           role="toolbar"
           aria-orientation={orientation}
           data-slot="action-bar"
+          data-idoc-table-panel
           data-side={side}
           data-align={align}
           data-orientation={orientation}
@@ -578,6 +579,7 @@ function ActionBarItem(props: ActionBarItemProps) {
     <Button
       type="button"
       data-slot="action-bar-item"
+      data-idoc-table-control
       variant="secondary"
       size="sm"
       disabled={disabled}

@@ -31,6 +31,7 @@ export function DataTable<TData>({
 }: DataTableProps<TData>) {
   return (
     <div
+      data-idoc-table-root
       className={cn("flex w-full flex-col gap-2.5 overflow-auto", className)}
       {...props}
     >

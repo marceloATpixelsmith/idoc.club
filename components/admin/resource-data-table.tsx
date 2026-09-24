@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import { X } from 'lucide-react';
+import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -128,10 +128,16 @@ export function ResourceDataTable({
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, header: 'Actions',
-        cell: ({ row }) => <div className="flex gap-3 whitespace-nowrap">
-          <Link className="underline" href={`${config.path}/${row.original.id}`}>Edit</Link>
-          {tableType !== 'seminars' && <Link className="underline" href={`${config.path}/${row.original.id}/preview`}>Preview</Link>}
-          {tableType === 'seminars' && <Link className="underline" href={`${config.path}/${row.original.id}#registrations`}>Registrations</Link>}
+        cell: ({ row }) => <div className="flex items-center gap-1">
+          <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
+          </Button>
+          {tableType !== 'seminars' && <Button asChild aria-label="Preview" size="icon-sm" title="Preview" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}/preview`}><Eye aria-hidden="true" /></Link>
+          </Button>}
+          {tableType === 'seminars' && <Button asChild aria-label="Registrations" size="icon-sm" title="Registrations" variant="ghost">
+            <Link href={`${config.path}/${row.original.id}#registrations`}><ClipboardList aria-hidden="true" /></Link>
+          </Button>}
         </div>,
       },
     ];
@@ -233,21 +239,6 @@ export function ResourceDataTable({
     router.push(`${pathname}?${params}`);
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  async function reset() {
-    const response = await fetch(`/api/admin/table-preferences/${tableType}`, {
-      credentials: 'same-origin',
-      headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') },
-      method: 'DELETE',
-    });
-    if (!response.ok)
-      {
-      setError('Table preferences could not be reset.');
-      return;
-      }
-    suppressPersistence.current = true;
-    table.resetRowSelection();
-    window.location.assign(pathname);
-  }
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
   const manuallyFiltered = ['q', 'from', 'to'].some((key) => searchParams.has(key));
   const filtered = manuallyFiltered || searchParams.has('status') || searchParams.has('audience');
@@ -279,7 +270,6 @@ export function ResourceDataTable({
         </>}
       >
         <DataTableSortList table={table} />
-        <Button onClick={() => void reset()} size="sm" type="button" variant="ghost">Reset to default</Button>
       </DataTableToolbar>
       <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching records</p>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
