@@ -39,7 +39,7 @@ export function DateRangeFilter({
     onChange(undefined, undefined);
   }
 
-  const dateText = range.from && range.to
+  const dateText = range.from && range.to && range.from.getTime() !== range.to.getTime()
     ? `${formatDate(range.from)} - ${formatDate(range.to)}`
     : formatDate(range.from ?? range.to);
 

@@ -38,7 +38,7 @@ export function AdminReadOnlyTable({
   const columns = useMemo<ColumnDef<ReadOnlyRow>[]>(() => {
     const definedColumns: ColumnDef<ReadOnlyRow>[] = [
       {
-        id: 'select', enableHiding: false, enableSorting: false,
+        id: 'select', enableHiding: false, enableSorting: false, size: 40,
         header: ({ table }) => <Checkbox aria-label="Select all rows on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />,
         cell: ({ row }) => <Checkbox aria-label={`Select row ${row.original.id}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} />,
       },

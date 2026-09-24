@@ -20,6 +20,8 @@ interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
   onReset?: () => void;
   /** OR'd with the column-filter-driven detection to decide whether the Reset button shows. */
   isFiltered?: boolean;
+  /** Extra controls rendered after View, at the very end of the toolbar (e.g. a download/export icon). */
+  trailing?: React.ReactNode;
 }
 
 export function DataTableToolbar<TData>({
@@ -27,6 +29,7 @@ export function DataTableToolbar<TData>({
   leading,
   onReset: onResetProp,
   isFiltered: isFilteredProp,
+  trailing,
   children,
   className,
   ...props
@@ -75,6 +78,7 @@ export function DataTableToolbar<TData>({
       <div className="flex items-center gap-2">
         {children}
         <DataTableViewOptions table={table} align="end" />
+        {trailing}
       </div>
     </div>
   );

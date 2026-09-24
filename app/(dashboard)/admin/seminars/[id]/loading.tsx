@@ -1,0 +1,1 @@
+export default function Loading() { return <main aria-busy="true" className="animate-pulse space-y-6 px-5 py-8 lg:px-8"><div className="h-8 w-72 rounded bg-muted" /><div className="h-96 rounded-xl bg-muted" /></main>; }

@@ -18,6 +18,8 @@ interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   actionBar?: React.ReactNode;
   emptyState?: React.ReactNode;
   pageSizeOptions?: number[];
+  /** True while a search/filter/sort/column-visibility/pagination change is being applied. */
+  loading?: boolean;
 }
 
 export function DataTable<TData>({
@@ -25,6 +27,7 @@ export function DataTable<TData>({
   actionBar,
   emptyState,
   pageSizeOptions,
+  loading,
   children,
   className,
   ...props
@@ -36,7 +39,13 @@ export function DataTable<TData>({
       {...props}
     >
       {children}
-      <div className="overflow-hidden rounded-md border">
+      <div
+        aria-busy={loading || undefined}
+        className={cn(
+          "relative overflow-hidden rounded-md border transition-opacity",
+          loading && "pointer-events-none opacity-60 animate-pulse",
+        )}
+      >
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

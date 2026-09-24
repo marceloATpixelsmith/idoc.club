@@ -4,7 +4,7 @@ import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-
 import { X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
@@ -28,18 +28,18 @@ function visibility(params: URLSearchParams, initial?: string[]): VisibilityStat
 function header(id: string) { return ({ column }: HeaderContext<AdminSupportRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 
 export function SupportInboxTable({ administrators, filters, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { page: number; pageSize: number; q?: string; category?: string | string[]; status?: string | string[]; assigned?: string | string[]; activityFrom?: string | string[]; activityTo?: string | string[]; filters?: string | string[]; joinOperator?: string | string[]; sort?: string | string[]; direction?: string | string[] }; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
-  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false);
+  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false); const [isPending, startTransition] = useTransition();
   const initialVisibility = useMemo(() => visibility(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
   const activityFrom = Array.isArray(filters.activityFrom) ? filters.activityFrom[0] : filters.activityFrom;
   const activityTo = Array.isArray(filters.activityTo) ? filters.activityTo[0] : filters.activityTo;
   const columns = useMemo<ColumnDef<AdminSupportRow>[]>(() => [
-    { id: 'select', enableHiding: false, enableSorting: false, header: ({ table }) => <Checkbox aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
+    { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
     { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, header: header('member'), meta: { label: 'Member' }, cell: ({ row }) => <div>{row.original.profile_id ? <Link className="font-medium underline" href={`/admin/members?profileId=${row.original.profile_id}`}>{row.original.member_name || 'Member record'}</Link> : row.original.member_name}<span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
-    { accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
-    { accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'select' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
-    { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
-    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
-    { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
+    { id: 'subject', accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
+    { id: 'category', accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'select' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
+    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
+    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
+    { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity Date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
   ], [administrators, searchParams]);
   let initialSorting = [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
   try { const parsed = JSON.parse(searchParams.get('sort') ?? '[]'); if (Array.isArray(parsed) && parsed.length) initialSorting = parsed; } catch { /* The server safely applies legacy/default sorting. */ }
@@ -53,6 +53,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
     queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
     shallow: false,
+    startTransition,
   });
   function filterPreferenceFields(params: URLSearchParams) {
     return {
@@ -73,7 +74,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
   // Purging 'filters'/'joinOperator' here (the retired advanced filter-builder's params) keeps
   // a stale/shared URL carrying them from silently narrowing results the current toolbar shows
   // no indication of.
-  function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); params.delete('filters'); params.delete('joinOperator'); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); router.push(`${pathname}?${params}`); }
+  function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); params.delete('filters'); params.delete('joinOperator'); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); startTransition(() => router.push(`${pathname}?${params}`)); }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   async function copySelectedLinks() {
     try {
@@ -82,9 +83,9 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     } catch { setCopyNotice('Could not copy the selected links.'); }
   }
   const selected = table.getSelectedRowModel().rows.length;
-  const manuallyFiltered = Boolean(searchParams.get('q') || searchParams.get('activityFrom') || searchParams.get('activityTo'));
+  const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo'));
   const filtered = manuallyFiltered || Boolean(searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
-  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} pageSizeOptions={[10, 25, 50, 100]} table={table}>
+  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
     <DataTableToolbar
       className="rounded-xl border bg-background p-3"
       table={table}
