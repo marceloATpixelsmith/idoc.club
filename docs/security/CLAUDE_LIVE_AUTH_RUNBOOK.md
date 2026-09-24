@@ -29,12 +29,14 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
   needed a human to solve it manually, one flow at a time.
 - **The staging and production deployments deliberately share the same Postgres database** (one
-  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) -- a
-  documented exception to `docs/07` §15's general "staging must use its own non-production
-  provider credentials" rule, made specifically to avoid paying for a second Render Postgres
-  instance. See `docs/07` "Branch, environment, and deployment workflow" for the full policy.
-  This is a permanent, operator-confirmed decision, not a temporary gap or an oversight of this
-  runbook. Practical consequences for this audit:
+  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) -- staging
+  is deliberately near-identical to production under `docs/07` §15's policy, not isolated from
+  it; the database is one of the values staging shares verbatim (Stripe and Brevo credentials
+  and the URL-family values are the named exceptions that differ instead). Sharing the database
+  specifically also avoids paying for a second Render Postgres instance. See `docs/07` "Branch,
+  environment, and deployment workflow" for the full policy. This is a permanent,
+  operator-confirmed decision, not a temporary gap or an oversight of this runbook. Practical
+  consequences for this audit:
   - Every disposable test account, adversarial request, and piece of test data created during a
     live-auth run lands in the real production database alongside genuine member data.
   - The read-only `query_render_postgres` connector below is querying the **same** database
