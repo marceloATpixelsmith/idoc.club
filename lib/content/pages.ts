@@ -43,7 +43,11 @@ export async function listAdminContentPages(input: Record<string, string | strin
   const audienceValue = one(input.audience);
   const audience = CONTENT_AUDIENCES.includes(audienceValue as never) ? audienceValue : null;
   const order = listOrder(input, { title: 'p.title', status: 'p.status', updated: 'p.updated_at' }, 'updated', 'p.id');
-  const advancedWhere = advancedListWhere(input, { title: 'p.title', status: 'p.status' }, CONTENT_STATUSES);
+  // The advanced filter-builder UI that produced `filters`/`joinOperator` has been removed in
+  // favor of simple per-field query params above; pass an empty input so a stale/shared URL
+  // carrying those legacy params can't silently narrow results the current toolbar shows no
+  // indication of.
+  const advancedWhere = advancedListWhere({}, { title: 'p.title', status: 'p.status' }, CONTENT_STATUSES);
   const offset = (page - 1) * pageSize;
   const rows = await client`select p.id,p.slug,p.title,p.status,p.updated_at,p.audience_mode,
     coalesce(string_agg(a.audience,',' order by a.audience),'') audiences,count(*) over()::int total_count

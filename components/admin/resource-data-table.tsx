@@ -220,6 +220,10 @@ export function ResourceDataTable({
 
   function update(values: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
+    // Purge the retired advanced filter-builder's params so a stale/shared URL carrying them
+    // doesn't keep silently narrowing results the current toolbar shows no indication of.
+    params.delete('filters');
+    params.delete('joinOperator');
     for (const [key, value] of Object.entries(values))
       {
       if (value) params.set(key, value);

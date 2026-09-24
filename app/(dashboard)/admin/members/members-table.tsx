@@ -98,6 +98,23 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     shallow: false,
   });
 
+  // Persisted under the same key the live URL/column use (`type`, the membership-type column's
+  // id) so that redirecting a saved preference back into the URL reproduces a value the
+  // toolbar's own filter state -- keyed by column id -- picks up, not just the server query.
+  function filterPreferenceFields(params: URLSearchParams) {
+    return {
+      country: params.get('country') ?? undefined,
+      expiresFrom: params.get('expiresFrom') ?? undefined,
+      expiresTo: params.get('expiresTo') ?? undefined,
+      federation: params.get('federation') ?? undefined,
+      q: params.get('q') ?? undefined,
+      region: params.get('region') ?? undefined,
+      sort: params.get('sort') ?? undefined,
+      status: params.get('status') ?? undefined,
+      type: params.get('type') ?? undefined,
+    };
+  }
+
   useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
   useEffect(() => {
     table.setColumnVisibility(visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns));
@@ -106,12 +123,10 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
     const preferences = {
+      ...filterPreferenceFields(params),
       columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false),
       columnOrder: params.get('columnOrder') ?? initialColumnOrder,
       pageSize: Number(params.get('pageSize') ?? pageSize),
-      q: params.get('q') ?? undefined,
-      sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
     };
     void persistTablePreferences('memberships', preferences);
   }, [pageSize, searchParams, table]);
@@ -123,12 +138,16 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     if (current.length === columns.length && current.every((value, index) => value === columns[index])) return;
     params.delete('column');
     for (const column of columns) params.append('column', column);
-    void persistTablePreferences('memberships', { columns, columnOrder: params.get('columnOrder') ?? initialColumnOrder, pageSize: state.pagination.pageSize, q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined, status: params.get('status') ?? undefined });
+    void persistTablePreferences('memberships', { ...filterPreferenceFields(params), columns, columnOrder: params.get('columnOrder') ?? initialColumnOrder, pageSize: state.pagination.pageSize });
     router.replace(`${pathname}?${params}`, { scroll: false });
   }, [table.getState().columnVisibility]);
 
   function update(values: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
+    // Purge the retired advanced filter-builder's params so a stale/shared URL carrying them
+    // doesn't keep silently narrowing results the current toolbar shows no indication of.
+    params.delete('filters');
+    params.delete('joinOperator');
     for (const [key, value] of Object.entries(values)) {
       if (value) params.set(key, value); else params.delete(key);
     }

@@ -30,7 +30,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
   const params = await searchParams;
-  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
+  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'type', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
   const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
   const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
   if (savedPreferences) {

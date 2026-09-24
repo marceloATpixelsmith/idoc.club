@@ -109,7 +109,11 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const from = listDate(fromValue);
   const to = listDate(toValue);
   const order = listOrder(input, { publication: 'publication_date', title: 'title', status: 'status', updated: 'updated_at' }, 'publication');
-  const advancedWhere = advancedListWhere(input, { title: 'title', status: 'status' }, NEWS_STATUSES);
+  // The advanced filter-builder UI that produced `filters`/`joinOperator` has been removed in
+  // favor of simple per-field query params above; pass an empty input so a stale/shared URL
+  // carrying those legacy params can't silently narrow results the current toolbar shows no
+  // indication of.
+  const advancedWhere = advancedListWhere({}, { title: 'title', status: 'status' }, NEWS_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = await client`select id,slug,title,subtitle,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles

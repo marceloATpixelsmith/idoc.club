@@ -40,7 +40,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     { accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
     { accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'select' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
     { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
-    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned administrator', options: administrators, variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
+    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
     { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
   ], [administrators, searchParams]);
   let initialSorting = [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
@@ -56,11 +56,26 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
     shallow: false,
   });
+  function filterPreferenceFields(params: URLSearchParams) {
+    return {
+      activityFrom: params.get('activityFrom') ?? undefined,
+      activityTo: params.get('activityTo') ?? undefined,
+      assigned: params.get('assigned') ?? undefined,
+      category: params.get('category') ?? undefined,
+      q: params.get('q') ?? undefined,
+      sort: params.get('sort') ?? undefined,
+      status: params.get('status') ?? undefined,
+    };
+  }
+
   useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
   useEffect(() => { table.resetRowSelection(); }, [searchParams, table]);
-  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') { suppressPersistence.current = false; sessionStorage.removeItem('support-preferences-reset'); return; } const state = table.getState(); const selected = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false); const params = new URLSearchParams(searchParams.toString()); const current = params.getAll('column'); if (current.length === selected.length && current.every((value, index) => value === selected[index])) return; params.delete('column'); for (const column of selected) params.append('column', column); void persistTablePreferences('support', { columns: selected, pageSize: state.pagination.pageSize, q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined }); router.replace(`${pathname}?${params}`, { scroll: false }); }, [table.getState().columnVisibility]);
-  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') return; const params = new URLSearchParams(searchParams.toString()); void persistTablePreferences('support', { columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false), columnOrder: params.get('columnOrder') ?? undefined, pageSize: Number(params.get('pageSize') ?? filters.pageSize), q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined }); }, [filters.pageSize, searchParams, table]);
-  function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); router.push(`${pathname}?${params}`); }
+  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') { suppressPersistence.current = false; sessionStorage.removeItem('support-preferences-reset'); return; } const state = table.getState(); const selected = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false); const params = new URLSearchParams(searchParams.toString()); const current = params.getAll('column'); if (current.length === selected.length && current.every((value, index) => value === selected[index])) return; params.delete('column'); for (const column of selected) params.append('column', column); void persistTablePreferences('support', { ...filterPreferenceFields(params), columns: selected, pageSize: state.pagination.pageSize }); router.replace(`${pathname}?${params}`, { scroll: false }); }, [table.getState().columnVisibility]);
+  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') return; const params = new URLSearchParams(searchParams.toString()); void persistTablePreferences('support', { ...filterPreferenceFields(params), columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false), columnOrder: params.get('columnOrder') ?? undefined, pageSize: Number(params.get('pageSize') ?? filters.pageSize) }); }, [filters.pageSize, searchParams, table]);
+  // Purging 'filters'/'joinOperator' here (the retired advanced filter-builder's params) keeps
+  // a stale/shared URL carrying them from silently narrowing results the current toolbar shows
+  // no indication of.
+  function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); params.delete('filters'); params.delete('joinOperator'); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); router.push(`${pathname}?${params}`); }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const reset = async () => { await fetch('/api/admin/table-preferences/support', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); suppressPersistence.current = true; sessionStorage.setItem('support-preferences-reset', '1'); table.setColumnOrder(getDefaultColumnOrder(columns)); table.resetColumnVisibility(); table.resetSorting(); table.resetRowSelection(); router.push(pathname); };
   async function copySelectedLinks() {
