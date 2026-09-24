@@ -128,8 +128,8 @@ export function DataTableFilterList<TData>({
 
     if (!column) return;
 
-    debouncedSetFilters([
-      ...filters,
+    void setFilters((currentFilters) => [
+      ...currentFilters,
       {
         id: column.id as Extract<keyof TData, string>,
         value: "",
@@ -140,7 +140,7 @@ export function DataTableFilterList<TData>({
         filterId: generateId({ length: 8 }),
       },
     ]);
-  }, [columns, filters, debouncedSetFilters]);
+  }, [columns, setFilters]);
 
   const onFilterUpdate = React.useCallback(
     (
@@ -225,6 +225,7 @@ export function DataTableFilterList<TData>({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            data-idoc-table-control
             variant="outline"
             className="font-normal"
             onKeyDown={onTriggerKeyDown}
@@ -243,9 +244,12 @@ export function DataTableFilterList<TData>({
           </Button>
         </PopoverTrigger>
         <PopoverContent
+          data-idoc-table-panel
+          align="start"
+          sideOffset={8}
           aria-describedby={descriptionId}
           aria-labelledby={labelId}
-          className="flex w-full max-w-(--radix-popover-content-available-width) flex-col gap-3.5 p-4 sm:min-w-[380px]"
+          className="flex w-[min(42rem,calc(100vw-2rem))] max-w-(--radix-popover-content-available-width) flex-col gap-3.5 p-4"
           {...props}
         >
           <div className="flex flex-col gap-1">
@@ -393,7 +397,7 @@ function DataTableFilterItem<TData>({
         role="listitem"
         id={filterItemId}
         tabIndex={-1}
-        className="flex items-center gap-2"
+        className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/30 p-2"
         onKeyDown={onItemKeyDown}
       >
         <div className="min-w-[72px] text-center">
@@ -412,6 +416,7 @@ function DataTableFilterItem<TData>({
                 <SelectValue placeholder={joinOperator} />
               </SelectTrigger>
               <SelectContent
+                data-idoc-table-panel
                 id={joinOperatorListboxId}
                 position="popper"
                 className="min-w-(--radix-select-trigger-width) lowercase"
@@ -446,6 +451,7 @@ function DataTableFilterItem<TData>({
             </Button>
           </PopoverTrigger>
           <PopoverContent
+            data-idoc-table-panel
             id={fieldListboxId}
             align="start"
             className="w-40 p-0"
@@ -510,7 +516,7 @@ function DataTableFilterItem<TData>({
               <SelectValue placeholder={filter.operator} />
             </div>
           </SelectTrigger>
-          <SelectContent id={operatorListboxId}>
+          <SelectContent data-idoc-table-panel id={operatorListboxId}>
             <SelectGroup>
               {filterOperators.map((operator) => (
                 <SelectItem
@@ -652,7 +658,7 @@ function onFilterInputRender<TData>({
           >
             <SelectValue placeholder={filter.value ? "True" : "False"} />
           </SelectTrigger>
-          <SelectContent id={inputListboxId}>
+          <SelectContent data-idoc-table-panel id={inputListboxId}>
             <SelectGroup>
               <SelectItem value="true">True</SelectItem>
               <SelectItem value="false">False</SelectItem>
@@ -704,7 +710,7 @@ function onFilterInputRender<TData>({
               />
             </Button>
           </FacetedTrigger>
-          <FacetedContent id={inputListboxId} className="w-[200px]">
+          <FacetedContent data-idoc-table-panel id={inputListboxId} className="w-[200px]">
             <FacetedInput
               aria-label={`Search ${columnMeta?.label} options`}
               placeholder={columnMeta?.placeholder ?? "Search options..."}
@@ -773,6 +779,7 @@ function onFilterInputRender<TData>({
             </Button>
           </PopoverTrigger>
           <PopoverContent
+            data-idoc-table-panel
             id={inputListboxId}
             align="start"
             className="w-auto p-0"

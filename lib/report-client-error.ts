@@ -1,14 +1,18 @@
-/** Reports an error caught by a client error boundary so it's visible in server logs, not only in whichever browser happened to hit it. Best-effort — never throws. */
-export function reportClientError(error: Error & { digest?: string }) {
+/**REPORTS AN OCCURRENCE WITHOUT SENDING ERROR TEXT TO THE SERVER. RETURNS ITS LOG REFERENCE WHEN AVAILABLE.*/
+export async function reportClientError(error: Error & { digest?: string }): Promise<string | null> {
   console.error(error);
-  fetch('/api/client-error', {
-    body: JSON.stringify({
-      digest: error.digest,
-      message: error.message,
-      stack: error.stack,
-      url: typeof window === 'undefined' ? '' : window.location.href,
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  }).catch(() => {});
+  try {
+    const response = await fetch('/api/client-error', {
+      body: '{}',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+    if (!response.ok) return null;
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object' || !('requestId' in result)) return null;
+    const requestId = result.requestId;
+    return typeof requestId === 'string' && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(requestId) ? requestId : null;
+  } catch {
+    return null;
+  }
 }

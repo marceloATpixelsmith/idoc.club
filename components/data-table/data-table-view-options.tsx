@@ -46,17 +46,18 @@ export function DataTableViewOptions<TData>({
     <Popover>
       <PopoverTrigger asChild>
         <Button
+          data-idoc-table-control
           aria-label="Toggle columns"
           role="combobox"
           variant="outline"
-          className="ml-auto hidden h-8 font-normal lg:flex"
+          className="ml-auto h-8 font-normal"
           disabled={disabled}
         >
           <Settings2 className="text-muted-foreground" />
           View
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn("w-44 p-0", className)} {...props}>
+      <PopoverContent data-idoc-table-panel align="end" sideOffset={8} className={cn("w-52 p-1", className)} {...props}>
         <Command>
           <CommandInput placeholder="Search columns..." />
           <CommandList>
@@ -70,6 +71,15 @@ export function DataTableViewOptions<TData>({
                     column.toggleVisibility(!column.getIsVisible())
                   }
                 >
+                  <input
+                    aria-label={`Show ${column.columnDef.meta?.label ?? column.id}`}
+                    checked={column.getIsVisible()}
+                    className="size-4 shrink-0 accent-[var(--gold)]"
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => column.toggleVisibility(!column.getIsVisible())}
+                    tabIndex={-1}
+                    type="checkbox"
+                  />
                   <span className="truncate">
                     {column.columnDef.meta?.label ?? column.id}
                   </span>

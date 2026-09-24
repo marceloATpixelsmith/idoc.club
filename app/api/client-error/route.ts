@@ -1,4 +1,5 @@
 import { logError } from '@/lib/observability/logger';
+import { currentRequestId } from '@/lib/observability/request-id';
 
 // Accepts a best-effort crash report from a client error boundary and logs it server-side, so a
 // production error is visible in runtime logs even when nobody was watching the browser that hit
@@ -12,5 +13,6 @@ export async function POST(request: Request) {
     // data. Record only the registered occurrence; request correlation is added by the logger.
     await logError('client_error');
   }
-  return new Response(null, { status: 204 });
+  const requestId = await currentRequestId();
+  return Response.json({ requestId }, { headers: { 'Cache-Control': 'no-store' } });
 }

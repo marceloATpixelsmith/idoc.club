@@ -171,7 +171,7 @@ test('the admin seminar table provides Dice UI date, sorting, pagination, and vi
   const page = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
   const table = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
   assert.match(page, /ResourceListPage/);
-  for (const value of ['DataTableFilterMenu', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
+  for (const value of ['DataTableFilterList', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
   assert.match(seminarsSource, /date: 's\.seminar_date'/);
 });
 

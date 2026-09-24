@@ -22,7 +22,7 @@ test('membership roster presents the requested active, expired, and archived vie
 });
 
 test('membership roster composes the official Dice UI controls and a real selected-row action bar', () => {
-  for (const component of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableFilterMenu', 'DataTableSortList', 'ActionBar']) assert.match(memberTable, new RegExp(`<${component}`));
+  for (const component of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableSortList', 'ActionBar']) assert.match(memberTable, new RegExp(`<${component}`));
   assert.match(memberTable, /useDataTable\(\{/);
   assert.match(memberTable, /table\.resetRowSelection\(\)/);
   assert.doesNotMatch(memberTable, /<table className=/);
@@ -31,9 +31,9 @@ test('membership roster composes the official Dice UI controls and a real select
 test('URL/history-driven controls remain controlled and range zero is not discarded', () => {
   assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
   assert.match(memberTable, /value=\{search\}/);
-  const filterMenu = readFileSync(new URL('../components/data-table/data-table-filter-menu.tsx', import.meta.url), 'utf8');
+  const filterList = readFileSync(new URL('../components/data-table/data-table-filter-list.tsx', import.meta.url), 'utf8');
   const rangeFilter = readFileSync(new URL('../components/data-table/data-table-range-filter.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(filterMenu, /defaultValue=\{typeof filter\.value/);
+  assert.doesNotMatch(filterList, /defaultValue=\{typeof filter\.value/);
   assert.match(rangeFilter, /value=\{value\[0\] \?\? ""\}/);
   assert.match(rangeFilter, /value=\{value\[1\] \?\? ""\}/);
 });

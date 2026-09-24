@@ -566,10 +566,10 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 3. Attempt safe replay of stale/revoked/tampered session material only on disposable accounts.
 
 ### PASS
-- Authentication does not preserve attacker-controlled pre-auth authority; stale/revoked/tampered sessions are rejected by protected resources.
+- Authentication does not preserve attacker-controlled pre-auth authority; stale/revoked/tampered sessions are rejected by protected resources with a clean redirect/denial (307 to /sign-in for a page, null/401/403 for an API) -- not merely 'access not granted', since an uncaught server error also fails to grant access while leaving the member on a broken generic error page instead of a path back to signing in.
 
 ### FAIL
-- A stale, revoked, or tampered session grants authenticated authority.
+- A stale, revoked, or tampered session grants authenticated authority, OR its rejection surfaces as an uncaught error/generic error boundary rather than a clean redirect/denial.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.

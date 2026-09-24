@@ -240,7 +240,11 @@ server-generated request correlation fields to runtime logs; it is never persist
 It requires no authorization because it must remain reachable from a broken or anonymous session.
 Client-controlled `digest`, `message`, `stack`, `url`, and all other submitted fields are deliberately
 discarded rather than truncated or logged because they can contain credentials, personal data, or
-attacker-controlled content.
+attacker-controlled content. The browser now sends an empty object, and the endpoint returns only
+its server-generated request ID with `no-store`, allowing an admin error boundary to identify the
+matching occurrence in runtime logs without disclosing error details through an anonymous API.
+Admin error boundaries show locally available technical details only after their parent admin layout
+authorizes the administrator; Next.js production server errors remain masked in the browser.
 
 ## Member account-security management
 
