@@ -111,11 +111,7 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
     date: 's.seminar_date', title: 's.title', status: 's.status',
     registrations: '(select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
   }, 'date', 's.id');
-  // The advanced filter-builder UI that produced `filters`/`joinOperator` has been removed in
-  // favor of simple per-field query params above; pass an empty input so a stale/shared URL
-  // carrying those legacy params can't silently narrow results the current toolbar shows no
-  // indication of.
-  const advancedWhere = advancedListWhere({}, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
+  const advancedWhere = advancedListWhere(input, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = await client`select s.id,s.title,s.status,s.seminar_date,s.start_time,s.capacity,s.payment_method_canonical_id,count(*) over()::int total_count,

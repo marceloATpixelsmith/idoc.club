@@ -95,11 +95,16 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     sorts, advancedFilters: [], joinOperator: firstValue(input.joinOperator) === 'or' ? 'or' : 'and',
     status: status && MEMBERSHIP_STATUSES.includes(status as MembershipStatusFilter) ? status as MembershipStatusFilter : 'active',
   };
-  // The advanced filter-builder UI that produced `input.filters` (a JSON blob of
-  // operator/value conditions) has been removed in favor of simple per-field query params
-  // above; `filters.advancedFilters` is intentionally never populated from `input.filters` so a
-  // stale/shared URL carrying that legacy param can't silently narrow results the current
-  // toolbar shows no indication of.
+  const rawAdvancedFilters = firstValue(input.filters);
+  if (rawAdvancedFilters && rawAdvancedFilters.length <= 4000) {
+    try {
+      const advanced: unknown = JSON.parse(rawAdvancedFilters);
+      if (Array.isArray(advanced)) filters.advancedFilters = advanced.slice(0, 20).filter((filter): filter is AdvancedMemberFilter =>
+        filter && ['status', 'type', 'country', 'federation', 'region', 'expires'].includes(filter.id)
+        && typeof filter.operator === 'string' && (typeof filter.value === 'string'
+          || Array.isArray(filter.value) && filter.value.every((value: unknown) => typeof value === 'string')));
+    } catch { /* Invalid advanced state is ignored and server defaults remain authoritative. */ }
+  }
   const validDate = (value: string | undefined) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
   if (!validDate(filters.expiresFrom) || !validDate(filters.expiresTo)
     || (filters.expiresFrom && filters.expiresTo && filters.expiresFrom > filters.expiresTo)) throw new MemberFilterRangeError();

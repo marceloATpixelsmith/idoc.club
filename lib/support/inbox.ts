@@ -165,12 +165,8 @@ export async function listAdminConversations(input: SupportSearchParams) {
   const activityFrom = listDate(firstSearchValue(input.activityFrom) ?? '');
   const activityTo = listDate(firstSearchValue(input.activityTo) ?? '');
   type AdvancedFilter = { id?: string; operator?: string; value?: string | string[] };
-  // The advanced filter-builder UI that produced `input.filters` (a JSON blob of
-  // operator/value conditions) has been removed in favor of simple per-field query params
-  // above; `advancedFilters` is intentionally never populated from `input.filters` so a
-  // stale/shared URL carrying that legacy param can't silently narrow results the current
-  // toolbar shows no indication of.
-  const advancedFilters: AdvancedFilter[] = [];
+  let advancedFilters: AdvancedFilter[] = [];
+  try { const parsed = JSON.parse(firstSearchValue(input.filters) ?? '[]'); if (Array.isArray(parsed)) advancedFilters = parsed.slice(0, 20); } catch { /* Invalid URL state is ignored. */ }
   const join = firstSearchValue(input.joinOperator) === 'or' ? 'or' : 'and';
   const escapeLike = (value: string) => value.replaceAll('%', '\\%').replaceAll('_', '\\_');
   // postgres.js query fragments carry their selected-row generic even though fragments are never

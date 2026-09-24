@@ -52,10 +52,15 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
   const visibleColumns = params.column ? (Array.isArray(params.column) ? params.column : [params.column]) : Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
   const { profileId: profileIdParam } = params;
+  // The admin UI's advanced filter-builder (which produced `filters`/`joinOperator`) is retired;
+  // listAdminMembers still supports those params for direct/programmatic callers, but a stale or
+  // shared URL reaching this page must not have them silently applied with no toolbar indication
+  // that a filter is active.
+  const { filters: _filters, joinOperator: _joinOperator, ...listParams } = effectiveParams;
   let filterError: string | null = null;
   let listing: Awaited<ReturnType<typeof listAdminMembers>>;
   try {
-    listing = await listAdminMembers(effectiveParams);
+    listing = await listAdminMembers(listParams);
   } catch (error) {
     if (!(error instanceof MemberFilterRangeError)) throw error;
     filterError = error.message;
