@@ -76,7 +76,6 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Members</h1>
-    <nav className="mt-4 flex gap-4 text-sm" aria-label="Membership views"><Link className="underline" href="/admin/members?status=active">Active</Link><Link className="underline" href="/admin/members?status=expired">Expired</Link><Link className="underline" href="/admin/members?status=archived">Archived</Link><Link className="underline" href="/admin/revenue">Revenue dashboard</Link></nav>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
     <MembersTable defaultActive={!hasUrlState && !savedPreferences} initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (

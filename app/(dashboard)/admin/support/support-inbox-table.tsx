@@ -12,12 +12,10 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
-import { getDefaultColumnOrder } from '@/lib/data-table';
 import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
 
 type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
@@ -77,7 +75,6 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
   // no indication of.
   function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); params.delete('filters'); params.delete('joinOperator'); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); router.push(`${pathname}?${params}`); }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  const reset = async () => { await fetch('/api/admin/table-preferences/support', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); suppressPersistence.current = true; sessionStorage.setItem('support-preferences-reset', '1'); table.setColumnOrder(getDefaultColumnOrder(columns)); table.resetColumnVisibility(); table.resetSorting(); table.resetRowSelection(); router.push(pathname); };
   async function copySelectedLinks() {
     try {
       await navigator.clipboard.writeText(table.getSelectedRowModel().rows.map(({ original }) => `${window.location.origin}/admin/support/${original.public_id}`).join('\n'));
@@ -99,7 +96,6 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
       </>}
     >
       <DataTableSortList table={table} />
-      <Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button>
     </DataTableToolbar>
     <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching conversations</p>{copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
 }

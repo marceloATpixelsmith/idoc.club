@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
-import { getDefaultColumnOrder } from '@/lib/data-table';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
 import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries';
 import { IDOC_REGIONS } from '@/lib/membership/validation';
@@ -155,7 +154,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     router.push(`${pathname}?${params}`);
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  const reset = async () => { await fetch('/api/admin/table-preferences/memberships', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); table.setColumnOrder(getDefaultColumnOrder(columns)); table.resetRowSelection(); router.push(`${pathname}?status=active`); };
   const exportParams = new URLSearchParams(searchParams.toString()); exportParams.delete('page'); exportParams.delete('profileId'); exportParams.delete('column');
   const selected = table.getSelectedRowModel().rows.length;
   const selectedExportParams = new URLSearchParams(exportParams.toString());
@@ -178,7 +176,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
       >
         <DataTableSortList table={table} />
         <Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>
-        <Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button>
       </DataTableToolbar>
       <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching members</p>
     </DataTable>

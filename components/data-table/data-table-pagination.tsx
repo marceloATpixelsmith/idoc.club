@@ -70,6 +70,7 @@ export function DataTablePagination<TData>({
         <div className="flex items-center space-x-2">
           <Button
             aria-label="Go to first page"
+            data-idoc-table-control
             variant="outline"
             size="icon"
             className="hidden size-8 lg:flex"
@@ -80,6 +81,7 @@ export function DataTablePagination<TData>({
           </Button>
           <Button
             aria-label="Go to previous page"
+            data-idoc-table-control
             variant="outline"
             size="icon"
             className="size-8"
@@ -90,6 +92,7 @@ export function DataTablePagination<TData>({
           </Button>
           <Button
             aria-label="Go to next page"
+            data-idoc-table-control
             variant="outline"
             size="icon"
             className="size-8"
@@ -100,6 +103,7 @@ export function DataTablePagination<TData>({
           </Button>
           <Button
             aria-label="Go to last page"
+            data-idoc-table-control
             variant="outline"
             size="icon"
             className="hidden size-8 lg:flex"

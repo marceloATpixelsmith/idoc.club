@@ -13,7 +13,6 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useDataTable } from '@/hooks/use-data-table';
@@ -233,21 +232,6 @@ export function ResourceDataTable({
     router.push(`${pathname}?${params}`);
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  async function reset() {
-    const response = await fetch(`/api/admin/table-preferences/${tableType}`, {
-      credentials: 'same-origin',
-      headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') },
-      method: 'DELETE',
-    });
-    if (!response.ok)
-      {
-      setError('Table preferences could not be reset.');
-      return;
-      }
-    suppressPersistence.current = true;
-    table.resetRowSelection();
-    window.location.assign(pathname);
-  }
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
   const manuallyFiltered = ['q', 'from', 'to'].some((key) => searchParams.has(key));
   const filtered = manuallyFiltered || searchParams.has('status') || searchParams.has('audience');
@@ -279,7 +263,6 @@ export function ResourceDataTable({
         </>}
       >
         <DataTableSortList table={table} />
-        <Button onClick={() => void reset()} size="sm" type="button" variant="ghost">Reset to default</Button>
       </DataTableToolbar>
       <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching records</p>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}

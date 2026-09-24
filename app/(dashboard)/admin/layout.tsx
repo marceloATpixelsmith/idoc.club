@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <NuqsAdapter>
-      <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-7xl flex-col lg:flex-row">
+      <div className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
         <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} unreadCount={unreadCount} />
         <div className="min-w-0 flex-1">{children}</div>
       </div>
