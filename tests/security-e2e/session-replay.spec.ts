@@ -115,7 +115,13 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
   await dashboardContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
   const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
   expect(dashboard.status()).toBe(307);
-  expect(new URL(dashboard.headers().location!).pathname).toBe('/sign-in');
+  // Unlike middleware.ts's NextResponse.redirect(new URL(path, request.url)) (an absolute URL,
+  // asserted on below in the legacy-cookie test via new URL(...).pathname), this redirect() call
+  // is a page-level next/navigation call from inside the dashboard layout's RSC render. Confirmed
+  // empirically against this dev server: Next still uses a 307 for a GET navigation here, but the
+  // Location header it emits is the bare relative path with no scheme/host, so new URL() on it
+  // alone throws (Invalid URL) rather than parsing -- assert on the raw header value instead.
+  expect(dashboard.headers().location).toBe('/sign-in');
   await dashboardContext.close();
 });
 
