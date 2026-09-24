@@ -6,6 +6,7 @@ import { SECURITY_ACTIVITY_LABELS } from '@/lib/auth/security-activity';
 
 export type PublicUser = { email: string; firstName: string | null; id: number; lastName: string | null };
 export type SecurityPageUser = { accountState: 'active' | 'onboarding'; hasPassword: boolean; id: number; sessionVersion: number };
+export type AccountStateUser = { accountState: 'active' | 'onboarding'; id: number };
 
 /** AUTH-API-003: the only user-shaped value ever sent to the browser -- every server-rendered
  * consumer of the current user's identity (the root layout's SWR fallback, the /api/user route
@@ -49,6 +50,27 @@ export async function getSecurityPageUser(): Promise<SecurityPageUser | null> {
   }
 
   return { accountState: user.accountState as 'active' | 'onboarding', hasPassword: user.passwordSetAt !== null, id: user.id, sessionVersion: user.sessionVersion };
+}
+
+/** Authenticates the current session while selecting only accountState -- like getSecurityPageUser,
+ * for a Server Component page that only needs to branch on onboarding vs. active state and must not
+ * let a full users row (passwordHash included) cross the render boundary. */
+export async function getAccountStateUser(): Promise<AccountStateUser | null> {
+  const sessionData = await getSession();
+  if (!sessionData) return null;
+
+  const [user] = await db
+    .select({ accountState: users.accountState, emailVerifiedAt: users.emailVerifiedAt, id: users.id, sessionVersion: users.sessionVersion })
+    .from(users)
+    .where(and(eq(users.id, sessionData.user.id), isNull(users.deletedAt)))
+    .limit(1);
+
+  if (!user?.emailVerifiedAt || !['active', 'onboarding'].includes(user.accountState) ||
+      user.sessionVersion !== sessionData.user.sessionVersion) {
+    return null;
+  }
+
+  return { accountState: user.accountState as 'active' | 'onboarding', id: user.id };
 }
 
 export async function getUser() {
