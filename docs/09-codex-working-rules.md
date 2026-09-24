@@ -9,11 +9,11 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 3. Do not stop merely because the checkout has no usable `origin` remote, `gh` is unavailable, or outbound Git HTTPS cloning/fetching is blocked.
 4. If an attached checkout exists, continue implementation there. Clone only when no local checkout exists anywhere under `/workspace` or `/tmp`.
 5. Stop for repository-access reasons only when no checkout exists and no supported repository integration can provide the needed write access.
-6. When `origin/main` is available, begin from its latest state. Never knowingly work from an old branch when `origin/main` is available.
+6. When `origin/staging` is available, begin from its latest state. Never knowingly work from an old branch when `origin/staging` is available. Per docs/07 "Branch, environment, and deployment workflow," `staging` is the pre-merge verification gate for ordinary work; `main` receives only reviewed promotions from `staging`.
 7. If remote fetch is unavailable but a checkout exists, use the attached checkout as the baseline and report that limitation.
 8. Create a feature branch when Git permits it. If branch creation is unavailable but a checkout exists, continue and report the limitation.
 9. Never commit directly to `main`.
-10. Open or update a pull request into `main` when the environment supports it. Do not treat a missing `gh` executable as a blocker when the connected GitHub integration can publish the work.
+10. Open or update a pull request into `staging`, not `main`, when the environment supports it — per docs/07's branch policy, ordinary work is verified on `staging` before a separate, reviewed promotion PR ships it to `main`. Target `main` directly only for an explicitly declared production emergency that cannot wait for a staging cycle, and back-merge the same fix into `staging` immediately afterward. Do not treat a missing `gh` executable as a blocker when the connected GitHub integration can publish the work.
 11. If PR creation is unavailable, complete the changes and report the changed files, validation results, and exact publishing blocker.
 12. Do not use `[skip ci]`.
 13. Do not merge a pull request until `codex/review-complete` succeeds for its current head commit and all actionable review threads are resolved. If Codex review quota is unavailable, only a repository administrator or maintainer may use the audited quota-waiver workflow for that exact revision.

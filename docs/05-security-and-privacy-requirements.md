@@ -119,7 +119,7 @@ Vercel Pro strengthens the deployment perimeter and operations; it does not repl
 
 | **Control** | **Approved IDOC use** | **When to implement** |
 |---|---|---|
-| Environment separation and protected previews | Separate Production, Staging/UAT and Preview values. Preview uses non-production data and Stripe test mode only; protect private feature previews. | Foundation |
+| Environment separation and protected previews | Separate Production and ordinary per-PR Preview values; ordinary Preview uses non-production data and Stripe test mode only; protect private feature previews. **Deliberate exception:** the long-lived `staging.idoc.club` deployment is not isolated from Production this way — it deliberately shares the database and most secrets with Production (Stripe/Brevo credentials and URL-family values are the named exceptions that still differ); see `docs/07` "Branch, environment, and deployment workflow" for the full policy and rationale. | Foundation |
 | Firewall / WAF | Use managed protections plus narrowly scoped rate limits for auth, recovery, verification/resend, email changes, contact forms, Stripe webhooks and sensitive admin mutations. | Before public account and admin flows |
 | Sensitive Environment Variables | Store production secrets as sensitive server-only values; never expose them in logs, browser responses, source maps or documentation. | Before entering production secrets |
 | Observability and Runtime Logs | Investigate server errors, latency, failed background work and deployments without logging secrets or unnecessary personal data. | Before UAT |

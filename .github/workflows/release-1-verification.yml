@@ -2,7 +2,7 @@ name: Release 1 Verification
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
