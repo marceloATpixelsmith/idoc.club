@@ -83,8 +83,12 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     } catch { setCopyNotice('Could not copy the selected links.'); }
   }
   const selected = table.getSelectedRowModel().rows.length;
+  // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
+  // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
+  // copy, so it must include `q`: a search that matches nothing is still "no conversations match
+  // this view", not "no support conversations exist at all".
   const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo'));
-  const filtered = manuallyFiltered || Boolean(searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
+  const filtered = manuallyFiltered || Boolean(searchParams.get('q') || searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
   return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
     <DataTableToolbar
       className="rounded-xl border bg-background p-3"

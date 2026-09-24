@@ -242,8 +242,12 @@ export function ResourceDataTable({
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
+  // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
+  // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
+  // copy, so it must include `q`: a search that matches nothing is still "no records match this
+  // view", not "no records exist at all".
   const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key));
-  const filtered = manuallyFiltered || searchParams.has('status') || searchParams.has('audience');
+  const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
     <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
