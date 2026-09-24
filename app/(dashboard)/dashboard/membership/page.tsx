@@ -8,6 +8,7 @@ import { getOwnPaymentMethodSummary } from '@/lib/payments/stripe';
 import { MembershipCard } from './membership-card';
 import { PaymentMethodCard } from './payment-method-card';
 import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
+import { getUser } from '@/lib/db/queries';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -29,9 +30,15 @@ function daysUntil(validUntil: string, today: string): number {
   return Math.round((new Date(`${validUntil}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / MILLISECONDS_PER_DAY);
 }
 
-/** '/dashboard' is the account's onboarding gate -- an account that hasn't finished onboarding is
- * routed there instead of here (see ../page.tsx), so this page never has to consider that state. */
+/** '/dashboard' is the account's onboarding gate and normally routes an unfinished account there
+ * instead of here (see ../page.tsx) -- but a direct deep link can still land here first, so this
+ * page must check for itself rather than trust that routing (AUTH-AUTHZ-011; same bug class as
+ * AUTH-AUTHZ-009/010: requireAccountAccess('profile') throws AuthorizationError for an
+ * onboarding-state account, which left uncaught crashed into Next.js's generic error boundary
+ * instead of redirecting). */
 export default async function DashboardMembershipPage() {
+  const user = await getUser();
+  if (!user || user.accountState === 'onboarding') redirect('/dashboard');
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
   // page to see their status and pay/renew, not just currently-entitled members (docs/02's
   // "limited expired-account view").

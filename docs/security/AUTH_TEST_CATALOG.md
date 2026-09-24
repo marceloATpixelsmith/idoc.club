@@ -235,10 +235,10 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 4. Refresh/back during onboarding.
 
 ### PASS
-- Required earlier state cannot be skipped; invalid query values are rejected/ignored safely; refresh/back preserves a coherent state.
+- Required earlier state cannot be skipped; a deep link to a later dashboard/onboarding step redirects cleanly back to /dashboard (HTTP 307, no server error page); invalid query values are rejected/ignored safely; refresh/back preserves a coherent state.
 
 ### FAIL
-- Direct navigation grants access/state that should require a prior onboarding step.
+- Direct navigation grants access/state that should require a prior onboarding step, OR produces an uncaught server error (HTTP 500 / generic error boundary) instead of a clean redirect -- a crash is not a pass just because it also grants no access.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
