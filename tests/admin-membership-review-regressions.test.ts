@@ -10,7 +10,7 @@ const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.
 const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
 
 test('member pagination preserves every normalized active filter while replacing only page', () => {
-  assert.match(memberTable, /queryKeys: \{ filters: 'filters'.*page: 'page', perPage: 'pageSize', sort: 'sort' \}/);
+  assert.match(memberTable, /queryKeys: \{ page: 'page', perPage: 'pageSize', sort: 'sort' \}/);
   assert.match(memberTable, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
   assert.match(memberTable, /<DataTable table=\{table\}/);
 });
@@ -18,24 +18,22 @@ test('member pagination preserves every normalized active filter while replacing
 test('membership roster presents the requested active, expired, and archived views', () => {
   assert.match(memberQueries, /\['active', 'expired', 'archived', 'without_active'/);
   assert.match(memberQueries, /m\.status = 'archived'/);
-  for (const status of ['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']) assert.match(memberTable, new RegExp(`value: '${status}'`));
+  for (const status of ['active', 'expired', 'archived', 'administrator', 'super_admin', 'onboarding', 'test']) assert.match(memberTable, new RegExp(`value: '${status}'`));
+  assert.doesNotMatch(memberTable.split('const STATUS_OPTIONS = ')[1].split('const TYPE_OPTIONS = ')[0], /without_active/);
 });
 
 test('membership roster composes the official Dice UI controls and a real selected-row action bar', () => {
-  for (const component of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableSortList', 'ActionBar']) assert.match(memberTable, new RegExp(`<${component}`));
+  for (const component of ['DataTable', 'DataTableToolbar', 'DataTableSortList', 'ActionBar']) assert.match(memberTable, new RegExp(`<${component}`));
+  assert.doesNotMatch(memberTable, /<DataTableAdvancedToolbar|<DataTableFilterList/);
+  assert.match(memberTable, /enableAdvancedFilter: false/);
   assert.match(memberTable, /useDataTable\(\{/);
   assert.match(memberTable, /table\.resetRowSelection\(\)/);
   assert.doesNotMatch(memberTable, /<table className=/);
 });
 
-test('URL/history-driven controls remain controlled and range zero is not discarded', () => {
+test('URL/history-driven search control remains controlled', () => {
   assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
   assert.match(memberTable, /value=\{search\}/);
-  const filterList = readFileSync(new URL('../components/data-table/data-table-filter-list.tsx', import.meta.url), 'utf8');
-  const rangeFilter = readFileSync(new URL('../components/data-table/data-table-range-filter.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(filterList, /defaultValue=\{typeof filter\.value/);
-  assert.match(rangeFilter, /value=\{value\[0\] \?\? ""\}/);
-  assert.match(rangeFilter, /value=\{value\[1\] \?\? ""\}/);
 });
 
 test('malformed page parameters fall back before SQL offset is calculated', () => {

@@ -58,9 +58,14 @@ export async function ResourceListPage({ query, tableType }: { query: Query; tab
   let page: number;
   let pageSize: number;
   let total: number;
+  // The admin UI's advanced filter-builder (which produced `filters`/`joinOperator`) is retired;
+  // `listAdminArticles`/`listAdminSeminars`/`listAdminContentPages` still support those params
+  // for direct/programmatic callers, but a stale or shared URL reaching this page must not have
+  // them silently applied with no toolbar indication that a filter is active.
+  const { filters: _filters, joinOperator: _joinOperator, ...listQuery } = query;
   if (tableType === 'news')
     {
-    const listing = await listAdminArticles(query);
+    const listing = await listAdminArticles(listQuery);
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
@@ -72,7 +77,7 @@ export async function ResourceListPage({ query, tableType }: { query: Query; tab
     }
   else if (tableType === 'seminars')
     {
-    const listing = await listAdminSeminars(query);
+    const listing = await listAdminSeminars(listQuery);
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
@@ -84,7 +89,7 @@ export async function ResourceListPage({ query, tableType }: { query: Query; tab
     }
   else
     {
-    const listing = await listAdminContentPages(query);
+    const listing = await listAdminContentPages(listQuery);
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title), slug: String(row.slug),

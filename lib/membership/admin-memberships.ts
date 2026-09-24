@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
+import { ISO_COUNTRY_CODES, IDOC_REGIONS } from '@/lib/membership/validation';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
 import { requireAdministrator } from './authorization';
@@ -20,7 +21,10 @@ export type MemberFilters = {
   column?: RawFilterValue; country?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
   membershipType?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
   direction?: RawFilterValue; filters?: RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
-  status?: RawFilterValue;
+  status?: RawFilterValue; joinOperator?: RawFilterValue;
+  // The membership-type column keeps id `type` (its sort id, matching SORT_FIELDS); the simple-mode
+  // toolbar filter therefore syncs to a `type` query param rather than `membershipType`.
+  type?: RawFilterValue;
 };
 
 export type AdminMemberRow = {
@@ -31,6 +35,7 @@ export type AdminMemberRow = {
 
 const SORT_FIELDS = ['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
 type SortField = typeof SORT_FIELDS[number];
+type AdvancedMemberFilter = { id: 'status' | 'type' | 'country' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
 const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
 
@@ -54,15 +59,22 @@ function pageNumber(value: number | RawFilterValue): number {
 type NormalizedMemberFilters = {
   country?: string; expiresFrom?: string; expiresTo?: string; federation?: string;
   direction: 'asc' | 'desc'; membershipType?: MembershipTypeOption; page: number; pageSize: 10 | 25 | 50 | 100; q?: string; region?: string;
-  sort: SortField; status: MembershipStatusFilter;
+  sort: SortField; sorts: { id: SortField; desc: boolean }[]; advancedFilters: AdvancedMemberFilter[];
+  joinOperator: 'and' | 'or'; status: MembershipStatusFilter;
 };
 
 function normalized(input: MemberFilters): NormalizedMemberFilters {
   const page = pageNumber(input.page);
-  const membershipType = firstValue(input.membershipType);
+  const membershipType = firstValue(input.membershipType) ?? firstValue(input.type);
   const rawSort = firstValue(input.sort);
   let parsedSort: { desc?: boolean; id?: string } | undefined;
-  try { parsedSort = rawSort?.startsWith('[') ? JSON.parse(rawSort)[0] : undefined; } catch { parsedSort = undefined; }
+  let sorts: { id: SortField; desc: boolean }[] = [];
+  try {
+    const parsed: unknown = rawSort?.startsWith('[') ? JSON.parse(rawSort) : null;
+    if (Array.isArray(parsed)) sorts = parsed.filter((item): item is { id: SortField; desc: boolean } =>
+      item && typeof item.id === 'string' && SORT_FIELDS.includes(item.id as SortField) && typeof item.desc === 'boolean').slice(0, SORT_FIELDS.length);
+    parsedSort = sorts[0];
+  } catch { parsedSort = undefined; }
   const legacySort = parsedSort?.id ?? rawSort;
   const [legacyField, legacyDirection] = legacySort?.split('_') ?? [];
   const sort = legacyField && SORT_FIELDS.includes(legacyField as SortField) ? legacyField : legacySort;
@@ -80,35 +92,66 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     q: firstValue(input.q)?.trim().slice(0, 200) || undefined,
     region: firstValue(input.region)?.trim().slice(0, 40) || undefined,
     sort: sort && SORT_FIELDS.includes(sort as SortField) ? sort as SortField : 'name',
+    sorts, advancedFilters: [], joinOperator: firstValue(input.joinOperator) === 'or' ? 'or' : 'and',
     status: status && MEMBERSHIP_STATUSES.includes(status as MembershipStatusFilter) ? status as MembershipStatusFilter : 'active',
   };
   const rawAdvancedFilters = firstValue(input.filters);
-  if (rawAdvancedFilters) {
+  if (rawAdvancedFilters && rawAdvancedFilters.length <= 4000) {
     try {
-      const advanced = JSON.parse(rawAdvancedFilters);
-      if (Array.isArray(advanced)) for (const filter of advanced) {
-        const value = Array.isArray(filter?.value) ? filter.value[0] : filter?.value;
-        if (typeof value !== 'string') continue;
-        if (filter.id === 'status' && MEMBERSHIP_STATUSES.includes(value as MembershipStatusFilter)) filters.status = value as MembershipStatusFilter;
-        else if (filter.id === 'type' && MEMBERSHIP_TYPE_OPTIONS.includes(value as MembershipTypeOption)) filters.membershipType = value as MembershipTypeOption;
-        else if (filter.id === 'country') filters.country = value.trim().slice(0, 2).toUpperCase() || undefined;
-        else if (filter.id === 'federation') filters.federation = value.trim().slice(0, 2).toUpperCase() || undefined;
-        else if (filter.id === 'region') filters.region = value.trim().slice(0, 40) || undefined;
-        else if (filter.id === 'expires') {
-          const values = Array.isArray(filter.value) ? filter.value : [filter.value];
-          const dates = values.map((item: unknown) => { if (typeof item !== 'string' || !/^\d+$/.test(item)) return item; const date = new Date(Number(item)); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
-          if (filter.operator === 'isBetween') [filters.expiresFrom, filters.expiresTo] = dates as [string?, string?];
-          else if (filter.operator === 'gt' || filter.operator === 'gte') filters.expiresFrom = dates[0] as string;
-          else if (filter.operator === 'lt' || filter.operator === 'lte') filters.expiresTo = dates[0] as string;
-          else if (filter.operator === 'eq') [filters.expiresFrom, filters.expiresTo] = [dates[0] as string, dates[0] as string];
-        }
-      }
+      const advanced: unknown = JSON.parse(rawAdvancedFilters);
+      if (Array.isArray(advanced)) filters.advancedFilters = advanced.slice(0, 20).filter((filter): filter is AdvancedMemberFilter =>
+        filter && ['status', 'type', 'country', 'federation', 'region', 'expires'].includes(filter.id)
+        && typeof filter.operator === 'string' && (typeof filter.value === 'string'
+          || Array.isArray(filter.value) && filter.value.every((value: unknown) => typeof value === 'string')));
     } catch { /* Invalid advanced state is ignored and server defaults remain authoritative. */ }
   }
   const validDate = (value: string | undefined) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
   if (!validDate(filters.expiresFrom) || !validDate(filters.expiresTo)
     || (filters.expiresFrom && filters.expiresTo && filters.expiresFrom > filters.expiresTo)) throw new MemberFilterRangeError();
   return filters;
+}
+
+function statusCondition(value: MembershipStatusFilter, effectiveStatus: SQL): SQL {
+  if (value === 'administrator') return sql`coalesce(app_roles.is_administrator,false)`;
+  if (value === 'super_admin') return sql`coalesce(app_roles.is_super_admin,false)`;
+  if (value === 'onboarding') return sql`u.account_state in ('unverified','onboarding','migrated_pending')`;
+  if (value === 'test') return sql`(u.email like '%+test@%' or u.email like '%@example.test' or u.email like '%@example.com')`;
+  if (value === 'without_active') return sql`${effectiveStatus} <> 'active'`;
+  return sql`${effectiveStatus} = ${value}`;
+}
+
+function advancedCondition(filter: AdvancedMemberFilter, effectiveStatus: SQL): SQL | null {
+  const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).filter(Boolean).slice(0, 20);
+  if (filter.id === 'expires') {
+    const field = sql`m.valid_until`;
+    if (filter.operator === 'isEmpty') return sql`${field} is null`;
+    if (filter.operator === 'isNotEmpty') return sql`${field} is not null`;
+    const dates = values.map((value) => {
+      if (!/^\d+$/.test(value)) return value;
+      const date = new Date(Number(value));
+      return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+    });
+    if (!dates[0] || !/^\d{4}-\d{2}-\d{2}$/.test(dates[0])) return null;
+    if (filter.operator === 'isBetween') return dates[1] && /^\d{4}-\d{2}-\d{2}$/.test(dates[1]) ? sql`${field} between ${dates[0]} and ${dates[1]}` : null;
+    if (filter.operator === 'eq') return sql`${field} = ${dates[0]}`;
+    if (filter.operator === 'ne') return sql`${field} is not null and ${field} <> ${dates[0]}`;
+    if (filter.operator === 'gt') return sql`${field} > ${dates[0]}`;
+    if (filter.operator === 'gte') return sql`${field} >= ${dates[0]}`;
+    if (filter.operator === 'lt') return sql`${field} < ${dates[0]}`;
+    if (filter.operator === 'lte') return sql`${field} <= ${dates[0]}`;
+    return null;
+  }
+  const allowed = filter.id === 'status' ? MEMBERSHIP_STATUSES : filter.id === 'type' ? MEMBERSHIP_TYPE_OPTIONS
+    : filter.id === 'region' ? IDOC_REGIONS : ISO_COUNTRY_CODES;
+  const selected = [...new Set(values.filter((value) => (allowed as readonly string[]).includes(value)))];
+  if (!selected.length || !['eq', 'ne', 'inArray', 'notInArray'].includes(filter.operator)) return null;
+  const field = filter.id === 'type' ? sql`roles.membership_type` : filter.id === 'federation' ? sql`roles.federation`
+    : filter.id === 'country' ? sql`p.country_code` : sql`roles.region`;
+  const matches = filter.id === 'status' ? selected.map((value) => statusCondition(value as MembershipStatusFilter, effectiveStatus))
+    : selected.map((value) => sql`${field} = ${value}`);
+  const match = sql`(${sql.join(matches, sql` or `)})`;
+  return filter.operator === 'ne' || filter.operator === 'notInArray'
+    ? sql`not coalesce(${match},false)` : match;
 }
 
 function queryParts(raw: MemberFilters) {
@@ -119,12 +162,8 @@ function queryParts(raw: MemberFilters) {
     conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
   }
   const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when ((m.status in ('active','complimentary','canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date)) and u.account_state <> 'suspended' then 'active' else 'expired' end`;
-  if (filters.status === 'administrator') conditions.push(sql`app_roles.is_administrator`);
-  else if (filters.status === 'super_admin') conditions.push(sql`app_roles.is_super_admin`);
-  else if (filters.status === 'onboarding') conditions.push(sql`u.account_state in ('unverified','onboarding','migrated_pending')`);
-  else if (filters.status === 'test') conditions.push(sql`(u.email like '%+test@%' or u.email like '%@example.test' or u.email like '%@example.com')`);
-  else if (filters.status === 'without_active') conditions.push(sql`${effectiveStatus} <> 'active'`);
-  else conditions.push(sql`${effectiveStatus} = ${filters.status}`);
+  const advancedStatus = filters.advancedFilters.some((filter) => filter.id === 'status' && advancedCondition(filter, effectiveStatus));
+  if (!advancedStatus) conditions.push(statusCondition(filters.status, effectiveStatus));
   if (filters.expiresFrom) conditions.push(sql`m.valid_until >= ${filters.expiresFrom}`);
   if (filters.expiresTo) conditions.push(sql`m.valid_until <= ${filters.expiresTo}`);
   if (filters.country) conditions.push(sql`p.country_code = ${filters.country}`);
@@ -133,13 +172,18 @@ function queryParts(raw: MemberFilters) {
   if (filters.membershipType) conditions.push(filters.membershipType === 'combo'
     ? sql`roles.has_judge and roles.has_steward`
     : sql`roles.role_types @> array[${filters.membershipType}]::text[]`);
-  const direction = filters.direction === 'desc' ? sql`desc` : sql`asc`;
-  const sortExpression = filters.sort === 'email' ? sql`u.email` : filters.sort === 'status' ? effectiveStatus
-    : filters.sort === 'type' ? sql`roles.membership_type` : filters.sort === 'federation' ? sql`roles.federation`
-      : filters.sort === 'country' ? sql`p.country_code` : filters.sort === 'region' ? sql`roles.region`
-        : filters.sort === 'expires' ? sql`m.valid_until` : filters.sort === 'lastPayment' ? sql`payment.last_payment_at`
-          : filters.sort === 'updated' ? sql`greatest(u.updated_at,p.updated_at,coalesce(m.updated_at,p.updated_at))` : sql`p.last_name`;
-  const order = sql`${sortExpression} ${direction} nulls last, p.first_name ${direction}, coalesce(p.id,u.id) ${direction}, u.id ${direction}`;
+  const advanced = filters.advancedFilters.map((filter) => advancedCondition(filter, effectiveStatus)).filter((condition): condition is SQL => condition !== null);
+  if (advanced.length) conditions.push(sql`(${sql.join(advanced, filters.joinOperator === 'or' ? sql` or ` : sql` and `)})`);
+  const sortExpression = (field: SortField) => field === 'email' ? sql`u.email` : field === 'status' ? effectiveStatus
+    : field === 'type' ? sql`roles.membership_type` : field === 'federation' ? sql`roles.federation`
+      : field === 'country' ? sql`p.country_code` : field === 'region' ? sql`roles.region`
+        : field === 'expires' ? sql`m.valid_until` : field === 'lastPayment' ? sql`payment.last_payment_at`
+          : field === 'updated' ? sql`greatest(u.updated_at,p.updated_at,coalesce(m.updated_at,p.updated_at))` : sql`p.last_name`;
+  const sorts = filters.sorts.length ? filters.sorts : [{ id: filters.sort, desc: filters.direction === 'desc' }];
+  const order = sql`${sql.join(sorts.flatMap(({ id, desc }) => [
+    sql`${sortExpression(id)} ${desc ? sql`desc` : sql`asc`} nulls last`,
+    ...(id === 'name' ? [sql`p.first_name ${desc ? sql`desc` : sql`asc`} nulls last`] : []),
+  ]), sql`, `)}, p.first_name, coalesce(p.id,u.id), u.id`;
   return { effectiveStatus, filters, order, where: sql.join(conditions, sql` and `) };
 }
 

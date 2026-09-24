@@ -74,7 +74,8 @@ test('the admin article table uses the shared Dice UI resource controls and serv
   const page = readFileSync('app/(dashboard)/admin/news/page.tsx', 'utf8');
   const table = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
   assert.match(page, /ResourceListPage/);
-  for (const value of ['DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableSortList', 'pageSizeOptions', 'type="date"', 'Export selected CSV']) assert.match(table, new RegExp(value));
+  for (const value of ['DataTableToolbar', 'DataTableSortList', 'pageSizeOptions', 'DateRangeFilter', 'Export selected CSV']) assert.match(table, new RegExp(value));
+  assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
   assert.match(source, /listOrder\(input/);
   assert.match(source, /publication: 'publication_date'/);
 });

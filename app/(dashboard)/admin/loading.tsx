@@ -1,0 +1,1 @@
+export default function Loading() { return <main aria-busy="true" className="animate-pulse space-y-6 px-5 py-8 lg:px-8"><div className="h-8 w-56 rounded bg-muted" /><div className="grid gap-4 sm:grid-cols-3">{[1, 2, 3].map((item) => <div className="h-28 rounded-lg bg-muted" key={item} />)}</div><div className="h-64 rounded bg-muted" /></main>; }

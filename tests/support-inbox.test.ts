@@ -65,8 +65,9 @@ test('the administrator queue provides Tablecn-style server controls', () => {
   const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
   const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
   const dataTable = readFileSync('components/data-table/data-table.tsx', 'utf8');
-  const toolbar = readFileSync('components/data-table/data-table-advanced-toolbar.tsx', 'utf8');
-  for (const control of ['DataTable', 'DataTableAdvancedToolbar', 'DataTableFilterList', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
+  const toolbar = readFileSync('components/data-table/data-table-toolbar.tsx', 'utf8');
+  for (const control of ['DataTable', 'DataTableToolbar', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
+  assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
   assert.match(page, /hasUrlState \? params/);
   assert.match(page, /preferenceQuery\(saved\)/);
   assert.match(table, /pageSizeOptions=\{\[10, 25, 50, 100\]\}/);
