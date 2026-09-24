@@ -22,6 +22,9 @@ export type MemberFilters = {
   membershipType?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
   direction?: RawFilterValue; filters?: RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
   status?: RawFilterValue; joinOperator?: RawFilterValue;
+  // The membership-type column keeps id `type` (its sort id, matching SORT_FIELDS); the simple-mode
+  // toolbar filter therefore syncs to a `type` query param rather than `membershipType`.
+  type?: RawFilterValue;
 };
 
 export type AdminMemberRow = {
@@ -62,7 +65,7 @@ type NormalizedMemberFilters = {
 
 function normalized(input: MemberFilters): NormalizedMemberFilters {
   const page = pageNumber(input.page);
-  const membershipType = firstValue(input.membershipType);
+  const membershipType = firstValue(input.membershipType) ?? firstValue(input.type);
   const rawSort = firstValue(input.sort);
   let parsedSort: { desc?: boolean; id?: string } | undefined;
   let sorts: { id: SortField; desc: boolean }[] = [];

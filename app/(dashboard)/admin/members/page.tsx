@@ -30,7 +30,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
   const params = await searchParams;
-  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
+  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'type', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
   const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
   const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
   if (savedPreferences) {
@@ -52,10 +52,15 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
   const visibleColumns = params.column ? (Array.isArray(params.column) ? params.column : [params.column]) : Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
   const { profileId: profileIdParam } = params;
+  // The admin UI's advanced filter-builder (which produced `filters`/`joinOperator`) is retired;
+  // listAdminMembers still supports those params for direct/programmatic callers, but a stale or
+  // shared URL reaching this page must not have them silently applied with no toolbar indication
+  // that a filter is active.
+  const { filters: _filters, joinOperator: _joinOperator, ...listParams } = effectiveParams;
   let filterError: string | null = null;
   let listing: Awaited<ReturnType<typeof listAdminMembers>>;
   try {
-    listing = await listAdminMembers(effectiveParams);
+    listing = await listAdminMembers(listParams);
   } catch (error) {
     if (!(error instanceof MemberFilterRangeError)) throw error;
     filterError = error.message;

@@ -5,16 +5,18 @@ import { X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
-import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
-import { DataTableFilterList } from '@/components/data-table/data-table-filter-list';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
+import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useDataTable } from '@/hooks/use-data-table';
+import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { getDefaultColumnOrder } from '@/lib/data-table';
 import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
 
@@ -27,27 +29,54 @@ const STATUS_OPTIONS = SUPPORT_STATUSES.map((value) => ({ label: STATUS_LABELS[v
 function visibility(params: URLSearchParams, initial?: string[]): VisibilityState { const explicit = params.getAll('column'); const selected = explicit.length ? explicit : initial; return selected ? Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, selected.includes(column)])) : {}; }
 function header(id: string) { return ({ column }: HeaderContext<AdminSupportRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 
-export function SupportInboxTable({ administrators, filters, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { page: number; pageSize: number; q?: string; category?: string | string[]; status?: string | string[]; assigned?: string | string[]; filters?: string | string[]; joinOperator?: string | string[]; sort?: string | string[]; direction?: string | string[] }; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
+export function SupportInboxTable({ administrators, filters, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { page: number; pageSize: number; q?: string; category?: string | string[]; status?: string | string[]; assigned?: string | string[]; activityFrom?: string | string[]; activityTo?: string | string[]; filters?: string | string[]; joinOperator?: string | string[]; sort?: string | string[]; direction?: string | string[] }; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
   const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false);
   const initialVisibility = useMemo(() => visibility(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
+  const activityFrom = Array.isArray(filters.activityFrom) ? filters.activityFrom[0] : filters.activityFrom;
+  const activityTo = Array.isArray(filters.activityTo) ? filters.activityTo[0] : filters.activityTo;
   const columns = useMemo<ColumnDef<AdminSupportRow>[]>(() => [
-    { id: 'select', enableHiding: false, enableSorting: false, header: ({ table }) => <input aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected()} onChange={table.getToggleAllPageRowsSelectedHandler()} type="checkbox" />, cell: ({ row }) => <input aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} type="checkbox" /> },
-    { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, enableColumnFilter: true, header: header('member'), meta: { label: 'Member', placeholder: 'Name or email', variant: 'text' }, cell: ({ row }) => <div>{row.original.profile_id ? <Link className="font-medium underline" href={`/admin/members?profileId=${row.original.profile_id}`}>{row.original.member_name || 'Member record'}</Link> : row.original.member_name}<span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
-    { accessorKey: 'subject', enableColumnFilter: true, header: header('subject'), meta: { label: 'Subject', variant: 'text' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
-    { accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
-    { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
-    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned administrator', options: administrators, variant: 'multiSelect' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
-    { id: 'activity', accessorKey: 'updated_at', enableColumnFilter: true, header: header('activity'), meta: { label: 'Activity date', variant: 'dateRange' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
+    { id: 'select', enableHiding: false, enableSorting: false, header: ({ table }) => <Checkbox aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
+    { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, header: header('member'), meta: { label: 'Member' }, cell: ({ row }) => <div>{row.original.profile_id ? <Link className="font-medium underline" href={`/admin/members?profileId=${row.original.profile_id}`}>{row.original.member_name || 'Member record'}</Link> : row.original.member_name}<span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
+    { accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
+    { accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'select' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
+    { accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
+    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
+    { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
   ], [administrators, searchParams]);
   let initialSorting = [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
   try { const parsed = JSON.parse(searchParams.get('sort') ?? '[]'); if (Array.isArray(parsed) && parsed.length) initialSorting = parsed; } catch { /* The server safely applies legacy/default sorting. */ }
-  const { table, debounceMs, shallow, throttleMs } = useDataTable({ columns, data: rows, enableAdvancedFilter: true, getRowId: (row) => row.public_id, initialState: { columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting }, pageCount: Math.max(1, Math.ceil(total / filters.pageSize)), queryKeys: { filters: 'filters', joinOperator: 'joinOperator', page: 'page', perPage: 'pageSize', sort: 'sort' }, shallow: false });
+  const { table } = useDataTable({
+    columns, data: rows,
+    // Simple (non-advanced) mode is required for the auto-rendered category/status/assigned
+    // faceted filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
+    enableAdvancedFilter: false,
+    getRowId: (row) => row.public_id,
+    initialState: { columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
+    pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
+    queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
+    shallow: false,
+  });
+  function filterPreferenceFields(params: URLSearchParams) {
+    return {
+      activityFrom: params.get('activityFrom') ?? undefined,
+      activityTo: params.get('activityTo') ?? undefined,
+      assigned: params.get('assigned') ?? undefined,
+      category: params.get('category') ?? undefined,
+      q: params.get('q') ?? undefined,
+      sort: params.get('sort') ?? undefined,
+      status: params.get('status') ?? undefined,
+    };
+  }
+
   useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
   useEffect(() => { table.resetRowSelection(); }, [searchParams, table]);
-  useEffect(() => { if (!searchParams.get('filters') || filters.page === 1) return; const params = new URLSearchParams(searchParams.toString()); params.delete('page'); router.replace(`${pathname}?${params}`, { scroll: false }); }, [filters.page, pathname, router, searchParams]);
-  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') { suppressPersistence.current = false; sessionStorage.removeItem('support-preferences-reset'); return; } const state = table.getState(); const selected = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false); const params = new URLSearchParams(searchParams.toString()); const current = params.getAll('column'); if (current.length === selected.length && current.every((value, index) => value === selected[index])) return; params.delete('column'); for (const column of selected) params.append('column', column); void persistTablePreferences('support', { columns: selected, filters: params.get('filters') ?? undefined, joinOperator: params.get('joinOperator') ?? undefined, pageSize: state.pagination.pageSize, q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined }); router.replace(`${pathname}?${params}`, { scroll: false }); }, [table.getState().columnVisibility]);
-  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') return; const params = new URLSearchParams(searchParams.toString()); void persistTablePreferences('support', { columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false), columnOrder: params.get('columnOrder') ?? undefined, filters: params.get('filters') ?? undefined, joinOperator: params.get('joinOperator') ?? undefined, pageSize: Number(params.get('pageSize') ?? filters.pageSize), q: params.get('q') ?? undefined, sort: params.get('sort') ?? undefined }); }, [filters.pageSize, searchParams, table]);
-  const applySearch = () => { const params = new URLSearchParams(searchParams.toString()); search.trim() ? params.set('q', search.trim()) : params.delete('q'); params.delete('page'); router.push(`${pathname}?${params}`); };
+  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') { suppressPersistence.current = false; sessionStorage.removeItem('support-preferences-reset'); return; } const state = table.getState(); const selected = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false); const params = new URLSearchParams(searchParams.toString()); const current = params.getAll('column'); if (current.length === selected.length && current.every((value, index) => value === selected[index])) return; params.delete('column'); for (const column of selected) params.append('column', column); void persistTablePreferences('support', { ...filterPreferenceFields(params), columns: selected, pageSize: state.pagination.pageSize }); router.replace(`${pathname}?${params}`, { scroll: false }); }, [table.getState().columnVisibility]);
+  useEffect(() => { if (suppressPersistence.current || sessionStorage.getItem('support-preferences-reset') === '1') return; const params = new URLSearchParams(searchParams.toString()); void persistTablePreferences('support', { ...filterPreferenceFields(params), columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false), columnOrder: params.get('columnOrder') ?? undefined, pageSize: Number(params.get('pageSize') ?? filters.pageSize) }); }, [filters.pageSize, searchParams, table]);
+  // Purging 'filters'/'joinOperator' here (the retired advanced filter-builder's params) keeps
+  // a stale/shared URL carrying them from silently narrowing results the current toolbar shows
+  // no indication of.
+  function update(values: Record<string, string | undefined>) { const params = new URLSearchParams(searchParams.toString()); params.delete('filters'); params.delete('joinOperator'); for (const [key, value] of Object.entries(values)) { if (value) params.set(key, value); else params.delete(key); } params.delete('page'); router.push(`${pathname}?${params}`); }
+  const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const reset = async () => { await fetch('/api/admin/table-preferences/support', { credentials: 'same-origin', headers: { 'x-idoc-csrf': decodeURIComponent(document.cookie.match(/(?:^|; )(?:__Host-)?idoc-csrf=([^;]+)/)?.[1] ?? '') }, method: 'DELETE' }); suppressPersistence.current = true; sessionStorage.setItem('support-preferences-reset', '1'); table.setColumnOrder(getDefaultColumnOrder(columns)); table.resetColumnVisibility(); table.resetSorting(); table.resetRowSelection(); router.push(pathname); };
   async function copySelectedLinks() {
     try {
@@ -55,6 +84,22 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
       setCopyNotice('Selected links copied.');
     } catch { setCopyNotice('Could not copy the selected links.'); }
   }
-  const selected = table.getSelectedRowModel().rows.length; const filtered = Boolean(searchParams.get('q') || searchParams.get('filters') || searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
-  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} pageSizeOptions={[10, 25, 50, 100]} table={table}><DataTableAdvancedToolbar className="rounded-xl border bg-background p-3" table={table}><div className="flex min-w-64 flex-1 gap-2"><Input aria-label="Search support conversations" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applySearch(); }} placeholder="Search member, email, or subject…" type="search" value={search} /><Button onClick={applySearch} type="button">Search</Button></div><DataTableFilterList debounceMs={debounceMs} shallow={shallow} table={table} throttleMs={throttleMs} /><DataTableSortList table={table} /><Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button></DataTableAdvancedToolbar><p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching conversations</p>{copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
+  const selected = table.getSelectedRowModel().rows.length;
+  const manuallyFiltered = Boolean(searchParams.get('q') || searchParams.get('activityFrom') || searchParams.get('activityTo'));
+  const filtered = manuallyFiltered || Boolean(searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
+  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} pageSizeOptions={[10, 25, 50, 100]} table={table}>
+    <DataTableToolbar
+      className="rounded-xl border bg-background p-3"
+      table={table}
+      isFiltered={manuallyFiltered}
+      onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined })}
+      leading={<>
+        <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
+        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} to={activityTo} />
+      </>}
+    >
+      <DataTableSortList table={table} />
+      <Button onClick={reset} size="sm" type="button" variant="ghost">Reset to default</Button>
+    </DataTableToolbar>
+    <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching conversations</p>{copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
 }

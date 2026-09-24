@@ -14,15 +14,25 @@ import { cn } from "@/lib/utils";
 
 interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
   table: Table<TData>;
+  /** Extra controls rendered before the auto-generated per-column filters, e.g. a search input. */
+  leading?: React.ReactNode;
+  /** Called in addition to clearing column filters, to also clear manually-managed filters. */
+  onReset?: () => void;
+  /** OR'd with the column-filter-driven detection to decide whether the Reset button shows. */
+  isFiltered?: boolean;
 }
 
 export function DataTableToolbar<TData>({
   table,
+  leading,
+  onReset: onResetProp,
+  isFiltered: isFilteredProp,
   children,
   className,
   ...props
 }: DataTableToolbarProps<TData>) {
-  const isFiltered = table.getState().columnFilters.length > 0;
+  const isFiltered =
+    table.getState().columnFilters.length > 0 || Boolean(isFilteredProp);
 
   const columns = React.useMemo(
     () => table.getAllColumns().filter((column) => column.getCanFilter()),
@@ -31,7 +41,8 @@ export function DataTableToolbar<TData>({
 
   const onReset = React.useCallback(() => {
     table.resetColumnFilters();
-  }, [table]);
+    onResetProp?.();
+  }, [table, onResetProp]);
 
   return (
     <div
@@ -44,11 +55,13 @@ export function DataTableToolbar<TData>({
       {...props}
     >
       <div className="flex flex-1 flex-wrap items-center gap-2">
+        {leading}
         {columns.map((column) => (
           <DataTableToolbarFilter key={column.id} column={column} />
         ))}
         {isFiltered && (
           <Button
+            data-idoc-table-control
             aria-label="Reset filters"
             variant="outline"
             className="border-dashed"
