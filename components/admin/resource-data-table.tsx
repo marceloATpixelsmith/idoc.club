@@ -4,7 +4,7 @@ import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-
 import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
@@ -47,14 +47,14 @@ type ResourceConfig = {
 
 const CONFIG: Record<ResourceType, ResourceConfig> = {
   news: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication date' }, { id: 'updated', label: 'Updated' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
     dateFilter: true,
     path: '/admin/news',
     searchLabel: 'Search article title, subtitle, or slug',
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Scheduled', value: 'scheduled' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
   },
   seminars: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'date', label: 'Date' }, { id: 'status', label: 'Status' }, { id: 'payment', label: 'Payment method' }, { id: 'registrations', label: 'Registered / capacity' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'date', label: 'Date' }, { id: 'status', label: 'Status' }, { id: 'payment', label: 'Payment Method' }, { id: 'registrations', label: 'Registered / Capacity' }],
     dateFilter: true,
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
@@ -96,6 +96,7 @@ export function ResourceDataTable({
   const [error, setError] = useState('');
   const suppressPersistence = useRef(false);
   const syncingUrl = useRef(false);
+  const [isPending, startTransition] = useTransition();
   const optional = useMemo(() => config.columns.filter(({ id }) => id !== 'title').map(({ id }) => id), [config]);
   const initialVisibility = useMemo<VisibilityState>(() => {
     const explicit = searchParams.getAll('column');
@@ -106,7 +107,7 @@ export function ResourceDataTable({
     const header = (label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => <DataTableColumnHeader column={column} label={label} />;
     return [
       {
-        id: 'select', enableHiding: false, enableSorting: false,
+        id: 'select', enableHiding: false, enableSorting: false, size: 40,
         header: ({ table }) => <Checkbox aria-label="Select all rows on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />,
         cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.title}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} />,
       },
@@ -127,7 +128,7 @@ export function ResourceDataTable({
           : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
-        id: 'actions', enableHiding: false, enableSorting: false, header: 'Actions',
+        id: 'actions', enableHiding: false, enableSorting: false, size: 90, header: 'Actions',
         cell: ({ row }) => <div className="flex items-center gap-1">
           <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
             <Link href={`${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
@@ -169,6 +170,7 @@ export function ResourceDataTable({
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
     queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
     shallow: false,
+    startTransition,
   });
 
   useEffect(() => setSearch(searchParams.get('q') ?? ''), [searchParams]);
@@ -236,15 +238,19 @@ export function ResourceDataTable({
       else params.delete(key);
       }
     params.delete('page');
-    router.push(`${pathname}?${params}`);
+    startTransition(() => router.push(`${pathname}?${params}`));
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
-  const manuallyFiltered = ['q', 'from', 'to'].some((key) => searchParams.has(key));
-  const filtered = manuallyFiltered || searchParams.has('status') || searchParams.has('audience');
+  // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
+  // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
+  // copy, so it must include `q`: a search that matches nothing is still "no records match this
+  // view", not "no records exist at all".
+  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key));
+  const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
