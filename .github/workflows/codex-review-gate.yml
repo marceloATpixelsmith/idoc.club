@@ -83,7 +83,7 @@ jobs:
                   .user.login == "chatgpt-codex-connector" or
                   .user.login == "chatgpt-codex-connector[bot]"
                 ) |
-                select(.body | contains("Codex Review: Didn'''t find any major issues")) |
+                select((.body | contains("Codex Review: Didn")) and (.body | contains("find any major issues"))) |
                 . + {
                   reviewed_sha: (
                     try (
