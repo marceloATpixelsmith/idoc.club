@@ -1,5 +1,5 @@
 import 'server-only';
-import { advancedListWhere, listDate, listOrder, listPage, listPageSize } from '@/lib/admin/resource-list-query';
+import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 
 import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
@@ -100,8 +100,8 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   await requireSeminarAdministrator();
   const firstValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
   const page = listPage(input);
-  const statusValue = firstValue(input.status);
-  const status: SeminarStatus | null = SEMINAR_STATUSES.includes(statusValue as SeminarStatus) ? (statusValue as SeminarStatus) : null;
+  const statuses = many(input.status).filter((value): value is SeminarStatus => SEMINAR_STATUSES.includes(value as SeminarStatus));
+  const statusWhere = statuses.length ? client`s.status in ${client(statuses)}` : client`true`;
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
@@ -117,7 +117,7 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   const rows = await client`select s.id,s.title,s.status,s.seminar_date,s.start_time,s.capacity,s.payment_method_canonical_id,count(*) over()::int total_count,
     (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
     from idoc.seminars s
-    where (${status}::text is null or s.status=${status}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
+    where (${statusWhere}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
     and (${from}::date is null or s.seminar_date>=${from}::date) and (${to}::date is null or s.seminar_date<=${to}::date) and (${advancedWhere})
     order by ${order} limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };

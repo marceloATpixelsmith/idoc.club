@@ -6,20 +6,38 @@ import { asAdmin, adminUser, closeHarness, createMembership, createProfile, crea
 beforeEach(resetIdoc);
 after(closeHarness);
 
-test('admin member search: an array-valued (repeated-key) query parameter is treated as its first value instead of crashing -- a real Next.js searchParams shape', async () => {
+test('admin member search: a repeated-key query parameter is treated as a real multi-select instead of crashing -- a real Next.js searchParams shape', async () => {
   const admin = await adminUser();
   const user = await createUser();
   const profile = await createProfile(user.id);
   await createMembership(profile.id);
 
   // Simulates a real ?country=DE&country=FR request: Next.js hands this to the page as an array.
+  // Scalar filters (page, sort, q) still resolve to their first value; multi-select filters
+  // (country, federation, status) now match ANY of the repeated values.
   const listing = await asAdmin(admin.id, () => listAdminMembers({
     country: ['DE', 'FR'], federation: ['DE', 'PL'], page: ['1', '2'], q: [''], sort: ['name_asc', 'name_desc'], status: ['active', 'expired'],
   }));
   assert.equal(listing.filters.page, 1);
-  assert.equal(listing.filters.country, 'DE');
-  assert.equal(listing.filters.status, 'active');
+  assert.deepEqual(listing.filters.countries, ['DE', 'FR']);
+  assert.deepEqual(listing.filters.statuses, ['active', 'expired']);
   assert.ok(listing.rows.some((row) => row.profileId === profile.id));
+});
+
+test('admin member search: a comma-joined single query param (the multi-select toolbar\'s actual shape) matches any selected value', async () => {
+  const admin = await adminUser();
+  const first = await createUser();
+  const firstProfile = await createProfile(first.id);
+  await createMembership(firstProfile.id);
+  const second = await createUser();
+  const secondProfile = await createProfile(second.id);
+  await createMembership(secondProfile.id, false);
+
+  const listing = await asAdmin(admin.id, () => listAdminMembers({ status: 'active,expired' }));
+  assert.deepEqual(listing.filters.statuses, ['active', 'expired']);
+  const profileIds = listing.rows.map((row) => row.profileId);
+  assert.ok(profileIds.includes(firstProfile.id));
+  assert.ok(profileIds.includes(secondProfile.id));
 });
 
 test('membership filters apply selectable country, federation, region, status exclusions and multiple sort priorities to real rows', async () => {

@@ -16,6 +16,7 @@ import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSele
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
@@ -119,9 +120,9 @@ export function ResourceDataTable({
         enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
         header: header(label),
         meta: id === 'status'
-          ? { label, options: config.statuses, variant: 'select' }
+          ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'audience'
-            ? { label, options: config.audiences ?? [], variant: 'select' }
+            ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? <Link className="font-medium underline" href={`${config.path}/${row.original.id}`}>{row.original.title}</Link>
@@ -242,6 +243,7 @@ export function ResourceDataTable({
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
+  const actionBarVisibility = useActionBarVisibility(selected.length);
   // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
   // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
   // copy, so it must include `q`: a search that matches nothing is still "no records match this
@@ -250,7 +252,7 @@ export function ResourceDataTable({
   const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}

@@ -4,7 +4,7 @@ import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import { getSession } from '@/lib/auth/session';
 import { client } from '@/lib/db/drizzle';
-import { advancedListWhere, listOrder, listPage, listPageSize } from '@/lib/admin/resource-list-query';
+import { advancedListWhere, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
@@ -38,10 +38,12 @@ export async function listAdminContentPages(input: Record<string, string | strin
   const page = listPage(input);
   const pageSize = listPageSize(input);
   const q = one(input.q).trim().slice(0, 100);
-  const statusValue = one(input.status);
-  const status = CONTENT_STATUSES.includes(statusValue as never) ? statusValue : null;
-  const audienceValue = one(input.audience);
-  const audience = CONTENT_AUDIENCES.includes(audienceValue as never) ? audienceValue : null;
+  const statuses = many(input.status).filter((value): value is typeof CONTENT_STATUSES[number] => CONTENT_STATUSES.includes(value as never));
+  const statusWhere = statuses.length ? client`p.status in ${client(statuses)}` : client`true`;
+  const audiences = many(input.audience).filter((value): value is typeof CONTENT_AUDIENCES[number] => CONTENT_AUDIENCES.includes(value as never));
+  const audienceWhere = audiences.length
+    ? client`exists(select 1 from idoc.content_page_audiences x where x.page_id=p.id and x.audience in ${client(audiences)})`
+    : client`true`;
   const order = listOrder(input, { title: 'p.title', status: 'p.status', updated: 'p.updated_at' }, 'updated', 'p.id');
   const advancedWhere = advancedListWhere(input, { title: 'p.title', status: 'p.status' }, CONTENT_STATUSES);
   const offset = (page - 1) * pageSize;
@@ -49,8 +51,8 @@ export async function listAdminContentPages(input: Record<string, string | strin
     coalesce(string_agg(a.audience,',' order by a.audience),'') audiences,count(*) over()::int total_count
     from idoc.content_pages p left join idoc.content_page_audiences a on a.page_id=p.id
     where (${q}='' or p.title ilike ${`%${q}%`} or p.slug ilike ${`%${q}%`})
-    and (${status}::text is null or p.status=${status})
-    and (${audience}::text is null or exists(select 1 from idoc.content_page_audiences x where x.page_id=p.id and x.audience=${audience}))
+    and (${statusWhere})
+    and (${audienceWhere})
     and (${advancedWhere}) group by p.id
     order by ${order} limit ${pageSize + 1} offset ${offset}`;
   return { hasNext: rows.length > pageSize, page, pageSize, rows: rows.slice(0, pageSize), total: Number(rows[0]?.total_count ?? 0) };

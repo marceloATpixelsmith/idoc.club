@@ -42,10 +42,17 @@ test('malformed page parameters fall back before SQL offset is calculated', () =
   assert.doesNotMatch(memberQueries, /Math\.trunc\(input\.page/);
 });
 
-test('an array-valued (repeated-key) filter is resolved to its first value before any string method is called on it', () => {
+test('a scalar filter (page, q, sort, expiresFrom/To) resolves an array-valued (repeated-key) value to its first entry before any string method is called on it', () => {
   assert.match(memberQueries, /function firstValue\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? value\[0\] : value;/);
-  for (const field of ['country', 'expiresFrom', 'expiresTo', 'federation', 'membershipType', 'q', 'region', 'sort', 'status']) {
+  for (const field of ['expiresFrom', 'expiresTo', 'q', 'sort']) {
     assert.match(memberQueries, new RegExp(`firstValue\\(input\\.${field}\\)`));
+  }
+});
+
+test('a multi-select filter (country, federation, region, membershipType, status) collapses both a repeated-key array and a comma-joined single value into a deduped token list, matching any of them', () => {
+  assert.match(memberQueries, /function allValues\(value: RawFilterValue\): string\[\] \{/);
+  for (const field of ['country', 'federation', 'membershipType', 'region', 'status', 'type']) {
+    assert.match(memberQueries, new RegExp(`allValues\\(input\\.${field}\\)`));
   }
 });
 

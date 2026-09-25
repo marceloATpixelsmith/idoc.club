@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { z } from 'zod';
-import { listDate } from '@/lib/admin/resource-list-query';
+import { listDate, many } from '@/lib/admin/resource-list-query';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, isAdministrator, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
@@ -149,18 +149,27 @@ function firstSearchValue(value: string | string[] | undefined) {
 export async function listAdminConversations(input: SupportSearchParams) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const pageValue = firstSearchValue(input.page);
-  const categoryValue = firstSearchValue(input.category);
-  const statusValue = firstSearchValue(input.status);
-  const assignedValue = firstSearchValue(input.assigned);
   const searchValue = firstSearchValue(input.q);
   const sortValue = firstSearchValue(input.sort);
   const directionValue = firstSearchValue(input.direction);
   const rawPageSize = Number.parseInt(firstSearchValue(input.pageSize) ?? '', 10);
   const pageSize = [10, 25, 50, 100].includes(rawPageSize) ? rawPageSize : 25;
   const page = Math.max(1, Number.parseInt(pageValue ?? '1', 10) || 1); const offset = (page - 1) * pageSize;
-  const category: string | null = SUPPORT_CATEGORIES.includes(categoryValue as SupportCategory) ? categoryValue ?? null : null;
-  const status: string | null = SUPPORT_STATUSES.includes(statusValue as never) ? statusValue ?? null : null;
-  const assigned = assignedValue === 'unassigned' ? -1 : (assignedValue ? await resolveEligibleAdministrator(assignedValue) : null);
+  const categories = many(input.category).filter((value): value is SupportCategory => SUPPORT_CATEGORIES.includes(value as SupportCategory));
+  const categoryWhere = categories.length ? client`c.category in ${client(categories)}` : client`true`;
+  const statuses = many(input.status).filter((value) => SUPPORT_STATUSES.includes(value as never));
+  const statusWhere = statuses.length ? client`c.status in ${client(statuses)}` : client`true`;
+  const assignedValues = many(input.assigned);
+  const includeUnassigned = assignedValues.includes('unassigned');
+  const assignedAdminIds = (await Promise.all(assignedValues.filter((value) => value !== 'unassigned').map(resolveEligibleAdministrator)))
+    .filter((id): id is number => id !== null);
+  // biome-ignore lint/suspicious/noExplicitAny: heterogeneous postgres.js query fragments
+  const assignedParts: any[] = [];
+  if (includeUnassigned) assignedParts.push(client`not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id)`);
+  if (assignedAdminIds.length) assignedParts.push(client`exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id in ${client(assignedAdminIds)})`);
+  const assignedWhere = !assignedValues.length ? client`true` : assignedParts.length
+    ? assignedParts.slice(1).reduce((result, condition) => client`${result} or ${condition}`, assignedParts[0])
+    : client`false`;
   const search = (searchValue ?? '').trim().slice(0, 100);
   const activityFrom = listDate(firstSearchValue(input.activityFrom) ?? '');
   const activityTo = listDate(firstSearchValue(input.activityTo) ?? '');
@@ -232,9 +241,8 @@ export async function listAdminConversations(input: SupportSearchParams) {
     exists(select 1 from idoc.support_messages m where m.conversation_id=c.id and m.author_side='member' and m.created_at>
       coalesce((select rc.read_at from idoc.support_administrator_read_cursors rc where rc.conversation_id=c.id and rc.administrator_user_id=${actor.id}),'-infinity'::timestamptz)) unread
     from idoc.support_conversations c join idoc.users u on u.id=c.member_user_id left join idoc.profiles p on p.user_id=u.id
-    where (${category}::text is null or c.category=${category}) and (${status}::text is null or c.status=${status})
-    and (${assigned}::int is null or (${assigned}=-1 and not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id))
-      or exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id=${assigned}))
+    where (${categoryWhere}) and (${statusWhere})
+    and (${assignedWhere})
     and (${search}='' or c.subject ilike ${`%${escapeLike(search)}%`} escape '\\' or u.email ilike ${`%${escapeLike(search)}%`} escape '\\' or concat_ws(' ',p.first_name,p.last_name) ilike ${`%${escapeLike(search)}%`} escape '\\')
     and (${activityFrom}::date is null or (c.updated_at at time zone 'UTC')::date>=${activityFrom}::date)
     and (${activityTo}::date is null or (c.updated_at at time zone 'UTC')::date<=${activityTo}::date)

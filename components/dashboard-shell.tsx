@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Header } from '@/components/site/Header';
-import { NavigationLoadingProvider } from '@/components/navigation-loading';
 import { Button } from '@/components/ui/button';
 import type { MainNavAccess } from '@/lib/auth/user-menu-access';
 
@@ -34,7 +33,7 @@ export function DashboardShell({
           </>
         }
       />
-      <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
+      {children}
     </section>
   );
 }

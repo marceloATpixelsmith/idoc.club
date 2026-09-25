@@ -40,8 +40,33 @@ export function DataTableFacetedFilter<TData, TValue>({
   const [open, setOpen] = React.useState(false);
 
   const columnFilterValue = column?.getFilterValue();
+  const committedValues = React.useMemo(
+    () => (Array.isArray(columnFilterValue) ? columnFilterValue : []),
+    [columnFilterValue],
+  );
+  // In multiple mode, checking a box only updates this draft -- the column filter (and the URL/query
+  // it drives) is committed once when the popover closes, so picking several options doesn't refetch
+  // after every click.
+  const [draftValues, setDraftValues] = React.useState<string[]>(committedValues);
   const selectedValues = new Set(
-    Array.isArray(columnFilterValue) ? columnFilterValue : [],
+    multiple && open ? draftValues : committedValues,
+  );
+
+  const onOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (next) {
+        setDraftValues(committedValues);
+      } else if (multiple) {
+        const changed =
+          draftValues.length !== committedValues.length ||
+          draftValues.some((value) => !committedValues.includes(value));
+        if (changed) {
+          column?.setFilterValue(draftValues.length ? draftValues : undefined);
+        }
+      }
+      setOpen(next);
+    },
+    [column, committedValues, draftValues, multiple],
   );
 
   const onItemSelect = React.useCallback(
@@ -55,8 +80,7 @@ export function DataTableFacetedFilter<TData, TValue>({
         } else {
           newSelectedValues.add(option.value);
         }
-        const filterValues = Array.from(newSelectedValues);
-        column.setFilterValue(filterValues.length ? filterValues : undefined);
+        setDraftValues(Array.from(newSelectedValues));
       } else {
         column.setFilterValue(isSelected ? undefined : [option.value]);
         setOpen(false);
@@ -68,13 +92,14 @@ export function DataTableFacetedFilter<TData, TValue>({
   const onReset = React.useCallback(
     (event?: React.MouseEvent) => {
       event?.stopPropagation();
+      setDraftValues([]);
       column?.setFilterValue(undefined);
     },
     [column],
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button
           data-idoc-table-control

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Column, Table } from "@tanstack/react-table";
-import { X } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 import * as React from "react";
 
 import { DataTableDateFilter } from "@/components/data-table/data-table-date-filter";
@@ -42,9 +42,12 @@ export function DataTableToolbar<TData>({
     [table],
   );
 
+  const [isResetting, startResetTransition] = React.useTransition();
   const onReset = React.useCallback(() => {
-    table.resetColumnFilters();
-    onResetProp?.();
+    startResetTransition(() => {
+      table.resetColumnFilters();
+      onResetProp?.();
+    });
   }, [table, onResetProp]);
 
   return (
@@ -66,11 +69,13 @@ export function DataTableToolbar<TData>({
           <Button
             data-idoc-table-control
             aria-label="Reset filters"
+            aria-busy={isResetting}
             variant="outline"
             className="border-dashed"
+            disabled={isResetting}
             onClick={onReset}
           >
-            <X />
+            {isResetting ? <LoaderCircle className="animate-spin" /> : <X />}
             Reset
           </Button>
         )}

@@ -15,6 +15,7 @@ import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { getDefaultColumnOrder } from '@/lib/data-table';
 
 export type ReadOnlyRow = { id: string; link?: string; [key: string]: string | undefined };
@@ -70,6 +71,7 @@ export function AdminReadOnlyTable({
     state: { columnFilters, columnOrder, columnVisibility, globalFilter: search },
   });
   const selected = table.getSelectedRowModel().rows.map(({ original }) => original);
+  const actionBarVisibility = useActionBarVisibility(selected.length);
   function exportSelected() {
     if (selected.length > 100)
       {
@@ -88,7 +90,7 @@ export function AdminReadOnlyTable({
     table.setPageIndex(0);
     table.resetRowSelection();
   }
-  return <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+  return <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
     <DataTableToolbar
       className="mt-4 rounded-xl border bg-background p-3"
       table={table}
