@@ -45,8 +45,11 @@ export default async function globalSetup() {
   if (!product.active || product.deleted) throw new Error('Stripe E2E membership Product fixture is unavailable or inactive.');
   const customer = await stripe.customers.create({ email, metadata: { fixture: email, run_id: runId } }, { idempotencyKey: `idoc-stripe-e2e-customer-${runId}` });
   await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${profile.id},${customer.id})`;
+  // The shared Stripe member must start entitled because the acceptance-matrix and seminar
+  // provider suites consume this fixture independently. Hosted Checkout tests that specifically
+  // need the payment panel reset this same disposable member to expired in their own beforeEach.
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,grace_ends_on,membership_type,source)
-    values(${profile.id},'expired',current_date - interval '1 year',current_date - interval '1 day',current_date - interval '1 day','standard','complimentary')`;
+    values(${profile.id},'active',current_date,current_date + interval '1 year',current_date + interval '1 year' + interval '5 days','standard','complimentary')`;
   const secondEmail = `stripe-e2e-${runId}-other@example.test`;
   const [secondUser] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
     values(${secondEmail},'stripe-e2e-disabled-password',now(),'active') returning id`;
