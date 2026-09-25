@@ -6,7 +6,7 @@ These are mandatory instructions for GPT while collaborating with the client on 
 
 1. Start with a broad Codex prompt. Tighten later prompts only when the prior approach averages more than two rounds of CI errors or pull-request review comments.
 2. Every Codex prompt must include the complete rule set from [Codex Working Rules](09-codex-working-rules.md), without exception.
-3. Do not ask Codex to target a pull request by number. Each Codex prompt must assume earlier pull requests are close and merged, then instruct Codex to work from the latest available `staging` and open its PR into `staging` — per docs/07's branch policy, `main` receives only reviewed promotions, never ordinary Codex work directly.
+3. Do not ask Codex to target a pull request by number. Each Codex prompt must assume earlier pull requests are close and merged, then instruct Codex to work from the latest available `staging` and open its PR into `staging` — per docs/07's branch policy, `main` receives only reviewed promotions, never ordinary Codex work directly. **Exception:** when the prompt is for an explicitly declared production emergency, instruct Codex to work from `main` and open its PR into `main` instead, per docs/09 rule 6's `main`-then-back-merge exception — `staging` may carry unpromoted, unverified backlog that an emergency fix must not pull in.
 4. Keep Codex prompts scoped to the approved task and aligned with the architecture, security, documentation, and testing requirements in the governing documents.
 
 ## 2. CI failures and pull-request review comments
