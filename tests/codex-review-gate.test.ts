@@ -30,9 +30,11 @@ test('Codex gate accepts both formal reviews and no-findings comments only for t
   assert.match(workflow, /startswith\(\$comment\.reviewed_sha \| ascii_downcase\)/);
 });
 
-test('Codex gate retries API failures, paginates, and finalizes errors visibly', () => {
+test('Codex gate retries API failures, paginates, propagates fetch errors, and finalizes visibly', () => {
   assert.match(workflow, /--retry 4 --retry-all-errors/);
   assert.match(workflow, /trap finalize_error ERR/);
+  assert.match(workflow, /if ! reviews="\$\(api_get/);
+  assert.match(workflow, /if ! comments="\$\(api_get/);
   assert.match(workflow, /page=\$\{page\}/);
   assert.match(workflow, /count < 100/);
   assert.match(workflow, /Codex gate error; see Actions log/);
