@@ -223,4 +223,3 @@ test('an already-open dashboard redirects to sign-in when its session is revoked
     await context.close();
   }
 });
-
