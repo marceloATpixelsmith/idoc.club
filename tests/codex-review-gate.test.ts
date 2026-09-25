@@ -4,13 +4,13 @@ import test from 'node:test';
 
 const workflow = readFileSync('.github/workflows/codex-review-gate.yml', 'utf8');
 
-test('the one-time bootstrap path is restricted to approved same-repository repair flows', () => {
-  assert.match(workflow, /branches: \[staging, main\]/);
-  assert.match(workflow, /github\.event\.pull_request\.number == 282/);
-  assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
-  assert.match(workflow, /github\.event\.pull_request\.base\.ref == 'main'/);
-  assert.match(workflow, /github\.event\.pull_request\.head\.ref == 'staging'/);
-  assert.match(workflow, /hotfix\/codex-review-gate-default-branch/);
+test('the one-time same-repository bootstrap (PR #282, the staging-to-main promotion, and the default-branch hotfix branch) has been fully retired now that the repair it existed for has landed on both main and staging -- normal operation is pull_request_target only, with no bootstrap pull_request path or job-level event branching left to admit', () => {
+  assert.doesNotMatch(workflow, /\n  pull_request:\n/);
+  assert.doesNotMatch(workflow, /branches: \[staging, main\]/);
+  assert.doesNotMatch(workflow, /github\.event\.pull_request\.number == 282/);
+  assert.doesNotMatch(workflow, /hotfix\/codex-review-gate-default-branch/);
+  assert.doesNotMatch(workflow, /if: >-/);
+  assert.match(workflow, /^on:\n  pull_request_target:\n    types: \[opened, ready_for_review, reopened, synchronize\]\n/m);
 });
 
 test('the quota-waiver bootstrap (which matched any past quota-exhaustion comment without binding it to the current head commit) has been removed now that the default-branch gate repair it existed for already landed on main', () => {
@@ -27,8 +27,9 @@ test('Codex gate proactively asks Codex to review each revision instead of only 
   assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" \\\n\s+--data-binary @review-request\.json/);
 });
 
-test('the self-nudge only runs once per revision, even for the narrow same-repository bootstrap paths where both pull_request and pull_request_target fire for the same push', () => {
-  assert.match(workflow, /name: Ask Codex to review this exact revision\s*\n\s*(?:#.*\n\s*)*if: github\.event_name == 'pull_request_target'/);
+test('the self-nudge step has no leftover event-branching guard now that pull_request_target is the workflow\'s only trigger', () => {
+  assert.match(workflow, /name: Ask Codex to review this exact revision\n\s*run: \|/);
+  assert.doesNotMatch(workflow, /if: github\.event_name == 'pull_request_target'/);
 });
 
 test('Codex gate stays visibly in progress while waiting for the current revision', () => {
