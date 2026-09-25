@@ -28,12 +28,17 @@ function fromDateKey(value?: string): Date | undefined {
  * applies, rather than the range appearing to filter on a single day after the first click.
  */
 export function DateRangeFilter({
-  from, label, onChange, onDraftActiveChange, to,
+  from, label, onChange, onDraftActiveChange, resetSignal, to,
 }: {
   from?: string; label: string; onChange: (from: string | undefined, to: string | undefined) => void;
   /** Reports whether an uncommitted, in-progress selection exists (popover open with a picked date),
    * so a caller can keep its own Reset control available even before this commits on close. */
   onDraftActiveChange?: (active: boolean) => void;
+  /** Bump this (e.g. a counter) to force-clear an in-progress draft, such as from a toolbar-level
+   * Reset click. Needed because when from/to were already undefined, clearing them via a caller's
+   * own Reset doesn't change those prop values, so the from/to resync effect below has nothing to
+   * react to and the stale draft would otherwise get committed back on close. */
+  resetSignal?: number;
   to?: string;
 }) {
   const committed: DateRange = { from: fromDateKey(from), to: fromDateKey(to) };
@@ -49,6 +54,11 @@ export function DateRangeFilter({
   useEffect(() => {
     if (open) setDraft({ from: fromDateKey(from), to: fromDateKey(to) });
   }, [from, to, open]);
+
+  useEffect(() => {
+    if (resetSignal !== undefined) setDraft({ from: undefined, to: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires only when the signal itself changes, not on every render.
+  }, [resetSignal]);
 
   useEffect(() => {
     onDraftActiveChange?.(draftActive);

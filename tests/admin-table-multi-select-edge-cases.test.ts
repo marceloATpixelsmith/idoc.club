@@ -39,9 +39,9 @@ test('a repeated multi-select query key is canonicalized to the toolbar\'s comma
 });
 
 test('Reset performs a single navigation that clears both the manual (search/date) fields and the facet-filter query params together, so the button\'s pending state reflects one real round trip instead of racing two separate transitions sharing the same isPending flag', () => {
-  assert.match(memberTable, /onReset=\{\(\) => update\(\{ expiresFrom: undefined, expiresTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
-  assert.match(resourceTable, /onReset=\{\(\) => update\(\{ q: undefined, from: undefined, to: undefined, \.\.\.Object\.fromEntries\(multiSelectParams\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
-  assert.match(supportTable, /onReset=\{\(\) => update\(\{ activityFrom: undefined, activityTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
+  assert.match(memberTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ expiresFrom: undefined, expiresTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
+  assert.match(resourceTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ q: undefined, from: undefined, to: undefined, \.\.\.Object\.fromEntries\(multiSelectParams\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
+  assert.match(supportTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ activityFrom: undefined, activityTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
 });
 
 test('the toolbar Reset control stays available while a date-range popover holds an uncommitted draft, not only once a date range is actually committed to the URL', () => {
@@ -57,4 +57,18 @@ test('the toolbar Reset control stays available while a date-range popover holds
   assert.match(supportTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
   assert.match(supportTable, /activityFrom'\) \|\| searchParams\.get\('activityTo'\)\) \|\| dateDraftActive;/);
   assert.match(supportTable, /onDraftActiveChange=\{setDateDraftActive\}/);
+});
+
+test('clicking Reset while a date draft is uncommitted (from/to were already absent, so they don\'t change value) still force-clears the draft via an explicit resetSignal, instead of leaving it to be silently re-committed when the popover later closes', () => {
+  assert.match(dateRangeFilter, /resetSignal\?: number;/);
+  assert.match(dateRangeFilter, /if \(resetSignal !== undefined\) setDraft\(\{ from: undefined, to: undefined \}\);/);
+  assert.match(memberTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
+  assert.match(memberTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ expiresFrom: undefined/);
+  assert.match(memberTable, /resetSignal=\{dateResetSignal\}/);
+  assert.match(resourceTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
+  assert.match(resourceTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ q: undefined, from: undefined/);
+  assert.match(resourceTable, /resetSignal=\{dateResetSignal\}/);
+  assert.match(supportTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
+  assert.match(supportTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ activityFrom: undefined/);
+  assert.match(supportTable, /resetSignal=\{dateResetSignal\}/);
 });

@@ -252,6 +252,7 @@ export function ResourceDataTable({
   // copy, so it must include `q`: a search that matches nothing is still "no records match this
   // view", not "no records exist at all".
   const [dateDraftActive, setDateDraftActive] = useState(false);
+  const [dateResetSignal, setDateResetSignal] = useState(0);
   const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key)) || dateDraftActive;
   const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
@@ -262,7 +263,7 @@ export function ResourceDataTable({
         table={table}
         isFiltered={manuallyFiltered}
         pending={isPending}
-        onReset={() => update({ q: undefined, from: undefined, to: undefined, ...Object.fromEntries(multiSelectParams.map((key) => [key, undefined])) })}
+        onReset={() => { setDateResetSignal((signal) => signal + 1); update({ q: undefined, from: undefined, to: undefined, ...Object.fromEntries(multiSelectParams.map((key) => [key, undefined])) }); }}
         leading={<>
           <Input
             aria-label={config.searchLabel}
@@ -278,6 +279,7 @@ export function ResourceDataTable({
               label="Date"
               onChange={(from, to) => update({ from, to })}
               onDraftActiveChange={setDateDraftActive}
+              resetSignal={dateResetSignal}
               to={searchParams.get('to') ?? undefined}
             />
           )}
