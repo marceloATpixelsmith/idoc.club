@@ -30,8 +30,16 @@ test('Codex gate accepts both formal reviews and no-findings comments only for t
   assert.match(workflow, /startswith\(\$comment\.reviewed_sha \| ascii_downcase\)/);
 });
 
+test('Codex gate retries API failures, paginates, and finalizes errors visibly', () => {
+  assert.match(workflow, /--retry 4 --retry-all-errors/);
+  assert.match(workflow, /trap finalize_error ERR/);
+  assert.match(workflow, /page=\\\$\\\{page\\\}/);
+  assert.match(workflow, /count < 100/);
+  assert.match(workflow, /Codex gate error; see Actions log/);
+});
+
 test('Codex gate has a bounded visible failure instead of an indefinite pending state', () => {
   assert.match(workflow, /Codex review not detected within 30 minutes/);
-  assert.match(workflow, /--arg state "failure"/);
+  assert.match(workflow, /post_status "failure"/);
   assert.match(workflow, /exit 1/);
 });
