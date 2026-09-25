@@ -4,6 +4,6 @@
 // never reads Stripe or mutates the database; it just sends the member somewhere sensible.
 export async function GET(request: Request) {
   const sessionId = new URL(request.url).searchParams.get('session_id');
-  const destination = sessionId ? '/dashboard?checkout=success' : '/pricing';
+  const destination = sessionId ? '/dashboard?checkout=success' : '/dashboard/membership';
   return Response.redirect(new URL(destination, request.url));
 }

@@ -10,7 +10,7 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { getUser } from '@/lib/db/queries';
 
 export type MainNavAccess = {
-  /** Gates the header's "My IDOC" dropdown (a plain /pricing link otherwise, see signedIn) --
+  /** Gates the header's "My IDOC" dropdown (a plain /dashboard/membership link otherwise, see signedIn) --
    * mirrors the same convenience check app/(dashboard)/dashboard/layout.tsx uses for the sidebar,
    * never an authorization boundary on its own. */
   entitled: boolean;
@@ -20,7 +20,7 @@ export type MainNavAccess = {
   memberSupport: boolean;
   /** A signed-in, non-entitled (never-paid or post-grace-expired) member still needs a way back
    * into the payment flow from the header -- the "My IDOC" nav item falls back to a plain link to
-   * /pricing (rather than the dashboard-subpages dropdown) whenever this is true and entitled is
+   * /dashboard/membership (rather than the dashboard-subpages dropdown) whenever this is true and entitled is
    * false. Distinct from entitled: every entitled visitor is also signedIn, but not the reverse. */
   signedIn: boolean;
   showAdminDashboard: boolean;

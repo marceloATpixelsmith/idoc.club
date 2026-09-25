@@ -235,7 +235,7 @@ export async function deleteOwnAccount() {
  * ('member.membership_canceled' vs admin suspension's 'admin.membership.suspended') is what
  * distinguishes a self-cancellation from an administrator's suspension-for-cause in the record; nothing
  * in the schema needs to. The login/profile record itself is untouched -- a member can sign back in
- * later, though (like any other non-entitled member) they land on the pricing page, not a dashboard
+ * later, though (like any other non-entitled member) they land on the My Membership payment view, not an entitled-member dashboard
  * view of the canceled membership. Best-effort cancels any open Stripe subscription immediately (not
  * at-period-end) and unsubscribes from the marketing mailing list; neither failure blocks the
  * membership-level cancellation, which is unconditional and DB-only. handleInvoicePaid and

@@ -30,7 +30,7 @@ test('saving perks is CSRF-protected and revalidates every surface that renders 
   assert.match(body, /requireAccountAccess\('administration'\)/);
   assert.match(body, /updateMembershipPerks\(actor, formData\.getAll\('perk'\)\.map\(String\)\)/);
   assert.match(body, /revalidatePath\('\/membership'\)/);
-  assert.match(body, /revalidatePath\('\/pricing'\)/);
+  assert.match(body, /revalidatePath\('\/dashboard\/membership'\)/);
 });
 
 test('the update path rejects an empty perk list rather than silently clearing the table', () => {
@@ -50,13 +50,13 @@ test('the public membership page and the dashboard payment box both render the d
   assert.match(membershipPage, /const perks = await getMembershipPerks\(\);/);
   assert.match(membershipPage, /<MembershipPerksList className="mt-7 flex-1 space-y-3 text-sm" perks=\{perks\} \/>/);
 
-  const pricingPage = readFileSync(new URL('../app/(dashboard)/pricing/page.tsx', import.meta.url), 'utf8');
-  assert.match(pricingPage, /const perks = await getMembershipPerks\(\);/);
-  assert.match(pricingPage, /<MembershipPerksList className="mt-7 space-y-3 text-sm" perks=\{perks\} \/>/);
-  assert.match(pricingPage, /<CheckoutForm label="Pay" \/>/);
+  const membershipDashboardPage = readFileSync(new URL('../app/(dashboard)/dashboard/membership/page.tsx', import.meta.url), 'utf8');
+  assert.match(membershipDashboardPage, /const perks = await getMembershipPerks\(\);/);
+  assert.match(membershipDashboardPage, /<MembershipPerksList className="mt-7 space-y-3 text-sm" perks=\{perks\} \/>/);
+  assert.match(membershipDashboardPage, /<CheckoutForm label="Pay" \/>/);
 });
 
 test('the dashboard payment box reuses the same card-midnight box style as the public membership tiers', () => {
-  const pricingPage = readFileSync(new URL('../app/(dashboard)/pricing/page.tsx', import.meta.url), 'utf8');
-  assert.match(pricingPage, /className="card-midnight flex flex-col p-8"/);
+  const membershipDashboardPage = readFileSync(new URL('../app/(dashboard)/dashboard/membership/page.tsx', import.meta.url), 'utf8');
+  assert.match(membershipDashboardPage, /className="card-midnight mt-6 flex max-w-lg flex-col p-8"/);
 });

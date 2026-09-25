@@ -36,7 +36,7 @@ export async function saveMembershipPerks(_state: MembershipPerksState, formData
     await updateMembershipPerks(actor, formData.getAll('perk').map(String));
     revalidatePath('/', 'layout');
     revalidatePath('/membership');
-    revalidatePath('/pricing');
+    revalidatePath('/dashboard/membership');
     return { success: 'Membership perks saved.' };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Membership perks could not be saved.' };

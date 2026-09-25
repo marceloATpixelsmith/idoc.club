@@ -3,12 +3,15 @@ import { Gavel, Flag, Stethoscope } from 'lucide-react';
 import { getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
-import { PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
+import { MEMBERSHIP_FEE_CENTS, PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
 import { getOwnPaymentMethodSummary } from '@/lib/payments/stripe';
 import { MembershipCard } from './membership-card';
 import { PaymentMethodCard } from './payment-method-card';
 import { getOwnRenewalPreference } from '@/lib/payments/renewal-preferences';
 import { getAccountStateUser } from '@/lib/db/queries';
+import { MembershipPerksList } from '@/components/membership/membership-perks-list';
+import { getMembershipPerks } from '@/lib/organization/membership-perks';
+import { CheckoutForm } from './checkout-form';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -36,7 +39,27 @@ function daysUntil(validUntil: string, today: string): number {
  * AUTH-AUTHZ-009/010: requireAccountAccess('profile') throws AuthorizationError for an
  * onboarding-state account, which left uncaught crashed into Next.js's generic error boundary
  * instead of redirecting). */
-export default async function DashboardMembershipPage() {
+function MembershipCheckoutPanel({ perks }: { perks: Awaited<ReturnType<typeof getMembershipPerks>> }) {
+  return (
+    <section className="card-midnight mt-6 flex max-w-lg flex-col p-8">
+      <h2 className="text-2xl font-semibold text-foreground">IDOC Annual Membership</h2>
+      <p className="mt-2 text-sm uppercase tracking-[0.16em] text-gold">€{MEMBERSHIP_FEE_CENTS / 100} / year</p>
+      <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+        One membership with full access for every professional classification.
+      </p>
+      <MembershipPerksList className="mt-7 space-y-3 text-sm" perks={perks} />
+      <div className="mt-8">
+        <CheckoutForm label="Pay" />
+      </div>
+    </section>
+  );
+}
+
+export default async function DashboardMembershipPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ renew?: string }>;
+}) {
   const user = await getAccountStateUser();
   if (!user || user.accountState === 'onboarding') redirect('/dashboard');
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
@@ -68,11 +91,22 @@ export default async function DashboardMembershipPage() {
   const entitled = isEntitled(entitlement, today);
 
   if (!entitled && !privileged) {
-    redirect('/pricing');
+    const perks = await getMembershipPerks();
+    return (
+      <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
+        <h1 className="text-2xl font-semibold">My Membership</h1>
+        <p className="mt-3 text-muted-foreground">
+          Your membership is not currently active. Pay the annual fee below to activate or renew it.
+        </p>
+        <MembershipCheckoutPanel perks={perks} />
+      </main>
+    );
   }
 
   const mode = renewalMode(subscription, entitlement);
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
+  const { renew } = await searchParams;
+  const renewalPerks = showRenew && renew === '1' ? await getMembershipPerks() : null;
   const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
     listOwnPaymentHistory(),
     getOwnRenewalPreference(),
@@ -100,6 +134,12 @@ export default async function DashboardMembershipPage() {
         />
         {canManageBilling ? <PaymentMethodCard summary={paymentMethodSummary} /> : null}
       </div>
+
+      {renewalPerks ? (
+        <div id="renew">
+          <MembershipCheckoutPanel perks={renewalPerks} />
+        </div>
+      ) : null}
 
       <section className="mt-6 max-w-2xl">
         <h2 className="font-medium text-foreground">Payment history</h2>
