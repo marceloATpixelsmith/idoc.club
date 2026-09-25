@@ -167,9 +167,14 @@ export async function listAdminConversations(input: SupportSearchParams) {
   const assignedParts: any[] = [];
   if (includeUnassigned) assignedParts.push(client`not exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id)`);
   if (assignedAdminIds.length) assignedParts.push(client`exists(select 1 from idoc.support_conversation_administrators ca where ca.conversation_id=c.id and ca.administrator_user_id in ${client(assignedAdminIds)})`);
-  const assignedWhere = !assignedValues.length ? client`true` : assignedParts.length
-    ? assignedParts.slice(1).reduce((result, condition) => client`${result} or ${condition}`, assignedParts[0])
-    : client`false`;
+  // A saved assignment filter can reference an administrator whose email changed or whose
+  // account/role was since deactivated, so none of its values resolve to a real ID (and
+  // "unassigned" wasn't itself selected). Treat that the same as no filter, matching the
+  // previous single-value implementation, rather than matching nothing -- a stale saved view
+  // should keep showing the inbox, not silently go empty. Any tokens that do resolve are still
+  // applied normally via assignedParts above, so a mixed selection only ignores the stale ones.
+  const assignedWhere = !assignedValues.length || !assignedParts.length ? client`true`
+    : assignedParts.slice(1).reduce((result, condition) => client`${result} or ${condition}`, assignedParts[0]);
   const search = (searchValue ?? '').trim().slice(0, 100);
   const activityFrom = listDate(firstSearchValue(input.activityFrom) ?? '');
   const activityTo = listDate(firstSearchValue(input.activityTo) ?? '');
