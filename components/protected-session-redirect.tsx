@@ -32,7 +32,11 @@ export function ProtectedSessionRedirect({ initiallySignedIn }: { initiallySigne
     checking.current = true;
     try {
       const user = await mutate<PublicUser | null>('/api/user');
-      if (user === null) {
+      if (user === null && isProtectedPath(window.location.pathname)) {
+        // The async revalidation may finish after the user already navigated out of this layout.
+        // Only redirect while the browser is still on a protected route, otherwise a slow null
+        // response could incorrectly pull an already-public page back to sign-in.
+        //
         // Hard replacement removes the stale protected page from browser history and guarantees the
         // next render starts at the server-authenticated sign-in boundary.
         window.location.replace('/sign-in');
