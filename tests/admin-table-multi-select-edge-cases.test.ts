@@ -61,7 +61,7 @@ test('the toolbar Reset control stays available while a date-range popover holds
 
 test('clicking Reset while a date draft is uncommitted (from/to were already absent, so they don\'t change value) still force-clears the draft via an explicit resetSignal, instead of leaving it to be silently re-committed when the popover later closes', () => {
   assert.match(dateRangeFilter, /resetSignal\?: number;/);
-  assert.match(dateRangeFilter, /if \(resetSignal !== undefined\) setDraft\(\{ from: undefined, to: undefined \}\);/);
+  assert.match(dateRangeFilter, /if \(resetSignal !== undefined\) \{\s*\n\s*setDraft\(\{ from: undefined, to: undefined \}\);\s*\n\s*setOpen\(false\);/);
   assert.match(memberTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
   assert.match(memberTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ expiresFrom: undefined/);
   assert.match(memberTable, /resetSignal=\{dateResetSignal\}/);
@@ -71,4 +71,10 @@ test('clicking Reset while a date draft is uncommitted (from/to were already abs
   assert.match(supportTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
   assert.match(supportTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ activityFrom: undefined/);
   assert.match(supportTable, /resetSignal=\{dateResetSignal\}/);
+});
+
+test('a toolbar-level Reset click while the date popover is open does not race a stale draft commit onto the URL, since Radix\'s outside-pointerdown dismissal (which fires before Reset\'s own click handler) is suppressed for that specific interaction', () => {
+  assert.match(dateRangeFilter, /const onPointerDownOutside: React\.ComponentProps<typeof PopoverContent>\['onPointerDownOutside'\] = \(event\) => \{/);
+  assert.match(dateRangeFilter, /\(event\.target as Element \| null\)\?\.closest\('\[aria-label="Reset filters"\]'\)\) event\.preventDefault\(\);/);
+  assert.match(dateRangeFilter, /onPointerDownOutside=\{onPointerDownOutside\}/);
 });

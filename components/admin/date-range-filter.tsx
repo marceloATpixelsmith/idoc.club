@@ -56,9 +56,23 @@ export function DateRangeFilter({
   }, [from, to, open]);
 
   useEffect(() => {
-    if (resetSignal !== undefined) setDraft({ from: undefined, to: undefined });
+    if (resetSignal !== undefined) {
+      setDraft({ from: undefined, to: undefined });
+      setOpen(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fires only when the signal itself changes, not on every render.
   }, [resetSignal]);
+
+  // A toolbar-level Reset button lives outside this popover, so clicking it while the popover is
+  // open is itself an "outside" interaction. Radix's outside-dismiss detection runs on pointerdown,
+  // which fires before Reset's own onClick -- so without this guard, onOpenChange below would run
+  // first and commit the stale draft to the URL, racing Reset's own separate clear navigation that
+  // only fires once the later click event reaches it. Skip the auto-dismiss entirely for a click
+  // that lands on Reset; the resetSignal effect above already closes the popover deliberately once
+  // that click's handler actually runs.
+  const onPointerDownOutside: React.ComponentProps<typeof PopoverContent>['onPointerDownOutside'] = (event) => {
+    if ((event.target as Element | null)?.closest('[aria-label="Reset filters"]')) event.preventDefault();
+  };
 
   useEffect(() => {
     onDraftActiveChange?.(draftActive);
@@ -109,7 +123,7 @@ export function DateRangeFilter({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent data-idoc-table-panel className="w-auto p-0" align="start">
+      <PopoverContent data-idoc-table-panel className="w-auto p-0" align="start" onPointerDownOutside={onPointerDownOutside}>
         <Calendar autoFocus captionLayout="dropdown" mode="range" onSelect={(next) => setDraft(next ?? { from: undefined, to: undefined })} selected={draft} />
       </PopoverContent>
     </Popover>
