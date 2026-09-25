@@ -24,6 +24,23 @@ async function prepareMemberForCheckout() {
     )`;
 }
 
+
+async function restoreMemberEntitlement() {
+  await sql`update idoc.memberships
+    set status = 'active',
+        starts_on = current_date,
+        valid_until = current_date + interval '1 year',
+        grace_ends_on = current_date + interval '1 year' + interval '5 days',
+        updated_at = now()
+    where profile_id = (
+      select pr.id
+      from idoc.profiles pr
+      join idoc.users u on u.id = pr.user_id
+      where u.email = ${memberEmail}
+      limit 1
+    )`;
+}
+
 async function waitForProjection(expectedSource: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -75,7 +92,14 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
   });
 
   test.afterEach(async ({ context }, info) => {
-    await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
+    // Hosted Checkout scenarios deliberately expire the shared member in beforeEach so the payment
+    // panel is visible. Restore entitlement deterministically before any later Stripe acceptance
+    // spec runs instead of depending on asynchronous webhook timing from the final scenario.
+    try {
+      await restoreMemberEntitlement();
+    } finally {
+      await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
+    }
   });
 
   test('completes one-time EUR 80 Checkout and verifies the test-mode Session', async ({ page }) => {
