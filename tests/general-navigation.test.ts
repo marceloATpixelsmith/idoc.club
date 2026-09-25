@@ -40,7 +40,7 @@ test('an already-open protected page leaves for sign-in when its shared identity
   assert.match(dashboardShell, /<ProtectedSessionRedirect initiallySignedIn=\{navAccess\.signedIn\} \/>/);
   assert.match(protectedSessionRedirect, /\['\/dashboard', '\/admin', '\/onboarding'\]/);
   assert.match(protectedSessionRedirect, /mutate<PublicUser \| null>\('\/api\/user'\)/);
-  assert.match(protectedSessionRedirect, /user === null/);
+  assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
   assert.match(protectedSessionRedirect, /window\.location\.replace\('\/sign-in'\)/);
   assert.match(protectedSessionRedirect, /addEventListener\('focus'/);
   assert.match(protectedSessionRedirect, /visibilitychange/);
