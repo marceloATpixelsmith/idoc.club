@@ -10,7 +10,7 @@ import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -104,15 +104,15 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   // toolbar's own filter state -- keyed by column id -- picks up, not just the server query.
   function filterPreferenceFields(params: URLSearchParams) {
     return {
-      country: params.get('country') ?? undefined,
+      country: manyParam(params, 'country'),
       expiresFrom: params.get('expiresFrom') ?? undefined,
       expiresTo: params.get('expiresTo') ?? undefined,
-      federation: params.get('federation') ?? undefined,
+      federation: manyParam(params, 'federation'),
       q: params.get('q') ?? undefined,
-      region: params.get('region') ?? undefined,
+      region: manyParam(params, 'region'),
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
-      type: params.get('type') ?? undefined,
+      status: manyParam(params, 'status'),
+      type: manyParam(params, 'type'),
     };
   }
 

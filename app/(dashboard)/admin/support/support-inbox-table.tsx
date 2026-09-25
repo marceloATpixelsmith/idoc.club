@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
@@ -60,11 +60,11 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     return {
       activityFrom: params.get('activityFrom') ?? undefined,
       activityTo: params.get('activityTo') ?? undefined,
-      assigned: params.get('assigned') ?? undefined,
-      category: params.get('category') ?? undefined,
+      assigned: manyParam(params, 'assigned'),
+      category: manyParam(params, 'category'),
       q: params.get('q') ?? undefined,
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
+      status: manyParam(params, 'status'),
     };
   }
 

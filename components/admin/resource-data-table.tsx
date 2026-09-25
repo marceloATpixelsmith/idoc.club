@@ -5,7 +5,7 @@ import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
 import { DataTable } from '@/components/data-table/data-table';
@@ -214,14 +214,14 @@ export function ResourceDataTable({
       pageSize: Number(params.get('pageSize') ?? pageSize),
       q: params.get('q') ?? undefined,
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
+      status: manyParam(params, 'status'),
     };
     if (config.dateFilter)
       {
       preferences.from = params.get('from') ?? undefined;
       preferences.to = params.get('to') ?? undefined;
       }
-    if (tableType === 'content_pages') preferences.audience = params.get('audience') ?? undefined;
+    if (tableType === 'content_pages') preferences.audience = manyParam(params, 'audience');
     void persistTablePreferences(tableType, preferences).then((response) => {
       if (!response.ok) setError('Table preferences could not be saved.');
     }).catch(() => setError('Table preferences could not be saved.'));
