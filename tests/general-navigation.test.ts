@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const menu = readFileSync('components/authenticated-user-menu.tsx', 'utf8');
 const dashboardShell = readFileSync('components/dashboard-shell.tsx', 'utf8');
+const protectedSessionRedirect = readFileSync('components/protected-session-redirect.tsx', 'utf8');
 const header = readFileSync('components/site/Header.tsx', 'utf8');
 const dashboardLayout = readFileSync('app/(dashboard)/layout.tsx', 'utf8');
 const marketingLayout = readFileSync('app/(marketing)/layout.tsx', 'utf8');
@@ -33,6 +34,18 @@ test('dashboard navigation uses the shared logged-out Member Login fallback', ()
   assert.doesNotMatch(dashboardShell, />\s*Pricing\s*</);
   assert.doesNotMatch(dashboardShell, /href="\/sign-up">Sign Up</);
   assert.match(header, /loggedOut \?\? <MemberLoginLink/);
+});
+
+test('an already-open protected page leaves for sign-in when its shared identity revalidates to null', () => {
+  assert.match(dashboardShell, /<ProtectedSessionRedirect initiallySignedIn=\{navAccess\.signedIn\} \/>/);
+  assert.match(protectedSessionRedirect, /\['\/dashboard', '\/admin', '\/onboarding'\]/);
+  assert.match(protectedSessionRedirect, /mutate<PublicUser \| null>\('\/api\/user'\)/);
+  assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
+  assert.match(protectedSessionRedirect, /window\.location\.replace\('\/sign-in'\)/);
+  assert.match(protectedSessionRedirect, /addEventListener\('focus'/);
+  assert.match(protectedSessionRedirect, /visibilitychange/);
+  assert.match(protectedSessionRedirect, /pageshow/);
+  assert.doesNotMatch(protectedSessionRedirect, /setInterval|refreshInterval/);
 });
 
 test('both navigation surfaces share the authenticated initials menu', () => {
