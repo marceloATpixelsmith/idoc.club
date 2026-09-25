@@ -33,7 +33,7 @@ Working project document. Update this document when project decisions change.
 
 | **Checkpoint** | **Scope** | **Verification gate** |
 |---|---|---|
-| Foundation deployment controls | Separate Vercel Production, Staging/UAT and Preview values; Sensitive Environment Variables; protected previews; Observability/Runtime Log access. | Preview uses isolated data and Stripe test mode; production secrets are not available there. |
+| Foundation deployment controls | Separate Vercel Production and ordinary per-PR Preview values; Sensitive Environment Variables; protected previews; Observability/Runtime Log access. **Deliberate exception:** the long-lived `staging.idoc.club` deployment shares the database and most secrets with Production instead of being isolated — see `docs/07` "Branch, environment, and deployment workflow." | Ordinary Preview uses isolated data and Stripe test mode; production secrets are not available there. Staging is the named exception and is treated as production data for this purpose. |
 | Public account-flow hardening | Endpoint-specific Firewall/WAF protections for authentication, recovery, verification/resend, email changes and contact forms. | Normal and abuse-path tests pass without account enumeration. |
 | Billing/admin hardening | Extend coverage to Stripe webhooks, payment/renewal and sensitive admin operations. | Verified Stripe delivery succeeds; invalid/replayed events remain rejected. |
 | Scheduled jobs | Add Cron-backed database-idempotent notifications, expiry, reconciliation and alerts only after the underlying workflows exist. | Authenticated invocation, duplicate-run handling, durable job records and alerts pass in non-production. |
