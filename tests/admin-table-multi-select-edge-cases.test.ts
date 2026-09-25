@@ -8,6 +8,7 @@ const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/membe
 const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
 const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
 const dateRangeFilter = readFileSync(new URL('../components/admin/date-range-filter.tsx', import.meta.url), 'utf8');
+const facetedFilter = readFileSync(new URL('../components/data-table/data-table-faceted-filter.tsx', import.meta.url), 'utf8');
 
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
@@ -77,4 +78,10 @@ test('a toolbar-level Reset click while the date popover is open does not race a
   assert.match(dateRangeFilter, /const onPointerDownOutside: React\.ComponentProps<typeof PopoverContent>\['onPointerDownOutside'\] = \(event\) => \{/);
   assert.match(dateRangeFilter, /\(event\.target as Element \| null\)\?\.closest\('\[aria-label="Reset filters"\]'\)\) event\.preventDefault\(\);/);
   assert.match(dateRangeFilter, /onPointerDownOutside=\{onPointerDownOutside\}/);
+});
+
+test('a toolbar-level Reset click while a multi-select facet popover is open does not get its own commit-then-unmount race either, matching the same outside-pointerdown guard already applied to the date-range filter', () => {
+  assert.match(facetedFilter, /const onPointerDownOutside: React\.ComponentProps<typeof PopoverContent>\["onPointerDownOutside"\] = \(event\) => \{/);
+  assert.match(facetedFilter, /\(event\.target as Element \| null\)\?\.closest\('\[aria-label="Reset filters"\]'\)\) event\.preventDefault\(\);/);
+  assert.match(facetedFilter, /onPointerDownOutside=\{onPointerDownOutside\}/);
 });

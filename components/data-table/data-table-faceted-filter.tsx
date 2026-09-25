@@ -59,6 +59,17 @@ export function DataTableFacetedFilter<TData, TValue>({
     multiple && open ? draftValues : committedValues,
   );
 
+  // A toolbar-level Reset button lives outside this popover, so clicking it while the popover is
+  // open is itself an "outside" interaction. Radix's outside-dismiss detection can run before
+  // Reset's own click reaches it, and onOpenChange below would then commit a draft (e.g. an
+  // unchecked-to-empty selection) that Reset was about to clear anyway -- if that commit removes
+  // the toolbar's last active filter, Reset can unmount before its own click is processed, dropping
+  // the click entirely instead of clearing everything. Skip the auto-dismiss for a click that lands
+  // on Reset; closing (and any real commit) still happens via the popover's own controls.
+  const onPointerDownOutside: React.ComponentProps<typeof PopoverContent>["onPointerDownOutside"] = (event) => {
+    if ((event.target as Element | null)?.closest('[aria-label="Reset filters"]')) event.preventDefault();
+  };
+
   const onOpenChange = React.useCallback(
     (next: boolean) => {
       if (!next && multiple) {
@@ -167,6 +178,7 @@ export function DataTableFacetedFilter<TData, TValue>({
         data-idoc-table-panel
         className="w-50 p-0"
         align="start"
+        onPointerDownOutside={onPointerDownOutside}
       >
         <Command>
           <CommandInput placeholder={title} />
