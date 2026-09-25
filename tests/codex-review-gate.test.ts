@@ -4,6 +4,11 @@ import test from 'node:test';
 
 const workflow = readFileSync('.github/workflows/codex-review-gate.yml', 'utf8');
 
+test('the one-time bootstrap path is restricted to same-repository PR 282', () => {
+  assert.match(workflow, /github\.event\.pull_request\.number == 282/);
+  assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+});
+
 test('Codex gate stays visibly in progress while waiting for the current revision', () => {
   assert.match(workflow, /name: Codex review progress/);
   assert.match(workflow, /MAX_WAIT_SECONDS: "1800"/);
