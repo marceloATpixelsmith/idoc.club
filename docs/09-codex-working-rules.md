@@ -62,6 +62,15 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 3. If a check was not run, state why.
 4. Do not provide partial diffs as the only deliverable; give a concise completed-work summary.
 
-## 6. Rule maintenance
+## 6. Efficiency and cost discipline
+
+1. Scale verification to actual risk. Read `docs/26-ci-risk-classification-and-agent-merge-policy.md`'s classification for the diff before choosing what to run; a change it classifies as low risk gets the fast check, not the full suite.
+2. For a small, single-concern fixup stacked on a commit that was already fully verified, verify only the incremental change (typecheck plus the specific test file(s) it affects) — do not re-run the full unit/integration/e2e/build battery unless the fixup itself touches schema, authentication, or another genuinely high-risk area.
+3. Do not rebuild a fresh environment (a clean clone, a full dependency reinstall, a full production build) for a small, low-risk change when the existing checkout is already known clean and current.
+4. When a CI failure or review round surfaces several findings at once, fix and validate all of them in one commit and one push, not one push per finding.
+5. Do not poll a slow external check (CI, an automated review) in a tight loop, and never send a second review request while one is already in flight — wait for the actual completion signal before acting again.
+6. When reporting progress, state what changed and what was verified; do not narrate routine mechanics (each intermediate commit, each push attempt) that give the reader nothing to decide.
+
+## 7. Rule maintenance
 
 Update this document when the repository's approved tooling, architecture, security controls, or delivery workflow changes. Any exception requires an explicit task instruction and must be recorded in the relevant pull request.
