@@ -69,3 +69,9 @@ test('Codex gate has a bounded visible failure instead of an indefinite pending 
   assert.match(workflow, /post_status "failure"/);
   assert.match(workflow, /exit 1/);
 });
+
+test('an administrator-triggered quota waiver that lands while this job is still polling is not immediately overwritten by the timeout path\'s own failure status', () => {
+  assert.match(workflow, /current_state="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status" \| jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state'\)"/);
+  assert.match(workflow, /if \[\[ "\$\{current_state\}" == "success" \]\]\s*\n\s*then\s*\n\s*echo "### codex\/review-complete already satisfied"/);
+  assert.match(workflow, /not overwriting it with a timeout failure/);
+});
