@@ -91,7 +91,8 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
   // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
   // copy, so it must include `q`: a search that matches nothing is still "no conversations match
   // this view", not "no support conversations exist at all".
-  const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo'));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo')) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(searchParams.get('q') || searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
   return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
     <DataTableToolbar
@@ -102,7 +103,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
       onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) })}
       leading={<>
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
-        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} to={activityTo} />
+        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} onDraftActiveChange={setDateDraftActive} to={activityTo} />
       </>}
     >
       <DataTableSortList table={table} />

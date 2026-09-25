@@ -7,6 +7,7 @@ const canonicalize = readFileSync(new URL('../hooks/use-canonicalize-multi-selec
 const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
 const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
+const dateRangeFilter = readFileSync(new URL('../components/admin/date-range-filter.tsx', import.meta.url), 'utf8');
 
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
@@ -41,4 +42,19 @@ test('Reset performs a single navigation that clears both the manual (search/dat
   assert.match(memberTable, /onReset=\{\(\) => update\(\{ expiresFrom: undefined, expiresTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
   assert.match(resourceTable, /onReset=\{\(\) => update\(\{ q: undefined, from: undefined, to: undefined, \.\.\.Object\.fromEntries\(multiSelectParams\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
   assert.match(supportTable, /onReset=\{\(\) => update\(\{ activityFrom: undefined, activityTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
+});
+
+test('the toolbar Reset control stays available while a date-range popover holds an uncommitted draft, not only once a date range is actually committed to the URL', () => {
+  assert.match(dateRangeFilter, /onDraftActiveChange\?: \(active: boolean\) => void;/);
+  assert.match(dateRangeFilter, /const draftActive = open && Boolean\(draft\.from \|\| draft\.to\);/);
+  assert.match(dateRangeFilter, /onDraftActiveChange\?\.\(draftActive\);/);
+  assert.match(memberTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
+  assert.match(memberTable, /some\(\(key\) => searchParams\.has\(key\)\) \|\| dateDraftActive;/);
+  assert.match(memberTable, /onDraftActiveChange=\{setDateDraftActive\}/);
+  assert.match(resourceTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
+  assert.match(resourceTable, /\['from', 'to'\]\.some\(\(key\) => searchParams\.has\(key\)\) \|\| dateDraftActive;/);
+  assert.match(resourceTable, /onDraftActiveChange=\{setDateDraftActive\}/);
+  assert.match(supportTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
+  assert.match(supportTable, /activityFrom'\) \|\| searchParams\.get\('activityTo'\)\) \|\| dateDraftActive;/);
+  assert.match(supportTable, /onDraftActiveChange=\{setDateDraftActive\}/);
 });

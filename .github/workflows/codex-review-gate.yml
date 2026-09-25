@@ -55,6 +55,11 @@ jobs:
             --data-binary @status.json
 
       - name: Ask Codex to review this exact revision
+        # pull_request_target always fires alongside the narrow same-repository pull_request
+        # bootstrap paths this job's `if:` also admits (PR #282, a staging-to-main promotion, the
+        # default-branch hotfix branch) -- restrict to one event so those cases don't get a second,
+        # duplicate "@codex review" comment (and a second Codex run) from the other event's job.
+        if: github.event_name == 'pull_request_target'
         run: |
           set -euo pipefail
           # The chatgpt-codex-connector app does not reliably auto-review every synchronize push in

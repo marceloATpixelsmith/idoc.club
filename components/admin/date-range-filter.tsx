@@ -28,15 +28,20 @@ function fromDateKey(value?: string): Date | undefined {
  * applies, rather than the range appearing to filter on a single day after the first click.
  */
 export function DateRangeFilter({
-  from, label, onChange, to,
+  from, label, onChange, onDraftActiveChange, to,
 }: {
-  from?: string; label: string; onChange: (from: string | undefined, to: string | undefined) => void; to?: string;
+  from?: string; label: string; onChange: (from: string | undefined, to: string | undefined) => void;
+  /** Reports whether an uncommitted, in-progress selection exists (popover open with a picked date),
+   * so a caller can keep its own Reset control available even before this commits on close. */
+  onDraftActiveChange?: (active: boolean) => void;
+  to?: string;
 }) {
   const committed: DateRange = { from: fromDateKey(from), to: fromDateKey(to) };
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange>(committed);
   const range = open ? draft : committed;
   const hasValue = Boolean(range.from || range.to);
+  const draftActive = open && Boolean(draft.from || draft.to);
 
   // Re-sync whenever the committed from/to props change while the popover is open (e.g. browser
   // back/forward navigating the URL out from under an open popover), not just on open -- otherwise
@@ -44,6 +49,10 @@ export function DateRangeFilter({
   useEffect(() => {
     if (open) setDraft({ from: fromDateKey(from), to: fromDateKey(to) });
   }, [from, to, open]);
+
+  useEffect(() => {
+    onDraftActiveChange?.(draftActive);
+  }, [draftActive, onDraftActiveChange]);
 
   function onOpenChange(next: boolean) {
     if (!next && (draft.from?.getTime() !== committed.from?.getTime() || draft.to?.getTime() !== committed.to?.getTime())) {

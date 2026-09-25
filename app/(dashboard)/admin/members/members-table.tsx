@@ -164,7 +164,8 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   const actionBarVisibility = useActionBarVisibility(selected);
   const selectedExportParams = new URLSearchParams(exportParams.toString());
   for (const row of table.getSelectedRowModel().rows) selectedExportParams.append('selectedUserId', String(row.original.userId));
-  const manuallyFiltered = ['expiresFrom', 'expiresTo'].some((key) => searchParams.has(key));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const manuallyFiltered = ['expiresFrom', 'expiresTo'].some((key) => searchParams.has(key)) || dateDraftActive;
   const hasActiveView = [...searchParams.keys()].some((key) => !['column', 'page', 'pageSize', 'profileId'].includes(key));
 
   return <>
@@ -178,7 +179,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
         onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) })}
         leading={<>
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
-          <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} to={filters.expiresTo} />
+          <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} onDraftActiveChange={setDateDraftActive} to={filters.expiresTo} />
         </>}
         trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
       >

@@ -251,7 +251,8 @@ export function ResourceDataTable({
   // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
   // copy, so it must include `q`: a search that matches nothing is still "no records match this
   // view", not "no records exist at all".
-  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key)) || dateDraftActive;
   const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
@@ -276,6 +277,7 @@ export function ResourceDataTable({
               from={searchParams.get('from') ?? undefined}
               label="Date"
               onChange={(from, to) => update({ from, to })}
+              onDraftActiveChange={setDateDraftActive}
               to={searchParams.get('to') ?? undefined}
             />
           )}

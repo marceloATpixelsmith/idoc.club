@@ -27,6 +27,10 @@ test('Codex gate proactively asks Codex to review each revision instead of only 
   assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" \\\n\s+--data-binary @review-request\.json/);
 });
 
+test('the self-nudge only runs once per revision, even for the narrow same-repository bootstrap paths where both pull_request and pull_request_target fire for the same push', () => {
+  assert.match(workflow, /name: Ask Codex to review this exact revision\s*\n\s*(?:#.*\n\s*)*if: github\.event_name == 'pull_request_target'/);
+});
+
 test('Codex gate stays visibly in progress while waiting for the current revision', () => {
   assert.match(workflow, /name: Codex review progress/);
   assert.match(workflow, /MAX_WAIT_SECONDS: "1800"/);
