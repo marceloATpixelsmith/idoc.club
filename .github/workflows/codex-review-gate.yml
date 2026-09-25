@@ -1,10 +1,10 @@
 name: Codex Review Gate
 
 on:
-  # One-time same-repository bootstrap for PR #282, which repairs the broken base-branch gate.
-  # Remove pull_request after #282 lands; the permanent gate runs from pull_request_target.
+  # One-time same-repository bootstrap for PR #282 and its staging-to-main promotion.
+  # Remove pull_request after the repair reaches main; the permanent gate runs from pull_request_target.
   pull_request:
-    branches: [staging]
+    branches: [staging, main]
     types: [opened, ready_for_review, reopened, synchronize]
   pull_request_target:
     types: [opened, ready_for_review, reopened, synchronize]
@@ -19,11 +19,13 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'pull_request' &&
-       github.event.pull_request.number == 282 &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.number == 282 ||
+        (github.event.pull_request.base.ref == 'main' &&
+         github.event.pull_request.head.ref == 'staging')))
     name: Codex review progress
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -42,7 +44,7 @@ jobs:
             --arg description "Codex review in progress" \
             --arg target_url "${PR_URL}" \
             '{state: $state, context: $context, description: $description, target_url: $target_url}' > status.json
-          curl --fail-with-body --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
             --request POST \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer ${GH_TOKEN}" \
@@ -64,7 +66,7 @@ jobs:
               --arg description "${description}" \
               --arg target_url "${target_url}" \
               '{state: $state, context: $context, description: $description, target_url: $target_url}' > status-update.json
-            curl --fail-with-body --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
+            curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
               --request POST \
               --header "Accept: application/vnd.github+json" \
               --header "Authorization: Bearer ${GH_TOKEN}" \
@@ -83,9 +85,10 @@ jobs:
             exit "${exit_code}"
           }
           trap finalize_error ERR
+          deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
 
           api_get() {
-            curl --fail-with-body --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
+            curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
               --header "Accept: application/vnd.github+json" \
               --header "Authorization: Bearer ${GH_TOKEN}" \
               --header "X-GitHub-Api-Version: 2022-11-28" \
@@ -100,6 +103,10 @@ jobs:
 
             while true
             do
+              if (( $(date +%s) >= deadline ))
+              then
+                return 124
+              fi
               if ! reviews="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100&page=${page}")"
               then
                 return 1
@@ -138,6 +145,10 @@ jobs:
 
             while true
             do
+              if (( $(date +%s) >= deadline ))
+              then
+                return 124
+              fi
               if ! comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
               then
                 return 1
@@ -181,8 +192,7 @@ jobs:
             done
           }
 
-          elapsed=0
-          while (( elapsed <= MAX_WAIT_SECONDS ))
+          while (( $(date +%s) < deadline ))
           do
             REVIEW_URL="$(codex_review_url)"
             if [[ -z "${REVIEW_URL}" ]]
@@ -199,9 +209,15 @@ jobs:
               exit 0
             fi
 
-            echo "Codex has not yet reported a review for ${HEAD_SHA}; checked after ${elapsed}s."
-            sleep "${POLL_SECONDS}"
-            elapsed=$((elapsed + POLL_SECONDS))
+            remaining=$((deadline - $(date +%s)))
+            echo "Codex has not yet reported a review for ${HEAD_SHA}; ${remaining}s remain before failure."
+            if (( remaining > POLL_SECONDS ))
+            then
+              sleep "${POLL_SECONDS}"
+            elif (( remaining > 0 ))
+            then
+              sleep "${remaining}"
+            fi
           done
 
           trap - ERR
