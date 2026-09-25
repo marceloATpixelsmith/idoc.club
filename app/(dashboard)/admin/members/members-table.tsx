@@ -175,7 +175,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
         table={table}
         isFiltered={manuallyFiltered}
         pending={isPending}
-        onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined })}
+        onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) })}
         leading={<>
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
           <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} to={filters.expiresTo} />

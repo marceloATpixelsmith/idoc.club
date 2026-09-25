@@ -31,7 +31,14 @@ test('a repeated multi-select query key is canonicalized to the toolbar\'s comma
   assert.match(canonicalize, /router\.replace\(`\$\{pathname\}\?\$\{params\}`, \{ scroll: false \}\)/);
   assert.match(memberTable, /useCanonicalizeMultiSelectParams\(MULTI_SELECT_PARAMS\)/);
   assert.match(memberTable, /const MULTI_SELECT_PARAMS = \['status', 'type', 'federation', 'country', 'region'\]/);
-  assert.match(resourceTable, /useCanonicalizeMultiSelectParams\(tableType === 'content_pages' \? \['status', 'audience'\] : \['status'\]\)/);
+  assert.match(resourceTable, /const multiSelectParams = tableType === 'content_pages' \? \['status', 'audience'\] : \['status'\];/);
+  assert.match(resourceTable, /useCanonicalizeMultiSelectParams\(multiSelectParams\)/);
   assert.match(supportTable, /useCanonicalizeMultiSelectParams\(MULTI_SELECT_PARAMS\)/);
   assert.match(supportTable, /const MULTI_SELECT_PARAMS = \['category', 'status', 'assigned'\]/);
+});
+
+test('Reset performs a single navigation that clears both the manual (search/date) fields and the facet-filter query params together, so the button\'s pending state reflects one real round trip instead of racing two separate transitions sharing the same isPending flag', () => {
+  assert.match(memberTable, /onReset=\{\(\) => update\(\{ expiresFrom: undefined, expiresTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
+  assert.match(resourceTable, /onReset=\{\(\) => update\(\{ q: undefined, from: undefined, to: undefined, \.\.\.Object\.fromEntries\(multiSelectParams\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
+  assert.match(supportTable, /onReset=\{\(\) => update\(\{ activityFrom: undefined, activityTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\)\}/);
 });

@@ -94,7 +94,8 @@ export function ResourceDataTable({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  useCanonicalizeMultiSelectParams(tableType === 'content_pages' ? ['status', 'audience'] : ['status']);
+  const multiSelectParams = tableType === 'content_pages' ? ['status', 'audience'] : ['status'];
+  useCanonicalizeMultiSelectParams(multiSelectParams);
   const [search, setSearch] = useState(searchParams.get('q') ?? '');
   const [error, setError] = useState('');
   const suppressPersistence = useRef(false);
@@ -260,7 +261,7 @@ export function ResourceDataTable({
         table={table}
         isFiltered={manuallyFiltered}
         pending={isPending}
-        onReset={() => update({ q: undefined, from: undefined, to: undefined })}
+        onReset={() => update({ q: undefined, from: undefined, to: undefined, ...Object.fromEntries(multiSelectParams.map((key) => [key, undefined])) })}
         leading={<>
           <Input
             aria-label={config.searchLabel}

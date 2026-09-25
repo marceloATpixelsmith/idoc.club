@@ -99,7 +99,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
       table={table}
       isFiltered={manuallyFiltered}
       pending={isPending}
-      onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined })}
+      onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) })}
       leading={<>
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
         <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} to={activityTo} />
