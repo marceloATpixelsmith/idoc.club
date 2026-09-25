@@ -1,40 +1,35 @@
 name: Codex Review Gate
 
 on:
-  pull_request_review:
-    types: [submitted]
   pull_request_target:
     types: [opened, ready_for_review, reopened, synchronize]
 
 permissions:
-  checks: write
   contents: read
   pull-requests: read
   statuses: write
 
 jobs:
-  mark-pending:
-    if: github.event_name == 'pull_request_target'
-    name: Initialize Codex review gate
+  wait-for-codex:
+    name: Codex review progress
     runs-on: ubuntu-latest
+    timeout-minutes: 32
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      MAX_WAIT_SECONDS: "1800"
+      POLL_SECONDS: "15"
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPOSITORY: ${{ github.repository }}
     steps:
-      - name: Mark the current revision as awaiting Codex
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
+      - name: Mark this revision as awaiting Codex
         run: |
           set -euo pipefail
-
           PR_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
-
-          # Required merge-gate status. This remains pending until Codex submits a review for this
-          # exact head revision.
           jq -n \
             --arg state "pending" \
             --arg context "codex/review-complete" \
-            --arg description "Waiting for Codex to review this revision" \
+            --arg description "Codex review in progress" \
             --arg target_url "${PR_URL}" \
             '{state: $state, context: $context, description: $description, target_url: $target_url}' > status.json
           curl --fail-with-body --silent --show-error \
@@ -45,129 +40,116 @@ jobs:
             "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             --data-binary @status.json
 
-          # A commit status can remain yellow without telling the operator whether anything is
-          # actively pending. Keep a real Check Run visibly "In progress" on the PR until Codex
-          # reviews this exact revision. This is informational; codex/review-complete remains the
-          # required merge-gate context.
-          CHECKS="$(
-            curl --fail-with-body --silent --show-error \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100"
-          )"
-          CHECK_ID="$(jq -r '[.check_runs[] | select(.name == "Codex review progress")] | first | .id // empty' <<< "${CHECKS}")"
+      - name: Wait visibly for Codex to finish this exact revision
+        run: |
+          set -euo pipefail
 
-          jq -n \
-            --arg details_url "${PR_URL}" \
-            --arg title "Waiting for Codex review" \
-            --arg summary "Codex has been requested for the current PR revision. This check remains In progress until Codex reviews this exact commit. When it turns green, the required codex/review-complete gate is also satisfied." \
-            '{status: "in_progress", details_url: $details_url, output: {title: $title, summary: $summary}}' > update-check.json
-
-          if [[ -n "${CHECK_ID}" ]]
-          then
+          codex_review_url() {
+            local reviews
+            reviews="$(
               curl --fail-with-body --silent --show-error \
-                --request PATCH \
                 --header "Accept: application/vnd.github+json" \
                 --header "Authorization: Bearer ${GH_TOKEN}" \
                 --header "X-GitHub-Api-Version: 2022-11-28" \
-                "${GITHUB_API_URL}/repos/${REPOSITORY}/check-runs/${CHECK_ID}" \
-                --data-binary @update-check.json
-          else
+                "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100"
+            )"
+
+            jq -r --arg head "${HEAD_SHA}" '
+              [.[] |
+                select(
+                  .user.login == "chatgpt-codex-connector" or
+                  .user.login == "chatgpt-codex-connector[bot]"
+                ) |
+                select(.commit_id == $head)
+              ] |
+              last |
+              .html_url // empty
+            ' <<< "${reviews}"
+          }
+
+          codex_no_issues_comment_url() {
+            local comments
+            comments="$(
+              curl --fail-with-body --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100"
+            )"
+
+            jq -r --arg head "${HEAD_SHA}" '
+              [.[] |
+                select(
+                  .user.login == "chatgpt-codex-connector" or
+                  .user.login == "chatgpt-codex-connector[bot]"
+                ) |
+                select(.body | contains("Codex Review: Didn'''t find any major issues")) |
+                . + {
+                  reviewed_sha: (
+                    try (
+                      .body |
+                      capture("Reviewed commit:\\*\\*[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{10,40})").sha
+                    ) catch ""
+                  )
+                } |
+                select((.reviewed_sha | length) >= 10) |
+                select(
+                  . as $comment |
+                  ($head | ascii_downcase | startswith($comment.reviewed_sha | ascii_downcase))
+                )
+              ] |
+              last |
+              .html_url // empty
+            ' <<< "${comments}"
+          }
+
+          elapsed=0
+          while (( elapsed <= MAX_WAIT_SECONDS ))
+          do
+            REVIEW_URL="$(codex_review_url)"
+            if [[ -z "${REVIEW_URL}" ]]
+            then
+              REVIEW_URL="$(codex_no_issues_comment_url)"
+            fi
+
+            if [[ -n "${REVIEW_URL}" ]]
+            then
               jq -n \
-                --arg name "Codex review progress" \
-                --arg head_sha "${HEAD_SHA}" \
-                --arg details_url "${PR_URL}" \
-                --arg title "Waiting for Codex review" \
-                --arg summary "Codex has been requested for the current PR revision. This check remains In progress until Codex reviews this exact commit. When it turns green, the required codex/review-complete gate is also satisfied." \
-                '{name: $name, head_sha: $head_sha, status: "in_progress", details_url: $details_url, output: {title: $title, summary: $summary}}' > create-check.json
+                --arg state "success" \
+                --arg context "codex/review-complete" \
+                --arg description "Codex finished reviewing this revision" \
+                --arg target_url "${REVIEW_URL}" \
+                '{state: $state, context: $context, description: $description, target_url: $target_url}' > success.json
               curl --fail-with-body --silent --show-error \
                 --request POST \
                 --header "Accept: application/vnd.github+json" \
                 --header "Authorization: Bearer ${GH_TOKEN}" \
                 --header "X-GitHub-Api-Version: 2022-11-28" \
-                "${GITHUB_API_URL}/repos/${REPOSITORY}/check-runs" \
-                --data-binary @create-check.json
-          fi
-
-  mark-complete:
-    if: >-
-      github.event_name == 'pull_request_review' &&
-      (github.event.review.user.login == 'chatgpt-codex-connector' ||
-      github.event.review.user.login == 'chatgpt-codex-connector[bot]')
-    name: Record completed Codex review
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify the reviewed revision and pass the gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
-          REVIEWED_SHA: ${{ github.event.review.commit_id }}
-          REVIEW_URL: ${{ github.event.review.html_url }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${REVIEWED_SHA}" || "${REVIEWED_SHA}" != "${HEAD_SHA}" ]]
-          then
-              echo "The Codex review is for an older PR revision; the current revision remains pending."
+                "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                --data-binary @success.json
+              echo "### Codex review complete" >> "${GITHUB_STEP_SUMMARY}"
+              echo "Codex reviewed the current head ${HEAD_SHA}." >> "${GITHUB_STEP_SUMMARY}"
               exit 0
-          fi
+            fi
 
+            echo "Codex has not yet reported a review for ${HEAD_SHA}; checked after ${elapsed}s."
+            sleep "${POLL_SECONDS}"
+            elapsed=$((elapsed + POLL_SECONDS))
+          done
+
+          PR_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
           jq -n \
-            --arg state "success" \
+            --arg state "failure" \
             --arg context "codex/review-complete" \
-            --arg description "Codex finished reviewing this revision" \
-            --arg target_url "${REVIEW_URL}" \
-            '{state: $state, context: $context, description: $description, target_url: $target_url}' > status.json
+            --arg description "Codex review not detected within 30 minutes" \
+            --arg target_url "${PR_URL}" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}' > timeout.json
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
-            --data-binary @status.json
-
-          CHECKS="$(
-            curl --fail-with-body --silent --show-error \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100"
-          )"
-          mapfile -t CHECK_IDS < <(jq -r '.check_runs[] | select(.name == "Codex review progress" and .status != "completed") | .id' <<< "${CHECKS}")
-
-          jq -n \
-            --arg details_url "${REVIEW_URL}" \
-            --arg title "Codex review completed" \
-            --arg summary "Codex reviewed this exact PR revision. If the other required checks are green and all review conversations are resolved, the PR is ready to merge." \
-            '{status: "completed", conclusion: "success", details_url: $details_url, output: {title: $title, summary: $summary}}' > completed-check.json
-
-          if (( ${#CHECK_IDS[@]} == 0 ))
-          then
-              jq -n \
-                --arg name "Codex review progress" \
-                --arg head_sha "${HEAD_SHA}" \
-                --arg details_url "${REVIEW_URL}" \
-                --arg title "Codex review completed" \
-                --arg summary "Codex reviewed this exact PR revision. If the other required checks are green and all review conversations are resolved, the PR is ready to merge." \
-                '{name: $name, head_sha: $head_sha, status: "completed", conclusion: "success", details_url: $details_url, output: {title: $title, summary: $summary}}' > completed-check.json
-              curl --fail-with-body --silent --show-error \
-                --request POST \
-                --header "Accept: application/vnd.github+json" \
-                --header "Authorization: Bearer ${GH_TOKEN}" \
-                --header "X-GitHub-Api-Version: 2022-11-28" \
-                "${GITHUB_API_URL}/repos/${REPOSITORY}/check-runs" \
-                --data-binary @completed-check.json
-          else
-              for CHECK_ID in "${CHECK_IDS[@]}"
-              do
-                  curl --fail-with-body --silent --show-error \
-                    --request PATCH \
-                    --header "Accept: application/vnd.github+json" \
-                    --header "Authorization: Bearer ${GH_TOKEN}" \
-                    --header "X-GitHub-Api-Version: 2022-11-28" \
-                    "${GITHUB_API_URL}/repos/${REPOSITORY}/check-runs/${CHECK_ID}" \
-                    --data-binary @completed-check.json
-              done
-          fi
+            --data-binary @timeout.json
+          echo "::error::Codex review was not detected within 30 minutes. Re-trigger Codex review and re-run this check."
+          exit 1
