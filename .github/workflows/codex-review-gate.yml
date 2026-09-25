@@ -100,7 +100,10 @@ jobs:
 
             while true
             do
-              reviews="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100&page=${page}")"
+              if ! reviews="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100&page=${page}")"
+              then
+                return 1
+              fi
               match="$(jq -r --arg head "${HEAD_SHA}" '
                 [.[] |
                   select(
@@ -135,7 +138,10 @@ jobs:
 
             while true
             do
-              comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
+              if ! comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
+              then
+                return 1
+              fi
               match="$(jq -r --arg head "${HEAD_SHA}" '
                 [.[] |
                   select(
