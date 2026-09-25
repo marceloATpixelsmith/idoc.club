@@ -15,6 +15,7 @@ import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSele
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
@@ -22,6 +23,7 @@ import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, t
 type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
 
 const OPTIONAL_COLUMNS = ['member', 'subject', 'category', 'status', 'assigned', 'activity'] as const;
+const MULTI_SELECT_PARAMS = ['category', 'status', 'assigned'] as const;
 const LABELS: Record<string, string> = { activity: 'Activity', assigned: 'Assigned', category: 'Category', member: 'Member', status: 'Status', subject: 'Subject' };
 const CATEGORY_OPTIONS = SUPPORT_CATEGORIES.map((value) => ({ label: CATEGORY_LABELS[value], value }));
 const STATUS_OPTIONS = SUPPORT_STATUSES.map((value) => ({ label: STATUS_LABELS[value], value }));
@@ -29,7 +31,7 @@ function visibility(params: URLSearchParams, initial?: string[]): VisibilityStat
 function header(id: string) { return ({ column }: HeaderContext<AdminSupportRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 
 export function SupportInboxTable({ administrators, filters, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { page: number; pageSize: number; q?: string; category?: string | string[]; status?: string | string[]; assigned?: string | string[]; activityFrom?: string | string[]; activityTo?: string | string[]; filters?: string | string[]; joinOperator?: string | string[]; sort?: string | string[]; direction?: string | string[] }; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
-  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false); const [isPending, startTransition] = useTransition();
+  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); useCanonicalizeMultiSelectParams(MULTI_SELECT_PARAMS); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false); const [isPending, startTransition] = useTransition();
   const initialVisibility = useMemo(() => visibility(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
   const activityFrom = Array.isArray(filters.activityFrom) ? filters.activityFrom[0] : filters.activityFrom;
   const activityTo = Array.isArray(filters.activityTo) ? filters.activityTo[0] : filters.activityTo;
@@ -96,6 +98,7 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
       className="rounded-xl border bg-background p-3"
       table={table}
       isFiltered={manuallyFiltered}
+      pending={isPending}
       onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined })}
       leading={<>
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />

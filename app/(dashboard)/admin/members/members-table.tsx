@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
@@ -27,6 +28,7 @@ type Filters = {
 };
 
 const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
+const MULTI_SELECT_PARAMS = ['status', 'type', 'federation', 'country', 'region'] as const;
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
@@ -68,6 +70,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  useCanonicalizeMultiSelectParams(MULTI_SELECT_PARAMS);
   const [search, setSearch] = useState(filters.q ?? '');
   const [isPending, startTransition] = useTransition();
   const initialVisibility = useMemo(() => visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
@@ -171,6 +174,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
         isFiltered={manuallyFiltered}
+        pending={isPending}
         onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined })}
         leading={<>
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />

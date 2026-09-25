@@ -22,6 +22,13 @@ interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
   isFiltered?: boolean;
   /** Extra controls rendered after View, at the very end of the toolbar (e.g. a download/export icon). */
   trailing?: React.ReactNode;
+  /** Whether the surrounding table is currently applying a search/filter/sort/pagination change --
+   * the same value passed to the table's own `loading` prop. Reset's spinner and visibility follow
+   * this rather than an internal transition around `resetColumnFilters()`: that call only updates
+   * local tanstack state synchronously (the real URL/server round trip is a separate, debounced
+   * update), so a transition scoped to it alone resolves, and `isFiltered` flips false, well before
+   * the actual navigation finishes -- omit this prop where filtering has no async round trip. */
+  pending?: boolean;
 }
 
 export function DataTableToolbar<TData>({
@@ -30,6 +37,7 @@ export function DataTableToolbar<TData>({
   onReset: onResetProp,
   isFiltered: isFilteredProp,
   trailing,
+  pending,
   children,
   className,
   ...props
@@ -42,13 +50,17 @@ export function DataTableToolbar<TData>({
     [table],
   );
 
-  const [isResetting, startResetTransition] = React.useTransition();
+  const [pendingReset, setPendingReset] = React.useState(false);
   const onReset = React.useCallback(() => {
-    startResetTransition(() => {
-      table.resetColumnFilters();
-      onResetProp?.();
-    });
+    setPendingReset(true);
+    table.resetColumnFilters();
+    onResetProp?.();
   }, [table, onResetProp]);
+  React.useEffect(() => {
+    if (!pending) setPendingReset(false);
+  }, [pending]);
+  const showReset = isFiltered || pendingReset;
+  const isResetting = pendingReset && Boolean(pending);
 
   return (
     <div
@@ -65,7 +77,7 @@ export function DataTableToolbar<TData>({
         {columns.map((column) => (
           <DataTableToolbarFilter key={column.id} column={column} />
         ))}
-        {isFiltered && (
+        {showReset && (
           <Button
             data-idoc-table-control
             aria-label="Reset filters"

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
@@ -93,6 +94,7 @@ export function ResourceDataTable({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  useCanonicalizeMultiSelectParams(tableType === 'content_pages' ? ['status', 'audience'] : ['status']);
   const [search, setSearch] = useState(searchParams.get('q') ?? '');
   const [error, setError] = useState('');
   const suppressPersistence = useRef(false);
@@ -257,6 +259,7 @@ export function ResourceDataTable({
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
         isFiltered={manuallyFiltered}
+        pending={isPending}
         onReset={() => update({ q: undefined, from: undefined, to: undefined })}
         leading={<>
           <Input
