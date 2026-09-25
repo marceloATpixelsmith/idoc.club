@@ -11,11 +11,17 @@ const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/supp
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
   assert.match(toolbar, /const \[pendingReset, setPendingReset\] = React\.useState\(false\);/);
-  assert.match(toolbar, /const showReset = isFiltered \|\| pendingReset;/);
+  assert.match(toolbar, /const showReset = isFiltered \|\| \(pending !== undefined && pendingReset\);/);
   assert.match(toolbar, /const isResetting = pendingReset && Boolean\(pending\);/);
   assert.match(toolbar, /\{showReset && \(/);
   assert.doesNotMatch(toolbar, /React\.useTransition\(\)/);
   for (const table of [memberTable, resourceTable, supportTable]) assert.match(table, /pending=\{isPending\}/);
+});
+
+test('a table that never reports pending state (synchronous, client-only filtering, e.g. AdminReadOnlyTable) never latches the reset button open -- it only follows isFiltered', () => {
+  assert.match(toolbar, /if \(pending !== undefined\) setPendingReset\(true\);/);
+  const readOnlyTable = readFileSync(new URL('../components/admin/admin-read-only-table.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(readOnlyTable, /pending=\{/);
 });
 
 test('a repeated multi-select query key is canonicalized to the toolbar\'s comma-joined form as soon as an admin table mounts, so client facet state matches what the server already applies', () => {

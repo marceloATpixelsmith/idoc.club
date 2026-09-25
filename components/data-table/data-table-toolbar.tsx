@@ -50,16 +50,21 @@ export function DataTableToolbar<TData>({
     [table],
   );
 
+  // Only latched when a caller actually reports async pending state -- a caller that never passes
+  // `pending` (filtering is synchronous, e.g. AdminReadOnlyTable) never sets this, so the button
+  // reverts to following `isFiltered` alone rather than getting stuck open forever: `pending` would
+  // stay `undefined` after a reset, so the effect below (keyed on `pending`) would never re-run to
+  // clear a latch that was set.
   const [pendingReset, setPendingReset] = React.useState(false);
   const onReset = React.useCallback(() => {
-    setPendingReset(true);
+    if (pending !== undefined) setPendingReset(true);
     table.resetColumnFilters();
     onResetProp?.();
-  }, [table, onResetProp]);
+  }, [pending, table, onResetProp]);
   React.useEffect(() => {
     if (!pending) setPendingReset(false);
   }, [pending]);
-  const showReset = isFiltered || pendingReset;
+  const showReset = isFiltered || (pending !== undefined && pendingReset);
   const isResetting = pendingReset && Boolean(pending);
 
   return (
