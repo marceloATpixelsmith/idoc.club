@@ -6,6 +6,12 @@ import { db } from '@/lib/db/drizzle';
 import { administratorTablePreferences } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator, type Actor } from '@/lib/membership/authorization';
+import { MEMBERSHIP_STATUSES, MEMBERSHIP_TYPE_OPTIONS } from '@/lib/membership/admin-memberships';
+import { IDOC_REGIONS, ISO_COUNTRY_CODES } from '@/lib/membership/validation';
+import { SUPPORT_CATEGORIES, SUPPORT_STATUSES } from '@/lib/support/inbox';
+import { NEWS_STATUSES } from '@/lib/news/articles';
+import { SEMINAR_STATUSES } from '@/lib/seminars/status';
+import { CONTENT_AUDIENCES, CONTENT_STATUSES } from '@/lib/content/pages';
 
 export const ADMIN_TABLE_IDENTIFIERS = ['memberships', 'support', 'news', 'seminars', 'content_pages'] as const;
 export type AdminTableIdentifier = typeof ADMIN_TABLE_IDENTIFIERS[number];
@@ -15,22 +21,29 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 const direction = z.enum(['asc', 'desc']).optional();
 const columns = (allowed: readonly string[]) => z.array(z.string()).max(20).transform((values) => [...new Set(values.filter((value) => allowed.includes(value)))]).optional();
 const pageSize = z.coerce.number().int().pipe(z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)])).optional();
+// A multi-select facet filter's committed value round-trips as the same comma-joined query-param
+// string the toolbar itself writes (?status=active,expired) -- see lib/admin/resource-list-query.ts's
+// `many()` helper, which every filter-building module parses that shape with. This validates every
+// comma-separated token against the column's real allow-list while keeping the stored string as-is,
+// so a single selection continues to round-trip identically to before multi-select existed.
+const multiToken = (allowed: readonly string[], maxLength = 500) => z.string().trim().max(maxLength)
+  .refine((value) => value.split(',').every((item) => allowed.includes(item.trim())), 'Invalid selection').optional();
 
 const schemas = {
   memberships: z.object({
     columns: columns(['name', 'email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions']),
-    country: text(2), direction, expiresFrom: date, expiresTo: date, federation: text(2), filters: text(4000),
+    country: multiToken(ISO_COUNTRY_CODES, 1000), direction, expiresFrom: date, expiresTo: date, federation: multiToken(ISO_COUNTRY_CODES, 1000), filters: text(4000),
     // 'membershipType' is a legacy key accepted for preferences saved before the membership-type
     // filter was keyed by column id; current code always writes 'type' (see members-table.tsx).
-    membershipType: z.enum(['judge', 'steward', 'combo', 'veterinarian']).optional(),
-    pageSize, q: text(), region: text(40), sort: text(1000), columnOrder: text(500), joinOperator: z.enum(['and', 'or']).optional(),
-    status: z.enum(['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test']).optional(),
-    type: z.enum(['judge', 'steward', 'combo', 'veterinarian']).optional(),
+    membershipType: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
+    pageSize, q: text(), region: multiToken(IDOC_REGIONS, 500), sort: text(1000), columnOrder: text(500), joinOperator: z.enum(['and', 'or']).optional(),
+    status: multiToken(MEMBERSHIP_STATUSES, 200),
+    type: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
   }).strict(),
-  support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: text(30), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(255), sort: text(1000), status: text(30) }).strict(),
-  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
-  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), pageSize, q: text(), sort: text(1000), status: text(30), to: date }).strict(),
-  content_pages: z.object({ audience: text(30), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, publicationState: text(30), q: text(), sort: text(1000), status: text(30) }).strict(),
+  support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: multiToken(SUPPORT_CATEGORIES, 200), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(2000), sort: text(1000), status: multiToken(SUPPORT_STATUSES, 200) }).strict(),
+  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), to: date }).strict(),
+  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
+  content_pages: z.object({ audience: multiToken(CONTENT_AUDIENCES, 200), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, publicationState: text(30), q: text(), sort: text(1000), status: multiToken(CONTENT_STATUSES, 200) }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;
 
 export type TablePreferenceState = Record<string, string | string[] | number | undefined>;

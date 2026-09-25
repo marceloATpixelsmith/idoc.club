@@ -36,7 +36,7 @@ export type AdminMemberRow = {
 const SORT_FIELDS = ['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
 type SortField = typeof SORT_FIELDS[number];
 type AdvancedMemberFilter = { id: 'status' | 'type' | 'country' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
-const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
+export const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
 
 export class MemberFilterRangeError extends Error {
