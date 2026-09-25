@@ -211,7 +211,11 @@ test('an already-open dashboard redirects to sign-in when its session is revoked
     // same null identity that already flips the header to its logged-out menu; the guard must turn
     // that signal into an immediate navigation away from stale protected content.
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(page).toHaveURL(/\/sign-in$/);
+    // The default 5s expect timeout is tight for the real chain this triggers (focus -> SWR
+    // revalidation -> fetch /api/user -> conditional window.location.replace) under a loaded CI
+    // runner; passed reliably (4/4) locally against this exact commit, so widen the timeout rather
+    // than the assertion itself.
+    await expect(page).toHaveURL(/\/sign-in$/, { timeout: 15_000 });
   } finally {
     if (sessionId) {
       await withDb(async (sql) => {
