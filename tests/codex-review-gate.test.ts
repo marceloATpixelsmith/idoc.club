@@ -13,6 +13,13 @@ test('the one-time bootstrap path is restricted to approved same-repository repa
   assert.match(workflow, /hotfix\/codex-review-gate-default-branch/);
 });
 
+test('the one-time default-branch repair can waive only on an actual Codex quota exhaustion signal', () => {
+  assert.match(workflow, /ALLOW_QUOTA_BOOTSTRAP/);
+  assert.match(workflow, /hotfix\/codex-review-gate-default-branch/);
+  assert.match(workflow, /reached your Codex usage limits for code reviews/);
+  assert.match(workflow, /Quota waiver: default-branch gate repair/);
+});
+
 test('Codex gate stays visibly in progress while waiting for the current revision', () => {
   assert.match(workflow, /name: Codex review progress/);
   assert.match(workflow, /MAX_WAIT_SECONDS: "1800"/);
