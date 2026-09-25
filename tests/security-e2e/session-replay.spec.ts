@@ -180,3 +180,47 @@ test('a genuinely valid, freshly registered session is accepted (positive contro
   expect((await identity.json()).email).toBe(email);
   await context.close();
 });
+
+test('an already-open dashboard redirects to sign-in when its session is revoked and the browser regains focus', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-b.json' });
+  const page = await context.newPage();
+  let sessionId: string | null = null;
+
+  try {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/dashboard(?:\/membership)?$/);
+
+    sessionId = await withDb(async (sql) => {
+      const [session] = await sql<{ session_id: string }[]>`
+        select s.session_id
+        from idoc.auth_sessions s
+        join idoc.users u on u.id = s.user_id
+        where u.email = 'member-b@security.example.test'
+          and s.revoked_at is null
+        order by s.authenticated_at desc
+        limit 1`;
+      expect(session?.session_id).toBeTruthy();
+      await sql`update idoc.auth_sessions
+        set revoked_at = now(), revoke_reason = 'security-e2e-live-session-loss'
+        where session_id = ${session.session_id}`;
+      return session.session_id;
+    });
+
+    // No click and no page reload: this models a protected tab that stayed open while its session
+    // became invalid, then the user returned to the browser. SWR's focus revalidation supplies the
+    // same null identity that already flips the header to its logged-out menu; the guard must turn
+    // that signal into an immediate navigation away from stale protected content.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page).toHaveURL(/\/sign-in$/);
+  } finally {
+    if (sessionId) {
+      await withDb(async (sql) => {
+        await sql`update idoc.auth_sessions
+          set revoked_at = null, revoke_reason = null, last_activity_at = now()
+          where session_id = ${sessionId}`;
+      });
+    }
+    await context.close();
+  }
+});
+
