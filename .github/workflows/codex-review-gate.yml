@@ -198,6 +198,20 @@ jobs:
             done
           }
 
+          # A repository administrator may run the separate quota-waiver workflow while this job is
+          # still polling; it posts its own "success" status for this same context and revision,
+          # bypassing the review/comment detectors above entirely. The Statuses API has no
+          # compare-and-swap primitive, so a read-then-write check can never fully close the race
+          # against a concurrently in-flight waiver request -- but checking every loop iteration
+          # (instead of only once, right before the timeout failure) shrinks that window from up to
+          # thirty minutes down to at most one poll interval, which is the practical mitigation this
+          # gate can offer without redesigning the two workflows to coordinate directly.
+          quota_waiver_already_succeeded() {
+            local state
+            state="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/status" | jq -r '.statuses[]? | select(.context == "codex/review-complete") | .state')"
+            [[ "${state}" == "success" ]]
+          }
+
           while (( $(date +%s) < deadline ))
           do
             REVIEW_URL="$(codex_review_url)"
@@ -215,6 +229,14 @@ jobs:
               exit 0
             fi
 
+            if quota_waiver_already_succeeded
+            then
+              trap - ERR
+              echo "### codex/review-complete already satisfied" >> "${GITHUB_STEP_SUMMARY}"
+              echo "A success status for ${HEAD_SHA} was already posted (e.g. by the quota-waiver workflow); not overwriting it." >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+            fi
+
             remaining=$((deadline - $(date +%s)))
             echo "Codex has not yet reported a review for ${HEAD_SHA}; ${remaining}s remain before failure."
             if (( remaining > POLL_SECONDS ))
@@ -226,20 +248,18 @@ jobs:
             fi
           done
 
-          trap - ERR
-
-          # A repository administrator may run the separate quota-waiver workflow while this job is
-          # still polling; it posts its own "success" status for this same context and revision. Check
-          # for that before declaring failure, so an authorized waiver that landed moments before this
-          # deadline isn't immediately overwritten back to a blocking failure.
-          current_state="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/status" | jq -r '.statuses[]? | select(.context == "codex/review-complete") | .state')"
-          if [[ "${current_state}" == "success" ]]
+          # Final check, immediately before declaring failure, to close as much of the remaining
+          # window as possible -- the ERR trap stays active through this lookup too, so a transient
+          # API failure here still finalizes the required status instead of leaving it stranded.
+          if quota_waiver_already_succeeded
           then
+            trap - ERR
             echo "### codex/review-complete already satisfied" >> "${GITHUB_STEP_SUMMARY}"
-            echo "A success status for ${HEAD_SHA} was already posted (e.g. by the quota-waiver workflow) while this job was polling; not overwriting it with a timeout failure." >> "${GITHUB_STEP_SUMMARY}"
+            echo "A success status for ${HEAD_SHA} was already posted (e.g. by the quota-waiver workflow); not overwriting it." >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
 
+          trap - ERR
           PR_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
           if ! post_status "failure" "Codex review not detected within 30 minutes" "${PR_URL}"
           then

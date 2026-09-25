@@ -70,8 +70,22 @@ test('Codex gate has a bounded visible failure instead of an indefinite pending 
   assert.match(workflow, /exit 1/);
 });
 
-test('an administrator-triggered quota waiver that lands while this job is still polling is not immediately overwritten by the timeout path\'s own failure status', () => {
-  assert.match(workflow, /current_state="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status" \| jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state'\)"/);
-  assert.match(workflow, /if \[\[ "\$\{current_state\}" == "success" \]\]\s*\n\s*then\s*\n\s*echo "### codex\/review-complete already satisfied"/);
-  assert.match(workflow, /not overwriting it with a timeout failure/);
+test('an administrator-triggered quota waiver is checked every poll iteration, not only once right before the timeout failure, narrowing (though not perfectly closing, given the Statuses API has no compare-and-swap) the window where this job\'s own eventual write could still race a concurrently in-flight waiver request', () => {
+  assert.match(workflow, /quota_waiver_already_succeeded\(\) \{/);
+  assert.match(workflow, /state="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status" \| jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state'\)"/);
+  assert.match(workflow, /\[\[ "\$\{state\}" == "success" \]\]/);
+  // Called from inside the polling while loop (before it sleeps)...
+  assert.match(workflow, /if \[\[ -n "\$\{REVIEW_URL\}" \]\][\s\S]*?if quota_waiver_already_succeeded[\s\S]*?remaining=\$\(\(deadline/);
+  // ...and again immediately before the timeout failure is posted, as a final check.
+  assert.match(workflow, /done\s*\n\s*\n\s*# Final check, immediately before declaring failure/);
+  const satisfiedMessageCount = workflow.split('not overwriting it').length - 1;
+  assert.equal(satisfiedMessageCount, 2, 'expected the "already satisfied" message in both the loop check and the final check');
+});
+
+test('the error finalizer stays active through the final quota-waiver lookup, so a transient API failure there still finalizes the required status instead of leaving it stranded pending on a red job', () => {
+  const loopEndIndex = workflow.lastIndexOf('done', workflow.indexOf('# Final check, immediately before declaring failure'));
+  const finalLookupIndex = workflow.indexOf('if quota_waiver_already_succeeded', loopEndIndex);
+  assert.ok(loopEndIndex > 0 && finalLookupIndex > loopEndIndex, 'expected the loop to end before the final lookup');
+  const between = workflow.slice(loopEndIndex, finalLookupIndex);
+  assert.doesNotMatch(between, /trap - ERR/, 'the ERR trap must still be active (not yet disabled) when the final quota-waiver lookup runs');
 });
