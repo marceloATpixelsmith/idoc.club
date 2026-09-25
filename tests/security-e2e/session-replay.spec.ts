@@ -199,7 +199,7 @@ test('an already-open dashboard redirects to sign-in when its session is revoked
           and s.revoked_at is null
         order by s.authenticated_at desc
         limit 1`;
-      expect(session?.session_id).toBeTruthy();
+      if (!session) throw new Error('member-b fixture has no active session');
       await sql`update idoc.auth_sessions
         set revoked_at = now(), revoke_reason = 'security-e2e-live-session-loss'
         where session_id = ${session.session_id}`;
