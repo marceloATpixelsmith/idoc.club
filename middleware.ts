@@ -14,7 +14,11 @@ import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
 import { contentSecurityPolicy } from '@/lib/security/content-security-policy';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
 
-const protectedRoutes = '/dashboard';
+const protectedRoutes = ['/dashboard', '/admin', '/onboarding'] as const;
+
+function isProtectedPath(pathname: string): boolean {
+  return protectedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
 
 // A lightweight substitute for a full APM/tracing vendor integration (docs/21 AUTH-LOG-004): every
 // request is assigned a fresh correlation ID here, before any application code runs, so a single
@@ -62,7 +66,7 @@ export async function middleware(request: NextRequest) {
   // here -- it is only ever defensively cleared, on every response path below, in case a browser
   // still holds one from before the persisted-session-registry retrofit.
   const legacyCookie = request.cookies.get(LEGACY_SESSION_COOKIE_NAME);
-  const isProtectedRoute = pathname.startsWith(protectedRoutes);
+  const isProtectedRoute = isProtectedPath(pathname);
 
   // AUTH-CSRF-003: ensure a valid, correctly session-bound CSRF cookie exists before this request
   // reaches any Server Component render or Server Action. A token minted anonymously (or under a

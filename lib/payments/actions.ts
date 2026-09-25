@@ -15,7 +15,7 @@ const checkoutSchema = z.object({ mode: z.enum(['payment', 'subscription']) });
 
 export const checkoutAction = validatedAction(checkoutSchema, async ({ mode }) => {
   const user = await getUser();
-  if (!user) redirect('/sign-in?redirect=pricing');
+  if (!user) redirect('/sign-in');
   const url = await createMembershipCheckoutSession(mode);
   redirect(url);
 });
