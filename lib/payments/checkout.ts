@@ -89,7 +89,7 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
       (${profile.id},${mode},${cycle},'creating',${idempotencyKey},${attempt}) returning id`;
     let session;
     try { session = await stripe.checkout.sessions.create({
-    cancel_url: `${baseUrl}/pricing`,
+    cancel_url: `${baseUrl}/dashboard/membership`,
     customer: customerId,
     line_items: [{
       price_data: {

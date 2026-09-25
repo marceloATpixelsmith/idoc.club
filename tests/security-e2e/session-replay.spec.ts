@@ -111,18 +111,19 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
   // requireAccountAccess() only discovers that deeper, inside the dashboard layout itself. Before
   // that catch existed, this fell through uncaught into Next.js's generic error boundary instead
   // of a clean redirect; confirmed against real production crashes since 2026-08-27.
-  const dashboardContext = await browser.newContext();
-  await dashboardContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
-  const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
-  expect(dashboard.status()).toBe(307);
-  // Unlike middleware.ts's NextResponse.redirect(new URL(path, request.url)) (an absolute URL,
-  // asserted on below in the legacy-cookie test via new URL(...).pathname), this redirect() call
-  // is a page-level next/navigation call from inside the dashboard layout's RSC render. Confirmed
-  // empirically against this dev server: Next still uses a 307 for a GET navigation here, but the
-  // Location header it emits is the bare relative path with no scheme/host, so new URL() on it
-  // alone throws (Invalid URL) rather than parsing -- assert on the raw header value instead.
-  expect(dashboard.headers().location).toBe('/sign-in');
-  await dashboardContext.close();
+  for (const route of ['/dashboard', '/admin', '/onboarding']) {
+    const protectedContext = await browser.newContext();
+    await protectedContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
+    const response = await protectedContext.request.get(route, { maxRedirects: 0 });
+    expect(response.status(), route).toBe(307);
+
+    // A validly-signed token reaches the deeper page boundary because middleware cannot see that
+    // its registry row has been revoked. Dashboard/admin/onboarding must still provide a clean path
+    // back to authentication instead of converting that stale session into a 404 or generic error.
+    const location = response.headers().location!;
+    expect(location.startsWith('http') ? new URL(location).pathname : location, route).toBe('/sign-in');
+    await protectedContext.close();
+  }
 });
 
 test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template session shape, under its old cookie name) never authenticates', async ({ browser }) => {
