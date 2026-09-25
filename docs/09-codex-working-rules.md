@@ -9,7 +9,7 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 3. Do not stop merely because the checkout has no usable `origin` remote, `gh` is unavailable, or outbound Git HTTPS cloning/fetching is blocked.
 4. If an attached checkout exists, continue implementation there. Clone only when no local checkout exists anywhere under `/workspace` or `/tmp`.
 5. Stop for repository-access reasons only when no checkout exists and no supported repository integration can provide the needed write access.
-6. When `origin/staging` is available, begin from its latest state. Never knowingly work from an old branch when `origin/staging` is available. Per docs/07 "Branch, environment, and deployment workflow," `staging` is the pre-merge verification gate for ordinary work; `main` receives only reviewed promotions from `staging`.
+6. When `origin/staging` is available, begin from its latest state. Never knowingly work from an old branch when `origin/staging` is available. Per docs/07 "Branch, environment, and deployment workflow," `staging` is the pre-merge verification gate for ordinary work; `main` receives only reviewed promotions from `staging`. **Exception:** for an explicitly declared production emergency (rule 10 below), begin from `origin/main` instead — `staging` may carry unpromoted, unverified backlog that an emergency fix must not pull in — and back-merge the resulting fix into `staging` immediately afterward.
 7. If remote fetch is unavailable but a checkout exists, use the attached checkout as the baseline and report that limitation.
 8. Create a feature branch when Git permits it. If branch creation is unavailable but a checkout exists, continue and report the limitation.
 9. Never commit directly to `main`.
