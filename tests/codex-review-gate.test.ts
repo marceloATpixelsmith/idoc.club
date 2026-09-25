@@ -72,7 +72,8 @@ test('Codex gate has a bounded visible failure instead of an indefinite pending 
 
 test('an administrator-triggered quota waiver is checked every poll iteration, not only once right before the timeout failure, narrowing (though not perfectly closing, given the Statuses API has no compare-and-swap) the window where this job\'s own eventual write could still race a concurrently in-flight waiver request', () => {
   assert.match(workflow, /quota_waiver_already_succeeded\(\) \{/);
-  assert.match(workflow, /state="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status" \| jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state'\)"/);
+  assert.match(workflow, /response="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status"\)"/);
+  assert.match(workflow, /state="\$\(jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state' <<< "\$\{response\}"\)"/);
   assert.match(workflow, /\[\[ "\$\{state\}" == "success" \]\]/);
   // Called from inside the polling while loop (before it sleeps)...
   assert.match(workflow, /if \[\[ -n "\$\{REVIEW_URL\}" \]\][\s\S]*?if quota_waiver_already_succeeded[\s\S]*?remaining=\$\(\(deadline/);
@@ -88,4 +89,13 @@ test('the error finalizer stays active through the final quota-waiver lookup, so
   assert.ok(loopEndIndex > 0 && finalLookupIndex > loopEndIndex, 'expected the loop to end before the final lookup');
   const between = workflow.slice(loopEndIndex, finalLookupIndex);
   assert.doesNotMatch(between, /trap - ERR/, 'the ERR trap must still be active (not yet disabled) when the final quota-waiver lookup runs');
+});
+
+test('quota_waiver_already_succeeded handles its own lookup failure explicitly instead of letting an unguarded assignment silently read as "no waiver" -- since the function is called directly as an if-condition at both call sites, bash suppresses errexit/ERR-trap handling for the whole call, so only an explicit check distinguishes a failed lookup from a genuine absence of a waiver', () => {
+  const fnStart = workflow.indexOf('quota_waiver_already_succeeded() {');
+  const fnEnd = workflow.indexOf('\n          }', fnStart);
+  const fnBody = workflow.slice(fnStart, fnEnd);
+  assert.match(fnBody, /if response="\$\(api_get/, 'expected the api_get call to be guarded, matching the pattern codex_review_url()\/codex_no_issues_comment_url() already use');
+  assert.match(fnBody, /for attempt in 1 2 3/, 'expected a bounded retry since a single api_get failure here (unlike the page-fetch helpers) is the last line of defense against overwriting a real waiver');
+  assert.match(fnBody, /::warning::/, 'expected a visible warning when the lookup fails, rather than a silent false');
 });

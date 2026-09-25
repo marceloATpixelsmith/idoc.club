@@ -206,10 +206,35 @@ jobs:
           # (instead of only once, right before the timeout failure) shrinks that window from up to
           # thirty minutes down to at most one poll interval, which is the practical mitigation this
           # gate can offer without redesigning the two workflows to coordinate directly.
+          # Called directly as an `if` condition at both call sites below -- bash suppresses
+          # errexit/ERR-trap handling for the whole compound command in that position, so an
+          # unguarded failed assignment inside this function would silently read as an empty
+          # $state (i.e. "no waiver") instead of "we couldn't tell". That matters here specifically:
+          # misreading a transient lookup failure as "no waiver" on the final check is exactly the
+          # kind of false negative that could overwrite a real, already-posted waiver with failure --
+          # the same race this function exists to close. Handle the failure explicitly, same as
+          # codex_review_url()/codex_no_issues_comment_url() do for their own api_get calls, and
+          # retry a couple of times before giving up, since api_get's own 4 retries can still both
+          # legitimately fail under sustained but short-lived flakiness.
           quota_waiver_already_succeeded() {
+            local response
             local state
-            state="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/status" | jq -r '.statuses[]? | select(.context == "codex/review-complete") | .state')"
-            [[ "${state}" == "success" ]]
+            local attempt
+
+            for attempt in 1 2 3
+            do
+              if response="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/status")"
+              then
+                state="$(jq -r '.statuses[]? | select(.context == "codex/review-complete") | .state' <<< "${response}")"
+                [[ "${state}" == "success" ]]
+                return
+              fi
+              echo "::warning::Could not check for an existing quota waiver on attempt ${attempt}/3." >&2
+              sleep 2
+            done
+
+            echo "::warning::Could not confirm whether a quota waiver already succeeded for ${HEAD_SHA} after 3 attempts; treating as none found." >&2
+            return 1
           }
 
           while (( $(date +%s) < deadline ))
