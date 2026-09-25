@@ -33,6 +33,16 @@ const nextConfig: NextConfig = {
         destination: '/dashboard/security',
         permanent: true,
         source: '/dashboard/activity'
+      },
+      {
+        // Stripe bakes cancel_url into a Checkout Session at creation time, so every session
+        // created before this deployment (when cancel_url was still `${baseUrl}/pricing`) still
+        // points here. That page no longer exists; without this redirect, a member who cancels
+        // out of an already-open Checkout session lands on a 404 instead of back in the app.
+        // Not permanent: safe to remove once those pre-existing sessions have all expired.
+        destination: '/dashboard/membership',
+        permanent: false,
+        source: '/pricing'
       }
     ];
   }
