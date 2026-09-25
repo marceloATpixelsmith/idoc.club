@@ -1,28 +1,17 @@
 name: Codex Review Gate
 
 on:
-  # One-time same-repository bootstrap for PR #282 and its staging-to-main promotion.
-  # Remove pull_request after the repair reaches main; the permanent gate runs from pull_request_target.
-  pull_request:
-    branches: [staging, main]
-    types: [opened, ready_for_review, reopened, synchronize]
   pull_request_target:
     types: [opened, ready_for_review, reopened, synchronize]
 
 permissions:
   contents: read
   pull-requests: read
+  issues: write
   statuses: write
 
 jobs:
   wait-for-codex:
-    if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.event.pull_request.number == 282 ||
-        (github.event.pull_request.base.ref == 'main' &&
-         github.event.pull_request.head.ref == 'staging')))
     name: Codex review progress
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -51,6 +40,23 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             --data-binary @status.json
+
+      - name: Ask Codex to review this exact revision
+        run: |
+          set -euo pipefail
+          # The chatgpt-codex-connector app does not reliably auto-review every synchronize push in
+          # this repository; without an explicit nudge, the wait step below can sit idle for the
+          # full 30-minute deadline before failing, on every single push. Ask directly instead of
+          # waiting on that assumption -- harmless to repeat once per revision if Codex did already
+          # pick the push up on its own.
+          jq -n --arg body "@codex review" '{body: $body}' > review-request.json
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --data-binary @review-request.json
 
       - name: Wait visibly for Codex to finish this exact revision
         run: |
