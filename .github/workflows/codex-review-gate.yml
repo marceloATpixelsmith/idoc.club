@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: write
   statuses: write
 
 jobs:
@@ -34,7 +35,6 @@ jobs:
       POLL_SECONDS: "15"
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPOSITORY: ${{ github.repository }}
-      ALLOW_QUOTA_BOOTSTRAP: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'hotfix/codex-review-gate-default-branch' }}
     steps:
       - name: Mark this revision as awaiting Codex
         run: |
@@ -53,6 +53,23 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             --data-binary @status.json
+
+      - name: Ask Codex to review this exact revision
+        run: |
+          set -euo pipefail
+          # The chatgpt-codex-connector app does not reliably auto-review every synchronize push in
+          # this repository; without an explicit nudge, the wait step below can sit idle for the
+          # full 30-minute deadline before failing, on every single push. Ask directly instead of
+          # waiting on that assumption -- harmless to repeat once per revision if Codex did already
+          # pick the push up on its own.
+          jq -n --arg body "@codex review" '{body: $body}' > review-request.json
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --data-binary @review-request.json
 
       - name: Wait visibly for Codex to finish this exact revision
         run: |
@@ -139,48 +156,6 @@ jobs:
             done
           }
 
-          codex_quota_exhausted_url() {
-            local page=1
-            local comments
-            local count
-            local match
-
-            while true
-            do
-              if (( $(date +%s) >= deadline ))
-              then
-                return 124
-              fi
-              if ! comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
-              then
-                return 1
-              fi
-              match="$(jq -r '
-                [.[] |
-                  select(
-                    .user.login == "chatgpt-codex-connector" or
-                    .user.login == "chatgpt-codex-connector[bot]"
-                  ) |
-                  select(.body | contains("reached your Codex usage limits for code reviews"))
-                ] |
-                last |
-                .html_url // empty
-              ' <<< "${comments}")"
-              if [[ -n "${match}" ]]
-              then
-                echo "${match}"
-                return 0
-              fi
-
-              count="$(jq 'length' <<< "${comments}")"
-              if (( count < 100 ))
-              then
-                return 0
-              fi
-              page=$((page + 1))
-            done
-          }
-
           codex_no_issues_comment_url() {
             local page=1
             local comments
@@ -251,19 +226,6 @@ jobs:
               echo "### Codex review complete" >> "${GITHUB_STEP_SUMMARY}"
               echo "Codex reviewed the current head ${HEAD_SHA}." >> "${GITHUB_STEP_SUMMARY}"
               exit 0
-            fi
-
-            if [[ "${ALLOW_QUOTA_BOOTSTRAP}" == "true" ]]
-            then
-              QUOTA_URL="$(codex_quota_exhausted_url)"
-              if [[ -n "${QUOTA_URL}" ]]
-              then
-                post_status "success" "Quota waiver: default-branch gate repair" "${QUOTA_URL}"
-                trap - ERR
-                echo "### Codex quota waiver applied" >> "${GITHUB_STEP_SUMMARY}"
-                echo "Codex reported review quota exhaustion; this one-time waiver is restricted to the default-branch gate repair hotfix." >> "${GITHUB_STEP_SUMMARY}"
-                exit 0
-              fi
             fi
 
             remaining=$((deadline - $(date +%s)))

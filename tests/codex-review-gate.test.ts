@@ -13,11 +13,18 @@ test('the one-time bootstrap path is restricted to approved same-repository repa
   assert.match(workflow, /hotfix\/codex-review-gate-default-branch/);
 });
 
-test('the one-time default-branch repair can waive only on an actual Codex quota exhaustion signal', () => {
-  assert.match(workflow, /ALLOW_QUOTA_BOOTSTRAP/);
-  assert.match(workflow, /hotfix\/codex-review-gate-default-branch/);
-  assert.match(workflow, /reached your Codex usage limits for code reviews/);
-  assert.match(workflow, /Quota waiver: default-branch gate repair/);
+test('the quota-waiver bootstrap (which matched any past quota-exhaustion comment without binding it to the current head commit) has been removed now that the default-branch gate repair it existed for already landed on main', () => {
+  assert.doesNotMatch(workflow, /ALLOW_QUOTA_BOOTSTRAP/);
+  assert.doesNotMatch(workflow, /codex_quota_exhausted_url/);
+  assert.doesNotMatch(workflow, /reached your Codex usage limits for code reviews/);
+  assert.doesNotMatch(workflow, /Quota waiver: default-branch gate repair/);
+});
+
+test('Codex gate proactively asks Codex to review each revision instead of only ever passively waiting on an assumed auto-trigger', () => {
+  assert.match(workflow, /issues: write/);
+  assert.match(workflow, /name: Ask Codex to review this exact revision/);
+  assert.match(workflow, /--arg body "@codex review"/);
+  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" \\\n\s+--data-binary @review-request\.json/);
 });
 
 test('Codex gate stays visibly in progress while waiting for the current revision', () => {
