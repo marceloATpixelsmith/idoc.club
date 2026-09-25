@@ -30,7 +30,8 @@
     "validate:auth-test-catalog": "node scripts/validate-auth-test-matrix.mjs && node scripts/generate-auth-test-docs.mjs --check",
     "generate:auth-test-docs": "node scripts/generate-auth-test-docs.mjs",
     "write:auth-ci-results": "node scripts/write-auth-ci-results.mjs",
-    "merge:auth-test-results": "node scripts/merge-auth-test-results.mjs"
+    "merge:auth-test-results": "node scripts/merge-auth-test-results.mjs",
+    "check:release1:extended": "node scripts/validate-toolchain-policy.mjs && pnpm test:integration-db && pnpm test:build-boundary && pnpm build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

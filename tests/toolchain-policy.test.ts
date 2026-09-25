@@ -8,7 +8,7 @@ test('CI pins the declared pnpm version and blocks high dependency advisories', 
     encoding: 'utf8',
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /high-severity audit is blocking/);
+  assert.match(result.stdout, /single blocking high-severity audit/);
 });
 
 test('the audit validator rejects a step-level continue-on-error bypass', () => {

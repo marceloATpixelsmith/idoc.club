@@ -2,6 +2,18 @@
 
 This policy tells Codex and Claude which verification level a pull request requires before merge.
 
+## CI execution model
+
+The fast PR workflow is the shared first gate for every pull request. It runs the documentation and inventory checks, whitespace check, dependency audit, typecheck, and unit tests once. Release and authentication workflows must not repeat those checks.
+
+The Release 1 workflow runs only for changes outside its documented low-risk path exclusions. It remains required for runtime, database, build, dependency, and application behavior changes, and its extended gate covers toolchain policy, PostgreSQL integration, build-boundary tests, and a production build. Changes are verified on `staging` first; a promotion to `main` never replaces the staging proof or live UAT required by the runbook.
+
+The Authentication security workflow runs only for its explicit sensitive-file list. It validates the auth test catalog and change coverage, then runs the browser security suite. The browser suite provisions and migrates its own isolated test database, so it does not need to rerun the separate database integration suite already in Release 1.
+
+The fast, release, and authentication test workflows cancel obsolete runs when a newer revision is pushed to the same pull request. Each job has a time limit so a hung runner cannot block indefinitely. Package-manager caching is enabled, and installs use the cached store when available.
+
+`codex/review-complete` is a legacy required status retained temporarily for branch-rule compatibility. It now records that a Codex review was requested; it does not certify that review completed. Codex review is advisory; automated test gates remain the merge gates, and Codex findings are still handled through normal PR review resolution. The workflow requests Codex review when a revision is opened or updated, then exits without polling. Later review events update the informational status only when they refer to the current PR revision. The repository owner should remove `codex/review-complete` from the required status checks in both `staging-protection` and `main-protection` after this workflow is deployed; until then the success status means only that the review request was sent. The audited quota-waiver workflow is no longer required for CI progress.
+
 ## Every pull request
 
 The `Fast PR verification` workflow runs automatically. It covers documentation validation, whitespace, dependency audit, TypeScript, and unit tests.

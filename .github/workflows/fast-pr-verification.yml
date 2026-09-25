@@ -5,6 +5,10 @@ on:
     branches: [main, staging]
   workflow_dispatch:
 
+concurrency:
+  group: fast-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -12,6 +16,7 @@ jobs:
   verify:
     name: Fast PR checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,7 +25,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --prefer-offline
       - run: node scripts/validate-auth-docs.mjs
       - run: node scripts/validate-release-checklist.mjs
       - run: pnpm validate:stripe-acceptance-inventory

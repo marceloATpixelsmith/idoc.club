@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 28221)
+Total output lines: 791
+
 **IDOC**
 
 **Administrator & Operations Runbook**
@@ -70,17 +73,11 @@ Day-to-day procedures after the IDOC membership platform goes live
 
 Working project document. Update this document when project decisions change.
 
-## Codex pull-request review gate
+## Codex pull-request review request
 
-The protected `staging` and `main` branches require the commit status `codex/review-complete`. Opening, reopening, marking ready, or updating a pull request places that status in `pending`, starts a visible **Codex review progress** Actions job, and — as its very next step — has the job itself post an `@codex review` comment on the pull request. That direct request exists because the `chatgpt-codex-connector` GitHub App does not reliably auto-review every `synchronize` push in this repository; before this step existed, the gate only ever passively waited for a review that was assumed to arrive on its own, which in practice meant it hung for the full 30-minute deadline on effectively every push until a human noticed the timeout and commented `@codex review` manually. The job then remains visibly in progress while it polls GitHub every 15 seconds against a wall-clock 30-minute deadline, so API latency and retries count toward the limit and the pull request itself shows that Codex is still outstanding instead of presenting a silent yellow status with no activity indicator.
+Codex automated review is advisory. When a pull request is opened or updated, the workflow requests a Codex review and exits promptly without polling. The legacy `codex/review-complete` status remains temporarily for branch-rule compatibility and means only that the review was requested; it does not certify review completion. Any Codex comments or inline findings remain visible for the author to address, while fast and risk-classified full CI workflows determine test readiness.
 
-The gate accepts either of the two result shapes the Codex GitHub integration currently emits: (1) a formal submitted review whose `commit_id` exactly equals the pull request's current head SHA, or (2) Codex's no-findings PR comment ("Codex Review: Didn't find any major issues") containing a **Reviewed commit** SHA whose 10–40 hexadecimal characters match the beginning of that same current head SHA. Only comments/reviews authored by `chatgpt-codex-connector` or `chatgpt-codex-connector[bot]` count. The poller follows every 100-item API page until it finds a match or exhausts the collection, and transient GitHub/API failures are retried. Each page-fetch function explicitly returns failure after exhausted retries (rather than relying on Bash `errexit` inside command substitution), allowing the top-level ERR finalizer to change the required status to `failure` before the job exits. This prevents a red Actions job from leaving `codex/review-complete` yellow forever. A later push creates a new pending gate, so an older review or no-findings comment cannot satisfy a newer revision. When Codex is detected, the job changes `codex/review-complete` to `success` and itself turns green. If nothing matching the current revision is detected within 30 minutes, both the job and `codex/review-complete` fail visibly rather than waiting forever; re-trigger Codex and re-run the check (though the self-nudge above should make this unnecessary in ordinary operation).
-
-The one-time same-repository bootstrap that let this repaired gate cross both protected branches while each base branch still had the old, pre-repair gate — limited to PR #282, the `staging` → `main` promotion PR, and the `hotfix/codex-review-gate-default-branch` emergency-repair branch — has been fully retired now that the repair has landed on both `main` and `staging`. The workflow's only trigger is `pull_request_target`; there is no longer a bootstrap `pull_request` path or any job-level event branching to admit one.
-
-Both branch rulesets require `codex/review-complete`; conversation resolution remains separately required so completing a Codex review never makes unresolved review threads mergeable.
-
-If the Codex review quota is unavailable, a repository administrator or maintainer may run **Codex Review Gate - Quota Waiver** from the Actions tab. Supply the open pull-request number, an audit reason, and the exact confirmation `CODEX_QUOTA_EXHAUSTED`. The workflow resolves the pull request's current head commit, records a successful waiver only for that revision, and posts an audit comment. A later push returns the new revision to pending. Do not use the waiver for ordinary review delays or to avoid actionable review feedback.
+After the updated workflow is deployed, remove `codex/review-complete` from the required status checks in both `staging-protection` and `main-protection`. Keep `Fast PR checks` required. Full release and authentication/security workflows remain required by the merge procedure whenever `docs/26-ci-risk-classification-and-agent-merge-policy.md` classifies the change as requiring them. Staging acceptance and the live or manual checks required by this runbook remain mandatory before a staging-to-main promotion.
 
 ## Branch, environment, and deployment workflow
 
@@ -91,7 +88,7 @@ Two long-lived branches drive the two live Vercel deployments referenced through
 | `staging` | Preview (a dedicated, always-on Preview deployment, not an ephemeral per-PR one) | `staging.idoc.club` | Where every change is verified before it ships: UAT, migration rehearsal, and the Claude Code Cloud live-auth audit (`docs/security/CLAUDE_LIVE_AUTH_RUNBOOK.md`). Enforced by the GitHub ruleset `staging-protection` (§ below). |
 | `main` | Production | `redesign.idoc.club` today; becomes `idoc.club`/`www.idoc.club` at the go-live domain cutover (§ "Stripe payment production readiness" below) | The real deployment. Enforced by the GitHub ruleset `main-protection` (§ below). Receives only reviewed promotions from `staging`, never a feature branch directly. |
 
-**Enforcement is a GitHub ruleset on each branch, not just this document.** Both `main-protection` and `staging-protection` (`Settings → Rules → Rulesets`) require the `Fast PR checks` and `codex/review-complete` status checks to pass before any ref update — merge or direct push alike, since a fresh commit has no recorded check runs until it has gone through a PR. Neither ruleset has any bypass actor configured, deliberately: any GitHub identity acting under the repository owner's account — including Claude Code Cloud, which performs its GitHub actions as the owner via the installed GitHub App — would otherwise inherit an owner-scoped bypass, defeating the point of the gate. Before 25 September 2026, `main` had no GitHub-enforced protection at all; `codex/review-complete` being "required" was a convention Claude and Codex followed voluntarily, not something GitHub actually blocked on. Both branches are now genuinely enforced.
+**Enforcement is a GitHub ruleset on each branch, not just this document.** Both `main-protection` and `staging-protection` (`Settings → Rules → Rulesets`) require the `Fast PR checks` and `codex/review-complete` status checks to pass before any ref update — merge or direct push alike, since a fresh commit has no recorded check runs until it has gone through a PR. `codex/review-complete` is a legacy compatibility status: after the CI-efficiency update it confirms only that an advisory Codex review was requested, not that the review finished. Remove it from both rulesets once the updated workflow is deployed; keep `Fast PR checks` required and continue to require the applicable full workflow under the risk-classification policy. Neither ruleset has any bypass actor configured, deliberately: any GitHub identity acting under the repository owner's account — including Claude Code Cloud, which performs its GitHub actions as the owner via the installed GitHub App — would otherwise inherit an owner-scoped bypass, defeating the point of the gate. Before 25 September 2026, `main` had no GitHub-enforced protection at all; `codex/review-complete` being "required" was a convention Claude and Codex followed voluntarily, not something GitHub actually blocked on. Both branches are now genuinely enforced.
 
 **Staging is deliberately near-identical to production, not a separate sandbox.** `staging.idoc.club` and `redesign.idoc.club` read/write the *same* Render PostgreSQL instance and share most of the rest of the environment-variable inventory verbatim (`AUTH_SECRET`, the MFA encryption/signing keys, `CRON_SECRET`, `RATE_LIMIT_HASH_KEY`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, and more — see §15.1 below for the full inventory and exactly which rows differ). This is deliberate: it is what makes verification on staging predictive of how a change will actually behave once promoted, and it avoids paying for a second Render Postgres instance. What structurally has to differ stays distinct even under this policy:
 
@@ -115,8 +112,8 @@ Because of this near-total sharing:
 
 1. **All ordinary feature/fix work branches off `staging`, and its PR targets `staging`.** Nothing goes to `redesign.idoc.club` without first being reachable at `staging.idoc.club`.
 2. **Verify the change on `staging.idoc.club`** — UAT, a migration rehearsal, or a Claude Code live-auth run, as the change warrants — before it goes any further.
-3. **Promote by opening a `staging` → `main` pull request once the change is verified.** This promotion PR still goes through the Codex review gate protecting `main` above; promotion is a deliberate, reviewed step, not an automatic sync. Merging it is what actually ships the change to `redesign.idoc.club`.
-4. **`main` is never a direct target for feature work.** The only exception is a genuine production emergency that cannot wait for a staging cycle — and even then, merge the same fix into `staging` immediately afterward so `staging` doesn't fall behind what's already live. **Executing this exception when the ruleset itself is the obstacle** (e.g. `codex/review-complete` is unacceptably slow during an active incident, or the CI workflow a check depends on is itself broken) means the repository owner temporarily sets the relevant ruleset's enforcement status to `Disabled` in `Settings → Rules → Rulesets`, completes the emergency push or merge, and immediately re-enables it. This is the sanctioned bypass mechanism — a deliberate, visible, one-off admin action instead of a standing bypass-list entry, because a standing entry tied to the owner's account would also cover every action Claude Code Cloud takes on the owner's behalf (see above), not just ones the owner actually decided in the moment.
+3. **Promote by opening a `staging` → `main` pull request once the change is verified.** This promotion PR reruns the fast gate; Codex feedback is advisory. Promotion is a deliberate step only after the staging revision has passed every applicable full workflow and the required staging UAT, migration rehearsal, and live-user checks. Merging it is what actually ships the change to `redesign.idoc.club`.
+4. **`main` is never a direct target for feature work.** The only exception is a genuine production emergency that cannot wait for a staging cycle — and even then, merge the same fix into `staging` immediately afterward so `staging` doesn't fall behind what's already live. **Executing this exception when the ruleset itself is the obstacle** (e.g. a required CI workflow is broken during an active incident) means the repository owner temporarily sets the relevant ruleset's enforcement status to `Disabled` in `Settings → Rules → Rulesets`, completes the emergency push or merge, and immediately re-enables it. This is the sanctioned bypass mechanism — a deliberate, visible, one-off admin action instead of a standing bypass-list entry, because a standing entry tied to the owner's account would also cover every action Claude Code Cloud takes on the owner's behalf (see above), not just ones the owner actually decided in the moment.
 5. **`git log origin/main..origin/staging` showing commits is normal**, not drift — it's the backlog of changes verified on staging and awaiting deliberate promotion, and it grows again the moment any new ordinary work lands on `staging`, including right after a clean promotion. Checking the reverse direction for an actual bypass needs `git log --no-merges origin/staging..origin/main` specifically — plain content-diffing (`git diff origin/staging origin/main`) or a raw `--is-ancestor` check on the two branch tips both give false positives here: a legitimate `staging` → `main` promotion's own merge commit exists only on `main` (never reachable from `staging`, since `staging` isn't touched by that merge), which makes both of those alternatives flag every single clean promotion as a bypass. `--no-merges` avoids this by filtering merge commits out and comparing only ordinary content commits; since `staging` only ever grows forward, the set of "`main` commits `staging` doesn't have" can only shrink or stay the same as `staging` gains more backlog afterward, never re-appear — verified directly against this repo's history immediately after a real promotion (PR #273) and again after further staging activity, both clean as expected. A non-merge commit actually showing up there means `main` has a commit `staging` never saw; treat that as the real anomaly to investigate and, if it wasn't an authorized emergency hotfix, back-merge it into `staging` right away. (This assumes promotions use a real merge commit, not a squash — the convention already in use in this repo.)
 
 Before this policy existed, work had been merged directly into both branches independently: as of 24 September 2026, 16 commits had reached `main` without ever passing through `staging` (process debt from before this policy, not something to redo), and 8 commits were verified on `staging` but never promoted (normal backlog, just overdue). The one-time reconciliation is: (a) merge those 16 main-only commits into `staging` so `staging` reflects everything already live, then (b) open the overdue `staging` → `main` promotion PR for the 8 staging-only commits so they actually ship. Once both land, the branches are aligned and the policy above governs from there.
@@ -266,216 +263,7 @@ Before approving a classification change, confirm that every field required by t
 4. Do not manually set or ask for the member's password.
 
 For an Administrator or Super Admin password-reset request, the recovery screen requires the
-account's active authenticator factor and never sends or falls back to an email OTP. If the factor
-is unavailable or missing, direct the person through approved identity-verification and support
-handling; do not enroll or replace an authenticator inside anonymous recovery. If the user retained a recovery code, they must complete password or Google primary sign-in, choose recovery at the MFA challenge, replace and prove a new authenticator, and acknowledge newly rotated recovery codes. This self-service event revokes prior sessions; support must never request a recovery code or authenticator secret. Successful reset
-revokes all persisted sessions and requires a fresh sign-in.
-
-5. If email delivery is failing, investigate provider logs and account email rather than creating a duplicate account.
-
-# 10. Member says membership is incorrectly expired
-
-1. Check valid-through date and status.
-
-2. Review recent payments and Stripe subscription/current period if Stripe-backed.
-
-3. Review manual payment records and audit history.
-
-4. Correct only after evidence identifies the intended entitlement.
-
-5. Record reason/source for any manual extension.
-
-6. Confirm the five-calendar-day grace rule was applied whether the prior term ended after a failed recurring charge or a non-recurring paid-through date. During grace the person retains full member access; after grace the account receives only payment and logout.
-
-# 11. Security incident escalation
-
-- Suspected unauthorized administrator access: revoke affected sessions/credentials and escalate immediately.
-
-- Suspected secret leakage: rotate the affected Vercel, Render PostgreSQL, application-authentication, or Stripe secret, then investigate logs and the exposure window.
-
-- Suspected cross-member data exposure: disable affected feature if necessary and treat as a privacy/security incident.
-
-- Webhook signature failures: verify endpoint/secret configuration; never bypass signature verification to restore service.
-
-- Database integrity anomaly: preserve evidence/backups before attempting broad corrective writes.
-
-# 12. Routine operational checks
-
-| **Frequency**      | **Check**                                                                                                                       |
-|--------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| Daily/regularly    | Failed Stripe webhooks, renewal failures, review-required members, application errors.                                          |
-| Weekly             | Manual payment exceptions, unresolved migration anomalies during stabilization, unusual admin actions.                          |
-| Monthly            | Active member counts versus billing/manual-payment expectations; access review for administrators.                              |
-| Quarterly          | Dependency/security updates, authorization and member-data-isolation spot-check, and Render PostgreSQL backup/recovery posture. |
-| When staff changes | Immediately remove or adjust administrative access.                                                                             |
-
-## 12.1 Vercel Pro operational controls
-
-| **Area** | **Procedure** |
-|---|---|
-| Preview access | Share protected previews only with current project reviewers; never use Preview to inspect or edit production member data. |
-| Environment variables | Enter, rotate and remove secrets only in approved Vercel project settings and target environment; never paste them in tickets, PRs, logs, screenshots or chat. |
-| Firewall/WAF | Document purpose, scope and rollback before changes, then test affected account, admin and Stripe flows. |
-| Observability/logs | Record deployment, timestamp, safe error ID and affected workflow; do not export unredacted member data or secrets. |
-| Scheduled jobs | Check prior effects before retries; escalate repeated failure, missed runs and duplicate-effect evidence. |
-
-### Account-delivery schedule
-
-Configure `CRON_SECRET` as a sensitive, server-only Vercel environment variable in Production; documentation, tickets, logs, and source control must never contain its value. Vercel Cron calls `/api/cron/account-delivery` on `*/5 * * * *` (every five minutes, UTC). A run handles at most 20 account-link records. Monitor non-sensitive delivered, retryable, dead-lettered, ineligible, and lease-lost counts; investigate repeated failures without recording member addresses, tokens, decrypted payloads, credentials, keys, exception text, or environment values. An expired or otherwise invalid queued link is not replaced by the worker; the member must make a new neutral recovery or activation request.
-
-Retry delay is `min(3,600, 30 × 2^(attempt − 1))` seconds according to the current attempt number; attempt six is retained as dead-lettered and is not claimable again. Do not manually clear a live lease. Reconciliation may reclaim an expired lease, but the stable message identifier must be preserved so a provider success followed by a database-finalization failure cannot create an uncontrolled new identity. Cron responses expose only aggregate delivered, retryable, dead-lettered, ineligible, and lease-lost counts.
-
-### Stripe reconciliation-scan schedule
-
-Vercel Cron calls `/api/cron/reconciliation-scan` on `0 7 * * *` (daily, UTC — an hour after the renewal-notice scan). It is gated by the same `CRON_SECRET` bearer header as every other Cron route. A run replaces the current findings snapshot only on success; a failure (e.g. Stripe temporarily unreachable) leaves the prior snapshot untouched and is recorded as a failed run, and the Cron route itself returns a non-2xx status so a missed or broken run is visible in Vercel's own Cron monitoring, not just on the `/admin/reconciliation` page. Investigate a run of consecutive failures the same way as any other Cron failure (§12) before assuming a specific finding is stale.
-
-### News scheduled-publish schedule
-
-Vercel Cron calls `/api/cron/news-scheduled-publish` on `*/5 * * * *` (every five minutes, UTC), gated by the same `CRON_SECRET` bearer header as every other Cron route. A run transitions every `news_articles` row with `status='scheduled'` and a `publication_date` at or before the current PostgreSQL `now()` to `status='published'`, in one transaction per article with `FOR UPDATE SKIP LOCKED`, and writes one audit row per transition with a null actor (a system action). The public site independently re-checks `publication_date<=now()` on every read regardless of this Cron's cadence, so a brief delay between an article's scheduled time and this job's next run never makes it appear early — only, at most, a few minutes later than scheduled.
-
-### Data-retention-purge schedule
-
-Vercel Cron calls `/api/cron/data-retention-purge` on `0 8 * * *` (daily, UTC — an hour after the reconciliation scan), gated by the same `CRON_SECRET` bearer header as every other Cron route. Each run permanently deletes rows from `email_otp_codes`, `mfa_challenge_transactions`, `mfa_enrollment_transactions`, `account_tokens`, `auth_sessions`, and `login_trusted_devices` once each row's own expiry is more than 30 days in the past (`lib/security/data-retention-purge.ts`). This is routine, expected data loss by design — do not treat a nonzero delete count as an anomaly requiring investigation, and do not attempt to restore purged rows from a backup (§12.2): they were already logically unauthorized well before physical deletion.
-
-## 12.2 Render PostgreSQL backup and recovery
-
-The production database runs on Render, whose **Hobby** plan includes two backup mechanisms automatically — nothing in this codebase implements or manages either of them:
-
-- **Point-in-time recovery (PITR).** Render continuously archives write-ahead log data. On the Hobby plan, this gives a **3-day recovery window** — a new database can be restored to any point within the last 3 days. (Render's Pro tier and above extend this to 7 days; upgrading does not retroactively extend an already-elapsed window, only going forward.)
-- **Logical backups.** Render also retains an exportable logical (`pg_dump`-style) backup, created and retained for **7 days**, downloadable from the Render dashboard.
-
-**What this means operationally:**
-
-- A data-corruption or destructive-write incident discovered **within 3 days** can be recovered via PITR — restore to a new Render Postgres instance at a timestamp just before the bad write, verify, then cut the application over (`POSTGRES_URL`) to the restored instance. This is a Render dashboard operation, not something scripted in this repository.
-- An incident discovered **after the 3-day window has elapsed** cannot be recovered via PITR at all — this is the single most consequential fact an operator must know about this backup posture, and is exactly why the quarterly check below exists.
-- A restore is a genuinely destructive, production-affecting operation (a new database instance, a `POSTGRES_URL` cutover, and a window of data loss between the incident and the restore point) — treat it with the same care as any other action in this category (see the top-level operating principles this document opens with), and prefer read-only investigation via a database export or replica-like inspection before deciding a restore is actually necessary.
-
-**Quarterly verification (§12's existing "Render PostgreSQL backup/recovery posture" line refers to this procedure):**
-
-1. Confirm in the Render dashboard that the production database is still on a paid plan (PITR and logical backups are **not** available on Render's free tier at all) and that PITR is showing as active with a 3-day (or better) window.
-2. Confirm a recent logical backup exists and is downloadable.
-3. This is a posture check, not a restore drill — actually restoring to a scratch/staging Render instance to prove the procedure works end-to-end is valuable but is a separate, deliberate exercise to schedule on its own, not something to perform against production as part of this routine check.
-
-### Mandatory post-restore reconciliation
-
-A point-in-time restore rolls the entire database back to an earlier moment — including every security-relevant row this application relies on being current. A restore that is not followed by this reconciliation can silently **resurrect** a session, account, or role grant that had been correctly revoked between the restore point and the incident. This is not optional cleanup; complete it before resuming production traffic against the restored database:
-
-1. **Rotate `AUTH_SECRET` immediately, using the hard-cutover procedure (§15.2), not the graceful-overlap one -- including its step to clear `AUTH_SECRET_RETIRED_KEYS` entirely.** Every session cookie is a JWT signed with this secret and is only ever honored alongside a matching, non-revoked `idoc.auth_sessions` row — but a restore can bring back a since-revoked row (its `revoked_at` un-set again) exactly as it existed at the restore point. `AUTH_SECRET` supports a graceful, non-disruptive overlap rotation for routine use (§15.2), but this specific situation calls for the opposite: clear any existing `AUTH_SECRET_RETIRED_KEYS` entries (a routine rotation's overlap window may still be active) and set a new `AUTH_SECRET` value, so every existing session JWT is invalidated regardless of what the restored database now says, closing this off unconditionally rather than depending on a manual per-row audit to catch every case.
-2. **Re-apply any account suspension, deletion, or role revocation that happened between the restore point and the incident.** Compare the restored `idoc.users.account_state`/`deleted_at`, `idoc.memberships.status`, and `idoc.application_roles.revoked_at` against the most recent pre-incident audit-log export (`/admin/exports`) or admin recollection of recent actions, for that specific window. Manually re-apply anything the restore rolled back (re-suspend, re-delete, re-revoke) before treating the restored database as authoritative.
-3. **TOTP/session encryption keys need no restore-specific action.** Key material lives in Vercel environment configuration, not the Postgres database, so a database restore cannot resurrect a key that was deliberately removed from the active key ring for being compromised — a restored `mfa_factors` row encrypted under a since-removed key simply fails to decrypt (a safe failure), it does not become usable again.
-
-# 13. Data export and reporting
-
-Administrative exports should be generated through authorized server-side reporting functions. Export only the fields necessary for the stated business purpose and avoid distributing raw migration exports or unnecessary billing identifiers.
-
-## 13.1 Stripe reconciliation report
-
-Any administrator can view `/admin/reconciliation`, a read-only report refreshed daily by the reconciliation-scan Cron job (see §12.1). It lists the current findings — subscription status conflicts, orphaned active Stripe subscriptions, repeated payment failures, and unlinked Stripe Customers (docs/04 §9) — and the timestamp/outcome of the last run, so a stopped or failing job is visible rather than silently read as "no anomalies." The page performs no writes of its own; act on a finding as described in §7's table.
-
-# 14. Decommissioning legacy IDOC WordPress membership
-
-1. Keep the archival legacy export/backup available through the agreed stabilization period.
-
-2. Confirm all post-cutover discrepancies are resolved.
-
-3. Take an archival export/backup according to IDOC retention requirements.
-
-4. Remove obsolete MemberPress/IDOC payment webhooks and scheduled jobs only after confirming the new platform is authoritative.
-
-5. The other former multisite sites will already have been retired independently; retire the IDOC WordPress site only after acceptance is complete.
-
-6. Document the final decommission date and retained archive location.
-
-## Production runtime configuration boundary
-
-Production runtime requires explicit `POSTGRES_URL`, `AUTH_SECRET`, HTTPS `BASE_URL`, `ACCOUNT_DELIVERY_KEY_VERSION`, `ACCOUNT_DELIVERY_ENCRYPTION_KEYS`, `RATE_LIMIT_HASH_KEY`, `CRON_SECRET`, `BREVO_API_KEY`, `BREVO_FROM_EMAIL`, `IDOC_ADMIN_NOTIFICATION_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_MEMBERSHIP_PRODUCT_ID`, `TURNSTILE_SECRET_KEY`, `MFA_PENDING_AUTH_SIGNING_KEY`, `MFA_TOTP_ACTIVE_KEY_ID`, `MFA_TOTP_ENCRYPTION_KEYS`, and `MFA_RECOVERY_CODE_DIGEST_KEY`. Secrets must be at least 32 characters where applicable, the Stripe membership Product ID must match Stripe's `prod_...` identifier shape, and each active key/version must resolve to material in its corresponding key ring. Never add compilation placeholders. A deployment build intentionally succeeds without these values, while each privileged runtime boundary fails closed until its real configuration exists. The former recurring/one-time Product variables are obsolete after migration `0047` deploys; retain them only for rollback until the new revision is healthy.
-
-The live privileged-MFA variables use these formats:
-
-- `MFA_PENDING_AUTH_SIGNING_KEY`: base64url-encoded key material representing at least 32 random bytes; rotate by replacing the value and expect outstanding pending-MFA continuations signed with the retired key to require a fresh primary login.
-- `MFA_TOTP_ACTIVE_KEY_ID`: the active TOTP encryption-key identifier, for example `v1`.
-- `MFA_TOTP_ENCRYPTION_KEYS`: a server-only JSON object mapping accepted key IDs to base64url-encoded **exactly 32-byte** AES-256 keys, for example `{"v1":"..."}`. Keep old key IDs present while factors encrypted under them still exist; re-encrypt/rotate factors before removing a retired key ID.
-- `MFA_RECOVERY_CODE_DIGEST_KEY`: base64url-encoded key material representing at least 32 random bytes. Rotating it invalidates outstanding recovery-code digests unless they are regenerated under the new key, so coordinate rotation with privileged-account recovery-code replacement.
-
-Store all four as sensitive server-only Vercel environment variables in every environment where privileged MFA login is expected to work. Do not expose them through `NEXT_PUBLIC_*`, logs, screenshots, tickets, or documentation values. Before production enablement, verify the active TOTP key ID exists in `MFA_TOTP_ENCRYPTION_KEYS` and perform an Administrator/Super Admin enrollment-and-login UAT pass; a missing or malformed value intentionally fails closed and can otherwise lock privileged users out.
-
-The signup/login/password-reset Turnstile challenge additionally requires `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (client-visible by design — it identifies the Turnstile widget, not a secret) alongside the server-only `TURNSTILE_SECRET_KEY` above. Without the public key the widget renders nothing and the signup submit button stays permanently disabled; without the secret key every server-side verification fails closed.
-
-`STRIPE_MEMBERSHIP_PRODUCT_ID` identifies the one IDOC Annual Membership Product against which Checkout builds recurring or non-recurring €80 Price configurations. Stripe requires different Price configurations for the two billing modes, not separate Products. The Product and both technical Price modes represent the same membership entitlement and are never shown as competing plans.
-
-The Stripe restricted key must permit Customer, Checkout Session, SetupIntent, PaymentMethod and
-Price reads/creation plus Subscription, Subscription Schedule, Invoice, Refund, reconciliation-list,
-and Billing Portal operations used by the application. Configure the complete webhook list in
-“Stripe payment production readiness” below; do not use an abbreviated subset. Unknown signed events
-are retained as processed evidence and never alter
-entitlement. A pending automatic-renewal schedule may be canceled from Billing Settings; operators
-must investigate any local pending state whose Schedule is missing or disagrees with Stripe rather
-than silently repairing ownership or billing identifiers.
-
-The five-minute account-delivery Cron also retries `stripe.customer_email_sync` jobs. It ignores
-the queued payload's identifiers and re-resolves the profile-owned Customer and current verified
-email on every leased attempt, applies bounded exponential backoff, and dead-letters after eight
-failed attempts for administrator follow-up.
-
-
-## Ordinary login trusted-device operations
-
-Set `LOGIN_DEVICE_TRUST_DIGEST_KEY` to a dedicated base64url-encoded secret of at least 32 random bytes in every runtime that serves password login. Keep it server-only and do not reuse session, password, TOTP-encryption, or recovery-code keys. Losing or rotating this single active key safely invalidates all existing ordinary-member trusted-device cookies; deploy the new key consistently before relying on newly issued trust. Individual or account-wide emergency revocation can set `idoc.login_trusted_devices.revoked_at` and an operational `revoke_reason`; revocation takes effect on the next login. Do not delete or mutate factor-bound `mfa_remembered_devices` for this purpose.
-
-## Account-security management operations
-
-Members manage password, Google sign-in, active canonical sessions, remembered ordinary login devices, privileged authenticators, and deletion at `/dashboard/security`. Each active session also shows a short, derived device/browser label (e.g. "Chrome on macOS"), captured from that session's own request at creation time -- this lets a member tell their own devices apart from an unrecognized one, which is the point of offering per-session revocation. Support should still never invent a browser, device, location, or IP description beyond what the member's own page already shows them: the session registry stores only this derived label plus authentication, activity, and absolute-expiry timestamps -- never the raw User-Agent string, and never location or IP. "Log out other sessions" intentionally preserves the server-bound current session; password change and account deletion intentionally require fresh sign-in.
-
-Administrator and Super Admin users never use ordinary remembered-login-device trust. Their security page links into the established authenticator recovery/replacement flow, which requires current TOTP or a one-time recovery code, rotates recovery codes, invalidates sessions, and requires acknowledgement before a fresh normal session. Item 8's broader notification and audit sweep remains an operational follow-up; this surface adds only mutation evidence consistent with current audit conventions.
-
-## Security-notification operations
-
-The five-minute account-delivery Cron also drains durable authentication-security notices. Each notice snapshots its recipient and event creation time, retries with the existing six-attempt exponential policy, and dead-letters after attempt six. Provider failure never reverses a password, email, factor, role, or session mutation. Operators may inspect only kind, user ownership, timestamps, attempt/lease state, dedupe identity, and categorical delivery error. Never add credential material, raw session/device identifiers, IP/location guesses, exception text, or provider responses to evidence. A dead-letter requires confirming current account ownership before an approved manual communication; never re-run the underlying security mutation merely to send email.
-
-## Public contact-form notification
-
-The public `/contact` page (`app/(marketing)/contact/`) collects a name, email, subject, and message from an anonymous visitor and relays it by email to the secretariat (`accounts@idoc.club`) via the same Brevo Transactional sender every other notification in this application uses (`lib/notifications/brevo-transactional.ts`). This is deliberately the simplest delivery shape in the application, not a member of the durable-outbox/retry-queue family described above: the message carries no account, membership, or security significance, so a failed send is not queued, retried, or dead-lettered. The Server Action (`app/(marketing)/contact/actions.ts`) synchronously attempts delivery once; on failure the visitor sees an inline error and may resubmit, with a fresh Turnstile challenge (each token is single-use). Abuse controls match the rest of the application's anonymous-form surfaces: Cloudflare Turnstile (action `contact`), the signed double-submit CSRF cookie, and the same dual email+origin rate-limit bucket (`checkRateLimit('contact_form', ...)`, `lib/security/rate-limit.ts`) other unauthenticated flows use. No new environment variables or operator action are required -- it reuses the already-documented `TURNSTILE_SECRET_KEY`/`NEXT_PUBLIC_TURNSTILE_SITE_KEY`/`BREVO_API_KEY`/`BREVO_FROM_EMAIL` values from section 15 below. Operational ownership is the secretariat inbox itself; there is no dedicated dashboard, outbox table, or Cron sweep for this path.
-
-## Security event logging (AUTH-LOG-001, AUTH-LOG-003)
-
-`lib/observability/logger.ts`'s `logWarn`/`logError` emit only names registered in
-`lib/observability/security-events.ts`'s `SECURITY_EVENT_TAXONOMY` -- an unregistered name is a
-TypeScript compile error. Every emitted line carries a server-generated correlation id (never
-client-supplied), the taxonomy's `category`, `resource`, `attribution`, and `retentionClass`; callers
-cannot override those registry-owned fields. Each event accepts only its own closed allowlist of
-categorical metadata keys and values. Unknown, free-form, nested, oversized, secret-bearing, or
-incorrectly attributed metadata is omitted, and a subject-attributed event without a positive internal
-subject ID is suppressed. The anonymous `client_error` event records occurrence and correlation only,
-never client-supplied message, stack, URL, or digest text. This deployment has no separate self-hosted
-log store; Vercel's platform retention governs actual duration. Configure the platform retention window
-to keep `retentionClass: 'security'` lines available for at least 90 days where the plan permits;
-`operational` lines may use the platform default. Never add request/provider bodies, headers, cookies,
-exception text, credentials, or other free-form client/provider content to an event schema.
-
-Security events (`lib/observability/logger.ts`) remain a distinct channel from `idoc.audit_log` (`docs/07` elsewhere, `lib/db/schema.ts`): the audit log is the actor-attributed, append-oriented record of security-sensitive state *changes*; the security-event log is operational/diagnostic and covers failures, not committed mutations.
-
-# 15. Production authentication configuration and UAT
-
-This section is the authoritative production-auth configuration inventory. The application is one Vercel-hosted Next.js deployment; its Cron route runs in that deployment and no separate authentication worker is deployed elsewhere. Put server-only values in **Vercel Project Settings → Environment Variables**. **`staging.idoc.club` is deliberately near-identical to production, not an isolated environment**: it intentionally shares `POSTGRES_URL`, `AUTH_SECRET`, the MFA encryption/signing keys, `CRON_SECRET`, `RATE_LIMIT_HASH_KEY`, and most of the rest of the inventory below verbatim with production (see "Branch, environment, and deployment workflow" above) — this is what makes staging's verification predictive of how a change will actually behave once promoted, and avoids paying for a second Render Postgres instance. The values that structurally have to differ do: `BASE_URL`/`GOOGLE_OAUTH_REDIRECT_URI` (each environment's own domain), the Turnstile keys (staging uses Cloudflare's own always-pass testing pair, scoped to the `staging` branch, because an automated Claude Code test run cannot solve a real interactive challenge), `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (must diverge at the go-live domain cutover — production needs a live key, staging/Preview always needs a test key), and `BREVO_API_KEY`/`BREVO_WEBHOOK_KEY` (kept distinct so staging's test traffic never hits real production email infrastructure). Each row below says explicitly which case it is. All instances within one environment must receive the same compatible values. Never put real values in `.env.example`, Git, documentation, issues, pull requests, chat, screenshots, build output, or runtime logs.
-
-## 15.1 Authoritative inventory
-
-“Rotate” below means an operator-coordinated deployment, never an application-generated fallback.
-
-| Variable | Requirement, consumer, and format | Rotation and environment rules |
-|---|---|---|
-| `AUTH_SECRET` | Required server-only UTF-8 text of at least 32 characters. `lib/auth/session.ts` uses it as the active HS256 JWT signing key for the canonical session cookie; it also signs OAuth browser binding and other short-lived transient authorities (pending signup/login/password-reset, Google-link fresh evidence). | Must match across instances. See the rotation procedure below: an ordinary rotation is now a graceful overlap for session cookies, not a hard cutover. The short-lived transient authorities (all ≤15 minutes) are still a hard cutover on rotation by design -- simply retrying that step is a negligible cost, and they were left out of the ring to keep this change minimal. Shared with production, not a distinct staging value. |
-| `AUTH_SECRET_RETIRED_KEYS` | Optional server-only JSON array of prior `AUTH_SECRET` values, each at least 32 characters. Unset (the default) is a single-key ring identical to before this variable existed. | Not itself rotated -- populated and drained as part of the `AUTH_SECRET` rotation procedure below. Never include the *current* `AUTH_SECRET` value in this list. |
-| `BASE_URL` | Required absolute application origin. HTTPS is mandatory in production; loopback HTTP is accepted only outside production. Used for trusted application origins and links. No trailing route; production is `https://idoc.club` when that is the deployed canonical origin. | Not secret. Must match across instances and the deployed origin. A change requires OAuth/callback and email-link review; use the actual staging origin in staging. |
-| `POSTGRES_URL` | Required server-only `postgres:`/`postgresql:` URL for the Render PostgreSQL database; production requires provider TLS configuration. Stores users, session registry, factors, challenges, devices, audit, and durable notification outbox. | Rotate the database credential using Render/Vercel coordination. It does not logically revoke auth material, but an incompatible cutover makes auth fail closed. **Deliberate exception:** `staging.idoc.club` intentionally uses this exact same value as production — see "Branch, environment, and deployment workflow" above. Do not stand up a second Render Postgres instance for staging without an explicit decision to reverse this. |
-| `MFA_TOTP_ACTIVE_KEY_ID` | Required 1–30 character key ID (`A-Z`, `a-z`, digits, `_`, `-`). Selects the encryption key for newly enrolled factors and must exist in the TOTP ring. | Not secret, but must match the ring on every instance. Change only as part of the additive procedure below. Shared with production; staging does not have an independent ring. |
-| `MFA_TOTP_ENCRYPTION_KEYS` | Required server-only JSON object from key ID to **unpadded canonical base64url**, each decoding to exactly 32 bytes (AES-256-GCM). Decrypts persisted privileged TOTP factors. | Must be compatible across instances. Additive rotation is safe; old IDs must remain until no factor references them. Removing a referenced key locks out that factor. Shared with production, not a distinct staging ring. |
-| `MFA_TOTP_COMPROMISED_KEY_IDS` / `MFA_TOTP_RETIRED_KEY_IDS` | Optional server-only JSON arrays of non-secret key IDs already present in `MFA_TOTP_ENCRYPTION_KEYS`. Unset (the default) is empty for both. A key ID may be in at most one list. `COMPROMISED` blocks the ID from new encryption and from decrypting old factors; `RETIRED` is an operator declaration that a key is fully decommissioned, cross-checked at read time against real `idoc.mfa_factors` usage (`mfaEncryptionKeyLifecycle`) rather than trusted blindly. | Declare `COMPROMISED` immediately on suspected exposure -- it takes effect on deploy, independent of the `AUTH_SECRET` compromise procedure below. Only add an ID to `RETIRED` after the same database inventory required by step 5 of the TOTP rotation procedure confirms no live (`pending`/`active`/`disabled`) factor references it; the app flags a mismatch rather than silently trusting a wrong declaration. Shared with production. |
-| `MFA_RECOVERY_CODE_DIGEST_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Keys persisted one-time recovery-code digests. | Must match across instances. Rotation intentionally invalidates every existing recovery code; old values are not consulted. Coordinate regeneration/re-enrollment and test only with a disposable staging account. Shared with production, not distinct per environment. |
-| `MFA_PENDING_AUTH_SIGNING_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Signs short-lived MFA enrollment/login/reset/replacement/step-up continuation authority. | Must match across instances. Rotation safely invalidates outstanding continuations; no old key is needed. Begin fresh flows after deployment. Shared with production. |
-| `LOGIN_DEVICE_TRUST_DIGEST_KEY` | Required server-only unpadded canonical base64url decoding to at least 32 bytes. Keys digest-only persisted ordinary-member 14-day login-device tokens. | Must match across instances. Rotation safely invalidates all remembered ordinary devices; no old key is needed. It does not bypass password+OTP recovery. Shared with production. |
-| `GOOGLE_OAUTH_CLIENT_ID` | Required when Google auth is enabled; Google-issued server configuration consumed by the canonical OIDC flow. | Must match the configured OAuth client across instances. Not secret. |
-| `GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS` / `GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION` | Required together, server-only: a JSON object from a 1-30 character version label to the corresponding Google-issued secret, plus the version label currently in use. There is no plain single-secret fallback -- a deployment that never rotates still sets both, with a single entry in `VERSIONS`. Setting `ACTIVE_VERSION` without a matching entry in `VERSIONS` fails closed. | Add the new version to `VERSIONS` before flipping `ACTIVE_VERSION` to it; keep the prior version in `VERSIONS` for rollback (revert the pointer only, never re-enter the secret) until no instance needs it. After deploying with the new version active and completing a real Google sign-in, a Super Admin opens `/admin/security` and selects **Record completed rotation**. The action requires fresh MFA, reads the active version on the server, records no secret material, and is safe to retry. `pnpm google:rotate-secret` remains the non-browser fallback. The same Google Client Secret is valid across all of that client's registered redirect URIs, so production and staging may share the same ring; only `GOOGLE_OAUTH_REDIRECT_URI` itself must differ per environment. |
+account's active authenticator factor and never sends or falls back to an email OTP. If…8221 tokens truncated…-browser fallback. The same Google Client Secret is valid across all of that client's registered redirect URIs, so production and staging may share the same ring; only `GOOGLE_OAUTH_REDIRECT_URI` itself must differ per environment. |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Required absolute HTTPS callback URI outside local development. It must be exactly `${BASE_URL}/api/auth/google/callback` for the deployed canonical origin and exactly match a Google authorized redirect URI. | Not secret; exact-match across instances and provider console. Each stable protected staging origin needs its own explicit callback. Do not use arbitrary per-PR hosts with the production client. |
 | `BREVO_API_KEY` | Required server-only Brevo-issued transactional API key (provider-defined length). Delivers login OTP and durable security/account messages. | Rotate in Brevo and Vercel; queued messages remain in PostgreSQL and retry with the new credential. It does not invalidate auth material. Use a non-production account/key or tightly controlled test subaccount in staging. |
 | `BREVO_FROM_EMAIL` | Required syntactically valid sender address for every transactional email (`accounts@idoc.club` in production). | Must be a verified sending identity in Brevo. Changing it does not invalidate auth material; confirm the new address is verified before deploying. |
