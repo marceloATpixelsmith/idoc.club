@@ -167,6 +167,10 @@ The implementation consumes `STRIPE_MEMBERSHIP_PRODUCT_ID` for both technical Pr
 
 The production Stripe webhook must deliver every event consumed by current payment/subscription handling plus any Subscription Schedule or SetupIntent events selected by the final transition design. The exact event list and restricted-key permissions must be documented from the implemented calls before production signoff.
 
+### 6.1 Checkout cancel_url routing
+
+`createMembershipCheckoutSession` (`lib/payments/checkout.ts`) sets `cancel_url` to `${baseUrl}/dashboard/membership`. Stripe bakes this value into the Checkout Session at creation time, so it cannot be changed retroactively for a session that already exists. An earlier revision used `${baseUrl}/pricing`; once that page was removed from the app, `next.config.ts` gained a non-permanent redirect from `/pricing` to `/dashboard/membership` so a member who opened Checkout before the change and then cancels still lands back in the app instead of hitting a 404. Remove that redirect entry once enough time has passed that no pre-existing Checkout Session could still be open (Stripe Checkout Sessions expire after at most 24 hours by default), and confirm no other historical `cancel_url`/`success_url` value needs the same compatibility treatment before doing so.
+
 ## 7. Required automated tests
 
 - one membership payment presentation; no second product/card/plan wording;
