@@ -1,7 +1,7 @@
 'use client';
 
 import { CalendarIcon, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -38,10 +38,15 @@ export function DateRangeFilter({
   const range = open ? draft : committed;
   const hasValue = Boolean(range.from || range.to);
 
+  // Re-sync whenever the committed from/to props change while the popover is open (e.g. browser
+  // back/forward navigating the URL out from under an open popover), not just on open -- otherwise
+  // closing would commit the now-stale draft and silently revert that navigation.
+  useEffect(() => {
+    if (open) setDraft({ from: fromDateKey(from), to: fromDateKey(to) });
+  }, [from, to, open]);
+
   function onOpenChange(next: boolean) {
-    if (next) {
-      setDraft(committed);
-    } else if (draft.from?.getTime() !== committed.from?.getTime() || draft.to?.getTime() !== committed.to?.getTime()) {
+    if (!next && (draft.from?.getTime() !== committed.from?.getTime() || draft.to?.getTime() !== committed.to?.getTime())) {
       onChange(draft.from ? toDateKey(draft.from) : undefined, draft.to ? toDateKey(draft.to) : undefined);
     }
     setOpen(next);

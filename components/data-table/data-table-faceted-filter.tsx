@@ -48,15 +48,20 @@ export function DataTableFacetedFilter<TData, TValue>({
   // it drives) is committed once when the popover closes, so picking several options doesn't refetch
   // after every click.
   const [draftValues, setDraftValues] = React.useState<string[]>(committedValues);
+  // Re-sync whenever the committed value changes while the popover is open (e.g. browser
+  // back/forward navigating the URL out from under an open popover), not just on open -- otherwise
+  // closing would commit the now-stale draft and silently revert that navigation.
+  React.useEffect(() => {
+    if (open) setDraftValues(committedValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- committedValues is a derived array; its content, not identity, should drive this.
+  }, [column, open, columnFilterValue]);
   const selectedValues = new Set(
     multiple && open ? draftValues : committedValues,
   );
 
   const onOpenChange = React.useCallback(
     (next: boolean) => {
-      if (next) {
-        setDraftValues(committedValues);
-      } else if (multiple) {
+      if (!next && multiple) {
         const changed =
           draftValues.length !== committedValues.length ||
           draftValues.some((value) => !committedValues.includes(value));
