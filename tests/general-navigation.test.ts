@@ -39,7 +39,8 @@ test('dashboard navigation uses the shared logged-out Member Login fallback', ()
 test('an already-open protected page leaves for sign-in when its shared identity revalidates to null', () => {
   assert.match(dashboardShell, /<ProtectedSessionRedirect initiallySignedIn=\{navAccess\.signedIn\} \/>/);
   assert.match(protectedSessionRedirect, /\['\/dashboard', '\/admin', '\/onboarding'\]/);
-  assert.match(protectedSessionRedirect, /mutate<PublicUser \| null>\('\/api\/user'\)/);
+  assert.match(protectedSessionRedirect, /fetch\('\/api\/user', \{ cache: 'no-store' \}\)/);
+  assert.match(protectedSessionRedirect, /mutate\('\/api\/user', user, \{ revalidate: false \}\)/);
   assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
   assert.match(protectedSessionRedirect, /window\.location\.replace\('\/sign-in'\)/);
   assert.match(protectedSessionRedirect, /addEventListener\('focus'/);

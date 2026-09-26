@@ -43,6 +43,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 jobs:
   security:
     runs-on: ubuntu-latest
@@ -82,8 +83,16 @@ jobs:
       - name: Enforce auth test catalog coverage for sensitive changes
         if: github.event_name == 'pull_request'
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: node scripts/validate-auth-change-coverage.mjs
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # github.event.pull_request.body is a snapshot from whatever push triggered this run.
+          # Editing the PR description afterward (e.g. to add the AUTH-TEST-CATALOG-NO-CHANGE
+          # rationale this check itself asks for) doesn't retrigger the workflow, so a check that
+          # trusted only that snapshot could never see a same-PR fix without another push. Fetch
+          # the live description instead so an edited PR body is honored immediately.
+          PR_BODY="$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json body --jq .body)"
+          export PR_BODY
+          node scripts/validate-auth-change-coverage.mjs
       # Remove the preconfigured Google Chrome APT source before Playwright refreshes
       # package indexes. Playwright's Chromium dependencies do not require that source,
       # and its stale mirror index can cause a false Hash Sum mismatch failure.
