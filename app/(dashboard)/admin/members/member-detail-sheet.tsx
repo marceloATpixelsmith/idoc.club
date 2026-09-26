@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -60,7 +61,8 @@ export function MemberDetailSheet({
   stripePayments: StripePayment[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(initialTab ?? '') ? (initialTab as Tab) : 'overview');
+  const requestedTab = (TABS as readonly string[]).includes(initialTab ?? '') ? (initialTab as Tab) : 'overview';
+  const [tab, setTab] = useState<Tab>(requestedTab === 'roles' && !isSuperAdmin ? 'overview' : requestedTab);
   const { profile } = selected;
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
@@ -75,6 +77,7 @@ export function MemberDetailSheet({
             {selected.entitlement ? (MEMBERSHIP_STATUS_LABELS[selected.entitlement.status] ?? selected.entitlement.status) : 'No membership on file'}
             {selected.entitlement && ` · Paid through ${selected.entitlement.validUntil}`}
             {' · '}<a className="underline underline-offset-4" href={`mailto:${encodeURIComponent(selected.email)}`}>{selected.email}</a>
+            {' · '}<Link className="underline underline-offset-4" href={`/admin/notifications?profileId=${profile.id}`}>Notification history</Link>
           </SheetDescription>
         </SheetHeader>
 
