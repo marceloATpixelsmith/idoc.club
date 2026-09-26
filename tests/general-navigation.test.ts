@@ -171,8 +171,3 @@ test('sign out retains the CSRF-protected action and clears shared user state', 
   assert.match(menu, /mutate\('\/api\/user'\)/);
   assert.match(menu, /router\.push\('\/'\)/);
 });
-
-test('navigation loading remains scoped to dashboard content and absent from public pages', () => {
-  assert.match(dashboardShell, /<NavigationLoadingProvider>\{children\}<\/NavigationLoadingProvider>/);
-  assert.doesNotMatch(marketingLayout, /NavigationLoading/);
-});

@@ -1,7 +1,6 @@
 'use client';
 
 import { Header } from '@/components/site/Header';
-import { NavigationLoadingProvider } from '@/components/navigation-loading';
 import { ProtectedSessionRedirect } from '@/components/protected-session-redirect';
 import type { MainNavAccess } from '@/lib/auth/user-menu-access';
 
@@ -21,7 +20,7 @@ export function DashboardShell({
         showAdminDashboard={navAccess.showAdminDashboard}
         signedIn={navAccess.signedIn}
       />
-      <NavigationLoadingProvider>{children}</NavigationLoadingProvider>
+      {children}
     </section>
   );
 }

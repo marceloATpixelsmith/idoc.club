@@ -164,7 +164,7 @@ test('the admin seminar list page supports search and status filtering', () => {
   const sharedTable = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
   assert.match(adminListPage, /ResourceListPage/);
   assert.match(sharedTable, /Search seminar title or location/);
-  assert.match(sharedTable, /variant: 'select'/);
+  assert.match(sharedTable, /variant: 'multiSelect'/);
 });
 
 test('the admin seminar table provides Dice UI date, sorting, pagination, and visibility controls', () => {

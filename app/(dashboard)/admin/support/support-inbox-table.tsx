@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
@@ -14,6 +14,8 @@ import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
@@ -21,6 +23,7 @@ import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, t
 type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
 
 const OPTIONAL_COLUMNS = ['member', 'subject', 'category', 'status', 'assigned', 'activity'] as const;
+const MULTI_SELECT_PARAMS = ['category', 'status', 'assigned'] as const;
 const LABELS: Record<string, string> = { activity: 'Activity', assigned: 'Assigned', category: 'Category', member: 'Member', status: 'Status', subject: 'Subject' };
 const CATEGORY_OPTIONS = SUPPORT_CATEGORIES.map((value) => ({ label: CATEGORY_LABELS[value], value }));
 const STATUS_OPTIONS = SUPPORT_STATUSES.map((value) => ({ label: STATUS_LABELS[value], value }));
@@ -28,7 +31,7 @@ function visibility(params: URLSearchParams, initial?: string[]): VisibilityStat
 function header(id: string) { return ({ column }: HeaderContext<AdminSupportRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 
 export function SupportInboxTable({ administrators, filters, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { page: number; pageSize: number; q?: string; category?: string | string[]; status?: string | string[]; assigned?: string | string[]; activityFrom?: string | string[]; activityTo?: string | string[]; filters?: string | string[]; joinOperator?: string | string[]; sort?: string | string[]; direction?: string | string[] }; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
-  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false); const [isPending, startTransition] = useTransition();
+  const pathname = usePathname(); const router = useRouter(); const searchParams = useSearchParams(); useCanonicalizeMultiSelectParams(MULTI_SELECT_PARAMS); const [search, setSearch] = useState(filters.q ?? ''); const [copyNotice, setCopyNotice] = useState(''); const suppressPersistence = useRef(false); const [isPending, startTransition] = useTransition();
   const initialVisibility = useMemo(() => visibility(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
   const activityFrom = Array.isArray(filters.activityFrom) ? filters.activityFrom[0] : filters.activityFrom;
   const activityTo = Array.isArray(filters.activityTo) ? filters.activityTo[0] : filters.activityTo;
@@ -36,9 +39,9 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
     { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, header: header('member'), meta: { label: 'Member' }, cell: ({ row }) => <div>{row.original.profile_id ? <Link className="font-medium underline" href={`/admin/members?profileId=${row.original.profile_id}`}>{row.original.member_name || 'Member record'}</Link> : row.original.member_name}<span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
     { id: 'subject', accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => { const current = `/admin/support?${searchParams}`; return <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent(current)}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link>; } },
-    { id: 'category', accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'select' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
-    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
-    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'select' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
+    { id: 'category', accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
+    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
+    { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'multiSelect' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
     { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity Date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
   ], [administrators, searchParams]);
   let initialSorting = [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
@@ -59,11 +62,11 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     return {
       activityFrom: params.get('activityFrom') ?? undefined,
       activityTo: params.get('activityTo') ?? undefined,
-      assigned: params.get('assigned') ?? undefined,
-      category: params.get('category') ?? undefined,
+      assigned: manyParam(params, 'assigned'),
+      category: manyParam(params, 'category'),
       q: params.get('q') ?? undefined,
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
+      status: manyParam(params, 'status'),
     };
   }
 
@@ -83,21 +86,25 @@ export function SupportInboxTable({ administrators, filters, initialVisibleColum
     } catch { setCopyNotice('Could not copy the selected links.'); }
   }
   const selected = table.getSelectedRowModel().rows.length;
+  const actionBarVisibility = useActionBarVisibility(selected);
   // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
   // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
   // copy, so it must include `q`: a search that matches nothing is still "no conversations match
   // this view", not "no support conversations exist at all".
-  const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo'));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const [dateResetSignal, setDateResetSignal] = useState(0);
+  const manuallyFiltered = Boolean(searchParams.get('activityFrom') || searchParams.get('activityTo')) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(searchParams.get('q') || searchParams.get('category') || searchParams.get('status') || searchParams.get('assigned'));
-  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
+  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
     <DataTableToolbar
       className="rounded-xl border bg-background p-3"
       table={table}
       isFiltered={manuallyFiltered}
-      onReset={() => update({ activityFrom: undefined, activityTo: undefined, q: undefined })}
+      pending={isPending}
+      onReset={() => { setDateResetSignal((signal) => signal + 1); update({ activityFrom: undefined, activityTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) }); }}
       leading={<>
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
-        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} to={activityTo} />
+        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => update({ activityFrom: nextFrom, activityTo: nextTo })} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={activityTo} />
       </>}
     >
       <DataTableSortList table={table} />

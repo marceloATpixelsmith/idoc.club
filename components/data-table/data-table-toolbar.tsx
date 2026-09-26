@@ -1,7 +1,7 @@
 "use client";
 
 import type { Column, Table } from "@tanstack/react-table";
-import { X } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 import * as React from "react";
 
 import { DataTableDateFilter } from "@/components/data-table/data-table-date-filter";
@@ -22,6 +22,13 @@ interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
   isFiltered?: boolean;
   /** Extra controls rendered after View, at the very end of the toolbar (e.g. a download/export icon). */
   trailing?: React.ReactNode;
+  /** Whether the surrounding table is currently applying a search/filter/sort/pagination change --
+   * the same value passed to the table's own `loading` prop. Reset's spinner and visibility follow
+   * this rather than an internal transition around `resetColumnFilters()`: that call only updates
+   * local tanstack state synchronously (the real URL/server round trip is a separate, debounced
+   * update), so a transition scoped to it alone resolves, and `isFiltered` flips false, well before
+   * the actual navigation finishes -- omit this prop where filtering has no async round trip. */
+  pending?: boolean;
 }
 
 export function DataTableToolbar<TData>({
@@ -30,6 +37,7 @@ export function DataTableToolbar<TData>({
   onReset: onResetProp,
   isFiltered: isFilteredProp,
   trailing,
+  pending,
   children,
   className,
   ...props
@@ -42,10 +50,22 @@ export function DataTableToolbar<TData>({
     [table],
   );
 
+  // Only latched when a caller actually reports async pending state -- a caller that never passes
+  // `pending` (filtering is synchronous, e.g. AdminReadOnlyTable) never sets this, so the button
+  // reverts to following `isFiltered` alone rather than getting stuck open forever: `pending` would
+  // stay `undefined` after a reset, so the effect below (keyed on `pending`) would never re-run to
+  // clear a latch that was set.
+  const [pendingReset, setPendingReset] = React.useState(false);
   const onReset = React.useCallback(() => {
+    if (pending !== undefined) setPendingReset(true);
     table.resetColumnFilters();
     onResetProp?.();
-  }, [table, onResetProp]);
+  }, [pending, table, onResetProp]);
+  React.useEffect(() => {
+    if (!pending) setPendingReset(false);
+  }, [pending]);
+  const showReset = isFiltered || (pending !== undefined && pendingReset);
+  const isResetting = pendingReset && Boolean(pending);
 
   return (
     <div
@@ -62,15 +82,17 @@ export function DataTableToolbar<TData>({
         {columns.map((column) => (
           <DataTableToolbarFilter key={column.id} column={column} />
         ))}
-        {isFiltered && (
+        {showReset && (
           <Button
             data-idoc-table-control
             aria-label="Reset filters"
+            aria-busy={isResetting}
             variant="outline"
             className="border-dashed"
+            disabled={isResetting}
             onClick={onReset}
           >
-            <X />
+            {isResetting ? <LoaderCircle className="animate-spin" /> : <X />}
             Reset
           </Button>
         )}

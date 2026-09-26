@@ -13,3 +13,16 @@ For every task that merges into `main`, investigates a difference between `stagi
 When code changes membership rules, member fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing, update the corresponding document in `docs/` in the same pull request. Keep `docs/08-product-roadmap-and-functional-requirements.md` aligned when scope, sequencing, or release gates change.
 
 Do not treat generated Word or PDF files as the source of truth.
+
+## Efficient agent operation (applies to every agent working in this repo, including Claude Code, its subagents, and Codex)
+
+Verification effort must scale with actual risk, not run at maximum thoroughness by default. This repo's own history shows the failure mode in both directions: skipping a check that later broke CI, and burning enormous time/token budget re-running full suites for changes that never needed them. Avoid the second failure mode as deliberately as the first:
+
+1. Classify risk with `docs/26-ci-risk-classification-and-agent-merge-policy.md` before deciding how much to verify, and size the check to the classification. A change docs/26 classifies as low risk gets the fast check, not the full battery "to be safe."
+2. Scope checks to what the diff actually touches. A small, single-concern fixup gets a typecheck plus the specific test file(s) covering that code — not a repeat of the full unit/integration/e2e/build suite already run for the commit it's stacked on, unless the fixup itself touches schema, auth, or another genuinely high-risk area.
+3. Never re-verify code that already passed verification and hasn't changed since. When stacking another small commit on top of an already-verified one, verify the incremental diff, not the whole history again.
+4. Do not spin up a fresh isolated environment (a clean clone or worktree, a full dependency reinstall, a full production build) for a small, low-risk change unless docs/26 actually calls for that level of check. Check directly against a working tree already known to be clean first.
+5. Never run the same verification twice — in parallel or in sequence — to double-check work a prior pass already fully covered. One thorough pass beats two redundant ones.
+6. When several fixes are already identified together (e.g., multiple review findings on one PR spotted at the same time), fix and verify them in one batch and one push, not one round-trip per finding.
+7. When waiting on a slow external process (a review bot, CI), wait for its actual completion signal instead of polling in a tight loop, and never send a duplicate request (e.g. another "please review") while one is already in flight.
+8. Report concisely. State what changed, what was checked, and the result — skip narrating routine mechanics (individual commits, individual pushes, intermediate tool calls) that carry no decision for the reader.
