@@ -178,7 +178,7 @@ export function DataTableDateFilter<TData>({
         <Button
           data-idoc-table-control
           variant="outline"
-          className="border-dashed font-normal"
+          className="h-8 border-dashed font-normal"
         >
           {hasValue ? (
             <div

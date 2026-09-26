@@ -9,6 +9,8 @@ const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/supp
 const dateRangeFilter = readFileSync(new URL('../components/admin/date-range-filter.tsx', import.meta.url), 'utf8');
 const facetedFilter = readFileSync(new URL('../components/data-table/data-table-faceted-filter.tsx', import.meta.url), 'utf8');
 const viewOptions = readFileSync(new URL('../components/data-table/data-table-view-options.tsx', import.meta.url), 'utf8');
+const sortList = readFileSync(new URL('../components/data-table/data-table-sort-list.tsx', import.meta.url), 'utf8');
+const dataTableLib = readFileSync(new URL('../lib/data-table.ts', import.meta.url), 'utf8');
 
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
@@ -135,4 +137,25 @@ test('useDataTable\'s notify cancels any pending debounced snapshot before dispa
   const debouncedCallback = readFileSync(new URL('../hooks/use-debounced-callback.ts', import.meta.url), 'utf8');
   assert.match(debouncedCallback, /return React\.useMemo\(\(\) => Object\.assign\(setValue, \{ cancel \}\), \[setValue, cancel\]\);/);
   assert.match(dataTableHook, /if \(immediate\) \{[\s\S]*?debouncedNotify\.cancel\(\);\s*\n\s*onLiveStateChange\?\.\(state\);\s*\n\s*\} else debouncedNotify\(state\);/);
+});
+
+test('getColumnPinningStyle no longer forces `background: var(--background)` inline on every cell regardless of pinning -- an inline style always wins over CSS classes, so this previously overrode the header row\'s --surface-raised band and any body row\'s hover/selected highlight on every table, pinned or not; only a pinned column (which needs an opaque backdrop for the content scrolling under it) still gets one', () => {
+  assert.doesNotMatch(dataTableLib, /background: isPinned \? "var\(--background\)" : "var\(--background\)"/);
+  assert.match(dataTableLib, /background: isPinned \? "var\(--background\)" : undefined,/);
+});
+
+test('View popover, faceted-filter, date-range-filter, and sort-list toolbar buttons are all h-8, matching the toolbar search Input\'s own h-8 -- previously only the View button set an explicit height, leaving every other outline-variant trigger at the Button component\'s h-9 default and visibly taller than the search box beside it', () => {
+  assert.match(facetedFilter, /className="h-8 border-dashed font-normal"/);
+  assert.match(dateRangeFilter, /className="h-8 border-dashed font-normal"/);
+  assert.match(sortList, /className="h-8 font-normal"/);
+});
+
+test('the toolbar Reset control is icon-only (just the X/spinner, no "Reset" label) at icon-sm size, so it fits on the same line as the filter pills instead of wrapping', () => {
+  assert.match(toolbar, /size="icon-sm"/);
+  assert.doesNotMatch(toolbar, /isResetting \? <LoaderCircle className="animate-spin" \/> : <X \/>\}\s*\n\s*Reset\s*\n/);
+  assert.match(toolbar, /\{isResetting \? <LoaderCircle className="animate-spin" \/> : <X \/>\}\s*\n\s*<\/Button>/);
+});
+
+test('the View popover always lists currently-visible (checked) columns above hidden (unchecked) ones, since the server-driven column list otherwise scatters a column a user just unchecked into the middle of a long list instead of grouping it with the other hidden columns at the bottom', () => {
+  assert.match(viewOptions, /\.sort\(\(a, b\) => Number\(b\.getIsVisible\(\)\) - Number\(a\.getIsVisible\(\)\)\);/);
 });

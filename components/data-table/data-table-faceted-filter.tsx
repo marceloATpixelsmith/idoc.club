@@ -120,7 +120,7 @@ export function DataTableFacetedFilter<TData, TValue>({
         <Button
           data-idoc-table-control
           variant="outline"
-          className="border-dashed font-normal"
+          className="h-8 border-dashed font-normal"
         >
           {selectedValues?.size > 0 ? (
             <div

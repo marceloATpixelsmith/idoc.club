@@ -175,7 +175,7 @@ export function DataTableSortList<TData>({
           <Button
             data-idoc-table-control
             variant="outline"
-            className="font-normal"
+            className="h-8 font-normal"
             onKeyDown={onTriggerKeyDown}
             disabled={disabled}
           >

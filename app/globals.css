@@ -279,8 +279,14 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 }
 
 /* Match the table header row to the toolbar's filter/sort/view button surface, so the header
- * reads as a distinct band rather than blending into the row background below it. */
-[data-idoc-table-root] [data-slot='table-header'] {
+ * reads as a distinct band rather than blending into the row background below it. Every sortable
+ * column's header renders a Radix dropdown trigger, which always carries an aria-expanded
+ * attribute (true or false) -- TableRow's own `has-aria-expanded:bg-muted/50` therefore matches
+ * unconditionally on header rows (not just while a menu is actually open) and, since it sets an
+ * explicit background directly on the <tr>, silently wins over the <thead>'s background below.
+ * The extra selector here targets that <tr> directly with higher specificity so it wins instead. */
+[data-idoc-table-root] [data-slot='table-header'],
+[data-idoc-table-root] [data-slot='table-header'] [data-slot='table-row'] {
   background: var(--surface-raised);
 }
 

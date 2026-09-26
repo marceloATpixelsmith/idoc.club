@@ -212,7 +212,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
           <DateRangeFilter from={expiresFrom} label="Expires" onChange={(from, to) => { setExpiresFrom(from); setExpiresTo(to); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { expiresFrom: from, expiresTo: to }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={expiresTo} />
         </>}
-        trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
+        trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon-sm" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
       >
         <DataTableSortList table={table} />
       </DataTableToolbar>
