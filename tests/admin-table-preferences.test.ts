@@ -26,7 +26,7 @@ test('only validated durable state is accepted for each supported table', () => 
 });
 
 test('database preferences are always the source of truth for filters/sort/columns/pagination -- there is no URL state to take precedence over, and only profileId is read from the URL', () => {
-  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string \}>/);
+  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string; tab\?: string \}>/);
   assert.match(membershipPage, /const savedPreferences = await getTablePreferences\('memberships'\);/);
   assert.doesNotMatch(membershipPage, /hasUrlState/);
   assert.doesNotMatch(membershipPage, /redirect\(/);

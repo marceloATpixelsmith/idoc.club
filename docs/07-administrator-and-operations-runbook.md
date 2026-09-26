@@ -25,12 +25,20 @@ cells with an apostrophe. Administrators must narrow an over-limit export.
 default range is the first UTC day of the month eleven months ago through today. Complimentary
 entries are not revenue; results remain grouped by currency.
 
-The selected-member panel provides Payment History, Record Manual Payment, Extend Expiration Date,
-Edit Member Information, Change Membership Type, Email Member, and protected member-centric Seminar
-History. Payment History is a newest-first, member-scoped safe projection of the persisted ledger.
-Seminar History is re-authorized for an administrator and scoped to the server-resolved member before
-reading registration records. Email Member is only a `mailto:` link to the current canonical account
-address.
+Selecting a member (`?profileId=`, the one query param this app still uses for a short-lived,
+single-step selection) opens a tabbed right-side Sheet rather than navigating to a separate page or
+jumping to an anchored section: Overview (seminar and payment history, read-only), Edit Info,
+Membership (extend expiration, correct entitlement, suspend/reinstate), Payment, Account
+(suspend/reinstate sign-in), Roles (Super Admin only: application roles plus the incident-response
+Force Revoke), and Audit Trail. An optional `&tab=` param opens a specific tab directly -- e.g. the
+roster's Payment action link opens straight to the Payment tab. Payment History (Overview tab) is a
+newest-first, member-scoped safe projection of the persisted ledger. Seminar History is re-authorized
+for an administrator and scoped to the server-resolved member before reading registration records.
+The Payment tab is also where a manual payment is recorded and where refundable Stripe payments are
+listed for refund -- there is no separate `/admin/payments` destination or navigation entry for this
+anymore; that route now only redirects into this Sheet's Payment tab (see docs/26 for auth-risk
+handling of this route change). Email Member (in the Sheet header) is only a `mailto:` link to the
+current canonical account address.
 
 Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
 bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action
@@ -188,7 +196,7 @@ This runbook defines normal administrative actions, exception handling and escal
 
 1. Open the existing member record.
 
-2. Select Record payment.
+2. Open the Payment tab.
 
 3. Choose payment source.
 
