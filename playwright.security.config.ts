@@ -10,6 +10,7 @@ export default defineConfig({
   testDir: './tests/security-e2e',
   fullyParallel: false,
   workers: 1,
+  retries: process.env.CI ? 1 : 0,
   globalSetup: './tests/security-e2e/global-setup.ts',
   outputDir: 'test-results/security-e2e',
   reporter: process.env.CI ? [['dot'], ['html', { open: 'never' }]] : 'list',

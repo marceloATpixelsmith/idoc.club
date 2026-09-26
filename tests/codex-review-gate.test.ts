@@ -20,52 +20,29 @@ test('the quota-waiver bootstrap (which matched any past quota-exhaustion commen
   assert.doesNotMatch(workflow, /Quota waiver: default-branch gate repair/);
 });
 
-test('Codex gate proactively asks Codex to review each revision instead of only ever passively waiting on an assumed auto-trigger', () => {
-  assert.match(workflow, /issues: write/);
-  assert.match(workflow, /name: Ask Codex to review this exact revision/);
+test('Codex review requests are event-driven and never poll for completion', () => {
+  assert.match(workflow, /pull_request_target:[\s\S]*pull_request_review:[\s\S]*issue_comment:/);
+  assert.match(workflow, /name: Set this revision pending and request review/);
   assert.match(workflow, /--arg body "@codex review"/);
-  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" \\\n\s+--data-binary @review-request\.json/);
+  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" --data-binary @review-request\.json/);
+  assert.match(workflow, /timeout-minutes: 5/);
+  assert.doesNotMatch(workflow, /MAX_WAIT_SECONDS|POLL_SECONDS|deadline=|while [(]/);
 });
 
-test('the self-nudge step has no leftover event-branching guard now that pull_request_target is the workflow\'s only trigger', () => {
-  assert.match(workflow, /name: Ask Codex to review this exact revision\n\s*run: \|/);
-  assert.doesNotMatch(workflow, /if: github\.event_name == 'pull_request_target'/);
+test('Codex advisory success is published only after GitHub accepts the review request', () => {
+  const requestIndex = workflow.indexOf('issues/${PR_NUMBER}/comments" --data-binary @review-request.json');
+  const successIndex = workflow.indexOf('--arg state success --arg context "codex/review-complete"');
+  assert.ok(requestIndex >= 0);
+  assert.ok(successIndex > requestIndex);
+  assert.ok(workflow.includes("Codex review requested (advisory); CI gates are authoritative"));
 });
 
-test('Codex gate stays visibly in progress while waiting for the current revision', () => {
-  assert.match(workflow, /name: Codex review progress/);
-  assert.match(workflow, /MAX_WAIT_SECONDS: "1800"/);
-  assert.match(workflow, /POLL_SECONDS: "15"/);
-  assert.match(workflow, /deadline=\$\(\( \$\(date \+%s\) \+ MAX_WAIT_SECONDS \)\)/);
-  assert.match(workflow, /while \(\( \$\(date \+%s\) < deadline \)\)/);
-  assert.match(workflow, /--arg state "pending"/);
-  assert.match(workflow, /--arg context "codex\/review-complete"/);
-});
-
-test('Codex gate accepts both formal reviews and no-findings comments only for the current head', () => {
-  assert.match(workflow, /pulls\/\$\{PR_NUMBER\}\/reviews\?per_page=100/);
-  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments\?per_page=100/);
+test('Codex review status updates require a connector review of the current PR head', () => {
+  assert.match(workflow, /ACTOR_LOGIN/);
   assert.match(workflow, /chatgpt-codex-connector/);
-  assert.match(workflow, /chatgpt-codex-connector\[bot\]/);
-  assert.match(workflow, /select\(\.commit_id == \$head\)/);
-  assert.match(workflow, /find any major issues/);
-  assert.match(workflow, /Reviewed commit/);
-  assert.match(workflow, /\(\.reviewed_sha \| length\) >= 10/);
-  assert.match(workflow, /startswith\(\$comment\.reviewed_sha \| ascii_downcase\)/);
-});
-
-test('Codex gate retries API failures, paginates, propagates fetch errors, and finalizes visibly', () => {
-  assert.match(workflow, /--connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors/);
-  assert.match(workflow, /trap finalize_error ERR/);
-  assert.match(workflow, /if ! reviews="\$\(api_get/);
-  assert.match(workflow, /if ! comments="\$\(api_get/);
-  assert.match(workflow, /page=\$\{page\}/);
-  assert.match(workflow, /count < 100/);
-  assert.match(workflow, /Codex gate error; see Actions log/);
-});
-
-test('Codex gate has a bounded visible failure instead of an indefinite pending state', () => {
-  assert.match(workflow, /Codex review not detected within 30 minutes/);
-  assert.match(workflow, /post_status "failure"/);
-  assert.match(workflow, /exit 1/);
+  assert.match(workflow, /pulls\/\$\{PR_NUMBER\}/);
+  assert.match(workflow, /CURRENT_SHA/);
+  assert.match(workflow, /REVIEWED_SHA/);
+  assert.match(workflow, /No Codex review for the current PR revision was found/);
+  assert.ok(workflow.includes("Codex review received (advisory); CI gates are authoritative"));
 });

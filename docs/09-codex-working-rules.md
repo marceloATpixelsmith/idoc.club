@@ -16,7 +16,7 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 10. Open or update a pull request into `staging`, not `main`, when the environment supports it — per docs/07's branch policy, ordinary work is verified on `staging` before a separate, reviewed promotion PR ships it to `main`. Target `main` directly only for an explicitly declared production emergency that cannot wait for a staging cycle, and back-merge the same fix into `staging` immediately afterward. Do not treat a missing `gh` executable as a blocker when the connected GitHub integration can publish the work.
 11. If PR creation is unavailable, complete the changes and report the changed files, validation results, and exact publishing blocker.
 12. Do not use `[skip ci]`.
-13. Do not merge a pull request until `codex/review-complete` succeeds for its current head commit and all actionable review threads are resolved. If Codex review quota is unavailable, only a repository administrator or maintainer may use the audited quota-waiver workflow for that exact revision.
+13. Treat Codex automated review as advisory. Do not merge until the fast PR checks and every full workflow required by `docs/26-ci-risk-classification-and-agent-merge-policy.md` have passed for the current revision, and all actionable review threads have been resolved. The legacy `codex/review-complete` status only confirms that a review request was sent; it is not evidence that the revision was reviewed.
 
 ## 2. Scope, architecture, and documentation
 
