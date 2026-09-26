@@ -41,12 +41,12 @@ export function getColumnPinningStyle<TData>({
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
     position: isPinned ? "sticky" : "relative",
-    // A pinned column needs an opaque background so scrolled-under content doesn't show through
-    // it; an unpinned cell must NOT get one, since an inline style always wins over the row/header
-    // CSS classes that are supposed to color it (the header's --surface-raised band, a hovered or
-    // selected body row's highlight) -- this previously set `var(--background)` unconditionally,
-    // silently overriding those on every cell in every table regardless of pinning.
-    background: isPinned ? "var(--background)" : undefined,
+    // A pinned column still needs an opaque backdrop so scrolled-under content can't show through
+    // it, but that backdrop must track context (the header's --surface-raised band, a hovered or
+    // selected body row's own highlight) rather than one flat, unchanging color -- and an inline
+    // style can never do that, since it always wins over any CSS class or :hover/[data-state]
+    // selector regardless of specificity. The actual opaque background for a pinned cell is set in
+    // app/globals.css via the [data-pinned] attribute this style is paired with, not here.
     // Same reasoning as background: forcing every column to its (150px-default) getSize() is what
     // kept every admin table column a rigid fixed-width box instead of shrinking to fit its actual
     // data. A pinned column still needs a real width (getStart/getAfter's sticky-offset math for
