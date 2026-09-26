@@ -72,22 +72,22 @@ test('the Support tab stays highlighted on its own subpages, only My Membership 
   await sql.end();
 });
 
-test('a not-yet-entitled member is sent straight to the pricing page, no intermediate paywall screen', async ({ browser }) => {
+test('a not-yet-entitled member sees payment directly on My Membership, with no separate pricing page', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/expired.json' });
   const page = await context.newPage();
   await page.goto('/dashboard');
-  await expect(page).toHaveURL(/\/pricing$/);
-  await expect(page.getByRole('heading', { name: 'IDOC Membership' })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
+  await expect(page.getByRole('heading', { name: 'My Membership' })).toBeVisible();
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
-  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
   // Regression: dashboard/support/page.tsx's listOwnConversations() -> requireAccountAccess('member')
   // throws AuthorizationError for a non-entitled member; left uncaught, that crashed into Next.js's
   // generic error boundary instead of redirecting, unlike profile/security which proactively check
   // entitlement themselves before rendering (AUTH-AUTHZ-010).
   await page.goto('/dashboard/support');
-  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
   await page.goto('/seminars');
   await expect(page).toHaveURL(/\/seminars$/);
   await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();

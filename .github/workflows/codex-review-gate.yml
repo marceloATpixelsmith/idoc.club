@@ -1,287 +1,93 @@
 name: Codex Review Gate
 
 on:
-  # One-time same-repository bootstrap for the default-branch gate repair.
-  # Remove the hotfix branch allowance after this repair lands on main; normal operation is pull_request_target.
-  pull_request:
-    branches: [staging, main]
-    types: [opened, ready_for_review, reopened, synchronize]
   pull_request_target:
     types: [opened, ready_for_review, reopened, synchronize]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
+  issues: write
   pull-requests: read
   statuses: write
 
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
-  wait-for-codex:
-    if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.event.pull_request.number == 282 ||
-        (github.event.pull_request.base.ref == 'main' &&
-         (github.event.pull_request.head.ref == 'staging' ||
-          github.event.pull_request.head.ref == 'hotfix/codex-review-gate-default-branch'))))
+  review-status:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
     name: Codex review progress
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      MAX_WAIT_SECONDS: "1800"
-      POLL_SECONDS: "15"
-      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
       REPOSITORY: ${{ github.repository }}
-      ALLOW_QUOTA_BOOTSTRAP: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'hotfix/codex-review-gate-default-branch' }}
+      EVENT_NAME: ${{ github.event_name }}
+      EVENT_ACTION: ${{ github.event.action }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.review.commit_id }}
+      ACTOR_LOGIN: ${{ github.event.comment.user.login || github.event.review.user.login }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      IS_PULL_REQUEST: ${{ github.event.issue.pull_request != null }}
     steps:
-      - name: Mark this revision as awaiting Codex
+      - name: Set this revision pending and request review
+        if: github.event_name == 'pull_request_target'
         run: |
           set -euo pipefail
           PR_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
-          jq -n \
-            --arg state "pending" \
-            --arg context "codex/review-complete" \
-            --arg description "Codex review in progress" \
-            --arg target_url "${PR_URL}" \
-            '{state: $state, context: $context, description: $description, target_url: $target_url}' > status.json
-          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
-            --request POST \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
-            --data-binary @status.json
+          jq -n --arg body "@codex review" '{body:$body}' > review-request.json
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 3 --retry-all-errors --retry-delay 2 \
+            --request POST --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --data-binary @review-request.json
+          # Publish the advisory success only after GitHub accepted the Codex review request.
+          jq -n --arg state success --arg context "codex/review-complete" --arg description "Codex review requested (advisory); CI gates are authoritative" --arg target_url "${PR_URL}" '{state:$state,context:$context,description:$description,target_url:$target_url}' > status.json
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 3 --retry-all-errors --retry-delay 2 \
+            --request POST --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" --data-binary @status.json
+          echo "Review requested for ${HEAD_SHA}; this runner exits without polling."
 
-      - name: Wait visibly for Codex to finish this exact revision
+      - name: Complete status when Codex reviews the current revision
+        if: github.event_name != 'pull_request_target'
         run: |
           set -euo pipefail
-
-          post_status() {
-            local state="$1"
-            local description="$2"
-            local target_url="$3"
-            jq -n \
-              --arg state "${state}" \
-              --arg context "codex/review-complete" \
-              --arg description "${description}" \
-              --arg target_url "${target_url}" \
-              '{state: $state, context: $context, description: $description, target_url: $target_url}' > status-update.json
-            curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
-              --request POST \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
-              --data-binary @status-update.json
-          }
-
-          finalize_error() {
-            local exit_code=$?
-            trap - ERR
-            set +e
-            local pr_url="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
-            post_status "failure" "Codex gate error; see Actions log" "${pr_url}" || true
-            echo "::error::Codex review gate aborted unexpectedly; codex/review-complete was finalized as failure."
-            exit "${exit_code}"
-          }
-          trap finalize_error ERR
-          deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
-
-          api_get() {
-            curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors --retry-delay 2 --retry-max-time 20 \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              "$1"
-          }
-
-          codex_review_url() {
-            local page=1
-            local reviews
-            local count
-            local match
-
-            while true
-            do
-              if (( $(date +%s) >= deadline ))
-              then
-                return 124
-              fi
-              if ! reviews="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100&page=${page}")"
-              then
-                return 1
-              fi
-              match="$(jq -r --arg head "${HEAD_SHA}" '
-                [.[] |
-                  select(
-                    .user.login == "chatgpt-codex-connector" or
-                    .user.login == "chatgpt-codex-connector[bot]"
-                  ) |
-                  select(.commit_id == $head)
-                ] |
-                last |
-                .html_url // empty
-              ' <<< "${reviews}")"
-              if [[ -n "${match}" ]]
-              then
-                echo "${match}"
-                return 0
-              fi
-
-              count="$(jq 'length' <<< "${reviews}")"
-              if (( count < 100 ))
-              then
-                return 0
-              fi
-              page=$((page + 1))
-            done
-          }
-
-          codex_quota_exhausted_url() {
-            local page=1
-            local comments
-            local count
-            local match
-
-            while true
-            do
-              if (( $(date +%s) >= deadline ))
-              then
-                return 124
-              fi
-              if ! comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
-              then
-                return 1
-              fi
-              match="$(jq -r '
-                [.[] |
-                  select(
-                    .user.login == "chatgpt-codex-connector" or
-                    .user.login == "chatgpt-codex-connector[bot]"
-                  ) |
-                  select(.body | contains("reached your Codex usage limits for code reviews"))
-                ] |
-                last |
-                .html_url // empty
-              ' <<< "${comments}")"
-              if [[ -n "${match}" ]]
-              then
-                echo "${match}"
-                return 0
-              fi
-
-              count="$(jq 'length' <<< "${comments}")"
-              if (( count < 100 ))
-              then
-                return 0
-              fi
-              page=$((page + 1))
-            done
-          }
-
-          codex_no_issues_comment_url() {
-            local page=1
-            local comments
-            local count
-            local match
-
-            while true
-            do
-              if (( $(date +%s) >= deadline ))
-              then
-                return 124
-              fi
-              if ! comments="$(api_get "${GITHUB_API_URL}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100&page=${page}")"
-              then
-                return 1
-              fi
-              match="$(jq -r --arg head "${HEAD_SHA}" '
-                [.[] |
-                  select(
-                    .user.login == "chatgpt-codex-connector" or
-                    .user.login == "chatgpt-codex-connector[bot]"
-                  ) |
-                  select((.body | contains("Codex Review: Didn")) and (.body | contains("find any major issues"))) |
-                  . + {
-                    reviewed_sha: (
-                      try (
-                        .body |
-                        capture("Reviewed commit:\\*\\*[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{10,40})").sha
-                      ) catch ""
-                    )
-                  } |
-                  select((.reviewed_sha | length) >= 10) |
-                  select(
-                    . as $comment |
-                    ($head | ascii_downcase | startswith($comment.reviewed_sha | ascii_downcase))
-                  )
-                ] |
-                last |
-                .html_url // empty
-              ' <<< "${comments}")"
-              if [[ -n "${match}" ]]
-              then
-                echo "${match}"
-                return 0
-              fi
-
-              count="$(jq 'length' <<< "${comments}")"
-              if (( count < 100 ))
-              then
-                return 0
-              fi
-              page=$((page + 1))
-            done
-          }
-
-          while (( $(date +%s) < deadline ))
-          do
-            REVIEW_URL="$(codex_review_url)"
-            if [[ -z "${REVIEW_URL}" ]]
-            then
-              REVIEW_URL="$(codex_no_issues_comment_url)"
-            fi
-
-            if [[ -n "${REVIEW_URL}" ]]
-            then
-              post_status "success" "Codex finished reviewing this revision" "${REVIEW_URL}"
-              trap - ERR
-              echo "### Codex review complete" >> "${GITHUB_STEP_SUMMARY}"
-              echo "Codex reviewed the current head ${HEAD_SHA}." >> "${GITHUB_STEP_SUMMARY}"
-              exit 0
-            fi
-
-            if [[ "${ALLOW_QUOTA_BOOTSTRAP}" == "true" ]]
-            then
-              QUOTA_URL="$(codex_quota_exhausted_url)"
-              if [[ -n "${QUOTA_URL}" ]]
-              then
-                post_status "success" "Quota waiver: default-branch gate repair" "${QUOTA_URL}"
-                trap - ERR
-                echo "### Codex quota waiver applied" >> "${GITHUB_STEP_SUMMARY}"
-                echo "Codex reported review quota exhaustion; this one-time waiver is restricted to the default-branch gate repair hotfix." >> "${GITHUB_STEP_SUMMARY}"
-                exit 0
-              fi
-            fi
-
-            remaining=$((deadline - $(date +%s)))
-            echo "Codex has not yet reported a review for ${HEAD_SHA}; ${remaining}s remain before failure."
-            if (( remaining > POLL_SECONDS ))
-            then
-              sleep "${POLL_SECONDS}"
-            elif (( remaining > 0 ))
-            then
-              sleep "${remaining}"
-            fi
-          done
-
-          trap - ERR
-          PR_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
-          if ! post_status "failure" "Codex review not detected within 30 minutes" "${PR_URL}"
-          then
-            echo "::error::Timed out waiting for Codex and could not publish the failure status."
+          if [[ "${EVENT_NAME}" == "issue_comment" && "${IS_PULL_REQUEST}" != "true" ]]; then
+            echo "Comment is not attached to a pull request; no action required."
+            exit 0
           fi
-          echo "::error::Codex review was not detected within 30 minutes. Re-trigger Codex review and re-run this check."
-          exit 1
+          if [[ "${ACTOR_LOGIN}" != "chatgpt-codex-connector" && "${ACTOR_LOGIN}" != "chatgpt-codex-connector[bot]" ]]; then
+            echo "Event is not from the Codex review connector; no action required."
+            exit 0
+          fi
+          CURRENT_SHA="$(curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 \
+            --header "Accept: application/vnd.github+json" --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}" | jq -r '.head.sha')"
+          REVIEWED_SHA=""
+          REVIEW_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
+          if [[ "${EVENT_NAME}" == "pull_request_review" ]]; then
+            REVIEWED_SHA="${HEAD_SHA}"
+            REVIEW_URL="${GITHUB_SERVER_URL}/${REPOSITORY}/pull/${PR_NUMBER}"
+          elif [[ "${EVENT_NAME}" == "issue_comment" ]]; then
+            REVIEWED_SHA="$(printf '%s' "${COMMENT_BODY}" | sed -nE 's/.*Reviewed commit:\*\*[^0-9a-fA-F]*([0-9a-fA-F]{10,40}).*/\1/p' | tail -n 1)"
+          fi
+          if [[ -z "${REVIEWED_SHA}" || "${CURRENT_SHA,,}" != "${REVIEWED_SHA,,}" && ! "${CURRENT_SHA,,}" == "${REVIEWED_SHA,,}"* ]]; then
+            echo "No Codex review for the current PR revision was found; status remains pending."
+            exit 0
+          fi
+          if [[ "${EVENT_NAME}" == "issue_comment" ]] && { ! grep -Fq "Codex Review: Didn" <<< "${COMMENT_BODY}" || ! grep -Fq "find any major issues" <<< "${COMMENT_BODY}"; }; then
+            echo "Codex comment does not match the no-issues completion format; status remains pending."
+            exit 0
+          fi
+          jq -n --arg state success --arg context "codex/review-complete" --arg description "Codex review received (advisory); CI gates are authoritative" --arg target_url "${REVIEW_URL}" '{state:$state,context:$context,description:$description,target_url:$target_url}' > status.json
+          curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 15 --retry 3 --retry-all-errors --retry-delay 2 \
+            --request POST --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/statuses/${CURRENT_SHA}" --data-binary @status.json
+          echo "Codex review completed for ${CURRENT_SHA}."

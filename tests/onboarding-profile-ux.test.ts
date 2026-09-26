@@ -80,7 +80,7 @@ test('onboarding is rendered on My Membership and advances directly to payment',
   const onboardingRoute = await readFile('app/(dashboard)/onboarding/page.tsx', 'utf8');
   assert.match(dashboardPage, /<OnboardingWizard/);
   assert.match(onboardingRoute, /redirect\(`\/dashboard\$\{query\}`\)/);
-  assert.match(onboardingAction, /redirect\('\/pricing'\)/);
+  assert.match(onboardingAction, /redirect\('\/dashboard\/membership'\)/);
   assert.match(source, /Continue to payment/);
 });
 

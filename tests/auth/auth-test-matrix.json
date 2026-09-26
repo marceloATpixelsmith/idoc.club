@@ -997,6 +997,7 @@
         "tests": [
           "tests/session-registry-adversarial.integration.ts",
           "tests/security-e2e/session-replay.spec.ts",
+          "tests/security-e2e/auth-boundaries.spec.ts",
           "tests/session-token-boundaries.test.ts"
         ],
         "rationale": ""
@@ -1013,13 +1014,15 @@
         "steps": [
           "Capture pre-login and post-login session state.",
           "Verify session rotation/authority transition.",
-          "Attempt safe replay of stale/revoked/tampered session material only on disposable accounts."
+          "Attempt safe replay of stale/revoked/tampered session material only on disposable accounts.",
+          "For protected page routing, explicitly verify /dashboard, /admin, and /onboarding (plus representative descendants where applicable) redirect an unauthenticated or server-invalid session to /sign-in; separately verify a genuinely authenticated non-admin user still receives the configured authorization-denial behavior for /admin.",
+          "With an authenticated protected dashboard already open, invalidate that session server-side, then return focus to the browser without clicking a dashboard control or refreshing; verify the stale protected page immediately leaves for /sign-in."
         ],
         "pass": [
-          "Authentication does not preserve attacker-controlled pre-auth authority; stale/revoked/tampered sessions are rejected by protected resources with a clean redirect/denial (307 to /sign-in for a page, null/401/403 for an API) -- not merely 'access not granted', since an uncaught server error also fails to grant access while leaving the member on a broken generic error page instead of a path back to signing in."
+          "Authentication does not preserve attacker-controlled pre-auth authority; stale/revoked/tampered sessions are rejected by protected resources with a clean redirect/denial (307 to /sign-in for unauthenticated /dashboard, /admin, and /onboarding page access; null/401/403 for an API). An already-open protected page whose session later becomes invalid automatically leaves for /sign-in when the browser resumes/focuses and identity revalidation returns null, without requiring a click or manual refresh. An authenticated but non-admin account may still receive the deliberate branded 404 for /admin. An uncaught server error or a 404 caused solely by an expired/missing session is a failure."
         ],
         "fail": [
-          "A stale, revoked, or tampered session grants authenticated authority, OR its rejection surfaces as an uncaught error/generic error boundary rather than a clean redirect/denial."
+          "A stale, revoked, or tampered session grants authenticated authority, OR its rejection surfaces as an uncaught error/generic error boundary rather than a clean redirect/denial, OR an already-open protected page remains visible after session-loss revalidation (for example, only swapping to logged-out navigation until the user clicks or refreshes)."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."

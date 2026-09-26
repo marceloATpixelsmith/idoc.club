@@ -8,6 +8,12 @@ const organizationLayout = readFileSync('app/(dashboard)/admin/organization/layo
 const securityLayout = readFileSync('app/(dashboard)/admin/security/layout.tsx', 'utf8');
 const supportDefaultsLayout = readFileSync('app/(dashboard)/admin/support/defaults/layout.tsx', 'utf8');
 
+test('admin layout authenticates with the minimal account-state projection before rendering', () => {
+  assert.match(adminLayout, /getAccountStateUser/);
+  assert.match(adminLayout, /if \(!\(await getAccountStateUser\(\)\)\) redirect\('\/sign-in'\)/);
+  assert.doesNotMatch(adminLayout, /\bgetUser\b/);
+});
+
 test('admin dashboard uses branded responsive navigation after server authorization', () => {
   assert.match(adminLayout, /requireAccountAccess\('administration'\)/);
   assert.match(adminLayout, /requireAdministrator\(actor\)/);

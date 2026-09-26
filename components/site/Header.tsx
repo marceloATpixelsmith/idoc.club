@@ -90,15 +90,14 @@ function NavDropdown({
 }
 
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
- * subpages dropdown once entitled, or a plain link to /pricing beforehand (never-paid or
- * post-grace-expired), mirroring how /dashboard/membership itself redirects an unentitled member
- * straight to /pricing (see app/(dashboard)/dashboard/membership/page.tsx's paywall gate). Support is excluded from the
+ * subpages dropdown once entitled, or a plain link to /dashboard/membership beforehand (never-paid or
+ * post-grace-expired), where the membership page itself renders the payment controls. Support is excluded from the
  * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
  * separate /admin/support inbox) -- see dashboardNavItems. */
 function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; memberSupport: boolean; pathname: string }) {
   if (!entitled) {
     return (
-      <Link href="/pricing" className={navClassName(isActive(pathname, '/pricing'))}>
+      <Link href="/dashboard/membership" className={navClassName(isActive(pathname, '/dashboard/membership'))}>
         My IDOC
       </Link>
     );
@@ -154,7 +153,7 @@ export function Header({
               {/* Contact is hidden for every signed-in account that already has a working way back into
                 * the site (entitled members and privileged administrators/super_admins alike -- the
                 * former via My IDOC's own Support/Contact entry, the latter via /admin/support). An
-                * onboarding/unpaid member (Pricing-only My IDOC fallback, entitled false) still needs
+                * onboarding/unpaid member (payment-only My IDOC fallback, entitled false) still needs
                 * it, since they have no other path to reach the secretariat. */}
               {(!signedIn || !entitled) && (
                 <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
@@ -259,7 +258,7 @@ export function Header({
                 ) : (
                   <li>
                     <Link
-                      href="/pricing"
+                      href="/dashboard/membership"
                       onClick={() => setOpen(false)}
                       className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                     >

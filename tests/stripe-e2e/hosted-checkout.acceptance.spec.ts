@@ -7,6 +7,40 @@ const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
 
 const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 
+
+async function prepareMemberForCheckout() {
+  await sql`update idoc.memberships
+    set status = 'expired',
+        starts_on = current_date - interval '1 year',
+        valid_until = current_date - interval '1 day',
+        grace_ends_on = current_date - interval '1 day',
+        updated_at = now()
+    where profile_id = (
+      select pr.id
+      from idoc.profiles pr
+      join idoc.users u on u.id = pr.user_id
+      where u.email = ${memberEmail}
+      limit 1
+    )`;
+}
+
+
+async function restoreMemberEntitlement() {
+  await sql`update idoc.memberships
+    set status = 'active',
+        starts_on = current_date,
+        valid_until = current_date + interval '1 year',
+        grace_ends_on = current_date + interval '1 year' + interval '5 days',
+        updated_at = now()
+    where profile_id = (
+      select pr.id
+      from idoc.profiles pr
+      join idoc.users u on u.id = pr.user_id
+      where u.email = ${memberEmail}
+      limit 1
+    )`;
+}
+
 async function waitForProjection(expectedSource: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -29,7 +63,7 @@ function evidencePath() {
 }
 
 async function completeHostedCheckout(page: import('@playwright/test').Page, autoRenew: boolean) {
-  await page.goto('/pricing');
+  await page.goto('/dashboard/membership');
   const renewal = page.getByRole('checkbox', { name: /renew automatically/i });
   await expect(renewal).toBeVisible();
   if (await renewal.isChecked() !== autoRenew) await renewal.click();
@@ -41,7 +75,7 @@ async function completeHostedCheckout(page: import('@playwright/test').Page, aut
   await page.getByLabel(/expiration/i).fill('1230');
   await page.getByLabel(/security code|cvc/i).fill('123');
   await page.getByRole('button', { name: /pay|subscribe|complete/i }).click();
-  await page.waitForURL(/dashboard|pricing/, { timeout: 60_000 });
+  await page.waitForURL(/dashboard\/membership|dashboard/, { timeout: 60_000 });
   return checkoutSessionId as string;
 }
 
@@ -50,11 +84,22 @@ test.describe('Stripe test-mode hosted Checkout acceptance', () => {
     if (!process.env.STRIPE_E2E_MEMBER_EMAIL) {
       throw new Error('STRIPE_E2E_MEMBER_EMAIL is required for authenticated provider tests.');
     }
+    // Every hosted Checkout scenario must begin with the payment panel visible. Previous tests can
+    // extend this same disposable member's entitlement through verified Stripe webhooks, so reset
+    // only the local membership entitlement before each scenario instead of depending on test order.
+    await prepareMemberForCheckout();
     await context.tracing.start({ screenshots: true, snapshots: true });
   });
 
   test.afterEach(async ({ context }, info) => {
-    await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
+    // Hosted Checkout scenarios deliberately expire the shared member in beforeEach so the payment
+    // panel is visible. Restore entitlement deterministically before any later Stripe acceptance
+    // spec runs instead of depending on asynchronous webhook timing from the final scenario.
+    try {
+      await restoreMemberEntitlement();
+    } finally {
+      await context.tracing.stop({ path: evidencePath() + '/' + info.title.replace(/[^a-z0-9]+/gi, '-') + '.zip' });
+    }
   });
 
   test('completes one-time EUR 80 Checkout and verifies the test-mode Session', async ({ page }) => {

@@ -116,7 +116,7 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
           <dt className="font-semibold text-foreground">Renewal Date</dt>
           <dd className="flex flex-wrap items-center justify-between gap-3 text-foreground">
             <span>{renewalDate}</span>
-            {showRenew ? <Link href="/pricing"><Button size="sm">Renew</Button></Link> : null}
+            {showRenew ? <Link href="/dashboard/membership?renew=1"><Button size="sm">Renew</Button></Link> : null}
           </dd>
         </> : null}
 

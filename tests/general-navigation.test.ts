@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const menu = readFileSync('components/authenticated-user-menu.tsx', 'utf8');
 const dashboardShell = readFileSync('components/dashboard-shell.tsx', 'utf8');
+const protectedSessionRedirect = readFileSync('components/protected-session-redirect.tsx', 'utf8');
 const header = readFileSync('components/site/Header.tsx', 'utf8');
 const dashboardLayout = readFileSync('app/(dashboard)/layout.tsx', 'utf8');
 const marketingLayout = readFileSync('app/(marketing)/layout.tsx', 'utf8');
@@ -28,9 +29,23 @@ test('the same header renders on marketing and dashboard pages alike', () => {
   assert.match(marketingLayout, /getMainNavAccess\(\)/);
 });
 
-test('logged-out dashboard navigation retains Pricing and Sign Up', () => {
-  assert.match(dashboardShell, />\s*Pricing\s*</);
-  assert.match(dashboardShell, /href="\/sign-up">Sign Up</);
+test('dashboard navigation uses the shared logged-out Member Login fallback', () => {
+  assert.doesNotMatch(dashboardShell, /loggedOut=/);
+  assert.doesNotMatch(dashboardShell, />\s*Pricing\s*</);
+  assert.doesNotMatch(dashboardShell, /href="\/sign-up">Sign Up</);
+  assert.match(header, /loggedOut \?\? <MemberLoginLink/);
+});
+
+test('an already-open protected page leaves for sign-in when its shared identity revalidates to null', () => {
+  assert.match(dashboardShell, /<ProtectedSessionRedirect initiallySignedIn=\{navAccess\.signedIn\} \/>/);
+  assert.match(protectedSessionRedirect, /\['\/dashboard', '\/admin', '\/onboarding'\]/);
+  assert.match(protectedSessionRedirect, /mutate<PublicUser \| null>\('\/api\/user'\)/);
+  assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
+  assert.match(protectedSessionRedirect, /window\.location\.replace\('\/sign-in'\)/);
+  assert.match(protectedSessionRedirect, /addEventListener\('focus'/);
+  assert.match(protectedSessionRedirect, /visibilitychange/);
+  assert.match(protectedSessionRedirect, /pageshow/);
+  assert.doesNotMatch(protectedSessionRedirect, /setInterval|refreshInterval/);
 });
 
 test('both navigation surfaces share the authenticated initials menu', () => {
@@ -52,10 +67,10 @@ test('the shared menu drops My Dashboard, keeping only the conditional Admin Das
   assert.match(menu, /href="\/admin"/);
 });
 
-test('the header exposes a My IDOC dropdown of the dashboard subpages (including Support), gated on entitlement -- falling back to a plain /pricing link for a signed-in member who is not yet entitled', () => {
+test('the header exposes a My IDOC dropdown of the dashboard subpages (including Support), gated on entitlement -- falling back to My Membership for a signed-in member who is not yet entitled', () => {
   assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} memberSupport=\{memberSupport\} pathname=\{pathname\} \/>/);
   assert.match(header, /label="My IDOC"/);
-  assert.match(header, /href="\/pricing"/);
+  assert.match(header, /href="\/dashboard\/membership"/);
   assert.match(header, /from '@\/lib\/navigation\/dashboard-nav'/);
 });
 
@@ -70,8 +85,8 @@ test('Contact is hidden for every signed-in, entitled account (ordinary members 
   assert.match(desktopContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
   assert.match(desktopContactBlock, /href=\{contactLink\.href\}/);
 
-  const mobilePricingFallback = header.lastIndexOf('href="/pricing"');
-  const mobileContactBlock = header.slice(mobilePricingFallback, header.indexOf('facebook.com/groups', mobilePricingFallback));
+  const mobilePaymentFallback = header.lastIndexOf('href="/dashboard/membership"');
+  const mobileContactBlock = header.slice(mobilePaymentFallback, header.indexOf('facebook.com/groups', mobilePaymentFallback));
   assert.match(mobileContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
   assert.match(mobileContactBlock, /href=\{contactLink\.href\}/);
 });
@@ -82,9 +97,9 @@ test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
   assert.ok(myIdocIndex > -1 && desktopContactIndex > myIdocIndex);
 
   const mobileMyIdocSection = header.indexOf("My IDOC\n                    </p>");
-  const mobilePricingFallback = header.indexOf('href="/pricing"');
+  const mobilePaymentFallback = header.indexOf('href="/dashboard/membership"');
   const mobileContactIndex = header.lastIndexOf('href={contactLink.href}');
-  assert.ok(mobileContactIndex > mobileMyIdocSection && mobileContactIndex > mobilePricingFallback);
+  assert.ok(mobileContactIndex > mobileMyIdocSection && mobileContactIndex > mobilePaymentFallback);
 });
 
 test('Membership is hidden from the top nav once signed in -- a member already has one', () => {
@@ -112,10 +127,10 @@ test('every dashboard nav item URL matches its label and no entry is a prefix of
   assert.match(header, /isItemActive=\{isDashboardNavItemActive\}/);
 });
 
-test('a signed-in member who is not yet entitled still has a way back to Pricing from the header', () => {
+test('a signed-in member who is not yet entitled still has a way back to payment from the header', () => {
   assert.match(navAccess, /signedIn: boolean/);
   assert.match(header, /if \(!entitled\) \{/);
-  assert.match(header, /href="\/pricing"/);
+  assert.match(header, /href="\/dashboard\/membership"/);
 });
 
 test('the dashboard sidebar heading reads My IDOC, matching the header nav item it belongs to', () => {

@@ -4,9 +4,10 @@ test('anonymous identity and protected pages fail closed', async ({ request }) =
   const identity = await request.get('/api/user');
   expect(identity.status()).toBe(200);
   expect(await identity.json()).toBeNull();
-  for (const route of ['/dashboard', '/dashboard/profile', '/dashboard/security', '/admin']) {
+  for (const route of ['/dashboard', '/dashboard/profile', '/dashboard/security', '/admin', '/onboarding']) {
     const response = await request.get(route, { maxRedirects: 0 });
-    expect(response.status(), route).not.toBe(200);
+    expect(response.status(), route).toBe(307);
+    expect(new URL(response.headers().location!).pathname, route).toBe('/sign-in');
   }
 });
 
@@ -26,7 +27,7 @@ test('account-state and role boundaries are enforced on direct requests', async 
     ['onboarding', '/onboarding', false],
     ['suspended', '/dashboard', false],
     ['expired', '/dashboard', false],
-    ['expired', '/pricing', true],
+    ['expired', '/dashboard/membership', true],
     ['member-a', '/admin', false],
     ['administrator', '/admin', true],
   ] as const;

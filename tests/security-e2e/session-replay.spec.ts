@@ -111,18 +111,19 @@ test('a JWT matching a directly-revoked registry row (never touched by the login
   // requireAccountAccess() only discovers that deeper, inside the dashboard layout itself. Before
   // that catch existed, this fell through uncaught into Next.js's generic error boundary instead
   // of a clean redirect; confirmed against real production crashes since 2026-08-27.
-  const dashboardContext = await browser.newContext();
-  await dashboardContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
-  const dashboard = await dashboardContext.request.get('/dashboard', { maxRedirects: 0 });
-  expect(dashboard.status()).toBe(307);
-  // Unlike middleware.ts's NextResponse.redirect(new URL(path, request.url)) (an absolute URL,
-  // asserted on below in the legacy-cookie test via new URL(...).pathname), this redirect() call
-  // is a page-level next/navigation call from inside the dashboard layout's RSC render. Confirmed
-  // empirically against this dev server: Next still uses a 307 for a GET navigation here, but the
-  // Location header it emits is the bare relative path with no scheme/host, so new URL() on it
-  // alone throws (Invalid URL) rather than parsing -- assert on the raw header value instead.
-  expect(dashboard.headers().location).toBe('/sign-in');
-  await dashboardContext.close();
+  for (const route of ['/dashboard', '/admin', '/onboarding']) {
+    const protectedContext = await browser.newContext();
+    await protectedContext.addCookies([{ name: 'idoc-session', value: token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax', secure: false }]);
+    const response = await protectedContext.request.get(route, { maxRedirects: 0 });
+    expect(response.status(), route).toBe(307);
+
+    // A validly-signed token reaches the deeper page boundary because middleware cannot see that
+    // its registry row has been revoked. Dashboard/admin/onboarding must still provide a clean path
+    // back to authentication instead of converting that stale session into a 404 or generic error.
+    const location = response.headers().location!;
+    expect(location.startsWith('http') ? new URL(location).pathname : location, route).toBe('/sign-in');
+    await protectedContext.close();
+  }
 });
 
 test('a validly-signed legacy-shaped cookie (the pre-retrofit starter-template session shape, under its old cookie name) never authenticates', async ({ browser }) => {
@@ -178,4 +179,47 @@ test('a genuinely valid, freshly registered session is accepted (positive contro
   const identity = await context.request.get('/api/user');
   expect((await identity.json()).email).toBe(email);
   await context.close();
+});
+
+test('an already-open dashboard redirects to sign-in when its session is revoked and the browser regains focus', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-b.json' });
+  const page = await context.newPage();
+  let sessionId: string | null = null;
+
+  try {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/dashboard(?:\/membership)?$/);
+
+    sessionId = await withDb(async (sql) => {
+      const [session] = await sql<{ session_id: string }[]>`
+        select s.session_id
+        from idoc.auth_sessions s
+        join idoc.users u on u.id = s.user_id
+        where u.email = 'member-b@security.example.test'
+          and s.revoked_at is null
+        order by s.authenticated_at desc
+        limit 1`;
+      if (!session) throw new Error('member-b fixture has no active session');
+      await sql`update idoc.auth_sessions
+        set revoked_at = now(), revoke_reason = 'security-e2e-live-session-loss'
+        where session_id = ${session.session_id}`;
+      return session.session_id;
+    });
+
+    // No click and no page reload: this models a protected tab that stayed open while its session
+    // became invalid, then the user returned to the browser. SWR's focus revalidation supplies the
+    // same null identity that already flips the header to its logged-out menu; the guard must turn
+    // that signal into an immediate navigation away from stale protected content.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page).toHaveURL(/\/sign-in$/);
+  } finally {
+    if (sessionId) {
+      await withDb(async (sql) => {
+        await sql`update idoc.auth_sessions
+          set revoked_at = null, revoke_reason = null, last_activity_at = now()
+          where session_id = ${sessionId}`;
+      });
+    }
+    await context.close();
+  }
 });

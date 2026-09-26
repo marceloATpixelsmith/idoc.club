@@ -9,6 +9,7 @@ if (!expectedVersion) {
 }
 
 const workflowNames = [
+  '.github/workflows/fast-pr-verification.yml',
   '.github/workflows/auth-security-verification.yml',
   '.github/workflows/release-1-verification.yml',
 ];
@@ -21,8 +22,16 @@ for (const workflowName of workflowNames) {
   }
 }
 
+const fastWorkflow = await readFile(
+  new URL('.github/workflows/fast-pr-verification.yml', root),
+  'utf8'
+);
 const securityWorkflow = await readFile(
   new URL('.github/workflows/auth-security-verification.yml', root),
+  'utf8'
+);
+const releaseWorkflow = await readFile(
+  new URL('.github/workflows/release-1-verification.yml', root),
   'utf8'
 );
 
@@ -45,8 +54,11 @@ export function hasBlockingHighAudit(workflow) {
   return false;
 }
 
-if (!hasBlockingHighAudit(securityWorkflow)) {
-  throw new Error('Authentication security CI must not bypass high-severity audit failures.');
+if (!hasBlockingHighAudit(fastWorkflow)) {
+  throw new Error('Fast PR CI must block on high-severity dependency advisories.');
+}
+if (hasBlockingHighAudit(securityWorkflow) || hasBlockingHighAudit(releaseWorkflow)) {
+  throw new Error('High-severity dependency audit must run only in Fast PR CI, not be repeated in full workflows.');
 }
 
-console.log(`Toolchain policy valid: pnpm ${expectedVersion}; high-severity audit is blocking.`);
+console.log(`Toolchain policy valid: pnpm ${expectedVersion}; the fast workflow runs the single blocking high-severity audit.`);
