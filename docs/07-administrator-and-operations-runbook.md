@@ -30,15 +30,21 @@ single-step selection) opens a tabbed right-side Sheet rather than navigating to
 jumping to an anchored section: Overview (seminar and payment history, read-only), Edit Info,
 Membership (extend expiration, correct entitlement, suspend/reinstate), Payment, Account
 (suspend/reinstate sign-in), Roles (Super Admin only: application roles plus the incident-response
-Force Revoke), and Audit Trail. An optional `&tab=` param opens a specific tab directly -- e.g. the
-roster's Payment action link opens straight to the Payment tab. Payment History (Overview tab) is a
-newest-first, member-scoped safe projection of the persisted ledger. Seminar History is re-authorized
-for an administrator and scoped to the server-resolved member before reading registration records.
-The Payment tab is also where a manual payment is recorded and where refundable Stripe payments are
-listed for refund -- there is no separate `/admin/payments` destination or navigation entry for this
-anymore; that route now only redirects into this Sheet's Payment tab (see docs/26 for auth-risk
-handling of this route change). Email Member (in the Sheet header) is only a `mailto:` link to the
-current canonical account address.
+Force Revoke), Notifications (that member's delivery history), and Audit Trail. An optional `&tab=`
+param opens a specific tab directly -- e.g. the roster's Payment action link opens straight to the
+Payment tab; a request for the Super-Admin-only Roles tab from a non-Super-Admin falls back to
+Overview rather than rendering an empty panel. Payment History (Overview tab) is a newest-first,
+member-scoped safe projection of the persisted ledger. Seminar History is re-authorized for an
+administrator and scoped to the server-resolved member before reading registration records. The
+Payment tab is also where a manual payment is recorded and where refundable Stripe payments are
+listed for refund, and the Notifications tab is that member's read-only notification delivery
+history (same Dice UI read-only table `/admin/notifications` used) -- there is no separate
+`/admin/payments` or `/admin/notifications` destination or navigation entry for either anymore; both
+routes now only redirect into this Sheet's corresponding tab (see docs/26 for auth-risk handling of
+these route changes). Every tab's fields are grouped into rounded card sections that lay out in a
+responsive grid (multiple cards per row on wide viewports, one column on narrow ones) rather than a
+flat vertical stack. Email Member (in the Sheet header) is only a `mailto:` link to the current
+canonical account address.
 
 Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
 bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action
@@ -649,7 +655,7 @@ The Memberships roster uses the official Dice UI `DataTable`, toolbar, sort list
 
 Preferences follow the signed-in administrator across browsers and devices for the five named table identifiers, and are the sole source of truth for filters, sort, columns, page size, and page -- there is no URL-based override for any of it. The `DELETE /api/admin/table-preferences/[table]` endpoint still removes a table's saved preference row without changing records or another administrator's settings, but no toolbar exposes it as a button; every table's toolbar now offers only the single **Reset** control, which clears the table's active filters. If saving preferences fails, the current view remains usable and the administrator may retry the action. News, Seminars, and Content Pages now use the same Dice UI table composition and server-backed filtering, sorting, page size, and pagination. Their selected-row CSV export contains only the already-loaded page rows; their direct row links open the established edit, preview, or registration workflow. Membership selection also exports selected visible-page rows through the audited server endpoint, while Support selection can copy conversation links. Notification history and reconciliation findings have read-only Dice UI tables with local controls and server-authorized, audited selected-row exports that omit internal database identifiers. Their local view state does not persist. Publishing, deletion, refunds, account-state changes, and support replies remain in their existing individually authorized workflows.
 
-The administrator layout no longer caps the table area at a fixed maximum width; the roster, News/Blog, Seminars, Pages, Support Inbox, Notifications, and Stripe reconciliation tables stretch to the available viewport width (minus the sidebar and page padding) instead of rendering in a narrow column with unused space, so a wide table still scrolls horizontally only when its own columns need more room than the viewport provides. All administrator data tables share a visibly rounded corner treatment (search field, filter buttons, filter popovers, pagination controls, and the selected-row `ActionBar`'s buttons) distinct from the sharper corners used elsewhere in the product, and each multi-select or date-range filter trigger shows a dashed border to distinguish it from an ordinary button. Every table's header row uses the same slightly raised surface color as the toolbar's filter/sort/view buttons, reading as a distinct band above the body rows. Dismissing the selected-row `ActionBar` with its close icon only hides the bar; it never clears the underlying row selection, which only "Clear selection" (or an explicit new selection reaching zero and back up) does.
+The administrator layout no longer caps the table area at a fixed maximum width; the roster, News/Blog, Seminars, Pages, Support Inbox, and Stripe reconciliation tables stretch to the available viewport width (minus the sidebar and page padding) instead of rendering in a narrow column with unused space, so a wide table still scrolls horizontally only when its own columns need more room than the viewport provides. The Notifications read-only table is the one exception: it now lives inside the Members Sheet's Notifications tab (a member-scoped view, not a standalone page), so it is bounded by the Sheet's width rather than the full viewport. All administrator data tables share a visibly rounded corner treatment (search field, filter buttons, filter popovers, pagination controls, and the selected-row `ActionBar`'s buttons) distinct from the sharper corners used elsewhere in the product, and each multi-select or date-range filter trigger shows a dashed border to distinguish it from an ordinary button. Every table's header row uses the same slightly raised surface color as the toolbar's filter/sort/view buttons, reading as a distinct band above the body rows. Dismissing the selected-row `ActionBar` with its close icon only hides the bar; it never clears the underlying row selection, which only "Clear selection" (or an explicit new selection reaching zero and back up) does.
 
 Bulk archive, pause, and force-revocation are deliberately not activated by the shared selection menu in this release. Archive requires one approved, retry-safe orchestration spanning Stripe subscription cancellation, retained seminar identity, support retention, Mailchimp removal, session/role state, and immutable audit history. Pause continues to mean the existing audited membership suspension (including its Stripe-cancellation behavior), not a new billing state. Force-revocation remains the existing Super-Admin-only, fresh-MFA incident-response workflow. Operators must use the existing row-level controls until that cross-provider orchestration is approved and tested; direct database edits are prohibited.
 

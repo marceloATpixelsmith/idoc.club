@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
+import type { MouseEvent } from 'react';
 import { Archive, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Gavel, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -78,9 +79,19 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   const [expiresFrom, setExpiresFrom] = useState(filters.expiresFrom);
   const [expiresTo, setExpiresTo] = useState(filters.expiresTo);
   const [isPending, startTransition] = useTransition();
+  // Opening the member Sheet is a server round trip (new profileId/tab searchParams), so a plain
+  // <Link> click has no visible feedback until the new page streams in. Routing through the same
+  // isPending/startTransition the table's own filter/sort changes already use makes the table dim
+  // into its pulsing-skeleton loading state (see DataTable's `loading` prop) the instant a row is
+  // clicked, rather than the click appearing to do nothing.
+  function openMember(event: MouseEvent, href: string) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    startTransition(() => router.push(href));
+  }
   const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?profileId=${row.original.profileId}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
     { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <Shield aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
@@ -90,7 +101,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, size: 120, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
+    { id: 'actions', enableHiding: true, enableSorting: false, size: 120, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   // Facet filters (status/type/federation/country/region) are applied server-side from saved

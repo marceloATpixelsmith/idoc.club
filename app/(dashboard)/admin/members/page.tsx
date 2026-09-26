@@ -1,4 +1,4 @@
-import { getPrivateMember, listAdminPaymentHistory, listAuditHistory, requireAccountAccess } from '@/lib/membership/data-access';
+import { getPrivateMember, listAdminPaymentHistory, listAuditHistory, listNotificationHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { listAdminMembers, MemberFilterRangeError, type MemberFilters } from '@/lib/membership/admin-memberships';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listActiveRoles } from '@/lib/membership/role-grants';
@@ -53,11 +53,12 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     hasValidProfileId ? getPrivateMember(profileId!) : Promise.resolve(null),
     hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
   ]);
-  const [activeRoles, accountState, paymentHistory, seminarHistory] = await Promise.all([
+  const [activeRoles, accountState, paymentHistory, seminarHistory, notificationHistory] = await Promise.all([
     selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),
     selected ? getUserAccountState(selected.profile.userId) : Promise.resolve(null),
     selected ? listAdminPaymentHistory(selected.profile.id) : Promise.resolve([]),
     selected ? listAdminSeminarHistoryForMember(selected.profile.id) : Promise.resolve([]),
+    selected ? listNotificationHistory(selected.profile.id) : Promise.resolve([]),
   ]);
   // Same query the standalone /admin/payments page used to run -- now feeding the Sheet's Payment
   // tab instead of a separate route (see components/admin-navigation.tsx: that nav item just told
@@ -78,6 +79,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         closeHref="/admin/members"
         initialTab={tab}
         isSuperAdmin={isSuperAdmin}
+        notificationHistory={notificationHistory}
         paymentHistory={paymentHistory}
         seminarHistory={seminarHistory}
         selected={selected}

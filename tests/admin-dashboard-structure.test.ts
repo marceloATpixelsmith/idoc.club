@@ -38,6 +38,12 @@ test('the manual-payments nav item is gone -- it only told admins to go back to 
   assert.doesNotMatch(navigation, /CreditCard/);
 });
 
+test('the notifications nav item is gone -- it only told admins to go back to Members and search', () => {
+  assert.doesNotMatch(navigation, /'Notifications'/);
+  assert.doesNotMatch(navigation, /\/admin\/notifications/);
+  assert.doesNotMatch(navigation, /\bBell\b/);
+});
+
 test('every Super Admin page independently maps insufficient authority to branded not-found', () => {
   for (const layout of [organizationLayout, securityLayout, supportDefaultsLayout]) {
     assert.match(layout, /requireAccountAccess\('administration'\)/);
