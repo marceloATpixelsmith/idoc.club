@@ -32,7 +32,7 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
   return list.length ? list.join(',') : undefined;
 }
 
-export function SupportInboxTable({ administrators, filters, initialColumnOrder, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { activityFrom?: string; activityTo?: string; page: number; pageSize: number; q?: string; sort?: string }; initialColumnOrder?: string; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
+export function SupportInboxTable({ administrators, filters, initialColumnOrder, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { activityFrom?: string; activityTo?: string; assigned?: string; category?: string; page: number; pageSize: number; q?: string; sort?: string; status?: string }; initialColumnOrder?: string; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.q ?? '');
   const [activityFrom, setActivityFrom] = useState(filters.activityFrom);
@@ -58,6 +58,17 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     return [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
+  // Facet filters are applied server-side from saved preferences regardless of this initial
+  // state, so this must mirror what the server actually applied -- otherwise the toolbar shows no
+  // active facets while the table is already filtered, and the next unrelated change persists
+  // `undefined` for these, silently clearing the saved view.
+  const initialColumnFilters = useMemo(() => [
+    { id: 'category', value: filters.category ? filters.category.split(',') : [] },
+    { id: 'status', value: filters.status ? filters.status.split(',') : [] },
+    { id: 'assigned', value: filters.assigned ? filters.assigned.split(',') : [] },
+  ].filter((filter) => filter.value.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
+    []);
 
   // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
   // writes any of this to the URL. `overrides` lets Reset atomically change search/date-range
@@ -78,8 +89,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
       q: effectiveSearch || undefined,
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       status: filterToken(state.columnFilters, 'status'),
-    });
-    startTransition(() => router.refresh());
+    }).finally(() => startTransition(() => router.refresh()));
   }
 
   const { table } = useDataTable({
@@ -88,7 +98,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     // faceted filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => row.public_id,
-    initialState: { columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
     startTransition,
@@ -116,8 +126,10 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     );
   }
 
+  // A manual filter change (search, date range) must return to page 1 -- otherwise staying on
+  // page N of a now-narrower result set can show an empty table, or even "Page N of 1".
   const debouncedSearchPersist = useDebouncedCallback((value: string) => {
-    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { q: value });
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { q: value });
   }, 300);
 
   async function copySelectedLinks() {
@@ -144,8 +156,8 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
       pending={isPending}
       onReset={resetAll}
       leading={<>
-        <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearchPersist(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
-        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => { setActivityFrom(nextFrom); setActivityTo(nextTo); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { activityFrom: nextFrom, activityTo: nextTo }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={activityTo} />
+        <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
+        <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => { setActivityFrom(nextFrom); setActivityTo(nextTo); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { activityFrom: nextFrom, activityTo: nextTo }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={activityTo} />
       </>}
     >
       <DataTableSortList table={table} />

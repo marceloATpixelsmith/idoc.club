@@ -99,7 +99,9 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /No conversations match this view/);
   assert.match(table, /No support conversations exist/);
   assert.match(table, /persistTablePreferences\('support'/);
-  assert.match(table, /startTransition\(\(\) => router\.refresh\(\)\);/);
+  // router.refresh() must fire only after the preference write settles -- a fire-and-forget PUT
+  // racing an immediate refresh can read the database before the write commits.
+  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(error, /AdminErrorState/);
 });

@@ -95,8 +95,13 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       sorting: next.sorting ?? sorting,
       columnFilters: next.columnFilters ?? columnFilters,
     };
-    if (immediate) onLiveStateChange?.(state);
-    else debouncedNotify(state);
+    if (immediate) {
+      // An immediate dispatch (page size, sort, column filter) supersedes any older debounced
+      // snapshot still pending -- without this, that stale timer fires later and overwrites the
+      // state this immediate call just persisted.
+      debouncedNotify.cancel();
+      onLiveStateChange?.(state);
+    } else debouncedNotify(state);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- always read the latest closed-over values at call time, not at definition time.
   }, [pagination, sorting, columnFilters, onLiveStateChange, debouncedNotify]);
 

@@ -102,3 +102,37 @@ test('hiding a column in the View popover only clears sorting when that column w
   assert.match(viewOptions, /if \(!nextVisible && table\.getState\(\)\.sorting\.some\(\(item\) => item\.id === column\.id\)\) \{/);
   assert.match(viewOptions, /table\.setSorting\(\(sorting\) => sorting\.filter\(\(item\) => item\.id !== column\.id\)\);/);
 });
+
+test('saved facet filters (status/type/country/federation/region, status/audience, category/status/assigned) are hydrated into each table\'s initial columnFilters, since the server applies them from saved preferences regardless -- otherwise the toolbar shows no active facets while the table is already filtered, and the next unrelated change persists undefined for them, silently clearing the saved view', () => {
+  assert.match(memberTable, /\{ id: 'type', value: filters\.membershipTypes \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'status', value: filters\.statuses \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'federation', value: filters\.federations \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'country', value: filters\.countries \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'region', value: filters\.regions \?\? \[\] \}/);
+  assert.match(resourceTable, /\{ id: 'status', value: initialStatus \? initialStatus\.split\(','\) : \[\] \}/);
+  assert.match(resourceTable, /\{ id: 'audience', value: initialAudience \? initialAudience\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'category', value: filters\.category \? filters\.category\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'status', value: filters\.status \? filters\.status\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'assigned', value: filters\.assigned \? filters\.assigned\.split\(','\) : \[\] \}/);
+  for (const table of [memberTable, resourceTable, supportTable]) assert.match(table, /initialState: \{ columnFilters: initialColumnFilters,/);
+});
+
+test('a manual filter change (search text, date range) resets pagination to page 1 in all three table wrappers -- otherwise staying on a stale page index against a narrower result set can show an empty table, or even "Page N of 1"', () => {
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /table\.setPageIndex\(0\);/);
+    assert.match(table, /pagination: \{ \.\.\.table\.getState\(\)\.pagination, pageIndex: 0 \}/);
+  }
+});
+
+test('persistAndRefresh in every table wrapper sequences router.refresh() after the preference-write promise settles, rather than firing it concurrently with a fire-and-forget PUT -- otherwise a refresh can render before the write commits, and the completed write triggers no follow-up refresh, leaving controls and results inconsistent', () => {
+  assert.match(memberTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  assert.match(resourceTable, /\.catch\(\(\) => setError\('Table preferences could not be saved\.'\)\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  assert.match(supportTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+});
+
+test('useDataTable\'s notify cancels any pending debounced snapshot before dispatching an immediate one, since otherwise an older queued snapshot (e.g. from closing a facet popover) can fire after a newer immediate change (e.g. a sort click within the debounce window) and revert it', () => {
+  const dataTableHook = readFileSync(new URL('../hooks/use-data-table.ts', import.meta.url), 'utf8');
+  const debouncedCallback = readFileSync(new URL('../hooks/use-debounced-callback.ts', import.meta.url), 'utf8');
+  assert.match(debouncedCallback, /return React\.useMemo\(\(\) => Object\.assign\(setValue, \{ cancel \}\), \[setValue, cancel\]\);/);
+  assert.match(dataTableHook, /if \(immediate\) \{[\s\S]*?debouncedNotify\.cancel\(\);\s*\n\s*onLiveStateChange\?\.\(state\);\s*\n\s*\} else debouncedNotify\(state\);/);
+});

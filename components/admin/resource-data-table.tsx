@@ -86,12 +86,14 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 }
 
 export function ResourceDataTable({
-  initialColumnOrder, initialFrom, initialSearch, initialSort, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
+  initialAudience, initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
 }: {
+  initialAudience?: string;
   initialColumnOrder?: string;
   initialFrom?: string;
   initialSearch?: string;
   initialSort?: string;
+  initialStatus?: string;
   initialTo?: string;
   initialVisibleColumns?: string[];
   page: number;
@@ -163,6 +165,16 @@ export function ResourceDataTable({
     return [{ desc: true, id: defaultSortId }];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
+  // Facet filters are applied server-side from saved preferences regardless of this initial
+  // state, so this must mirror what the server actually applied -- otherwise the toolbar shows no
+  // active facets while the table is already filtered, and the next unrelated change persists
+  // `undefined` for these, silently clearing the saved view.
+  const initialColumnFilters = useMemo(() => [
+    { id: 'status', value: initialStatus ? initialStatus.split(',') : [] },
+    { id: 'audience', value: initialAudience ? initialAudience.split(',') : [] },
+  ].filter((filter) => filter.value.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
+    []);
 
   // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
   // writes any of this to the URL. `overrides` lets Reset atomically change search/date-range
@@ -184,8 +196,7 @@ export function ResourceDataTable({
     if (tableType === 'content_pages') preferences.audience = filterToken(state.columnFilters, 'audience');
     void persistTablePreferences(tableType, preferences).then((response) => {
       if (!response.ok) setError('Table preferences could not be saved.');
-    }).catch(() => setError('Table preferences could not be saved.'));
-    startTransition(() => router.refresh());
+    }).catch(() => setError('Table preferences could not be saved.')).finally(() => startTransition(() => router.refresh()));
   }
 
   const { table } = useDataTable({
@@ -194,7 +205,7 @@ export function ResourceDataTable({
     // filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => String(row.id),
-    initialState: { columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
     startTransition,
@@ -222,8 +233,10 @@ export function ResourceDataTable({
     );
   }
 
+  // A manual filter change (search, date range) must return to page 1 -- otherwise staying on
+  // page N of a now-narrower result set can show an empty table, or even "Page N of 1".
   const debouncedSearchPersist = useDebouncedCallback((value: string) => {
-    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { q: value });
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { q: value });
   }, 300);
 
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
@@ -249,7 +262,7 @@ export function ResourceDataTable({
           <Input
             aria-label={config.searchLabel}
             className="h-8 w-40 lg:w-56"
-            onChange={(event) => { setSearch(event.target.value); debouncedSearchPersist(event.target.value); }}
+            onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }}
             placeholder="Search…"
             type="search"
             value={search}
@@ -258,7 +271,7 @@ export function ResourceDataTable({
             <DateRangeFilter
               from={from}
               label="Date"
-              onChange={(newFrom, newTo) => { setFrom(newFrom); setTo(newTo); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { from: newFrom, to: newTo }); }}
+              onChange={(newFrom, newTo) => { setFrom(newFrom); setTo(newTo); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { from: newFrom, to: newTo }); }}
               onDraftActiveChange={setDateDraftActive}
               resetSignal={dateResetSignal}
               to={to}

@@ -23,7 +23,8 @@ import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries'
 import { IDOC_REGIONS } from '@/lib/membership/validation';
 
 type Filters = {
-  direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; page: number; q?: string; sort: string;
+  countries?: string[]; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federations?: string[];
+  membershipTypes?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
 };
 
 const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
@@ -92,7 +93,17 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'actions', enableHiding: true, enableSorting: false, size: 120, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`/admin/payments?profileId=${row.original.profileId}`}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
-  const initialColumnFilters: ColumnFiltersState = [];
+  // Facet filters (status/type/federation/country/region) are applied server-side from saved
+  // preferences regardless of this initial state, so this must mirror what the server actually
+  // applied -- otherwise the toolbar shows no active facets while the table is already filtered,
+  // and the next unrelated change persists `undefined` for these, silently clearing the saved view.
+  const initialColumnFilters: ColumnFiltersState = [
+    { id: 'type', value: filters.membershipTypes ?? [] },
+    { id: 'status', value: filters.statuses ?? [] },
+    { id: 'federation', value: filters.federations ?? [] },
+    { id: 'country', value: filters.countries ?? [] },
+    { id: 'region', value: filters.regions ?? [] },
+  ].filter((filter) => filter.value.length > 0);
 
   // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
   // writes any of this to the URL. `overrides` lets a single caller (e.g. Reset) atomically change
@@ -117,8 +128,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       status: filterToken(state.columnFilters, 'status'),
       type: filterToken(state.columnFilters, 'type'),
-    });
-    startTransition(() => router.refresh());
+    }).finally(() => startTransition(() => router.refresh()));
   }
 
   const { table } = useDataTable({
@@ -156,8 +166,10 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     );
   }
 
+  // A manual filter change (search, date range) must return to page 1 -- otherwise staying on
+  // page N of a now-narrower result set can show an empty table, or even "Page N of 1".
   const debouncedSearchPersist = useDebouncedCallback((value: string) => {
-    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { q: value });
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { q: value });
   }, 300);
 
   /** Built fresh at click time from current state -- a query string on a one-off GET download
@@ -197,8 +209,8 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
         pending={isPending}
         onReset={resetAll}
         leading={<>
-          <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
-          <DateRangeFilter from={expiresFrom} label="Expires" onChange={(from, to) => { setExpiresFrom(from); setExpiresTo(to); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { expiresFrom: from, expiresTo: to }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={expiresTo} />
+          <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
+          <DateRangeFilter from={expiresFrom} label="Expires" onChange={(from, to) => { setExpiresFrom(from); setExpiresTo(to); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { expiresFrom: from, expiresTo: to }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={expiresTo} />
         </>}
         trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
       >
