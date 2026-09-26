@@ -2,6 +2,7 @@ import { flexRender, type Table as TanstackTable } from "@tanstack/react-table";
 import type * as React from "react";
 
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -41,10 +42,7 @@ export function DataTable<TData>({
       {children}
       <div
         aria-busy={loading || undefined}
-        className={cn(
-          "relative overflow-hidden rounded-md border transition-opacity",
-          loading && "pointer-events-none opacity-60 animate-pulse",
-        )}
+        className="relative overflow-hidden rounded-md border"
       >
         <Table>
           <TableHeader>
@@ -70,7 +68,21 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {loading ? (
+              // A real skeleton (pulsing placeholder blocks) rather than dimming the outgoing
+              // rows' opacity, which just reads as "the text got fainter," not as a loading state.
+              // Matches the current row count so the table doesn't visibly resize between the last
+              // real render and this one.
+              Array.from({ length: Math.max(1, table.getRowModel().rows?.length || table.getState().pagination.pageSize) }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`}>
+                  {table.getVisibleLeafColumns().map((column) => (
+                    <TableCell key={column.id} style={{ ...getColumnPinningStyle({ column }) }}>
+                      <Skeleton className="h-5 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}

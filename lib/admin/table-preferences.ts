@@ -21,6 +21,10 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 const direction = z.enum(['asc', 'desc']).optional();
 const columns = (allowed: readonly string[]) => z.array(z.string()).max(20).transform((values) => [...new Set(values.filter((value) => allowed.includes(value)))]).optional();
 const pageSize = z.coerce.number().int().pipe(z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)])).optional();
+// Restoring the exact page a member left off on -- not just filters/sort/columns -- is deliberate:
+// the whole point of persisting to the database instead of the URL is that closing the tab and
+// coming back should put the admin exactly where they were, not just apply the same filters to page 1.
+const page = z.coerce.number().int().positive().max(10_000).optional();
 // A multi-select facet filter's committed value round-trips as the same comma-joined query-param
 // string the toolbar itself writes (?status=active,expired) -- see lib/admin/resource-list-query.ts's
 // `many()` helper, which every filter-building module parses that shape with. This validates every
@@ -36,14 +40,14 @@ const schemas = {
     // 'membershipType' is a legacy key accepted for preferences saved before the membership-type
     // filter was keyed by column id; current code always writes 'type' (see members-table.tsx).
     membershipType: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
-    pageSize, q: text(), region: multiToken(IDOC_REGIONS, 500), sort: text(1000), columnOrder: text(500), joinOperator: z.enum(['and', 'or']).optional(),
+    page, pageSize, q: text(), region: multiToken(IDOC_REGIONS, 500), sort: text(1000), columnOrder: text(500), joinOperator: z.enum(['and', 'or']).optional(),
     status: multiToken(MEMBERSHIP_STATUSES, 200),
     type: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
   }).strict(),
-  support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: multiToken(SUPPORT_CATEGORIES, 200), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), assigned: text(2000), sort: text(1000), status: multiToken(SUPPORT_STATUSES, 200) }).strict(),
-  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), to: date }).strict(),
-  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
-  content_pages: z.object({ audience: multiToken(CONTENT_AUDIENCES, 200), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), pageSize, publicationState: text(30), q: text(), sort: text(1000), status: multiToken(CONTENT_STATUSES, 200) }).strict(),
+  support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: multiToken(SUPPORT_CATEGORIES, 200), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), assigned: text(2000), sort: text(1000), status: multiToken(SUPPORT_STATUSES, 200) }).strict(),
+  news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), to: date }).strict(),
+  seminars: z.object({ columns: columns(['title', 'date', 'status', 'payment', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), page, pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
+  content_pages: z.object({ audience: multiToken(CONTENT_AUDIENCES, 200), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, publicationState: text(30), q: text(), sort: text(1000), status: multiToken(CONTENT_STATUSES, 200) }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;
 
 export type TablePreferenceState = Record<string, string | string[] | number | undefined>;
@@ -86,20 +90,4 @@ export async function resetTablePreferences(tableInput: unknown): Promise<void> 
   const actor = await authorizedActor();
   const table = validateTableIdentifier(tableInput);
   await db.delete(administratorTablePreferences).where(and(eq(administratorTablePreferences.userId, actor.id), eq(administratorTablePreferences.tableIdentifier, table)));
-}
-
-// 'filters'/'joinOperator' may still be present in preferences saved before the advanced
-// filter-builder UI was removed; they are never replayed into the URL so a stale, invisible
-// advanced-filter condition can't silently narrow results the current toolbar shows as unfiltered.
-const LEGACY_ADVANCED_FILTER_KEYS = new Set(['filters', 'joinOperator']);
-
-export function preferenceQuery(preferences: TablePreferenceState | null): Record<string, string | string[]> {
-  if (!preferences) return {};
-  const query: Record<string, string | string[]> = {};
-  for (const [key, value] of Object.entries(preferences)) {
-    if (value === undefined || LEGACY_ADVANCED_FILTER_KEYS.has(key)) continue;
-    if (key === 'columns' && Array.isArray(value)) query.column = value;
-    else query[key] = String(value);
-  }
-  return query;
 }

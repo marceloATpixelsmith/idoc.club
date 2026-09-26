@@ -72,10 +72,10 @@ test('the administrator queue provides Tablecn-style server controls', () => {
   const toolbar = readFileSync('components/data-table/data-table-toolbar.tsx', 'utf8');
   for (const control of ['DataTable', 'DataTableToolbar', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
   assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
-  assert.match(page, /hasUrlState \? params/);
-  assert.match(page, /preferenceQuery\(saved\)/);
+  assert.match(page, /const saved = await getTablePreferences\('support'\);/);
+  assert.doesNotMatch(page, /hasUrlState/);
   assert.match(table, /pageSizeOptions=\{\[10, 25, 50, 100\]\}/);
-  assert.match(table, /getAll\('column'\)/);
+  assert.match(table, /initialVisibleColumns\.includes\(column\)/);
   assert.match(table, /resetRowSelection/);
   assert.match(dataTable, /DataTablePagination/);
   assert.match(toolbar, /DataTableViewOptions/);
@@ -99,7 +99,9 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /No conversations match this view/);
   assert.match(table, /No support conversations exist/);
   assert.match(table, /persistTablePreferences\('support'/);
-  assert.match(table, /params\.delete\('page'\)/);
+  // router.refresh() must fire only after the preference write settles -- a fire-and-forget PUT
+  // racing an immediate refresh can read the database before the write commits.
+  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(error, /AdminErrorState/);
 });

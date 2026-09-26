@@ -1,5 +1,4 @@
 import { notFound, redirect } from 'next/navigation';
-import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { AdminNavigation } from '@/components/admin-navigation';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireAdministrator, type Actor } from '@/lib/membership/authorization';
@@ -25,11 +24,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const unreadCount = await adminUnreadCount();
 
   return (
-    <NuqsAdapter>
-      <div className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
-        <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} unreadCount={unreadCount} />
-        <div className="min-w-0 flex-1">{children}</div>
-      </div>
-    </NuqsAdapter>
+    <div className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
+      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} unreadCount={unreadCount} />
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }

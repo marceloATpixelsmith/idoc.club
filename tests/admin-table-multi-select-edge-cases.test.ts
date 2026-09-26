@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const toolbar = readFileSync(new URL('../components/data-table/data-table-toolbar.tsx', import.meta.url), 'utf8');
-const canonicalize = readFileSync(new URL('../hooks/use-canonicalize-multi-select-params.ts', import.meta.url), 'utf8');
 const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
 const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
 const dateRangeFilter = readFileSync(new URL('../components/admin/date-range-filter.tsx', import.meta.url), 'utf8');
 const facetedFilter = readFileSync(new URL('../components/data-table/data-table-faceted-filter.tsx', import.meta.url), 'utf8');
+const viewOptions = readFileSync(new URL('../components/data-table/data-table-view-options.tsx', import.meta.url), 'utf8');
 
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
@@ -26,37 +26,41 @@ test('a table that never reports pending state (synchronous, client-only filteri
   assert.doesNotMatch(readOnlyTable, /pending=\{/);
 });
 
-test('a repeated multi-select query key is canonicalized to the toolbar\'s comma-joined form as soon as an admin table mounts, so client facet state matches what the server already applies', () => {
-  assert.match(canonicalize, /export function useCanonicalizeMultiSelectParams\(keys: readonly string\[\]\)/);
-  assert.match(canonicalize, /params\.getAll\(key\)/);
-  assert.match(canonicalize, /values\.length > 1/);
-  assert.match(canonicalize, /router\.replace\(`\$\{pathname\}\?\$\{params\}`, \{ scroll: false \}\)/);
-  assert.match(memberTable, /useCanonicalizeMultiSelectParams\(MULTI_SELECT_PARAMS\)/);
-  assert.match(memberTable, /const MULTI_SELECT_PARAMS = \['status', 'type', 'federation', 'country', 'region'\]/);
-  assert.match(resourceTable, /const multiSelectParams = tableType === 'content_pages' \? \['status', 'audience'\] : \['status'\];/);
-  assert.match(resourceTable, /useCanonicalizeMultiSelectParams\(multiSelectParams\)/);
-  assert.match(supportTable, /useCanonicalizeMultiSelectParams\(MULTI_SELECT_PARAMS\)/);
-  assert.match(supportTable, /const MULTI_SELECT_PARAMS = \['category', 'status', 'assigned'\]/);
+test('every column filter (status/type/category/etc.) is tracked as react-table\'s own local columnFilters state, comma-joined into a single preference field when persisted -- there is no URL to canonicalize a repeated key against anymore', () => {
+  assert.doesNotMatch(memberTable, /useSearchParams/);
+  assert.doesNotMatch(resourceTable, /useSearchParams/);
+  assert.doesNotMatch(supportTable, /useSearchParams/);
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /function filterToken\(columnFilters: ColumnFiltersState, id: string\): string \| undefined \{/);
+    assert.match(table, /list\.length \? list\.join\(','\) : undefined;/);
+  }
 });
 
-test('Reset performs a single navigation that clears both the manual (search/date) fields and the facet-filter query params together, so the button\'s pending state reflects one real round trip instead of racing two separate transitions sharing the same isPending flag', () => {
-  assert.match(memberTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ expiresFrom: undefined, expiresTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
-  assert.match(resourceTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ q: undefined, from: undefined, to: undefined, \.\.\.Object\.fromEntries\(multiSelectParams\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
-  assert.match(supportTable, /onReset=\{\(\) => \{ setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ activityFrom: undefined, activityTo: undefined, q: undefined, \.\.\.Object\.fromEntries\(MULTI_SELECT_PARAMS\.map\(\(key\) => \[key, undefined\]\)\) \}\); \}\}/);
+test('Reset atomically clears search, date-range, and column filters together in one persist+refresh call, so the button\'s pending state reflects one real round trip instead of racing separate updates', () => {
+  assert.match(memberTable, /function resetAll\(\) \{/);
+  assert.match(memberTable, /table\.resetColumnFilters\(\);/);
+  assert.match(memberTable, /\{ expiresFrom: undefined, expiresTo: undefined, q: undefined \},/);
+  assert.match(memberTable, /onReset=\{resetAll\}/);
+  assert.match(resourceTable, /function resetAll\(\) \{/);
+  assert.match(resourceTable, /\{ from: undefined, to: undefined, q: undefined \},/);
+  assert.match(resourceTable, /onReset=\{resetAll\}/);
+  assert.match(supportTable, /function resetAll\(\) \{/);
+  assert.match(supportTable, /\{ activityFrom: undefined, activityTo: undefined, q: undefined \},/);
+  assert.match(supportTable, /onReset=\{resetAll\}/);
 });
 
-test('the toolbar Reset control stays available while a date-range popover holds an uncommitted draft, not only once a date range is actually committed to the URL', () => {
+test('the toolbar Reset control stays available while a date-range popover holds an uncommitted draft, not only once a date range is actually persisted', () => {
   assert.match(dateRangeFilter, /onDraftActiveChange\?: \(active: boolean\) => void;/);
   assert.match(dateRangeFilter, /const draftActive = open && Boolean\(draft\.from \|\| draft\.to\);/);
   assert.match(dateRangeFilter, /onDraftActiveChange\?\.\(draftActive\);/);
   assert.match(memberTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
-  assert.match(memberTable, /some\(\(key\) => searchParams\.has\(key\)\) \|\| dateDraftActive;/);
+  assert.match(memberTable, /const manuallyFiltered = Boolean\(expiresFrom \|\| expiresTo\) \|\| dateDraftActive;/);
   assert.match(memberTable, /onDraftActiveChange=\{setDateDraftActive\}/);
   assert.match(resourceTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
-  assert.match(resourceTable, /\['from', 'to'\]\.some\(\(key\) => searchParams\.has\(key\)\) \|\| dateDraftActive;/);
+  assert.match(resourceTable, /const manuallyFiltered = Boolean\(from \|\| to\) \|\| dateDraftActive;/);
   assert.match(resourceTable, /onDraftActiveChange=\{setDateDraftActive\}/);
   assert.match(supportTable, /const \[dateDraftActive, setDateDraftActive\] = useState\(false\);/);
-  assert.match(supportTable, /activityFrom'\) \|\| searchParams\.get\('activityTo'\)\) \|\| dateDraftActive;/);
+  assert.match(supportTable, /const manuallyFiltered = Boolean\(activityFrom \|\| activityTo\) \|\| dateDraftActive;/);
   assert.match(supportTable, /onDraftActiveChange=\{setDateDraftActive\}/);
 });
 
@@ -64,13 +68,13 @@ test('clicking Reset while a date draft is uncommitted (from/to were already abs
   assert.match(dateRangeFilter, /resetSignal\?: number;/);
   assert.match(dateRangeFilter, /if \(resetSignal !== undefined\) \{\s*\n\s*setDraft\(\{ from: undefined, to: undefined \}\);\s*\n\s*setOpen\(false\);/);
   assert.match(memberTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
-  assert.match(memberTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ expiresFrom: undefined/);
+  assert.match(memberTable, /setDateResetSignal\(\(signal\) => signal \+ 1\);/);
   assert.match(memberTable, /resetSignal=\{dateResetSignal\}/);
   assert.match(resourceTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
-  assert.match(resourceTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ q: undefined, from: undefined/);
+  assert.match(resourceTable, /setDateResetSignal\(\(signal\) => signal \+ 1\);/);
   assert.match(resourceTable, /resetSignal=\{dateResetSignal\}/);
   assert.match(supportTable, /const \[dateResetSignal, setDateResetSignal\] = useState\(0\);/);
-  assert.match(supportTable, /setDateResetSignal\(\(signal\) => signal \+ 1\); update\(\{ activityFrom: undefined/);
+  assert.match(supportTable, /setDateResetSignal\(\(signal\) => signal \+ 1\);/);
   assert.match(supportTable, /resetSignal=\{dateResetSignal\}/);
 });
 
@@ -84,4 +88,51 @@ test('a toolbar-level Reset click while a multi-select facet popover is open doe
   assert.match(facetedFilter, /const onPointerDownOutside: React\.ComponentProps<typeof PopoverContent>\["onPointerDownOutside"\] = \(event\) => \{/);
   assert.match(facetedFilter, /\(event\.target as Element \| null\)\?\.closest\('\[aria-label="Reset filters"\]'\)\) event\.preventDefault\(\);/);
   assert.match(facetedFilter, /onPointerDownOutside=\{onPointerDownOutside\}/);
+});
+
+test('the column-visibility/order persist-on-change effect is a real useEffect, not a useMemo -- React may invoke a useMemo factory more than once per commit (Strict Mode\'s dev-mode double-invoke exists specifically to catch this), so persistAndRefresh (a real side effect: a network PUT plus router.refresh()) run from inside one can fire spuriously on mount or fire twice for one real change', () => {
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /const skipNextColumnPersist = useRef\(true\);/);
+    assert.match(table, /useEffect\(\(\) => \{\s*\n\s*if \(skipNextColumnPersist\.current\)/);
+  }
+});
+
+test('hiding a column in the View popover only clears sorting when that column was actually being sorted, since an unconditional setSorting call fires the sort query state\'s own full-page navigation on every hide -- even for a column nobody sorted by -- and that navigation can race and clobber the separate effect that persists the real column-visibility change, snapping the just-unchecked column back to visible and its checkbox back to checked', () => {
+  assert.doesNotMatch(viewOptions, /column\.toggleVisibility\(nextVisible\);\s*\n\s*if \(!nextVisible\) table\.setSorting/);
+  assert.match(viewOptions, /if \(!nextVisible && table\.getState\(\)\.sorting\.some\(\(item\) => item\.id === column\.id\)\) \{/);
+  assert.match(viewOptions, /table\.setSorting\(\(sorting\) => sorting\.filter\(\(item\) => item\.id !== column\.id\)\);/);
+});
+
+test('saved facet filters (status/type/country/federation/region, status/audience, category/status/assigned) are hydrated into each table\'s initial columnFilters, since the server applies them from saved preferences regardless -- otherwise the toolbar shows no active facets while the table is already filtered, and the next unrelated change persists undefined for them, silently clearing the saved view', () => {
+  assert.match(memberTable, /\{ id: 'type', value: filters\.membershipTypes \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'status', value: filters\.statuses \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'federation', value: filters\.federations \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'country', value: filters\.countries \?\? \[\] \}/);
+  assert.match(memberTable, /\{ id: 'region', value: filters\.regions \?\? \[\] \}/);
+  assert.match(resourceTable, /\{ id: 'status', value: initialStatus \? initialStatus\.split\(','\) : \[\] \}/);
+  assert.match(resourceTable, /\{ id: 'audience', value: initialAudience \? initialAudience\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'category', value: filters\.category \? filters\.category\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'status', value: filters\.status \? filters\.status\.split\(','\) : \[\] \}/);
+  assert.match(supportTable, /\{ id: 'assigned', value: filters\.assigned \? filters\.assigned\.split\(','\) : \[\] \}/);
+  for (const table of [memberTable, resourceTable, supportTable]) assert.match(table, /initialState: \{ columnFilters: initialColumnFilters,/);
+});
+
+test('a manual filter change (search text, date range) resets pagination to page 1 in all three table wrappers -- otherwise staying on a stale page index against a narrower result set can show an empty table, or even "Page N of 1"', () => {
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /table\.setPageIndex\(0\);/);
+    assert.match(table, /pagination: \{ \.\.\.table\.getState\(\)\.pagination, pageIndex: 0 \}/);
+  }
+});
+
+test('persistAndRefresh in every table wrapper sequences router.refresh() after the preference-write promise settles, rather than firing it concurrently with a fire-and-forget PUT -- otherwise a refresh can render before the write commits, and the completed write triggers no follow-up refresh, leaving controls and results inconsistent', () => {
+  assert.match(memberTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  assert.match(resourceTable, /\.catch\(\(\) => setError\('Table preferences could not be saved\.'\)\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  assert.match(supportTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+});
+
+test('useDataTable\'s notify cancels any pending debounced snapshot before dispatching an immediate one, since otherwise an older queued snapshot (e.g. from closing a facet popover) can fire after a newer immediate change (e.g. a sort click within the debounce window) and revert it', () => {
+  const dataTableHook = readFileSync(new URL('../hooks/use-data-table.ts', import.meta.url), 'utf8');
+  const debouncedCallback = readFileSync(new URL('../hooks/use-debounced-callback.ts', import.meta.url), 'utf8');
+  assert.match(debouncedCallback, /return React\.useMemo\(\(\) => Object\.assign\(setValue, \{ cancel \}\), \[setValue, cancel\]\);/);
+  assert.match(dataTableHook, /if \(immediate\) \{[\s\S]*?debouncedNotify\.cancel\(\);\s*\n\s*onLiveStateChange\?\.\(state\);\s*\n\s*\} else debouncedNotify\(state\);/);
 });
