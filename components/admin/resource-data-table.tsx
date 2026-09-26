@@ -5,7 +5,7 @@ import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
 import { DataTable } from '@/components/data-table/data-table';
@@ -16,6 +16,8 @@ import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSele
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
@@ -92,6 +94,8 @@ export function ResourceDataTable({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const multiSelectParams = tableType === 'content_pages' ? ['status', 'audience'] : ['status'];
+  useCanonicalizeMultiSelectParams(multiSelectParams);
   const [search, setSearch] = useState(searchParams.get('q') ?? '');
   const [error, setError] = useState('');
   const suppressPersistence = useRef(false);
@@ -119,9 +123,9 @@ export function ResourceDataTable({
         enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
         header: header(label),
         meta: id === 'status'
-          ? { label, options: config.statuses, variant: 'select' }
+          ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'audience'
-            ? { label, options: config.audiences ?? [], variant: 'select' }
+            ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? <Link className="font-medium underline" href={`${config.path}/${row.original.id}`}>{row.original.title}</Link>
@@ -213,14 +217,14 @@ export function ResourceDataTable({
       pageSize: Number(params.get('pageSize') ?? pageSize),
       q: params.get('q') ?? undefined,
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
+      status: manyParam(params, 'status'),
     };
     if (config.dateFilter)
       {
       preferences.from = params.get('from') ?? undefined;
       preferences.to = params.get('to') ?? undefined;
       }
-    if (tableType === 'content_pages') preferences.audience = params.get('audience') ?? undefined;
+    if (tableType === 'content_pages') preferences.audience = manyParam(params, 'audience');
     void persistTablePreferences(tableType, preferences).then((response) => {
       if (!response.ok) setError('Table preferences could not be saved.');
     }).catch(() => setError('Table preferences could not be saved.'));
@@ -242,20 +246,24 @@ export function ResourceDataTable({
   }
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
+  const actionBarVisibility = useActionBarVisibility(selected.length);
   // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
   // (search) -- the search box has its own clear affordance. `filtered` drives the empty-state
   // copy, so it must include `q`: a search that matches nothing is still "no records match this
   // view", not "no records exist at all".
-  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const [dateResetSignal, setDateResetSignal] = useState(0);
+  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key)) || dateDraftActive;
   const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={selected.length > 0} onOpenChange={(open) => { if (!open) table.resetRowSelection(); }}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
         isFiltered={manuallyFiltered}
-        onReset={() => update({ q: undefined, from: undefined, to: undefined })}
+        pending={isPending}
+        onReset={() => { setDateResetSignal((signal) => signal + 1); update({ q: undefined, from: undefined, to: undefined, ...Object.fromEntries(multiSelectParams.map((key) => [key, undefined])) }); }}
         leading={<>
           <Input
             aria-label={config.searchLabel}
@@ -270,6 +278,8 @@ export function ResourceDataTable({
               from={searchParams.get('from') ?? undefined}
               label="Date"
               onChange={(from, to) => update({ from, to })}
+              onDraftActiveChange={setDateDraftActive}
+              resetSignal={dateResetSignal}
               to={searchParams.get('to') ?? undefined}
             />
           )}

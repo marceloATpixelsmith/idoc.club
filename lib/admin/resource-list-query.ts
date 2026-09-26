@@ -8,6 +8,14 @@ export function one(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? '';
 }
 
+// A multi-select toolbar filter arrives either as a real repeated-key array (?status=a&status=b) or,
+// from the admin toolbar's actual multi-select control, a single comma-joined query param
+// (?status=a,b) -- both mean "match any of these", so both collapse to the same deduped token list.
+export function many(value: string | string[] | undefined): string[] {
+  const items = Array.isArray(value) ? value : value !== undefined ? [value] : [];
+  return [...new Set(items.flatMap((item) => item.split(',')).map((item) => item.trim()).filter(Boolean))];
+}
+
 export function listPage(input: ResourceQuery) {
   const value = Number(one(input.page));
   return Number.isSafeInteger(value) && value > 0 ? Math.min(value, 10000) : 1;

@@ -10,11 +10,13 @@ import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
-import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
 import { useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
@@ -22,11 +24,11 @@ import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries'
 import { IDOC_REGIONS } from '@/lib/membership/validation';
 
 type Filters = {
-  country?: string; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federation?: string; filters?: string;
-  membershipType?: string; page: number; pageSize: number; q?: string; region?: string; sort: string; status: string;
+  direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; page: number; q?: string; sort: string;
 };
 
 const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
+const MULTI_SELECT_PARAMS = ['status', 'type', 'federation', 'country', 'region'] as const;
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
@@ -68,6 +70,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  useCanonicalizeMultiSelectParams(MULTI_SELECT_PARAMS);
   const [search, setSearch] = useState(filters.q ?? '');
   const [isPending, startTransition] = useTransition();
   const initialVisibility = useMemo(() => visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
@@ -75,11 +78,11 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
     { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
-    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'select' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <Shield aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
-    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
-    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—' },
-    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.country ? countryNameForCode(row.original.country) : '—' },
-    { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.region ?? '—' },
+    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <Shield aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
+    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
+    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—' },
+    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? countryNameForCode(row.original.country) : '—' },
+    { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.region ?? '—' },
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
@@ -104,15 +107,15 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   // toolbar's own filter state -- keyed by column id -- picks up, not just the server query.
   function filterPreferenceFields(params: URLSearchParams) {
     return {
-      country: params.get('country') ?? undefined,
+      country: manyParam(params, 'country'),
       expiresFrom: params.get('expiresFrom') ?? undefined,
       expiresTo: params.get('expiresTo') ?? undefined,
-      federation: params.get('federation') ?? undefined,
+      federation: manyParam(params, 'federation'),
       q: params.get('q') ?? undefined,
-      region: params.get('region') ?? undefined,
+      region: manyParam(params, 'region'),
       sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
-      type: params.get('type') ?? undefined,
+      status: manyParam(params, 'status'),
+      type: manyParam(params, 'type'),
     };
   }
 
@@ -158,22 +161,26 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
   const exportParams = new URLSearchParams(searchParams.toString()); exportParams.delete('page'); exportParams.delete('profileId'); exportParams.delete('column');
   const selected = table.getSelectedRowModel().rows.length;
+  const actionBarVisibility = useActionBarVisibility(selected);
   const selectedExportParams = new URLSearchParams(exportParams.toString());
   for (const row of table.getSelectedRowModel().rows) selectedExportParams.append('selectedUserId', String(row.original.userId));
-  const manuallyFiltered = ['expiresFrom', 'expiresTo'].some((key) => searchParams.has(key));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const [dateResetSignal, setDateResetSignal] = useState(0);
+  const manuallyFiltered = ['expiresFrom', 'expiresTo'].some((key) => searchParams.has(key)) || dateDraftActive;
   const hasActiveView = [...searchParams.keys()].some((key) => !['column', 'page', 'pageSize', 'profileId'].includes(key));
 
   return <>
     <TablePreferenceSync table="memberships" />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
         isFiltered={manuallyFiltered}
-        onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined })}
+        pending={isPending}
+        onReset={() => { setDateResetSignal((signal) => signal + 1); update({ expiresFrom: undefined, expiresTo: undefined, q: undefined, ...Object.fromEntries(MULTI_SELECT_PARAMS.map((key) => [key, undefined])) }); }}
         leading={<>
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
-          <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} to={filters.expiresTo} />
+          <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={filters.expiresTo} />
         </>}
         trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
       >

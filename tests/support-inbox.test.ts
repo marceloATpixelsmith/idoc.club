@@ -37,6 +37,10 @@ test('administrator mutations authorize roles and revalidate submitted assignees
   assert.match(source, /requireSuperAdmin\(actor\)/);
 });
 
+test('a saved assignment filter whose values no longer resolve to a real administrator falls back to no filter instead of matching nothing', () => {
+  assert.match(source, /const assignedWhere = !assignedValues\.length \|\| !assignedParts\.length \? client`true`/);
+});
+
 test('thread transitions, read sides, chronological order, and idempotency are explicit', () => {
   assert.match(source, /status='admin_responded'/);
   assert.match(source, /status='member_replied'/);

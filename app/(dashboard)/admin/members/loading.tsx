@@ -1,3 +1,3 @@
 export default function MembersLoading() {
-  return <main aria-busy="true" aria-live="polite" className="flex-1 p-8"><h1 className="text-2xl font-semibold">Members</h1><p className="mt-4 text-sm text-muted-foreground">Loading membership roster…</p><div className="mt-6 h-64 animate-pulse rounded-xl bg-surface" /></main>;
+  return <main aria-busy="true" aria-live="polite" className="animate-pulse flex-1 space-y-6 p-8"><div className="h-8 w-56 rounded bg-muted" /><div className="h-24 rounded bg-muted" /><div className="h-64 rounded-xl bg-muted" /></main>;
 }

@@ -27,3 +27,21 @@ test('invalid saved JSON is ignored and reset affects only the authenticated own
   await asAdmin(first.id, () => resetTablePreferences('memberships'));
   assert.deepEqual(await asAdmin(second.id, () => getTablePreferences('memberships')), { status: 'expired' });
 });
+
+test('a multi-select facet filter\'s comma-joined value (as the toolbar itself writes it) is accepted and persists', async () => {
+  const admin = await adminUser();
+  await asAdmin(admin.id, () => saveTablePreferences('memberships', {
+    country: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
+  }));
+  assert.deepEqual(await asAdmin(admin.id, () => getTablePreferences('memberships')), {
+    country: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
+  });
+  await asAdmin(admin.id, () => saveTablePreferences('support', { category: 'billing_membership,seminars', status: 'admin_responded,member_replied' }));
+  assert.deepEqual(await asAdmin(admin.id, () => getTablePreferences('support')), { category: 'billing_membership,seminars', status: 'admin_responded,member_replied' });
+});
+
+test('a multi-select value containing any token outside the column\'s real allow-list is rejected entirely', async () => {
+  const admin = await adminUser();
+  await assert.rejects(asAdmin(admin.id, () => saveTablePreferences('memberships', { status: 'active,forged' })), (error) => error instanceof Error && error.name === 'ZodError');
+  assert.equal(await asAdmin(admin.id, () => getTablePreferences('memberships')), null);
+});

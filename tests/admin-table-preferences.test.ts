@@ -6,6 +6,10 @@ const preferences = readFileSync(new URL('../lib/admin/table-preferences.ts', im
 const migration = readFileSync(new URL('../lib/db/migrations/0045_administrator_table_preferences.sql', import.meta.url), 'utf8');
 const route = readFileSync(new URL('../app/api/admin/table-preferences/[table]/route.ts', import.meta.url), 'utf8');
 const membershipPage = readFileSync(new URL('../app/(dashboard)/admin/members/page.tsx', import.meta.url), 'utf8');
+const preferenceSync = readFileSync(new URL('../components/admin/table-preference-sync.tsx', import.meta.url), 'utf8');
+const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
+const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
+const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
 
 test('administrator table preferences are owner-scoped and uniquely upserted by table', () => {
   assert.match(migration, /UNIQUE INDEX "administrator_table_preferences_user_table_unique"/);
@@ -27,4 +31,13 @@ test('URL state takes precedence and default Active applies only without URL or 
   assert.match(membershipPage, /defaultActive=\{!hasUrlState && !savedPreferences\}/);
   assert.match(route, /requireCsrfTokenValue/);
   assert.match(route, /resetTablePreferences/);
+});
+
+test('a multi-select facet filter value is canonicalized to its comma-joined form before being persisted, whether the URL wrote it as a repeated key or the toolbar\'s own comma-joined param', () => {
+  assert.match(preferenceSync, /export function manyParam\(params: URLSearchParams, key: string\): string \| undefined \{/);
+  assert.match(preferenceSync, /params\.getAll\(key\)/);
+  for (const field of ['country', 'federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: manyParam\\(params, '${field}'\\)`));
+  assert.match(resourceTable, /status: manyParam\(params, 'status'\)/);
+  assert.match(resourceTable, /preferences\.audience = manyParam\(params, 'audience'\)/);
+  for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: manyParam\\(params, '${field}'\\)`));
 });

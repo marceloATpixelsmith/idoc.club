@@ -278,6 +278,12 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   background: var(--accent);
 }
 
+/* Match the table header row to the toolbar's filter/sort/view button surface, so the header
+ * reads as a distinct band rather than blending into the row background below it. */
+[data-idoc-table-root] [data-slot='table-header'] {
+  background: var(--surface-raised);
+}
+
 @utility eyebrow {
   font-family: var(--font-sans);
   font-size: 0.6875rem;
@@ -346,53 +352,5 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   .hero-rise {
     animation: none;
     opacity: 1;
-  }
-}
-
-
-@keyframes navigation-loading-blink {
-  0%, 100% {
-    opacity: 0.25;
-    transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
-  }
-
-  50% {
-    opacity: 1;
-    transform: translateX(var(--navigation-loading-star-x)) scale(1);
-  }
-}
-
-.navigation-loading-star {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  background: var(--gold);
-  clip-path: polygon(50% 0%, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0% 50%, 39% 38%);
-  filter: drop-shadow(0 0 8px color-mix(in oklch, var(--gold) 55%, transparent));
-  animation: navigation-loading-blink 1.2s ease-in-out infinite;
-}
-
-.navigation-loading-star--one {
-  --navigation-loading-star-x: -34px;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
-}
-
-.navigation-loading-star--two {
-  --navigation-loading-star-x: 0px;
-  animation-delay: 0.2s;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
-}
-
-.navigation-loading-star--three {
-  --navigation-loading-star-x: 34px;
-  animation-delay: 0.4s;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .navigation-loading-star {
-    animation: none;
-    opacity: 1;
-    transform: translateX(var(--navigation-loading-star-x)) scale(1);
   }
 }
