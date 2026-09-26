@@ -8,6 +8,24 @@ import { MembersTable } from './members-table';
 import { MemberDetailSheet } from './member-detail-sheet';
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { client } from '@/lib/db/drizzle';
+import type { ReadOnlyRow } from '@/components/admin/admin-read-only-table';
+
+const NOTIFICATION_KIND_LABELS: Record<string, string> = {
+  'administrator.profile_changed': 'Profile changed (admin alert)',
+  'membership.expiration_reminder': 'Expiration reminder',
+  'membership.grace_expired': 'Grace period ended',
+  'membership.grace_reminder': 'Grace period reminder',
+  'membership.payment_failed': 'Payment failed / grace started',
+  'membership.renewal_reminder': 'Renewal reminder',
+  'stripe.customer_email_sync': 'Stripe email sync',
+};
+
+function notificationOutcome(row: { deadLetteredAt: Date | null; lastErrorCode: string | null; sentAt: Date | null }): string {
+  if (row.sentAt) return 'Delivered';
+  if (row.deadLetteredAt) return 'Failed (gave up)';
+  if (row.lastErrorCode) return 'Retrying';
+  return 'Pending';
+}
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; tab?: string }> }) {
   const actor = await requireAccountAccess('administration');
@@ -53,13 +71,22 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     hasValidProfileId ? getPrivateMember(profileId!) : Promise.resolve(null),
     hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
   ]);
-  const [activeRoles, accountState, paymentHistory, seminarHistory, notificationHistory] = await Promise.all([
+  const [activeRoles, accountState, paymentHistory, seminarHistory, rawNotificationHistory] = await Promise.all([
     selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),
     selected ? getUserAccountState(selected.profile.userId) : Promise.resolve(null),
     selected ? listAdminPaymentHistory(selected.profile.id) : Promise.resolve([]),
     selected ? listAdminSeminarHistoryForMember(selected.profile.id) : Promise.resolve([]),
     selected ? listNotificationHistory(selected.profile.id) : Promise.resolve([]),
   ]);
+  // listNotificationHistory selects every column (payload, dedupeKey, leaseOwner, lease timestamps
+  // included) since it also backs the durable-outbox worker; project down to only the fields the
+  // Sheet's Notifications tab displays before this crosses into the client component, exactly like
+  // the standalone /admin/notifications page always did.
+  const notificationHistory: ReadOnlyRow[] = rawNotificationHistory.map((row) => ({
+    id: String(row.id), kind: NOTIFICATION_KIND_LABELS[row.kind] ?? row.kind,
+    created: row.createdAt.toISOString(), sent: row.sentAt ? row.sentAt.toISOString() : '—',
+    attempts: String(row.attemptCount), lastError: row.lastErrorCode ?? '—', status: notificationOutcome(row),
+  }));
   // Same query the standalone /admin/payments page used to run -- now feeding the Sheet's Payment
   // tab instead of a separate route (see components/admin-navigation.tsx: that nav item just told
   // admins to go back to Members and search, so it's gone).

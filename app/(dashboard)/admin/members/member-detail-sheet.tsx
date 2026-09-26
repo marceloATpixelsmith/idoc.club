@@ -3,12 +3,12 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
+import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MEMBERSHIP_STATUS_LABELS } from '@/lib/membership/entitlement';
-import type { getPrivateMember, listAdminPaymentHistory, listAuditHistory, listNotificationHistory } from '@/lib/membership/data-access';
+import type { getPrivateMember, listAdminPaymentHistory, listAuditHistory } from '@/lib/membership/data-access';
 import type { listActiveRoles } from '@/lib/membership/role-grants';
 import type { listAdminSeminarHistoryForMember } from '@/lib/seminars/registrations';
 import { AdminProfileForm } from './admin-profile-form';
@@ -25,32 +25,15 @@ type ActiveRole = Awaited<ReturnType<typeof listActiveRoles>>[number];
 type PaymentHistoryEntry = Awaited<ReturnType<typeof listAdminPaymentHistory>>[number];
 type SeminarHistoryEntry = Awaited<ReturnType<typeof listAdminSeminarHistoryForMember>>[number];
 type AuditEntry = Awaited<ReturnType<typeof listAuditHistory>>[number];
-type NotificationEntry = Awaited<ReturnType<typeof listNotificationHistory>>[number];
 type StripePayment = { amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string };
 
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   bank_transfer: 'Bank transfer', cash: 'Cash', complimentary: 'Complimentary grant',
   paypal: 'PayPal', stripe_one_time: 'Stripe one-time', stripe_recurring: 'Stripe recurring',
 };
-const NOTIFICATION_KIND_LABELS: Record<string, string> = {
-  'administrator.profile_changed': 'Profile changed (admin alert)',
-  'membership.expiration_reminder': 'Expiration reminder',
-  'membership.grace_expired': 'Grace period ended',
-  'membership.grace_reminder': 'Grace period reminder',
-  'membership.payment_failed': 'Payment failed / grace started',
-  'membership.renewal_reminder': 'Renewal reminder',
-  'stripe.customer_email_sync': 'Stripe email sync',
-};
 
 function money(amountCents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(amountCents / 100);
-}
-
-function notificationOutcome(row: NotificationEntry): string {
-  if (row.sentAt) return 'Delivered';
-  if (row.deadLetteredAt) return 'Failed (gave up)';
-  if (row.lastErrorCode) return 'Retrying';
-  return 'Pending';
 }
 
 /** Every tab section is this same shape (a heading, optional explanation, then content) styled as a
@@ -89,7 +72,7 @@ export function MemberDetailSheet({
   closeHref: string;
   initialTab?: string;
   isSuperAdmin: boolean;
-  notificationHistory: NotificationEntry[];
+  notificationHistory: ReadOnlyRow[];
   paymentHistory: PaymentHistoryEntry[];
   seminarHistory: SeminarHistoryEntry[];
   selected: Selected;
@@ -205,11 +188,7 @@ export function MemberDetailSheet({
               <AdminReadOnlyTable
                 columns={[{ id: 'kind', label: 'Kind' }, { id: 'created', label: 'Created' }, { id: 'sent', label: 'Sent' }, { id: 'attempts', label: 'Attempts' }, { id: 'lastError', label: 'Last error' }, { id: 'status', label: 'Status' }]}
                 empty="No notifications on file for this member."
-                rows={notificationHistory.map((row) => ({
-                  id: String(row.id), kind: NOTIFICATION_KIND_LABELS[row.kind] ?? row.kind,
-                  created: row.createdAt.toISOString(), sent: row.sentAt ? row.sentAt.toISOString() : '—',
-                  attempts: String(row.attemptCount), lastError: row.lastErrorCode ?? '—', status: notificationOutcome(row),
-                }))}
+                rows={notificationHistory}
                 searchLabel="Search notification history"
                 statusColumn="status"
                 tableType="notifications"

@@ -37,6 +37,17 @@ test('form sections render as cards in a responsive grid, not a flat vertical st
   assert.match(sheet, /function Section\(/);
 });
 
+test('notification history is projected to a safe row shape on the server before it ever reaches the client Sheet', () => {
+  // listNotificationHistory selects every column (payload, dedupeKey, leaseOwner, lease timestamps
+  // included), so the raw rows must never be handed to the 'use client' Sheet -- only the page.tsx
+  // server component may import the query, and it must map to the display-safe ReadOnlyRow shape.
+  assert.doesNotMatch(sheet, /listNotificationHistory/);
+  assert.match(page, /listNotificationHistory/);
+  assert.match(page, /NOTIFICATION_KIND_LABELS/);
+  assert.match(page, /function notificationOutcome/);
+  assert.match(page, /const notificationHistory: ReadOnlyRow\[\] = rawNotificationHistory\.map/);
+});
+
 test('the standalone manual-payments route now redirects into the Members Sheet\'s Payment tab', () => {
   assert.match(paymentsPage, /redirect\(/);
   assert.match(paymentsPage, /\/admin\/members\?profileId=\$\{profileId\}&tab=payment/);
