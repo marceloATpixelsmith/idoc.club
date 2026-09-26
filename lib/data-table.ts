@@ -41,7 +41,12 @@ export function getColumnPinningStyle<TData>({
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
     position: isPinned ? "sticky" : "relative",
-    background: isPinned ? "var(--background)" : "var(--background)",
+    // A pinned column needs an opaque background so scrolled-under content doesn't show through
+    // it; an unpinned cell must NOT get one, since an inline style always wins over the row/header
+    // CSS classes that are supposed to color it (the header's --surface-raised band, a hovered or
+    // selected body row's highlight) -- this previously set `var(--background)` unconditionally,
+    // silently overriding those on every cell in every table regardless of pinning.
+    background: isPinned ? "var(--background)" : undefined,
     width: column.getSize(),
     zIndex: isPinned ? 1 : undefined,
   };

@@ -86,14 +86,15 @@ export function DataTableToolbar<TData>({
           <Button
             data-idoc-table-control
             aria-label="Reset filters"
+            title="Reset filters"
             aria-busy={isResetting}
             variant="outline"
+            size="icon-sm"
             className="border-dashed"
             disabled={isResetting}
             onClick={onReset}
           >
             {isResetting ? <LoaderCircle className="animate-spin" /> : <X />}
-            Reset
           </Button>
         )}
       </div>

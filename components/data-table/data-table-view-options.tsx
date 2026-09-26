@@ -39,7 +39,11 @@ export function DataTableViewOptions<TData>({
       const bPosition = currentOrder.indexOf(b.id);
       return aPosition >= 0 && bPosition >= 0 ? aPosition - bPosition
         : (a.columnDef.meta?.label ?? a.id).localeCompare(b.columnDef.meta?.label ?? b.id, 'en');
-    });
+    })
+    // Visible columns always list above hidden ones (stable sort preserves each group's relative
+    // order from above), so the checked columns a user is actively working with aren't scattered
+    // among a long tail of hidden ones.
+    .sort((a, b) => Number(b.getIsVisible()) - Number(a.getIsVisible()));
 
   function toggleColumn(column: (typeof columns)[number]) {
     const nextVisible = !column.getIsVisible();

@@ -98,7 +98,7 @@ export function DateRangeFilter({
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
-        <Button data-idoc-table-control variant="outline" className="border-dashed font-normal">
+        <Button data-idoc-table-control variant="outline" className="h-8 border-dashed font-normal">
           {hasValue ? (
             <div
               aria-label={`Clear ${label} filter`}
