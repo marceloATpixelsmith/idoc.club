@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { getPrivateMember, listAdminPaymentHistory, listAuditHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { listAdminMembers, MemberFilterRangeError, type MemberFilters } from '@/lib/membership/admin-memberships';
 import { requireAdministrator } from '@/lib/membership/authorization';
@@ -14,7 +13,7 @@ import { RolesSection } from './roles-section';
 import { listAdminSeminarHistoryForMember } from '@/lib/seminars/registrations';
 import { MembersTable } from './members-table';
 import { ExtendExpirationForm } from './extend-expiration-form';
-import { getTablePreferences, preferenceQuery } from '@/lib/admin/table-preferences';
+import { getTablePreferences } from '@/lib/admin/table-preferences';
 
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   bank_transfer: 'Bank transfer', cash: 'Cash', complimentary: 'Complimentary grant',
@@ -25,38 +24,30 @@ function money(amountCents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(amountCents / 100);
 }
 
-export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<MemberFilters & { profileId?: string }> }) {
+export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string }> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
-  const params = await searchParams;
-  const tableKeys = ['q', 'status', 'expiresFrom', 'expiresTo', 'federation', 'country', 'region', 'membershipType', 'type', 'filters', 'joinOperator', 'sort', 'direction', 'pageSize', 'columnOrder', 'column'];
-  const hasUrlState = tableKeys.some((key) => params[key as keyof typeof params] !== undefined);
-  const savedPreferences = hasUrlState ? null : await getTablePreferences('memberships');
-  if (savedPreferences) {
-    const savedQuery = preferenceQuery(savedPreferences);
-    if (Object.keys(savedQuery).length) {
-      const savedParams = new URLSearchParams();
-      for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined) for (const entry of Array.isArray(value) ? value : [value]) savedParams.append(key, String(entry));
-      }
-      for (const [key, value] of Object.entries(savedQuery)) {
-        if (Array.isArray(value)) {
-          if (!value.length && key === 'column') savedParams.append(key, '');
-          else for (const entry of value) savedParams.append(key, entry);
-        } else savedParams.set(key, value);
-      }
-      redirect(`/admin/members?${savedParams}`);
-    }
-  }
-  const effectiveParams = hasUrlState ? params : { ...preferenceQuery(savedPreferences), ...params };
-  const visibleColumns = params.column ? (Array.isArray(params.column) ? params.column : [params.column]) : Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
-  const { profileId: profileIdParam } = params;
-  // The admin UI's advanced filter-builder (which produced `filters`/`joinOperator`) is retired;
-  // listAdminMembers still supports those params for direct/programmatic callers, but a stale or
-  // shared URL reaching this page must not have them silently applied with no toolbar indication
-  // that a filter is active.
-  const { filters: _filters, joinOperator: _joinOperator, ...listParams } = effectiveParams;
+  const { profileId: profileIdParam } = await searchParams;
+  // Filters, sort, columns, and pagination all come from the database, never the URL -- see
+  // components/admin/table-preference-sync.tsx and docs/07 for why. `profileId` is the one
+  // deliberate exception: opening a specific member's detail panel is exactly the short-lived,
+  // single-step use of a query param this app still allows.
+  const savedPreferences = await getTablePreferences('memberships');
+  const visibleColumns = Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
+  const listParams: MemberFilters = {
+    country: typeof savedPreferences?.country === 'string' ? savedPreferences.country : undefined,
+    expiresFrom: typeof savedPreferences?.expiresFrom === 'string' ? savedPreferences.expiresFrom : undefined,
+    expiresTo: typeof savedPreferences?.expiresTo === 'string' ? savedPreferences.expiresTo : undefined,
+    federation: typeof savedPreferences?.federation === 'string' ? savedPreferences.federation : undefined,
+    page: typeof savedPreferences?.page === 'number' ? savedPreferences.page : undefined,
+    pageSize: typeof savedPreferences?.pageSize === 'number' ? savedPreferences.pageSize : undefined,
+    q: typeof savedPreferences?.q === 'string' ? savedPreferences.q : undefined,
+    region: typeof savedPreferences?.region === 'string' ? savedPreferences.region : undefined,
+    sort: typeof savedPreferences?.sort === 'string' ? savedPreferences.sort : undefined,
+    status: typeof savedPreferences?.status === 'string' ? savedPreferences.status : undefined,
+    type: typeof savedPreferences?.type === 'string' ? savedPreferences.type : undefined,
+  };
   let filterError: string | null = null;
   let listing: Awaited<ReturnType<typeof listAdminMembers>>;
   try {
@@ -67,17 +58,27 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     listing = await listAdminMembers({ status: 'active' });
   }
   const profileId = profileIdParam ? Number(profileIdParam) : null;
-  const selected = profileId && Number.isInteger(profileId) ? await getPrivateMember(profileId) : null;
-  const auditHistory = profileId && Number.isInteger(profileId) ? await listAuditHistory(profileId) : [];
-  const activeRoles = selected && isSuperAdmin ? await listActiveRoles(selected.profile.userId) : [];
-  const accountState = selected ? await getUserAccountState(selected.profile.userId) : null;
-  const paymentHistory = selected ? await listAdminPaymentHistory(selected.profile.id) : [];
-  const seminarHistory = selected ? await listAdminSeminarHistoryForMember(selected.profile.id) : [];
+  const hasValidProfileId = Boolean(profileId && Number.isInteger(profileId));
+  // getPrivateMember and listAuditHistory both depend only on profileId, not on each other; once
+  // `selected` resolves, the remaining four detail-panel queries depend only on `selected`, not on
+  // each other either. Six round trips to the database run one at a time here previously (~6x the
+  // latency of a single query), which is the dominant cost in this route's render time whenever a
+  // member's profile is open -- Promise.all lets them overlap instead.
+  const [selected, auditHistory] = await Promise.all([
+    hasValidProfileId ? getPrivateMember(profileId!) : Promise.resolve(null),
+    hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
+  ]);
+  const [activeRoles, accountState, paymentHistory, seminarHistory] = await Promise.all([
+    selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),
+    selected ? getUserAccountState(selected.profile.userId) : Promise.resolve(null),
+    selected ? listAdminPaymentHistory(selected.profile.id) : Promise.resolve([]),
+    selected ? listAdminSeminarHistoryForMember(selected.profile.id) : Promise.resolve([]),
+  ]);
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-2xl font-semibold">Members</h1>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
-    <MembersTable defaultActive={!hasUrlState && !savedPreferences} initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
+    <MembersTable initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (
       <>
         <section className="mt-8 max-w-2xl border rounded-lg p-4">

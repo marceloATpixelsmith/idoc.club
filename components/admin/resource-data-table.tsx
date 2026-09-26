@@ -1,11 +1,11 @@
 'use client';
 
-import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
+import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
 import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { manyParam, persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
+import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
 import { DataTable } from '@/components/data-table/data-table';
@@ -17,8 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
-import { useCanonicalizeMultiSelectParams } from '@/hooks/use-canonicalize-multi-select-params';
-import { useDataTable } from '@/hooks/use-data-table';
+import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
 
@@ -80,9 +79,20 @@ function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'
   );
 }
 
+function filterToken(columnFilters: ColumnFiltersState, id: string): string | undefined {
+  const value = columnFilters.find((filter) => filter.id === id)?.value;
+  const list = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  return list.length ? list.join(',') : undefined;
+}
+
 export function ResourceDataTable({
-  initialVisibleColumns, page, pageSize, rows, tableType, total,
+  initialColumnOrder, initialFrom, initialSearch, initialSort, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
 }: {
+  initialColumnOrder?: string;
+  initialFrom?: string;
+  initialSearch?: string;
+  initialSort?: string;
+  initialTo?: string;
   initialVisibleColumns?: string[];
   page: number;
   pageSize: number;
@@ -93,19 +103,16 @@ export function ResourceDataTable({
   const config = CONFIG[tableType];
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const multiSelectParams = tableType === 'content_pages' ? ['status', 'audience'] : ['status'];
-  useCanonicalizeMultiSelectParams(multiSelectParams);
-  const [search, setSearch] = useState(searchParams.get('q') ?? '');
+  const [search, setSearch] = useState(initialSearch ?? '');
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
   const [error, setError] = useState('');
-  const suppressPersistence = useRef(false);
-  const syncingUrl = useRef(false);
   const [isPending, startTransition] = useTransition();
   const optional = useMemo(() => config.columns.filter(({ id }) => id !== 'title').map(({ id }) => id), [config]);
-  const initialVisibility = useMemo<VisibilityState>(() => {
-    const explicit = searchParams.getAll('column');
-    const selected = explicit.length ? explicit : initialVisibleColumns;
-    return selected ? Object.fromEntries(optional.map((id) => [id, selected.includes(id)])) : {};
+  const initialVisibility = useMemo(() => {
+    if (!initialVisibleColumns) return {};
+    return Object.fromEntries(optional.map((id) => [id, initialVisibleColumns.includes(id)]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount, matching useDataTable's own initialState-is-only-read-once contract.
   }, []);
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
     const header = (label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => <DataTableColumnHeader column={column} label={label} />;
@@ -147,104 +154,78 @@ export function ResourceDataTable({
       },
     ];
   }, [config, tableType]);
+  const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated';
   const initialSorting = useMemo(() => {
-    const value = searchParams.get('sort') ?? '';
-    try
-      {
-      const parsed: unknown = JSON.parse(value || '[]');
-      if (Array.isArray(parsed) && parsed.length && config.columns.some(({ id }) => id === parsed[0]?.id))
-        {
-        return parsed;
-        }
-      }
-    catch
-      {
-      }
-    const legacy = ['title', 'status', 'publication', 'updated', 'date', 'registrations'].includes(value)
-      && config.columns.some(({ id }) => id === value) ? value : '';
-    return [{ desc: searchParams.get('direction') !== 'asc', id: legacy || (tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated') }];
+    try {
+      const parsed: unknown = JSON.parse(initialSort || '[]');
+      if (Array.isArray(parsed) && parsed.length && config.columns.some(({ id }) => id === parsed[0]?.id)) return parsed;
+    } catch { /* fall through to the default below */ }
+    return [{ desc: true, id: defaultSortId }];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
+
+  // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
+  // writes any of this to the URL. `overrides` lets Reset atomically change search/date-range
+  // alongside table state without racing separate persist calls against each other.
+  function persistAndRefresh(state: DataTableLiveState, overrides?: { from?: string; to?: string; q?: string }) {
+    const effectiveSearch = overrides && 'q' in overrides ? overrides.q : search;
+    const effectiveFrom = overrides && 'from' in overrides ? overrides.from : from;
+    const effectiveTo = overrides && 'to' in overrides ? overrides.to : to;
+    const preferences: TablePreferenceState = {
+      columnOrder: table.getState().columnOrder.join(','),
+      columns: optional.filter((id) => table.getState().columnVisibility[id] !== false),
+      page: state.pagination.pageIndex + 1,
+      pageSize: state.pagination.pageSize,
+      q: effectiveSearch || undefined,
+      sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
+      status: filterToken(state.columnFilters, 'status'),
+    };
+    if (config.dateFilter) { preferences.from = effectiveFrom; preferences.to = effectiveTo; }
+    if (tableType === 'content_pages') preferences.audience = filterToken(state.columnFilters, 'audience');
+    void persistTablePreferences(tableType, preferences).then((response) => {
+      if (!response.ok) setError('Table preferences could not be saved.');
+    }).catch(() => setError('Table preferences could not be saved.'));
+    startTransition(() => router.refresh());
+  }
+
   const { table } = useDataTable({
     columns, data: rows,
     // Simple (non-advanced) mode is required for the auto-rendered status/audience faceted
     // filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => String(row.id),
-    initialState: { columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
+    initialState: { columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
+    onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
-    queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
-    shallow: false,
     startTransition,
   });
 
-  useEffect(() => setSearch(searchParams.get('q') ?? ''), [searchParams]);
-  useEffect(() => { table.resetRowSelection(); }, [searchParams, table]);
-  const urlColumns = searchParams.getAll('column').join('\u0000');
+  const skipNextColumnPersist = useRef(true);
+  const visibilityKey = JSON.stringify(table.getState().columnVisibility);
+  const orderKey = table.getState().columnOrder.join(',');
   useEffect(() => {
-    const selected = searchParams.getAll('column');
-    const next = Object.fromEntries(optional.map((id) => [id, !selected.length || selected.includes(id)]));
-    const current = table.getState().columnVisibility;
-    if (optional.some((id) => current[id] !== next[id]))
-      {
-      syncingUrl.current = true;
-      table.setColumnVisibility(next);
-      }
-  }, [urlColumns]);
-  useEffect(() => {
-    if (suppressPersistence.current) return;
-    if (syncingUrl.current)
-      {
-      syncingUrl.current = false;
-      return;
-      }
-    const state = table.getState();
-    const selected = optional.filter((id) => state.columnVisibility[id] !== false);
-    const current = searchParams.getAll('column');
-    if (current.length === selected.length && current.every((value, index) => value === selected[index])) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('column');
-    if (!selected.length) params.append('column', '');
-    else for (const id of selected) params.append('column', id);
-    router.replace(`${pathname}?${params}`, { scroll: false });
-  }, [table.getState().columnVisibility]);
-  useEffect(() => {
-    if (suppressPersistence.current) return;
-    const params = new URLSearchParams(searchParams.toString());
-    const preferences: TablePreferenceState = {
-      columns: optional.filter((id) => table.getState().columnVisibility[id] !== false),
-      columnOrder: params.get('columnOrder') ?? undefined,
-      direction: params.get('direction') ?? undefined,
-      pageSize: Number(params.get('pageSize') ?? pageSize),
-      q: params.get('q') ?? undefined,
-      sort: params.get('sort') ?? undefined,
-      status: manyParam(params, 'status'),
-    };
-    if (config.dateFilter)
-      {
-      preferences.from = params.get('from') ?? undefined;
-      preferences.to = params.get('to') ?? undefined;
-      }
-    if (tableType === 'content_pages') preferences.audience = manyParam(params, 'audience');
-    void persistTablePreferences(tableType, preferences).then((response) => {
-      if (!response.ok) setError('Table preferences could not be saved.');
-    }).catch(() => setError('Table preferences could not be saved.'));
-  }, [config.dateFilter, optional, pageSize, searchParams, table, tableType, table.getState().columnVisibility]);
+    if (skipNextColumnPersist.current) { skipNextColumnPersist.current = false; return; }
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting });
+    table.resetRowSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires exactly when visibility/order change, reading everything else fresh at call time.
+  }, [visibilityKey, orderKey]);
 
-  function update(values: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    // Purge the retired advanced filter-builder's params so a stale/shared URL carrying them
-    // doesn't keep silently narrowing results the current toolbar shows no indication of.
-    params.delete('filters');
-    params.delete('joinOperator');
-    for (const [key, value] of Object.entries(values))
-      {
-      if (value) params.set(key, value);
-      else params.delete(key);
-      }
-    params.delete('page');
-    startTransition(() => router.push(`${pathname}?${params}`));
+  function resetAll() {
+    setSearch('');
+    setFrom(undefined);
+    setTo(undefined);
+    setDateResetSignal((signal) => signal + 1);
+    table.resetColumnFilters();
+    persistAndRefresh(
+      { columnFilters: [], pagination: table.getState().pagination, sorting: table.getState().sorting },
+      { from: undefined, to: undefined, q: undefined },
+    );
   }
-  const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
+
+  const debouncedSearchPersist = useDebouncedCallback((value: string) => {
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { q: value });
+  }, 300);
+
   const selected = table.getSelectedRowModel().rows.map((row) => row.original);
   const actionBarVisibility = useActionBarVisibility(selected.length);
   // `manuallyFiltered` drives the Reset button's visibility, so it deliberately excludes `q`
@@ -253,8 +234,8 @@ export function ResourceDataTable({
   // view", not "no records exist at all".
   const [dateDraftActive, setDateDraftActive] = useState(false);
   const [dateResetSignal, setDateResetSignal] = useState(0);
-  const manuallyFiltered = ['from', 'to'].some((key) => searchParams.has(key)) || dateDraftActive;
-  const filtered = manuallyFiltered || searchParams.has('q') || searchParams.has('status') || searchParams.has('audience');
+  const manuallyFiltered = Boolean(from || to) || dateDraftActive;
+  const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
     <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
@@ -263,24 +244,24 @@ export function ResourceDataTable({
         table={table}
         isFiltered={manuallyFiltered}
         pending={isPending}
-        onReset={() => { setDateResetSignal((signal) => signal + 1); update({ q: undefined, from: undefined, to: undefined, ...Object.fromEntries(multiSelectParams.map((key) => [key, undefined])) }); }}
+        onReset={resetAll}
         leading={<>
           <Input
             aria-label={config.searchLabel}
             className="h-8 w-40 lg:w-56"
-            onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }}
+            onChange={(event) => { setSearch(event.target.value); debouncedSearchPersist(event.target.value); }}
             placeholder="Search…"
             type="search"
             value={search}
           />
           {config.dateFilter && (
             <DateRangeFilter
-              from={searchParams.get('from') ?? undefined}
+              from={from}
               label="Date"
-              onChange={(from, to) => update({ from, to })}
+              onChange={(newFrom, newTo) => { setFrom(newFrom); setTo(newTo); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting }, { from: newFrom, to: newTo }); }}
               onDraftActiveChange={setDateDraftActive}
               resetSignal={dateResetSignal}
-              to={searchParams.get('to') ?? undefined}
+              to={to}
             />
           )}
         </>}

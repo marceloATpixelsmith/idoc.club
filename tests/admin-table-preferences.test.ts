@@ -6,7 +6,6 @@ const preferences = readFileSync(new URL('../lib/admin/table-preferences.ts', im
 const migration = readFileSync(new URL('../lib/db/migrations/0045_administrator_table_preferences.sql', import.meta.url), 'utf8');
 const route = readFileSync(new URL('../app/api/admin/table-preferences/[table]/route.ts', import.meta.url), 'utf8');
 const membershipPage = readFileSync(new URL('../app/(dashboard)/admin/members/page.tsx', import.meta.url), 'utf8');
-const preferenceSync = readFileSync(new URL('../components/admin/table-preference-sync.tsx', import.meta.url), 'utf8');
 const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
 const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
@@ -26,18 +25,22 @@ test('only validated durable state is accepted for each supported table', () => 
   assert.match(preferences, /z\.union\(\[z\.literal\(10\), z\.literal\(25\), z\.literal\(50\), z\.literal\(100\)\]\)/);
 });
 
-test('URL state takes precedence and default Active applies only without URL or saved state', () => {
-  assert.match(membershipPage, /hasUrlState \? null : await getTablePreferences\('memberships'\)/);
-  assert.match(membershipPage, /defaultActive=\{!hasUrlState && !savedPreferences\}/);
+test('database preferences are always the source of truth for filters/sort/columns/pagination -- there is no URL state to take precedence over, and only profileId is read from the URL', () => {
+  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string \}>/);
+  assert.match(membershipPage, /const savedPreferences = await getTablePreferences\('memberships'\);/);
+  assert.doesNotMatch(membershipPage, /hasUrlState/);
+  assert.doesNotMatch(membershipPage, /redirect\(/);
   assert.match(route, /requireCsrfTokenValue/);
   assert.match(route, /resetTablePreferences/);
 });
 
-test('a multi-select facet filter value is canonicalized to its comma-joined form before being persisted, whether the URL wrote it as a repeated key or the toolbar\'s own comma-joined param', () => {
-  assert.match(preferenceSync, /export function manyParam\(params: URLSearchParams, key: string\): string \| undefined \{/);
-  assert.match(preferenceSync, /params\.getAll\(key\)/);
-  for (const field of ['country', 'federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: manyParam\\(params, '${field}'\\)`));
-  assert.match(resourceTable, /status: manyParam\(params, 'status'\)/);
-  assert.match(resourceTable, /preferences\.audience = manyParam\(params, 'audience'\)/);
-  for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: manyParam\\(params, '${field}'\\)`));
+test('a multi-select facet filter\'s selected values are read from react-table\'s own columnFilters state (an array) and comma-joined into a single preference field when persisted -- there is no URL-repeated-key form to canonicalize anymore', () => {
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /function filterToken\(columnFilters: ColumnFiltersState, id: string\): string \| undefined \{/);
+    assert.match(table, /const value = columnFilters\.find\(\(filter\) => filter\.id === id\)\?\.value;/);
+  }
+  for (const field of ['country', 'federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
+  assert.match(resourceTable, /status: filterToken\(state\.columnFilters, 'status'\)/);
+  assert.match(resourceTable, /preferences\.audience = filterToken\(state\.columnFilters, 'audience'\)/);
+  for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
 });

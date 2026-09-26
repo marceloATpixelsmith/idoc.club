@@ -6,17 +6,6 @@ import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 
 export const TABLE_PREFERENCE_EVENT = 'idoc:table-preference';
 
-// A facet filter's canonical multi-select shape is the toolbar's own comma-joined query param
-// (?status=active,expired -- see lib/admin/resource-list-query.ts's `many()`), but a raw/shared URL
-// may instead repeat the key (?status=active&status=expired), which the server already treats the
-// same way. `URLSearchParams.get()` only ever returns the first entry either way, so persisting a
-// saved view through it would silently drop every selected value but the first; this canonicalizes
-// both shapes to the same comma-joined string before saving.
-export function manyParam(params: URLSearchParams, key: string): string | undefined {
-  const values = params.getAll(key);
-  return values.length ? values.join(',') : undefined;
-}
-
 export function persistTablePreferences(table: AdminTableIdentifier, preferences: TablePreferenceState) {
   return fetch(`/api/admin/table-preferences/${table}`, {
     body: JSON.stringify(preferences), credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() }, method: 'PUT',

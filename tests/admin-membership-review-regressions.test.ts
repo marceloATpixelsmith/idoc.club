@@ -9,8 +9,9 @@ const revenueReport = readFileSync(new URL('../lib/payments/revenue-report.ts', 
 const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
 const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
 
-test('member pagination preserves every normalized active filter while replacing only page', () => {
-  assert.match(memberTable, /queryKeys: \{ page: 'page', perPage: 'pageSize', sort: 'sort' \}/);
+test('member pagination change persists the full current filter/sort/column state alongside the new page, since everything is read fresh from local state at persist time rather than a page-only URL param replacement', () => {
+  assert.match(memberTable, /onLiveStateChange: \(state\) => persistAndRefresh\(state\)/);
+  assert.match(memberTable, /page: state\.pagination\.pageIndex \+ 1,/);
   assert.match(memberTable, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
   assert.match(memberTable, /<DataTable table=\{table\}/);
 });
@@ -31,8 +32,8 @@ test('membership roster composes the official Dice UI controls and a real select
   assert.doesNotMatch(memberTable, /<table className=/);
 });
 
-test('URL/history-driven search control remains controlled', () => {
-  assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
+test('the search input is a controlled component seeded once from the server-supplied (database-backed) initial filter value, with no URL to resynchronize it from afterward', () => {
+  assert.match(memberTable, /const \[search, setSearch\] = useState\(filters\.q \?\? ''\);/);
   assert.match(memberTable, /value=\{search\}/);
 });
 
