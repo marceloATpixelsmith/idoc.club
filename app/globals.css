@@ -290,6 +290,25 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   background: var(--surface-raised);
 }
 
+/* A pinned column (currently just Actions) needs a genuinely opaque background so content
+ * scrolling underneath it can't show through -- but it must still track context instead of one
+ * flat, unchanging color: the header's --surface-raised band, and a hovered or selected body row's
+ * own highlight (approximated as an opaque color_mix, since a translucent hover:bg-muted/50 would
+ * let scrolled content bleed through a pinned cell). This lives in CSS, not getColumnPinningStyle's
+ * inline style, because an inline style can never react to :hover or [data-state] selectors. */
+[data-idoc-table-root] [data-pinned] {
+  background: var(--background);
+}
+[data-idoc-table-root] [data-slot='table-header'] [data-pinned] {
+  background: var(--surface-raised);
+}
+[data-idoc-table-root] [data-slot='table-row']:hover [data-pinned] {
+  background: color-mix(in oklab, var(--muted) 50%, var(--background));
+}
+[data-idoc-table-root] [data-slot='table-row'][data-state='selected'] [data-pinned] {
+  background: var(--muted);
+}
+
 @utility eyebrow {
   font-family: var(--font-sans);
   font-size: 0.6875rem;

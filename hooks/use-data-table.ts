@@ -145,10 +145,20 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [enableAdvancedFilter, notify, pagination],
   );
 
+  // The Actions column must always stay at the table's right edge -- including under horizontal
+  // scroll, once other columns stop being forced to a rigid width and start shrinking to their
+  // content -- so it's pinned right by default whenever a table defines one, unless a caller
+  // already supplied its own columnPinning.
+  const resolvedInitialState = React.useMemo(() => {
+    if (initialState?.columnPinning || !columns.some((column) => column.id === "actions")) return initialState;
+    return { ...initialState, columnPinning: { right: ["actions"] } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- computed once from the initial columns/initialState only, matching this hook's own initialState-is-read-once contract.
+  }, []);
+
   const table = useReactTable({
     ...tableProps,
     columns,
-    initialState,
+    initialState: resolvedInitialState,
     pageCount,
     state: {
       pagination,

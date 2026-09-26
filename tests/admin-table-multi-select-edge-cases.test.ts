@@ -139,9 +139,9 @@ test('useDataTable\'s notify cancels any pending debounced snapshot before dispa
   assert.match(dataTableHook, /if \(immediate\) \{[\s\S]*?debouncedNotify\.cancel\(\);\s*\n\s*onLiveStateChange\?\.\(state\);\s*\n\s*\} else debouncedNotify\(state\);/);
 });
 
-test('getColumnPinningStyle no longer forces `background: var(--background)` inline on every cell regardless of pinning -- an inline style always wins over CSS classes, so this previously overrode the header row\'s --surface-raised band and any body row\'s hover/selected highlight on every table, pinned or not; only a pinned column (which needs an opaque backdrop for the content scrolling under it) still gets one', () => {
+test('getColumnPinningStyle no longer sets any inline `background` at all -- an inline style always wins over CSS classes and can never react to :hover/[data-state] selectors, so forcing one there (even only for pinned cells) overrode the header row\'s --surface-raised band and any body row\'s hover/selected highlight; a pinned cell\'s opaque, context-tracking background now lives entirely in app/globals.css instead (see the [data-pinned] test below)', () => {
   assert.doesNotMatch(dataTableLib, /background: isPinned \? "var\(--background\)" : "var\(--background\)"/);
-  assert.match(dataTableLib, /background: isPinned \? "var\(--background\)" : undefined,/);
+  assert.doesNotMatch(dataTableLib, /^\s*background:/m);
 });
 
 test('View popover, faceted-filter, date-range-filter, and sort-list toolbar buttons are all h-8, matching the toolbar search Input\'s own h-8 -- previously only the View button set an explicit height, leaving every other outline-variant trigger at the Button component\'s h-9 default and visibly taller than the search box beside it', () => {
@@ -158,4 +158,28 @@ test('the toolbar Reset control is icon-only (just the X/spinner, no "Reset" lab
 
 test('the View popover always lists currently-visible (checked) columns above hidden (unchecked) ones, since the server-driven column list otherwise scatters a column a user just unchecked into the middle of a long list instead of grouping it with the other hidden columns at the bottom', () => {
   assert.match(viewOptions, /\.sort\(\(a, b\) => Number\(b\.getIsVisible\(\)\) - Number\(a\.getIsVisible\(\)\)\);/);
+});
+
+test('getColumnPinningStyle only forces a fixed width on a pinned column, letting every ordinary column shrink to its own content instead of the 150px default every column got before -- previously every table cell was forced to a rigid getSize() width regardless of pinning, which is why no admin table column ever shrank to fit its data', () => {
+  assert.doesNotMatch(dataTableLib, /width: column\.getSize\(\),/);
+  assert.match(dataTableLib, /width: isPinned \? column\.getSize\(\) : undefined,/);
+});
+
+test('useDataTable pins a table\'s "actions" column to the right by default, so it keeps a real width and position: sticky (via getColumnPinningStyle) and stays at the table\'s right edge under horizontal scroll -- now that ordinary columns shrink to content instead of forcing a fixed table width, the Actions column would otherwise scroll away with the rest instead of staying reachable', () => {
+  const dataTableHook = readFileSync(new URL('../hooks/use-data-table.ts', import.meta.url), 'utf8');
+  assert.match(dataTableHook, /columns\.some\(\(column\) => column\.id === "actions"\)/);
+  assert.match(dataTableHook, /return \{ \.\.\.initialState, columnPinning: \{ right: \["actions"\] \} \};/);
+  assert.match(dataTableHook, /initialState: resolvedInitialState,/);
+});
+
+test('a pinned column\'s opaque background is set via CSS on a [data-pinned] attribute rather than an inline style, so it can still track the header\'s --surface-raised band and a hovered/selected body row\'s own highlight instead of one flat unchanging color -- an inline style can never react to :hover or [data-state] selectors, which is exactly the bug a P2 Codex review finding caught: a pinned column stayed a differently colored strip on every header and highlighted row', () => {
+  const dataTable = readFileSync(new URL('../components/data-table/data-table.tsx', import.meta.url), 'utf8');
+  const globalsCss = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(dataTableLib, /background: isPinned \? "var\(--background\)" : undefined,/);
+  assert.match(dataTable, /data-pinned=\{header\.column\.getIsPinned\(\) \|\| undefined\}/);
+  assert.match(dataTable, /data-pinned=\{cell\.column\.getIsPinned\(\) \|\| undefined\}/);
+  assert.match(globalsCss, /\[data-idoc-table-root\] \[data-pinned\] \{\s*\n\s*background: var\(--background\);/);
+  assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-header'\] \[data-pinned\] \{\s*\n\s*background: var\(--surface-raised\);/);
+  assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]:hover \[data-pinned\] \{\s*\n\s*background: color-mix\(in oklab, var\(--muted\) 50%, var\(--background\)\);/);
+  assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]\[data-state='selected'\] \[data-pinned\] \{\s*\n\s*background: var\(--muted\);/);
 });
