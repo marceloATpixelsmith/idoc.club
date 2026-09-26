@@ -27,9 +27,15 @@ test('shared administrator functions precede conditional Super Admin functions',
   assert.ok(navigation.indexOf('const SHARED_ITEMS') < navigation.indexOf('const SUPER_ADMIN_ITEMS'));
   assert.match(navigation, /isSuperAdmin \? \[\.\.\.SHARED_ITEMS, \.\.\.SUPER_ADMIN_ITEMS\] : SHARED_ITEMS/);
   assert.match(navigation, /Super Admin/);
-  for (const icon of ['Users', 'CreditCard', 'FileDown', 'Building2', 'ShieldCheck']) {
+  for (const icon of ['Users', 'FileDown', 'Building2', 'ShieldCheck']) {
     assert.match(navigation, new RegExp(`icon: ${icon}`));
   }
+});
+
+test('the manual-payments nav item is gone -- it only told admins to go back to Members and search', () => {
+  assert.doesNotMatch(navigation, /Manual payments/);
+  assert.doesNotMatch(navigation, /\/admin\/payments/);
+  assert.doesNotMatch(navigation, /CreditCard/);
 });
 
 test('every Super Admin page independently maps insufficient authority to branded not-found', () => {
