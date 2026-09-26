@@ -159,3 +159,15 @@ test('the toolbar Reset control is icon-only (just the X/spinner, no "Reset" lab
 test('the View popover always lists currently-visible (checked) columns above hidden (unchecked) ones, since the server-driven column list otherwise scatters a column a user just unchecked into the middle of a long list instead of grouping it with the other hidden columns at the bottom', () => {
   assert.match(viewOptions, /\.sort\(\(a, b\) => Number\(b\.getIsVisible\(\)\) - Number\(a\.getIsVisible\(\)\)\);/);
 });
+
+test('getColumnPinningStyle only forces a fixed width on a pinned column, letting every ordinary column shrink to its own content instead of the 150px default every column got before -- previously every table cell was forced to a rigid getSize() width regardless of pinning, which is why no admin table column ever shrank to fit its data', () => {
+  assert.doesNotMatch(dataTableLib, /width: column\.getSize\(\),/);
+  assert.match(dataTableLib, /width: isPinned \? column\.getSize\(\) : undefined,/);
+});
+
+test('useDataTable pins a table\'s "actions" column to the right by default, so it keeps a real width and position: sticky (via getColumnPinningStyle) and stays at the table\'s right edge under horizontal scroll -- now that ordinary columns shrink to content instead of forcing a fixed table width, the Actions column would otherwise scroll away with the rest instead of staying reachable', () => {
+  const dataTableHook = readFileSync(new URL('../hooks/use-data-table.ts', import.meta.url), 'utf8');
+  assert.match(dataTableHook, /columns\.some\(\(column\) => column\.id === "actions"\)/);
+  assert.match(dataTableHook, /return \{ \.\.\.initialState, columnPinning: \{ right: \["actions"\] \} \};/);
+  assert.match(dataTableHook, /initialState: resolvedInitialState,/);
+});

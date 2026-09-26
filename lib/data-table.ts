@@ -47,7 +47,11 @@ export function getColumnPinningStyle<TData>({
     // selected body row's highlight) -- this previously set `var(--background)` unconditionally,
     // silently overriding those on every cell in every table regardless of pinning.
     background: isPinned ? "var(--background)" : undefined,
-    width: column.getSize(),
+    // Same reasoning as background: forcing every column to its (150px-default) getSize() is what
+    // kept every admin table column a rigid fixed-width box instead of shrinking to fit its actual
+    // data. A pinned column still needs a real width (getStart/getAfter's sticky-offset math for
+    // other pinned columns depends on it), but an unpinned column should size itself naturally.
+    width: isPinned ? column.getSize() : undefined,
     zIndex: isPinned ? 1 : undefined,
   };
 }
