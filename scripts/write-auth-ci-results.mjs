@@ -8,18 +8,36 @@ const runUrl = process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY &&
   : null;
 
 const results = manifest.cases.map((c) => {
-  if (c.ci.coverage === "mapped") {
-    return {
-      id: c.id,
-      status: "pass",
-      evidence: c.ci.tests,
-      note: "All mapped CI suites completed successfully in the auth-security verification job."
-    };
-  }
   if (c.ci.coverage === "na") {
     return { id: c.id, status: "not-applicable", evidence: [], note: c.ci.rationale };
   }
-  return { id: c.id, status: "gap", evidence: [], note: c.ci.rationale };
+  if (c.ci.coverage !== "mapped") {
+    return { id: c.id, status: "gap", evidence: [], note: c.ci.rationale };
+  }
+
+  const browserTests = c.ci.tests.filter((test) => test.startsWith("tests/security-e2e/"));
+  if (browserTests.length === 0) {
+    return {
+      id: c.id,
+      status: "not-run",
+      evidence: [],
+      note: "No tests for this case ran in the auth-security browser workflow; consult the matching Fast and Release CI runs."
+    };
+  }
+  if (browserTests.length < c.ci.tests.length) {
+    return {
+      id: c.id,
+      status: "partial",
+      evidence: browserTests,
+      note: "Browser tests passed in this workflow. Other mapped tests are not reported as passed here; consult the matching Fast and Release CI runs."
+    };
+  }
+  return {
+    id: c.id,
+    status: "pass",
+    evidence: browserTests,
+    note: "All mapped browser tests for this case passed in the auth-security workflow."
+  };
 });
 
 mkdirSync("test-results/auth", { recursive: true });

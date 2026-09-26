@@ -14,12 +14,16 @@ on:
       - '**/*.jpeg'
       - 'app/terms/**'
       - 'app/privacy/**'
-      - '.github/workflows/release-1-verification.yml'
+      - '.github/workflows/**'
       - 'components/navigation-loading.tsx'
       - 'components/navigation-menu.tsx'
   push:
     branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: release-1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -28,6 +32,7 @@ jobs:
   verify:
     name: Run Release 1 gate
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine
@@ -68,4 +73,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run Release 1 verification gate
-        run: pnpm check:release1
+        run: pnpm check:release1:extended
