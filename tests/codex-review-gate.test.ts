@@ -20,82 +20,29 @@ test('the quota-waiver bootstrap (which matched any past quota-exhaustion commen
   assert.doesNotMatch(workflow, /Quota waiver: default-branch gate repair/);
 });
 
-test('Codex gate proactively asks Codex to review each revision instead of only ever passively waiting on an assumed auto-trigger', () => {
-  assert.match(workflow, /issues: write/);
-  assert.match(workflow, /name: Ask Codex to review this exact revision/);
+test('Codex review requests are event-driven and never poll for completion', () => {
+  assert.match(workflow, /pull_request_target:[\s\S]*pull_request_review:[\s\S]*issue_comment:/);
+  assert.match(workflow, /name: Set this revision pending and request review/);
   assert.match(workflow, /--arg body "@codex review"/);
-  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" \\\n\s+--data-binary @review-request\.json/);
+  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments" --data-binary @review-request\.json/);
+  assert.match(workflow, /timeout-minutes: 5/);
+  assert.doesNotMatch(workflow, /MAX_WAIT_SECONDS|POLL_SECONDS|deadline=|while [(]/);
 });
 
-test('the self-nudge step has no leftover event-branching guard now that pull_request_target is the workflow\'s only trigger', () => {
-  assert.match(workflow, /name: Ask Codex to review this exact revision\n\s*run: \|/);
-  assert.doesNotMatch(workflow, /if: github\.event_name == 'pull_request_target'/);
+test('Codex advisory success is published only after GitHub accepts the review request', () => {
+  const requestIndex = workflow.indexOf('issues/${PR_NUMBER}/comments" --data-binary @review-request.json');
+  const successIndex = workflow.indexOf('--arg state success --arg context "codex/review-complete"');
+  assert.ok(requestIndex >= 0);
+  assert.ok(successIndex > requestIndex);
+  assert.ok(workflow.includes("Codex review requested (advisory); CI gates are authoritative"));
 });
 
-test('Codex gate stays visibly in progress while waiting for the current revision', () => {
-  assert.match(workflow, /name: Codex review progress/);
-  assert.match(workflow, /MAX_WAIT_SECONDS: "1800"/);
-  assert.match(workflow, /POLL_SECONDS: "15"/);
-  assert.match(workflow, /deadline=\$\(\( \$\(date \+%s\) \+ MAX_WAIT_SECONDS \)\)/);
-  assert.match(workflow, /while \(\( \$\(date \+%s\) < deadline \)\)/);
-  assert.match(workflow, /--arg state "pending"/);
-  assert.match(workflow, /--arg context "codex\/review-complete"/);
-});
-
-test('Codex gate accepts both formal reviews and no-findings comments only for the current head', () => {
-  assert.match(workflow, /pulls\/\$\{PR_NUMBER\}\/reviews\?per_page=100/);
-  assert.match(workflow, /issues\/\$\{PR_NUMBER\}\/comments\?per_page=100/);
+test('Codex review status updates require a connector review of the current PR head', () => {
+  assert.match(workflow, /ACTOR_LOGIN/);
   assert.match(workflow, /chatgpt-codex-connector/);
-  assert.match(workflow, /chatgpt-codex-connector\[bot\]/);
-  assert.match(workflow, /select\(\.commit_id == \$head\)/);
-  assert.match(workflow, /find any major issues/);
-  assert.match(workflow, /Reviewed commit/);
-  assert.match(workflow, /\(\.reviewed_sha \| length\) >= 10/);
-  assert.match(workflow, /startswith\(\$comment\.reviewed_sha \| ascii_downcase\)/);
-});
-
-test('Codex gate retries API failures, paginates, propagates fetch errors, and finalizes visibly', () => {
-  assert.match(workflow, /--connect-timeout 5 --max-time 15 --retry 4 --retry-all-errors/);
-  assert.match(workflow, /trap finalize_error ERR/);
-  assert.match(workflow, /if ! reviews="\$\(api_get/);
-  assert.match(workflow, /if ! comments="\$\(api_get/);
-  assert.match(workflow, /page=\$\{page\}/);
-  assert.match(workflow, /count < 100/);
-  assert.match(workflow, /Codex gate error; see Actions log/);
-});
-
-test('Codex gate has a bounded visible failure instead of an indefinite pending state', () => {
-  assert.match(workflow, /Codex review not detected within 30 minutes/);
-  assert.match(workflow, /post_status "failure"/);
-  assert.match(workflow, /exit 1/);
-});
-
-test('an administrator-triggered quota waiver is checked every poll iteration, not only once right before the timeout failure, narrowing (though not perfectly closing, given the Statuses API has no compare-and-swap) the window where this job\'s own eventual write could still race a concurrently in-flight waiver request', () => {
-  assert.match(workflow, /quota_waiver_already_succeeded\(\) \{/);
-  assert.match(workflow, /response="\$\(api_get "\$\{GITHUB_API_URL\}\/repos\/\$\{REPOSITORY\}\/commits\/\$\{HEAD_SHA\}\/status"\)"/);
-  assert.match(workflow, /state="\$\(jq -r '\.statuses\[\]\? \| select\(\.context == "codex\/review-complete"\) \| \.state' <<< "\$\{response\}"\)"/);
-  assert.match(workflow, /\[\[ "\$\{state\}" == "success" \]\]/);
-  // Called from inside the polling while loop (before it sleeps)...
-  assert.match(workflow, /if \[\[ -n "\$\{REVIEW_URL\}" \]\][\s\S]*?if quota_waiver_already_succeeded[\s\S]*?remaining=\$\(\(deadline/);
-  // ...and again immediately before the timeout failure is posted, as a final check.
-  assert.match(workflow, /done\s*\n\s*\n\s*# Final check, immediately before declaring failure/);
-  const satisfiedMessageCount = workflow.split('not overwriting it').length - 1;
-  assert.equal(satisfiedMessageCount, 2, 'expected the "already satisfied" message in both the loop check and the final check');
-});
-
-test('the error finalizer stays active through the final quota-waiver lookup, so a transient API failure there still finalizes the required status instead of leaving it stranded pending on a red job', () => {
-  const loopEndIndex = workflow.lastIndexOf('done', workflow.indexOf('# Final check, immediately before declaring failure'));
-  const finalLookupIndex = workflow.indexOf('if quota_waiver_already_succeeded', loopEndIndex);
-  assert.ok(loopEndIndex > 0 && finalLookupIndex > loopEndIndex, 'expected the loop to end before the final lookup');
-  const between = workflow.slice(loopEndIndex, finalLookupIndex);
-  assert.doesNotMatch(between, /trap - ERR/, 'the ERR trap must still be active (not yet disabled) when the final quota-waiver lookup runs');
-});
-
-test('quota_waiver_already_succeeded handles its own lookup failure explicitly instead of letting an unguarded assignment silently read as "no waiver" -- since the function is called directly as an if-condition at both call sites, bash suppresses errexit/ERR-trap handling for the whole call, so only an explicit check distinguishes a failed lookup from a genuine absence of a waiver', () => {
-  const fnStart = workflow.indexOf('quota_waiver_already_succeeded() {');
-  const fnEnd = workflow.indexOf('\n          }', fnStart);
-  const fnBody = workflow.slice(fnStart, fnEnd);
-  assert.match(fnBody, /if response="\$\(api_get/, 'expected the api_get call to be guarded, matching the pattern codex_review_url()\/codex_no_issues_comment_url() already use');
-  assert.match(fnBody, /for attempt in 1 2 3/, 'expected a bounded retry since a single api_get failure here (unlike the page-fetch helpers) is the last line of defense against overwriting a real waiver');
-  assert.match(fnBody, /::warning::/, 'expected a visible warning when the lookup fails, rather than a silent false');
+  assert.match(workflow, /pulls\/\$\{PR_NUMBER\}/);
+  assert.match(workflow, /CURRENT_SHA/);
+  assert.match(workflow, /REVIEWED_SHA/);
+  assert.match(workflow, /No Codex review for the current PR revision was found/);
+  assert.ok(workflow.includes("Codex review received (advisory); CI gates are authoritative"));
 });

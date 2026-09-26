@@ -107,7 +107,7 @@ test('local and CI Release 1 gates are fail-fast and contain every required boun
   const workflow = readFileSync(path.join(root, '.github/workflows/release-1-verification.yml'), 'utf8');
   assert.match(workflow, /image: postgres:16-alpine/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
-  assert.match(workflow, /run: pnpm check:release1/);
+  assert.match(workflow, /run: pnpm check:release1:extended/);
   const marker = path.join(mkdtempSync(path.join(tmpdir(), 'idoc-gate-failure-')), 'should-not-exist');
   const failure = spawnSync('sh', ['-c', `false && touch "${marker}"`]);
   assert.notEqual(failure.status, 0);
