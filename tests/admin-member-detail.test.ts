@@ -7,13 +7,14 @@ const sheet = readFileSync(new URL('../app/(dashboard)/admin/members/member-deta
 const table = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
 const revenue = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
 const paymentsPage = readFileSync(new URL('../app/(dashboard)/admin/payments/page.tsx', import.meta.url), 'utf8');
+const notificationsPage = readFileSync(new URL('../app/(dashboard)/admin/notifications/page.tsx', import.meta.url), 'utf8');
 
 test('a selected member opens a tabbed right-side Sheet, not flat anchor-jump sections', () => {
   assert.match(page, /<MemberDetailSheet/);
   assert.doesNotMatch(page, /href="#/);
   assert.match(sheet, /<Sheet /);
   assert.match(sheet, /<Tabs /);
-  for (const value of ['overview', 'edit', 'membership', 'payment', 'account', 'audit']) {
+  for (const value of ['overview', 'edit', 'membership', 'payment', 'account', 'notifications', 'audit']) {
     assert.match(sheet, new RegExp(`value="${value}"`));
   }
   assert.match(sheet, /isSuperAdmin && <TabsTrigger value="roles">/);
@@ -24,10 +25,27 @@ test('a selected member opens a tabbed right-side Sheet, not flat anchor-jump se
   assert.match(sheet, /<MembershipRefundForm/);
   assert.match(sheet, /<RolesSection/);
   assert.match(sheet, /<ForceRevokeAllAuthorityForm/);
+  assert.match(sheet, /<AdminReadOnlyTable/);
   assert.match(sheet, /mailto:\$\{encodeURIComponent\(selected\.email\)\}/);
   assert.match(sheet, /listAdminSeminarHistoryForMember\b|Seminar history/);
   assert.match(sheet, /Seminar history/);
   assert.doesNotMatch(sheet, /not implemented yet/);
+});
+
+test('form sections render as cards in a responsive grid, not a flat vertical stack', () => {
+  assert.match(sheet, /grid gap-4 md:grid-cols-2/);
+  assert.match(sheet, /function Section\(/);
+});
+
+test('notification history is projected to a safe row shape on the server before it ever reaches the client Sheet', () => {
+  // listNotificationHistory selects every column (payload, dedupeKey, leaseOwner, lease timestamps
+  // included), so the raw rows must never be handed to the 'use client' Sheet -- only the page.tsx
+  // server component may import the query, and it must map to the display-safe ReadOnlyRow shape.
+  assert.doesNotMatch(sheet, /listNotificationHistory/);
+  assert.match(page, /listNotificationHistory/);
+  assert.match(page, /NOTIFICATION_KIND_LABELS/);
+  assert.match(page, /function notificationOutcome/);
+  assert.match(page, /const notificationHistory: ReadOnlyRow\[\] = rawNotificationHistory\.map/);
 });
 
 test('the standalone manual-payments route now redirects into the Members Sheet\'s Payment tab', () => {
@@ -35,6 +53,13 @@ test('the standalone manual-payments route now redirects into the Members Sheet\
   assert.match(paymentsPage, /\/admin\/members\?profileId=\$\{profileId\}&tab=payment/);
   assert.match(paymentsPage, /requireAccountAccess\('administration'\)/);
   assert.match(paymentsPage, /requireAdministrator\(actor\)/);
+});
+
+test('the standalone notifications route now redirects into the Members Sheet\'s Notifications tab', () => {
+  assert.match(notificationsPage, /redirect\(/);
+  assert.match(notificationsPage, /\/admin\/members\?profileId=\$\{profileId\}&tab=notifications/);
+  assert.match(notificationsPage, /requireAccountAccess\('administration'\)/);
+  assert.match(notificationsPage, /requireAdministrator\(actor\)/);
 });
 
 test('table exposes integrated selection without presenting deferred external mutations as actions', () => {
