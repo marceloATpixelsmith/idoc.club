@@ -190,3 +190,13 @@ test('a pinned column\'s opaque background is set via CSS on a [data-pinned] att
   assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]:hover \[data-pinned\] \{\s*\n\s*background: color-mix\(in oklab, var\(--muted\) 50%, var\(--background\)\);/);
   assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]\[data-state='selected'\] \[data-pinned\] \{\s*\n\s*background: var\(--muted\);/);
 });
+
+test('every Actions column is non-hideable and uses the static (non-interactive) header, not DataTableColumnHeader\'s own dropdown -- this column has no accessorFn, so it never appears in the View popover to be restored, and a saved column-visibility preference predating it (or missing one entirely) must never be able to hide it with no way back; this is exactly the bug a P2 Codex review finding caught: the header\'s own "Hide" menu item could hide Actions with no UI path to bring it back', () => {
+  const columnHeader = readFileSync(new URL('../components/data-table/data-table-column-header.tsx', import.meta.url), 'utf8');
+  assert.match(columnHeader, /export function DataTableStaticHeader\(/);
+  assert.match(columnHeader, /data-slot="button"/);
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /id: 'actions', enableHiding: false,/);
+    assert.match(table, /<DataTableStaticHeader className="text-gold" label="Actions" \/>/);
+  }
+});

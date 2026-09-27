@@ -97,3 +97,18 @@ export function DataTableColumnHeader<TData, TValue>({
     </DropdownMenu>
   );
 }
+
+/**
+ * For a column that must never be hidden (e.g. Actions, which has no `accessorFn` and so never
+ * appears in the View popover to be restored) but still needs to look like every other header:
+ * reuses DataTableColumnHeader's own trigger classes -- a `[data-slot='button']` element, so the
+ * sitewide uppercase/bold/letter-spacing rule still applies -- without an interactive
+ * DropdownMenu, so there's no "Hide" affordance the column could get stuck behind.
+ */
+export function DataTableStaticHeader({ className, label }: { className?: string; label: string }) {
+  return (
+    <span data-slot="button" className={cn("-ml-1.5 flex h-8 items-center gap-1.5 rounded-md px-2 py-1.5", className)}>
+      {label}
+    </span>
+  );
+}

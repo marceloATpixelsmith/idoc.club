@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
-import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
+import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
@@ -29,12 +29,12 @@ type Filters = {
   membershipTypes?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
 };
 
-const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
+// 'actions' is deliberately excluded here: it's non-hideable (see the column def below) and has
+// no accessorFn, so it never appears in the View popover to be restored -- a saved preference
+// predating this column (or missing it) must never be able to hide it with no way back.
+const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
 const MULTI_SELECT_FILTERS = ['status', 'type', 'federation', 'country', 'region'] as const;
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
-/** Matches DataTableColumnHeader's own look (a native button, so the sitewide uppercase/bold/
- * letter-spacing rule already applies) instead of a bespoke size/weight, only tinting it gold. */
-function actionsHeader({ column }: HeaderContext<AdminMemberRow, unknown>) { return <DataTableColumnHeader className="text-gold" column={column} label="Actions" />; }
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
   { label: 'Archived Members', value: 'archived' },
@@ -105,7 +105,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, meta: { label: 'Actions' }, size: 150, header: actionsHeader, cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild={row.original.hasSupportHistory} aria-label="Support conversations" disabled={!row.original.hasSupportHistory} size="icon-sm" title={row.original.hasSupportHistory ? 'Support conversations' : 'No support conversations on file'} variant="ghost">{row.original.hasSupportHistory ? <Link href={`/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`}><Headphones aria-hidden="true" /></Link> : <Headphones aria-hidden="true" />}</Button><Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
+    { id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 150, header: () => <DataTableStaticHeader className="text-gold" label="Actions" />, cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild={row.original.hasSupportHistory} aria-label="Support conversations" disabled={!row.original.hasSupportHistory} size="icon-sm" title={row.original.hasSupportHistory ? 'Support conversations' : 'No support conversations on file'} variant="ghost">{row.original.hasSupportHistory ? <Link href={`/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`}><Headphones aria-hidden="true" /></Link> : <Headphones aria-hidden="true" />}</Button><Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   // Facet filters (status/type/federation/country/region) are applied server-side from saved
