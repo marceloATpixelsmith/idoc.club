@@ -1,4 +1,5 @@
 import { getRevenueReport, RevenueRangeError, type RevenueFilters } from '@/lib/payments/revenue-report';
+import { RevenueFilters as RevenueFiltersForm } from './revenue-filters';
 
 const money = (cents: number, currency: string) => new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
 function RevenueChart({ rows }: { rows: { currency: string; month: string; totalCents: number }[] }) {
@@ -31,12 +32,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
     <h1 className="text-2xl font-semibold">Membership revenue</h1>
     <p className="mt-2 text-sm text-muted-foreground">Historical membership-type attribution is unavailable: payment records do not snapshot the member classification at payment time. Current classifications are not used as historical substitutes.</p>
     <p className="mt-1 text-sm text-muted-foreground">Persisted successful payments, grouped by currency. Dates are inclusive UTC calendar dates.</p>
-    <form className="mt-6 flex flex-wrap gap-3" method="get">
-      <label className="text-sm">From <input className="block rounded-md border" defaultValue={report?.range.from ?? displayValue(filters.from)} name="from" type="date" /></label>
-      <label className="text-sm">Through <input className="block rounded-md border" defaultValue={report?.range.to ?? displayValue(filters.to)} name="to" type="date" /></label>
-      <label className="text-sm">Origin <select className="block rounded-md border" defaultValue={displayValue(filters.origin) ?? ''} name="origin"><option value="">All</option><option value="stripe">Stripe</option><option value="manual">Manual</option></select></label>
-      <button className="self-end rounded-md border bg-transparent px-4 py-2 text-sm" type="submit">Apply</button>
-    </form>
+    <RevenueFiltersForm from={report?.range.from ?? displayValue(filters.from)} origin={displayValue(filters.origin)} to={report?.range.to ?? displayValue(filters.to)} />
     {error ? <p className="mt-8 text-sm text-red-500" role="alert">{error}</p> : report && <>
       <section className="mt-8" aria-label="Revenue summary">
         {report.summary.length === 0 ? <p>No recorded revenue matched this range.</p> : report.summary.map((row) => <div className="mb-4" key={row.currency}><h2 className="mb-2 font-medium">{row.currency}</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><article className="rounded-lg border p-4"><h3 className="text-sm text-muted-foreground">Gross recorded revenue</h3><p className="mt-1 text-2xl font-semibold">{money(row.totalCents, row.currency)}</p></article><article className="rounded-lg border p-4"><h3 className="text-sm text-muted-foreground">Stripe revenue</h3><p className="mt-1 text-2xl font-semibold">{money(row.stripeCents, row.currency)}</p></article><article className="rounded-lg border p-4"><h3 className="text-sm text-muted-foreground">Manual revenue</h3><p className="mt-1 text-2xl font-semibold">{money(row.manualCents, row.currency)}</p></article><article className="rounded-lg border p-4"><h3 className="text-sm text-muted-foreground">Payments recorded</h3><p className="mt-1 text-2xl font-semibold">{row.paymentCount}</p></article></div></div>)}

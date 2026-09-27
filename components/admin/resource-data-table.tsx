@@ -9,6 +9,7 @@ import { persistTablePreferences, TablePreferenceSync } from '@/components/admin
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
 import { DataTable } from '@/components/data-table/data-table';
+import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
@@ -141,7 +142,7 @@ export function ResourceDataTable({
           : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
-        id: 'actions', enableHiding: false, enableSorting: false, size: 90, header: 'Actions',
+        id: 'actions', enableHiding: false, enableSorting: false, size: 90, header: () => <span className="text-xs font-bold uppercase tracking-wider text-gold">Actions</span>,
         cell: ({ row }) => <div className="flex items-center gap-1">
           <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
             <Link href={`${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
@@ -278,10 +279,10 @@ export function ResourceDataTable({
             />
           )}
         </>}
-      >
+      />
+      <DataTableActionsRow count={`${total} matching records`} table={table}>
         <DataTableSortList table={table} />
-      </DataTableToolbar>
-      <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching records</p>
+      </DataTableActionsRow>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </DataTable>
   </>;

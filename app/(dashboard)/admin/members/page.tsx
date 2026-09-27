@@ -48,7 +48,11 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     q: typeof savedPreferences?.q === 'string' ? savedPreferences.q : undefined,
     region: typeof savedPreferences?.region === 'string' ? savedPreferences.region : undefined,
     sort: typeof savedPreferences?.sort === 'string' ? savedPreferences.sort : undefined,
-    status: typeof savedPreferences?.status === 'string' ? savedPreferences.status : undefined,
+    // `savedPreferences === null` means this administrator has never saved a preference for this
+    // table at all (not merely "status happens to be absent", which is also true right after
+    // clicking Reset) -- only that true first-ever case gets the documented active-by-default view;
+    // Reset must be able to actually clear Status to "no restriction", not just re-apply this.
+    status: typeof savedPreferences?.status === 'string' ? savedPreferences.status : savedPreferences === null ? 'active' : undefined,
     type: typeof savedPreferences?.type === 'string' ? savedPreferences.type : undefined,
   };
   let filterError: string | null = null;

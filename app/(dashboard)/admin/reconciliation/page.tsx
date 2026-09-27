@@ -39,7 +39,8 @@ export default async function AdminReconciliationPage() {
     <section className="mt-8">
       <h2 className="font-medium text-foreground">Current findings</h2>
       <AdminReadOnlyTable
-        columns={[{ id: 'kind', label: 'Kind' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+        columns={[{ id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+        dateColumn="detected"
         empty="No findings from the last run."
         rows={findings.map((finding) => ({
           id: String(finding.id), kind: KIND_LABELS[finding.kind] ?? finding.kind,

@@ -3,13 +3,14 @@
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
 import { X } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
+import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -34,6 +35,7 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 
 export function SupportInboxTable({ administrators, filters, initialColumnOrder, initialVisibleColumns, rows, total }: { administrators: { label: string; value: string }[]; filters: { activityFrom?: string; activityTo?: string; assigned?: string; category?: string; page: number; pageSize: number; q?: string; sort?: string; status?: string }; initialColumnOrder?: string; initialVisibleColumns?: string[]; rows: AdminSupportRow[]; total: number }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [search, setSearch] = useState(filters.q ?? '');
   const [activityFrom, setActivityFrom] = useState(filters.activityFrom);
   const [activityTo, setActivityTo] = useState(filters.activityTo);
@@ -70,9 +72,13 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
 
-  // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
-  // writes any of this to the URL. `overrides` lets Reset atomically change search/date-range
-  // alongside table state without racing separate persist calls against each other.
+  // Persists to the database and refetches via router.replace(pathname) -- deliberately never
+  // writes any of this to the URL itself. Navigating to the bare pathname (rather than
+  // router.refresh(), which reuses whatever URL is currently shown) also drops the transient
+  // `memberEmail` query param the moment the admin makes their first edit here, so a later
+  // `router.refresh()` on that same URL can't re-apply the original member's email forever.
+  // `overrides` lets Reset atomically change search/date-range alongside table state without
+  // racing separate persist calls against each other.
   function persistAndRefresh(state: DataTableLiveState, overrides?: { activityFrom?: string; activityTo?: string; q?: string }) {
     const effectiveSearch = overrides && 'q' in overrides ? overrides.q : search;
     const effectiveFrom = overrides && 'activityFrom' in overrides ? overrides.activityFrom : activityFrom;
@@ -89,7 +95,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
       q: effectiveSearch || undefined,
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       status: filterToken(state.columnFilters, 'status'),
-    }).finally(() => startTransition(() => router.refresh()));
+    }).finally(() => startTransition(() => router.replace(pathname)));
   }
 
   const { table } = useDataTable({
@@ -159,8 +165,9 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
         <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => { setActivityFrom(nextFrom); setActivityTo(nextTo); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { activityFrom: nextFrom, activityTo: nextTo }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={activityTo} />
       </>}
-    >
+    />
+    <DataTableActionsRow count={total + ' matching conversations'} table={table}>
       <DataTableSortList table={table} />
-    </DataTableToolbar>
-    <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching conversations</p>{copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
+    </DataTableActionsRow>
+    {copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
 }

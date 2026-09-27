@@ -69,8 +69,8 @@ test('the administrator queue provides Tablecn-style server controls', () => {
   const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
   const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
   const dataTable = readFileSync('components/data-table/data-table.tsx', 'utf8');
-  const toolbar = readFileSync('components/data-table/data-table-toolbar.tsx', 'utf8');
-  for (const control of ['DataTable', 'DataTableToolbar', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
+  const actionsRow = readFileSync('components/data-table/data-table-actions-row.tsx', 'utf8');
+  for (const control of ['DataTable', 'DataTableToolbar', 'DataTableActionsRow', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
   assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
   assert.match(page, /const saved = await getTablePreferences\('support'\);/);
   assert.doesNotMatch(page, /hasUrlState/);
@@ -78,7 +78,7 @@ test('the administrator queue provides Tablecn-style server controls', () => {
   assert.match(table, /initialVisibleColumns\.includes\(column\)/);
   assert.match(table, /resetRowSelection/);
   assert.match(dataTable, /DataTablePagination/);
-  assert.match(toolbar, /DataTableViewOptions/);
+  assert.match(actionsRow, /DataTableViewOptions/);
 });
 
 test('support queue applies advanced operators, multi-value filters, joins, and ordered sorting on the server', () => {
@@ -99,9 +99,11 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /No conversations match this view/);
   assert.match(table, /No support conversations exist/);
   assert.match(table, /persistTablePreferences\('support'/);
-  // router.refresh() must fire only after the preference write settles -- a fire-and-forget PUT
-  // racing an immediate refresh can read the database before the write commits.
-  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  // The navigation must fire only after the preference write settles -- a fire-and-forget PUT
+  // racing an immediate navigation can read the database before the write commits. It navigates
+  // to the bare pathname (not router.refresh(), which reuses whatever URL is currently shown) so
+  // the one-time `memberEmail` query param is dropped on the admin's first edit here.
+  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.replace\(pathname\)\)\);/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(error, /AdminErrorState/);
 });

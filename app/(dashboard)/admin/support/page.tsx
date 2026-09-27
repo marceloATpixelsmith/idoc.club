@@ -2,18 +2,24 @@ import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { listAdminConversations, listEligibleAdministrators } from '@/lib/support/inbox';
 import { SupportInboxTable } from './support-inbox-table';
 
-export default async function AdminSupportPage() {
+export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ memberEmail?: string }> }) {
   // Filters, sort, columns, and pagination all come from the database, never the URL -- see
-  // components/admin/table-preference-sync.tsx and docs/07.
+  // components/admin/table-preference-sync.tsx and docs/07. `memberEmail` is a deliberate exception
+  // of the same short-lived, single-step shape as `profileId` on the Members page: the Members
+  // table's Support action link seeds the search box with a specific member's email for this one
+  // navigation only -- typing further, or a later visit, goes back through the normal DB-persisted `q`.
+  const { memberEmail } = await searchParams;
   const saved = await getTablePreferences('support');
   const listQuery = {
     activityFrom: typeof saved?.activityFrom === 'string' ? saved.activityFrom : undefined,
     activityTo: typeof saved?.activityTo === 'string' ? saved.activityTo : undefined,
     assigned: typeof saved?.assigned === 'string' ? saved.assigned : undefined,
     category: typeof saved?.category === 'string' ? saved.category : undefined,
-    page: typeof saved?.page === 'number' ? String(saved.page) : undefined,
+    // The one-time memberEmail shortcut must land on page 1 -- the admin's last-saved page number
+    // can easily exceed this one member's much smaller result set and render an empty table.
+    page: memberEmail ? undefined : typeof saved?.page === 'number' ? String(saved.page) : undefined,
     pageSize: typeof saved?.pageSize === 'number' ? String(saved.pageSize) : undefined,
-    q: typeof saved?.q === 'string' ? saved.q : undefined,
+    q: memberEmail || (typeof saved?.q === 'string' ? saved.q : undefined),
     sort: typeof saved?.sort === 'string' ? saved.sort : undefined,
     status: typeof saved?.status === 'string' ? saved.status : undefined,
   };
