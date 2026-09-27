@@ -274,7 +274,7 @@ export async function getAdminConversation(value: unknown) {
     const rows = await sql<AdminConversationRow[]>`select c.*,coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,
       coalesce((select array_agg(u2.email order by u2.email) from idoc.support_conversation_administrators ca
         join idoc.users u2 on u2.id=ca.administrator_user_id where ca.conversation_id=c.id),'{}') assigned_admin_keys
-      from idoc.support_conversations c join idoc.users u on u.id=c.member_user_id left join idoc.profiles p on p.user_id=u.id where c.public_id=${publicId}::uuid for update`;
+      from idoc.support_conversations c join idoc.users u on u.id=c.member_user_id left join idoc.profiles p on p.user_id=u.id where c.public_id=${publicId}::uuid for update of c`;
     if (!rows[0]) return null;
     await sql`insert into idoc.support_administrator_read_cursors(conversation_id,administrator_user_id,read_at)
       values(${rows[0].id},${actor.id},now()) on conflict(conversation_id,administrator_user_id) do update set read_at=excluded.read_at`;

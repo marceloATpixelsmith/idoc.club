@@ -53,7 +53,10 @@ export function DataTableToolbar<TData>({
   const [pendingReset, setPendingReset] = React.useState(false);
   const onReset = React.useCallback(() => {
     if (pending !== undefined) setPendingReset(true);
-    table.resetColumnFilters();
+    // `true` forces a blank reset ([]) -- omitting it resets to `initialState.columnFilters`
+    // instead, which is non-empty whenever a facet was already applied when the table mounted
+    // (e.g. a saved "Active Members" status), silently restoring that same selection.
+    table.resetColumnFilters(true);
     onResetProp?.();
   }, [pending, table, onResetProp]);
   React.useEffect(() => {

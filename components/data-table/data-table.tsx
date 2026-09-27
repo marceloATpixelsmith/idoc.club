@@ -54,7 +54,7 @@ export function DataTable<TData>({
                     colSpan={header.colSpan}
                     data-pinned={header.column.getIsPinned() || undefined}
                     style={{
-                      ...getColumnPinningStyle({ column: header.column }),
+                      ...getColumnPinningStyle({ column: header.column, withBorder: true }),
                     }}
                   >
                     {header.isPlaceholder
@@ -77,7 +77,7 @@ export function DataTable<TData>({
               Array.from({ length: Math.max(1, table.getRowModel().rows?.length || table.getState().pagination.pageSize) }).map((_, rowIndex) => (
                 <TableRow key={`skeleton-${rowIndex}`}>
                   {table.getVisibleLeafColumns().map((column) => (
-                    <TableCell key={column.id} data-pinned={column.getIsPinned() || undefined} style={{ ...getColumnPinningStyle({ column }) }}>
+                    <TableCell key={column.id} data-pinned={column.getIsPinned() || undefined} style={{ ...getColumnPinningStyle({ column, withBorder: true }) }}>
                       <Skeleton className="h-5 w-full" />
                     </TableCell>
                   ))}
@@ -94,7 +94,7 @@ export function DataTable<TData>({
                       key={cell.id}
                       data-pinned={cell.column.getIsPinned() || undefined}
                       style={{
-                        ...getColumnPinningStyle({ column: cell.column }),
+                        ...getColumnPinningStyle({ column: cell.column, withBorder: true }),
                       }}
                     >
                       {flexRender(

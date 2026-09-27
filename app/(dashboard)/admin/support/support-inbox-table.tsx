@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -13,6 +13,7 @@ import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
@@ -22,6 +23,10 @@ import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, t
 
 type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
 
+// 'actions' is deliberately excluded here (matching ResourceDataTable's own pattern): it stays
+// enableHiding so an admin can still hide it via View, but its visibility is otherwise never
+// restored from a saved preference -- an admin whose saved column list predates this column
+// (or has never saved one at all) still sees it, since an unmentioned column defaults to visible.
 const OPTIONAL_COLUMNS = ['member', 'subject', 'category', 'status', 'assigned', 'activity'] as const;
 const LABELS: Record<string, string> = { activity: 'Activity', assigned: 'Assigned', category: 'Category', member: 'Member', status: 'Status', subject: 'Subject' };
 const CATEGORY_OPTIONS = SUPPORT_CATEGORIES.map((value) => ({ label: CATEGORY_LABELS[value], value }));
@@ -54,6 +59,14 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
     { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'multiSelect' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
     { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity Date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
+    {
+      id: 'actions', enableHiding: true, enableSorting: false, size: 90,
+      header: ({ column }) => <DataTableColumnHeader className="text-gold" column={column} label="Actions" />,
+      meta: { label: 'Actions' },
+      cell: ({ row }) => <Button asChild aria-label="Open conversation" size="icon-sm" title="Open conversation" variant="ghost">
+        <Link href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent('/admin/support')}`}><Pencil aria-hidden="true" /></Link>
+      </Button>,
+    },
   ], [administrators]);
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
@@ -125,7 +138,9 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     setActivityFrom(undefined);
     setActivityTo(undefined);
     setDateResetSignal((signal) => signal + 1);
-    table.resetColumnFilters();
+    // `true` forces a blank reset ([]) -- omitting it resets to `initialState.columnFilters`, which
+    // is non-empty whenever a facet was already applied when this table mounted.
+    table.resetColumnFilters(true);
     persistAndRefresh(
       { columnFilters: [], pagination: table.getState().pagination, sorting: table.getState().sorting },
       { activityFrom: undefined, activityTo: undefined, q: undefined },
