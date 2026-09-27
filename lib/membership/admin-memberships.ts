@@ -172,7 +172,11 @@ function advancedCondition(filter: AdvancedMemberFilter, effectiveStatus: SQL): 
 
 function queryParts(raw: MemberFilters) {
   const filters = normalized(raw);
-  const conditions = [sql`true`];
+  // Unconditional, independent of any status filter: the roster lists member profiles, so a user
+  // with no profile at all (e.g. a plain administrator account) must never appear here just because
+  // no status restriction happens to be selected -- the old default-to-active status filter used to
+  // exclude such rows only as an accidental side effect of always requiring a matched status.
+  const conditions = [sql`p.id is not null`];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
