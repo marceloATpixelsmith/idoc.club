@@ -10,7 +10,7 @@ import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
-import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
+import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
@@ -142,7 +142,12 @@ export function ResourceDataTable({
           : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
-        id: 'actions', enableHiding: false, enableSorting: false, size: 90, header: () => <span className="text-xs font-bold uppercase tracking-wider text-gold">Actions</span>,
+        id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 90,
+        // Matches DataTableColumnHeader's own look (a native button, so the sitewide
+        // uppercase/bold/letter-spacing rule already applies) instead of a bespoke size/weight,
+        // only tinting it gold -- the same treatment as every other Actions column. Non-hideable:
+        // this column has no accessorFn, so it never appears in the View popover to be restored.
+        header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
         cell: ({ row }) => <div className="flex items-center gap-1">
           <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
             <Link href={`${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
@@ -227,7 +232,9 @@ export function ResourceDataTable({
     setFrom(undefined);
     setTo(undefined);
     setDateResetSignal((signal) => signal + 1);
-    table.resetColumnFilters();
+    // `true` forces a blank reset ([]) -- omitting it resets to `initialState.columnFilters`, which
+    // is non-empty whenever a facet was already applied when this table mounted.
+    table.resetColumnFilters(true);
     persistAndRefresh(
       { columnFilters: [], pagination: table.getState().pagination, sorting: table.getState().sorting },
       { from: undefined, to: undefined, q: undefined },

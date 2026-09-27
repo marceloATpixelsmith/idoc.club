@@ -40,7 +40,7 @@ test('every column filter (status/type/category/etc.) is tracked as react-table\
 
 test('Reset atomically clears search, date-range, and column filters together in one persist+refresh call, so the button\'s pending state reflects one real round trip instead of racing separate updates', () => {
   assert.match(memberTable, /function resetAll\(\) \{/);
-  assert.match(memberTable, /table\.resetColumnFilters\(\);/);
+  assert.match(memberTable, /table\.resetColumnFilters\(true\);/);
   assert.match(memberTable, /\{ expiresFrom: undefined, expiresTo: undefined, q: undefined \},/);
   assert.match(memberTable, /onReset=\{resetAll\}/);
   assert.match(resourceTable, /function resetAll\(\) \{/);
@@ -49,6 +49,13 @@ test('Reset atomically clears search, date-range, and column filters together in
   assert.match(supportTable, /function resetAll\(\) \{/);
   assert.match(supportTable, /\{ activityFrom: undefined, activityTo: undefined, q: undefined \},/);
   assert.match(supportTable, /onReset=\{resetAll\}/);
+});
+
+test('Reset forces a blank column-filter state (true) rather than resetting to the table\'s initial one -- a facet already selected when the table mounted (e.g. a saved "Active Members" status) is not silently restored', () => {
+  for (const table of [toolbar, memberTable, resourceTable, supportTable]) {
+    assert.match(table, /table\.resetColumnFilters\(true\)/);
+    assert.doesNotMatch(table, /table\.resetColumnFilters\(\)/);
+  }
 });
 
 test('the toolbar Reset control stays available while a date-range popover holds an uncommitted draft, not only once a date range is actually persisted', () => {
@@ -182,4 +189,14 @@ test('a pinned column\'s opaque background is set via CSS on a [data-pinned] att
   assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-header'\] \[data-pinned\] \{\s*\n\s*background: var\(--surface-raised\);/);
   assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]:hover \[data-pinned\] \{\s*\n\s*background: color-mix\(in oklab, var\(--muted\) 50%, var\(--background\)\);/);
   assert.match(globalsCss, /\[data-idoc-table-root\] \[data-slot='table-row'\]\[data-state='selected'\] \[data-pinned\] \{\s*\n\s*background: var\(--muted\);/);
+});
+
+test('every Actions column is non-hideable and uses the static (non-interactive) header, not DataTableColumnHeader\'s own dropdown -- this column has no accessorFn, so it never appears in the View popover to be restored, and a saved column-visibility preference predating it (or missing one entirely) must never be able to hide it with no way back; this is exactly the bug a P2 Codex review finding caught: the header\'s own "Hide" menu item could hide Actions with no UI path to bring it back', () => {
+  const columnHeader = readFileSync(new URL('../components/data-table/data-table-column-header.tsx', import.meta.url), 'utf8');
+  assert.match(columnHeader, /export function DataTableStaticHeader\(/);
+  assert.match(columnHeader, /data-slot="button"/);
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /id: 'actions', enableHiding: false,/);
+    assert.match(table, /<DataTableStaticHeader className="text-gold" label="Actions" \/>/);
+  }
 });

@@ -30,13 +30,11 @@ export function getColumnPinningStyle<TData>({
     isPinned === "right" && column.getIsFirstColumn("right");
 
   return {
-    boxShadow: withBorder
-      ? isLastLeftPinnedColumn
-        ? "-4px 0 4px -4px var(--border) inset"
-        : isFirstRightPinnedColumn
-          ? "4px 0 4px -4px var(--border) inset"
-          : undefined
-      : undefined,
+    // A real 1px solid line matching the table's own outer border (not a soft inset shadow) -- so
+    // a pinned column (currently just Actions) reads as visually separated the same way the whole
+    // table is separated from the page around it.
+    borderLeft: withBorder && isFirstRightPinnedColumn ? "1px solid var(--border)" : undefined,
+    borderRight: withBorder && isLastLeftPinnedColumn ? "1px solid var(--border)" : undefined,
     left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
