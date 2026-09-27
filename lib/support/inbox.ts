@@ -327,6 +327,25 @@ export async function setConversationClosed(publicIdValue: unknown, close: boole
   });
 }
 
+/** A member closing their own conversation -- the common flow once an administrator's fix is
+ * confirmed working: reply, then close it out yourself, the same as an admin can (setConversationClosed),
+ * but scoped to a conversation this member actually owns. Reopening is allowed too, symmetric with
+ * the admin action, in case the member finds the issue isn't actually resolved after all. */
+export async function setOwnConversationClosed(publicIdValue: unknown, close: boolean) {
+  const actor = await requireSupportMember();
+  const publicId = parse(publicIdSchema, publicIdValue);
+  await client.begin(async (sql) => {
+    const rows = await sql<{ id: number; status: string }[]>`select id,status from idoc.support_conversations where public_id=${publicId}::uuid and member_user_id=${actor.id} for update`;
+    if (!rows[0]) throw new SupportValidationError('Conversation not found.');
+    const latest = await sql<{ author_side: string }[]>`select author_side from idoc.support_messages where conversation_id=${rows[0].id} order by created_at desc,id desc limit 1`;
+    const next = close ? 'closed' : latest[0]?.author_side === 'admin' ? 'admin_responded' : latest[0]?.author_side === 'member' ? 'member_replied' : 'open';
+    if (rows[0].status === next) return;
+    await sql`update idoc.support_conversations set status=${next},updated_at=now(),member_read_at=now() where id=${rows[0].id}`;
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+      values(${actor.id},${close ? 'support.conversation.closed' : 'support.conversation.reopened'},'support_conversation',${publicId},${JSON.stringify({ status: rows[0].status })}::jsonb,${JSON.stringify({ status: next })}::jsonb)`;
+  });
+}
+
 export async function listCategoryDefaults() {
   const actor = await requireAccountAccess('administration'); requireSuperAdmin(actor);
   return client`select d.category,u.email assignment_key from idoc.support_category_defaults d join idoc.users u on u.id=d.administrator_user_id`;

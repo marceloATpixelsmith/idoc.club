@@ -99,7 +99,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     from idoc.payments p where p.profile_id=${selected.profile.id} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : [];
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
-    <h1 className="text-2xl font-semibold">Members</h1>
+    <h1 className="text-3xl font-semibold text-gold">Members</h1>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
     <MembersTable initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (

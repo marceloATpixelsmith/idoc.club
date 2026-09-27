@@ -56,11 +56,28 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
 
   return <section className="mt-12 border-t border-border pt-10" aria-labelledby="my-registrations-heading">
     <h2 className="text-2xl" id="my-registrations-heading">My seminar registrations</h2>
-    <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?tab=past">Past</Link></nav>
+    <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars?view=my">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?view=my&tab=past">Past</Link></nav>
     <div className="mt-6">
       <h3 className="text-lg font-semibold">Your upcoming and current registrations</h3>
       {registered.length ? <ul className="mt-3 grid gap-6 sm:grid-cols-2">{registered.map(card)}</ul> : <p className="mt-3 text-muted-foreground">{past ? 'You have no past seminar registrations.' : 'You have no upcoming seminar registrations.'}</p>}
     </div>
+  </section>;
+}
+
+/** The public seminar catalog for a signed-out visitor: the same real, published-seminar data as
+ * AvailableSeminars, but with no "already registered" filtering (there's no member context to
+ * filter against) and no registration form -- registering requires signing in as an active member. */
+export async function PublicSeminarsCatalog() {
+  const seminars = await listCurrentSeminarsForMember(null);
+  const card = (seminar: (typeof seminars)[number]) => <li className="card-midnight p-6" key={seminar.id}>
+    <h3 className="text-xl">{seminar.title}</h3>
+    {seminarMeta(seminar)}
+    <p className="mt-3 text-sm text-muted-foreground"><Link className="underline" href="/sign-in">Log in</Link> as an active member to register.</p>
+  </li>;
+
+  return <section className="mt-12" aria-labelledby="available-seminars-heading">
+    <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
+    {seminars.length ? <ul className="mt-6 grid gap-6 sm:grid-cols-2">{seminars.map(card)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
   </section>;
 }
 

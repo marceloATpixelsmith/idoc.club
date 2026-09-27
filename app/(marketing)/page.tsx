@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowUpRight, CalendarDays, MapPin } from 'lucide-react';
 import { HeroSlider } from '@/components/site/HeroSlider';
-import { blogPosts, news, seminars } from '@/lib/content/site';
+import { blogPosts } from '@/lib/content/site';
+import { listPublicArticles } from '@/lib/news/articles';
+import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
 
 export const metadata: Metadata = {
   title: 'IDOC — International Dressage Officials Club',
@@ -15,7 +17,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
+  const [{ rows: newsRows }, seminarRows] = await Promise.all([
+    listPublicArticles('1'),
+    listCurrentSeminarsForMember(null),
+  ]);
+  const recentNews = newsRows.slice(0, 4);
+  const upcomingSeminars = seminarRows.slice(0, 4);
   return (
     <>
       <HeroSlider />
@@ -39,18 +47,18 @@ export default function Home() {
             </div>
 
             <div className="mt-10 flex flex-col gap-6">
-              {news.slice(0, 4).map((item) => (
-                <article key={item.slug} className="card-midnight p-7">
-                  <div className="flex items-center gap-3 text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
-                    <span className="text-gold">{item.category}</span>
-                    <span className="h-px w-6 bg-border" />
-                    <span>{item.date}</span>
-                  </div>
-                  <h3 className="mt-4 text-2xl leading-snug">{item.title}</h3>
-                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                    {item.excerpt}
-                  </p>
-                </article>
+              {recentNews.length === 0 ? (
+                <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
+              ) : recentNews.map((item) => (
+                <Link key={String(item.slug)} href={`/news/${item.slug}`}>
+                  <article className="card-midnight p-7">
+                    <p className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
+                      {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <h3 className="mt-4 text-2xl leading-snug">{String(item.title)}</h3>
+                    {item.subtitle ? <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                  </article>
+                </Link>
               ))}
             </div>
           </div>
@@ -70,29 +78,30 @@ export default function Home() {
               </Link>
             </div>
 
-            <ul className="mt-10 divide-y divide-border border-y border-border">
-              {seminars.map((s) => (
-                <li
-                  key={s.title}
-                  className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <h3 className="text-xl">{s.title}</h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-5 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                      <span className="inline-flex items-center gap-2">
-                        <MapPin className="size-3.5 text-gold" /> {s.location}
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <CalendarDays className="size-3.5 text-gold" /> {s.date}
-                      </span>
+            {upcomingSeminars.length === 0 ? (
+              <p className="mt-10 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
+            ) : (
+              <ul className="mt-10 divide-y divide-border border-y border-border">
+                {upcomingSeminars.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <h3 className="text-xl">{s.title}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-5 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <MapPin className="size-3.5 text-gold" /> {s.location}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <CalendarDays className="size-3.5 text-gold" /> {new Date(`${s.seminar_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <span className="shrink-0 border border-border px-3 py-1 text-[0.68rem] uppercase tracking-[0.16em] text-muted-foreground">
-                    {s.audience}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </section>
