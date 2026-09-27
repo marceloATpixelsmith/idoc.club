@@ -115,3 +115,15 @@ test('assignment and workflow audit events exclude support bodies', () => {
   assert.ok(auditStatements.length >= 2);
   for (const statement of auditStatements) assert.doesNotMatch(statement, /\$\{body\}/);
 });
+
+test('a member can close their own conversation, mirroring the admin workflow action but scoped to a conversation they actually own -- once an administrator\'s fix is confirmed working, the member doesn\'t need an admin to close it out for them', () => {
+  assert.match(source, /export async function setOwnConversationClosed\(publicIdValue: unknown, close: boolean\)/);
+  const fn = source.slice(source.indexOf('export async function setOwnConversationClosed'));
+  assert.match(fn, /const actor = await requireSupportMember\(\);/);
+  assert.match(fn, /where public_id=\$\{publicId\}::uuid and member_user_id=\$\{actor\.id\} for update/);
+  const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
+  assert.match(memberActions, /export async function changeOwnConversationStatus/);
+  assert.match(memberActions, /setOwnConversationClosed\(publicId, close\)/);
+  assert.match(memberThread, /changeOwnConversationStatus/);
+  assert.match(memberThread, /Close conversation/);
+});

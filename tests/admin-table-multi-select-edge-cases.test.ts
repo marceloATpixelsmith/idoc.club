@@ -11,6 +11,7 @@ const facetedFilter = readFileSync(new URL('../components/data-table/data-table-
 const viewOptions = readFileSync(new URL('../components/data-table/data-table-view-options.tsx', import.meta.url), 'utf8');
 const sortList = readFileSync(new URL('../components/data-table/data-table-sort-list.tsx', import.meta.url), 'utf8');
 const dataTableLib = readFileSync(new URL('../lib/data-table.ts', import.meta.url), 'utf8');
+const pagination = readFileSync(new URL('../components/data-table/data-table-pagination.tsx', import.meta.url), 'utf8');
 
 test('the Reset button stays mounted and shows its spinner for the actual navigation duration, not an instantaneous local transition', () => {
   assert.match(toolbar, /pending\?: boolean;/);
@@ -199,4 +200,11 @@ test('every Actions column is non-hideable and uses the static (non-interactive)
     assert.match(table, /id: 'actions', enableHiding: false,/);
     assert.match(table, /<DataTableStaticHeader className="text-gold" label="Actions" \/>/);
   }
+});
+
+test('page navigation (page count + first/prev/next/last buttons) only renders once there is more than one page of results -- Rows-per-page stays regardless, since it is a standing preference rather than a navigation aid', () => {
+  assert.match(pagination, /const hasMultiplePages = table\.getFilteredRowModel\(\)\.rows\.length > table\.getState\(\)\.pagination\.pageSize;/);
+  assert.match(pagination, /\{hasMultiplePages && \(/);
+  // "Rows per page" must appear before the conditional wrapper in source, i.e. outside it.
+  assert.ok(pagination.indexOf('Rows per page') < pagination.indexOf('{hasMultiplePages && ('));
 });

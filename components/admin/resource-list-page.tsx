@@ -67,7 +67,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     }));
   }
   return <main className="space-y-6 px-5 py-8 lg:px-8">
-    <header className="flex items-center justify-between gap-4"><div><h1 className="text-2xl font-semibold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href={`${config.path}/new`}>{config.create}</Link></header>
+    <header className="flex items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold text-gold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href={`${config.path}/new`}>{config.create}</Link></header>
     <ResourceDataTable
       initialAudience={listQuery.audience}
       initialColumnOrder={typeof preferences?.columnOrder === 'string' ? preferences.columnOrder : undefined}

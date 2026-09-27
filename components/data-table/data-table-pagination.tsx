@@ -28,6 +28,10 @@ export function DataTablePagination<TData>({
   className,
   ...props
 }: DataTablePaginationProps<TData>) {
+  // Page navigation (the page count and first/prev/next/last buttons) is only meaningful once
+  // there's more than one page of results -- with everything already on-screen it's just noise.
+  // The Rows-per-page control stays regardless, since it's a standing preference, not a nav aid.
+  const hasMultiplePages = table.getFilteredRowModel().rows.length > table.getState().pagination.pageSize;
   return (
     <div
       className={cn(
@@ -63,56 +67,60 @@ export function DataTablePagination<TData>({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center justify-center font-medium text-sm">
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {table.getPageCount()}
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button
-            aria-label="Go to first page"
-            data-idoc-table-control
-            variant="outline"
-            size="icon"
-            className="hidden size-8 lg:flex"
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronsLeft />
-          </Button>
-          <Button
-            aria-label="Go to previous page"
-            data-idoc-table-control
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            aria-label="Go to next page"
-            data-idoc-table-control
-            variant="outline"
-            size="icon"
-            className="size-8"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRight />
-          </Button>
-          <Button
-            aria-label="Go to last page"
-            data-idoc-table-control
-            variant="outline"
-            size="icon"
-            className="hidden size-8 lg:flex"
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronsRight />
-          </Button>
-        </div>
+        {hasMultiplePages && (
+          <>
+            <div className="flex items-center justify-center font-medium text-sm">
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {table.getPageCount()}
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                aria-label="Go to first page"
+                data-idoc-table-control
+                variant="outline"
+                size="icon"
+                className="hidden size-8 lg:flex"
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+              >
+                <ChevronsLeft />
+              </Button>
+              <Button
+                aria-label="Go to previous page"
+                data-idoc-table-control
+                variant="outline"
+                size="icon"
+                className="size-8"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                aria-label="Go to next page"
+                data-idoc-table-control
+                variant="outline"
+                size="icon"
+                className="size-8"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                <ChevronRight />
+              </Button>
+              <Button
+                aria-label="Go to last page"
+                data-idoc-table-control
+                variant="outline"
+                size="icon"
+                className="hidden size-8 lg:flex"
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+              >
+                <ChevronsRight />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
       <Link className="underline" href="/admin/seminars">← Seminars</Link>
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{String(seminar.title)}</h1>
+          <h1 className="text-3xl font-semibold text-gold">{String(seminar.title)}</h1>
           <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} / {String(seminar.capacity)} registered</p>
         </div>
         <a className="underline" download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}>Export registrations (CSV)</a>

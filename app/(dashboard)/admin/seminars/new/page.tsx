@@ -13,7 +13,7 @@ export default async function NewSeminarPage() {
   return (
     <main className="space-y-6 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/seminars">← Seminars</Link>
-      <h1 className="text-2xl font-semibold">New seminar</h1>
+      <h1 className="text-3xl font-semibold text-gold">New seminar</h1>
       <SeminarForm action={createSeminarAction} submitLabel="Create seminar">
         <SeminarFieldset paymentMethods={paymentMethods} />
       </SeminarForm>

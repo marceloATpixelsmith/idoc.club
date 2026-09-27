@@ -11,7 +11,7 @@ export default async function NewNewsArticlePage() {
   return (
     <main className="space-y-6 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/news">← News / Blog</Link>
-      <h1 className="text-2xl font-semibold">New article</h1>
+      <h1 className="text-3xl font-semibold text-gold">New article</h1>
       <NewsForm action={createNewsArticle} submitLabel="Create article">
         <label className="block">Title<input className="mt-1 block w-full border p-2" maxLength={200} name="title" required /></label>
         <label className="block">Subtitle (optional)<input className="mt-1 block w-full border p-2" maxLength={300} name="subtitle" /></label>

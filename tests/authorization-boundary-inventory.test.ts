@@ -56,6 +56,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access', refundMembershipPaymentForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/security/actions.ts': { recordGoogleOauthRotationEvidenceForm: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/support/actions.ts': {
+    changeOwnConversationStatus: 'delegates-to-data-access',
     createSupportConversation: 'delegates-to-data-access', replyToSupportConversation: 'delegates-to-data-access',
   },
   'app/(dashboard)/admin/support/actions.ts': {

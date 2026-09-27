@@ -26,7 +26,7 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
       <Link className="underline" href="/admin/news">← News / Blog</Link>
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{String(article.title)}</h1>
+          <h1 className="text-3xl font-semibold text-gold">{String(article.title)}</h1>
           <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status as keyof typeof STATUS_LABELS]}</strong></p>
         </div>
         <Link className="underline" href={`/admin/news/${id}/preview`}>Preview</Link>

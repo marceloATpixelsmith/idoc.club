@@ -7,7 +7,7 @@ export default async function AdminExportsPage() {
   const isSuperAdmin = actor.roles.includes('super_admin');
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
-    <h1 className="text-2xl font-semibold">Exports</h1>
+    <h1 className="text-3xl font-semibold text-gold">Exports</h1>
     <ul className="mt-6 max-w-md space-y-3 text-sm">
       <li><a className="text-primary underline underline-offset-4 hover:opacity-80" download href="/api/admin/export/members">Member directory (CSV)</a></li>
       <li><a className="text-primary underline underline-offset-4 hover:opacity-80" download href="/api/admin/export/notifications">Notification history (CSV)</a></li>
