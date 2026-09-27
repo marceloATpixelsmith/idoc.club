@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { SeminarFieldset } from '@/components/seminars/seminar-fieldset';
 import { SeminarForm } from '@/components/seminars/seminar-form';
 import { SeminarRefundForm } from '@/components/seminars/refund-form';
@@ -73,17 +75,17 @@ export default async function EditSeminarPage({ params, searchParams }: {
       <section id="registrations">
         <h2 className="mb-3 text-lg font-semibold">Registrations</h2>
         <form className="mb-3 grid gap-3 md:grid-cols-4" method="get">
-          <input className="border p-2" defaultValue={Array.isArray(query.q) ? query.q[0] : query.q} name="q" placeholder="Search member name or email" />
-          <select className="border p-2" defaultValue={Array.isArray(query.registrationStatus) ? query.registrationStatus[0] : query.registrationStatus} name="registrationStatus">
+          <Input defaultValue={Array.isArray(query.q) ? query.q[0] : query.q} name="q" placeholder="Search member name or email" />
+          <select className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs" defaultValue={Array.isArray(query.registrationStatus) ? query.registrationStatus[0] : query.registrationStatus} name="registrationStatus">
             <option value="">Any registration status</option>
             <option value="registered">Registered</option>
             <option value="canceled">Canceled</option>
           </select>
-          <select className="border p-2" defaultValue={Array.isArray(query.paymentStatus) ? query.paymentStatus[0] : query.paymentStatus} name="paymentStatus">
+          <select className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs" defaultValue={Array.isArray(query.paymentStatus) ? query.paymentStatus[0] : query.paymentStatus} name="paymentStatus">
             <option value="">Any payment status</option>
             {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <button className="rounded bg-primary p-2 text-primary-foreground" type="submit">Filter</button>
+          <Button type="submit">Filter</Button>
         </form>
         {registrations.length === 0 ? <p>No registrations match these filters.</p> : (
           <div className="overflow-x-auto">

@@ -2,12 +2,13 @@
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
 import type { MouseEvent } from 'react';
-import { Archive, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Gavel, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
+import { Archive, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Gavel, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { DataTable } from '@/components/data-table/data-table';
+import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
@@ -101,7 +102,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, size: 120, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
+    { id: 'actions', enableHiding: true, enableSorting: false, size: 150, header: () => <span className="text-xs font-bold uppercase tracking-wider text-gold">Actions</span>, cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild={row.original.hasSupportHistory} aria-label="Support conversations" disabled={!row.original.hasSupportHistory} size="icon-sm" title={row.original.hasSupportHistory ? 'Support conversations' : 'No support conversations on file'} variant="ghost">{row.original.hasSupportHistory ? <Link href={`/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`}><Headphones aria-hidden="true" /></Link> : <Headphones aria-hidden="true" />}</Button><Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname]);
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   // Facet filters (status/type/federation/country/region) are applied server-side from saved
@@ -223,11 +224,10 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
           <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
           <DateRangeFilter from={expiresFrom} label="Expires" onChange={(from, to) => { setExpiresFrom(from); setExpiresTo(to); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { expiresFrom: from, expiresTo: to }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={expiresTo} />
         </>}
-        trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon-sm" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
-      >
+      />
+      <DataTableActionsRow count={`${total} matching members`} table={table} trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon-sm" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}>
         <DataTableSortList table={table} />
-      </DataTableToolbar>
-      <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching members</p>
+      </DataTableActionsRow>
     </DataTable>
   </>;
 }

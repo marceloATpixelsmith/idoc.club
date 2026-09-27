@@ -10,6 +10,7 @@ import { persistTablePreferences, TablePreferenceSync } from '@/components/admin
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
+import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -159,8 +160,9 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
         <Input aria-label="Search support conversations" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search member, email, or subject…" type="search" value={search} />
         <DateRangeFilter from={activityFrom} label="Activity" onChange={(nextFrom, nextTo) => { setActivityFrom(nextFrom); setActivityTo(nextTo); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { activityFrom: nextFrom, activityTo: nextTo }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={activityTo} />
       </>}
-    >
+    />
+    <DataTableActionsRow count={total + ' matching conversations'} table={table}>
       <DataTableSortList table={table} />
-    </DataTableToolbar>
-    <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching conversations</p>{copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
+    </DataTableActionsRow>
+    {copyNotice && <p aria-live="polite" className="px-1 text-sm">{copyNotice}</p>}</DataTable></>;
 }

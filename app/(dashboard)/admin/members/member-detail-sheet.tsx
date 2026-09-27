@@ -82,12 +82,19 @@ export function MemberDetailSheet({
   const requestedTab = (TABS as readonly string[]).includes(initialTab ?? '') ? (initialTab as Tab) : 'overview';
   const [tab, setTab] = useState<Tab>(requestedTab === 'roles' && !isSuperAdmin ? 'overview' : requestedTab);
   const { profile } = selected;
+  // `open` was previously hardcoded to the literal `true` rather than real state, which made this a
+  // Radix "controlled" component whose value never actually changed -- so closing (X, overlay click,
+  // Escape) never played the exit animation at all; the Sheet just sat there, fully open, until the
+  // slower background navigation eventually unmounted it outright. Backing `open` with real state
+  // lets Radix's own close animation start immediately, independent of how long closeHref's
+  // navigation takes underneath.
+  const [open, setOpen] = useState(true);
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
   // exception used elsewhere -- see app/(dashboard)/admin/members/page.tsx); closing just navigates
-  // back to the bare members URL rather than tracking a separate open/closed flag.
+  // back to the bare members URL rather than tracking a separate open/closed flag beyond `open` itself.
   return (
-    <Sheet onOpenChange={(open) => { if (!open) router.push(closeHref); }} open>
+    <Sheet onOpenChange={(next) => { setOpen(next); if (!next) router.push(closeHref); }} open={open}>
       <SheetContent className="w-full overflow-y-auto sm:w-[70vw] sm:max-w-4xl">
         <SheetHeader>
           <SheetTitle>{profile.firstName} {profile.lastName}</SheetTitle>
@@ -98,13 +105,13 @@ export function MemberDetailSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <Tabs onValueChange={(value) => setTab(value as Tab)} value={tab}>
+        <Tabs className="mt-2" onValueChange={(value) => setTab(value as Tab)} value={tab}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="edit">Edit Info</TabsTrigger>
             <TabsTrigger value="membership">Membership</TabsTrigger>
             <TabsTrigger value="payment">Payment</TabsTrigger>
-            <TabsTrigger value="account">Account</TabsTrigger>
+            <TabsTrigger value="account">Security</TabsTrigger>
             {isSuperAdmin && <TabsTrigger value="roles">Roles</TabsTrigger>}
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>

@@ -29,7 +29,7 @@ export type MemberFilters = {
 
 export type AdminMemberRow = {
   country: string | null; email: string; federation: string | null; firstName: string | null;
-  lastName: string | null; lastPaymentAt: Date | null; membershipType: string | null; profileId: number | null; region: string | null;
+  hasSupportHistory: boolean; lastName: string | null; lastPaymentAt: Date | null; membershipType: string | null; profileId: number | null; region: string | null;
   status: string; updatedAt: Date; userId: number; validUntil: string | null;
 };
 
@@ -103,7 +103,13 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     regions: allValues(input.region).map((value) => value.trim().slice(0, 40)).filter(Boolean),
     sort: sort && SORT_FIELDS.includes(sort as SortField) ? sort as SortField : 'name',
     sorts, advancedFilters: [], joinOperator: firstValue(input.joinOperator) === 'or' ? 'or' : 'and',
-    statuses: statuses.length ? statuses : ['active'],
+    // An empty selection means "no status restriction" here, exactly like every other facet below
+    // (countries/federations/regions/membershipTypes) -- it does NOT fall back to a default. The
+    // "active by default" behavior a brand-new administrator sees is applied once, by the caller,
+    // only when no preference has ever been saved (see app/(dashboard)/admin/members/page.tsx);
+    // baking that default in here as well made Reset unable to distinguish "never customized" from
+    // "explicitly cleared", so clearing the Status filter silently kept filtering to active members.
+    statuses,
   };
   const rawAdvancedFilters = firstValue(input.filters);
   if (rawAdvancedFilters && rawAdvancedFilters.length <= 4000) {
@@ -173,7 +179,7 @@ function queryParts(raw: MemberFilters) {
   }
   const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when ((m.status in ('active','complimentary','canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date)) and u.account_state <> 'suspended' then 'active' else 'expired' end`;
   const advancedStatus = filters.advancedFilters.some((filter) => filter.id === 'status' && advancedCondition(filter, effectiveStatus));
-  if (!advancedStatus) {
+  if (!advancedStatus && filters.statuses.length) {
     const matches = filters.statuses.map((value) => statusCondition(value, effectiveStatus));
     conditions.push(sql`(${sql.join(matches, sql` or `)})`);
   }
@@ -207,7 +213,8 @@ const from = sql`from idoc.users u left join idoc.profiles p on p.user_id = u.id
   left join lateral (select status, valid_until, grace_ends_on, updated_at from idoc.memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
   left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from idoc.professional_roles where profile_id=p.id and effective_to is null) roles on true
   left join lateral (select max(paid_at) last_payment_at from idoc.payments where profile_id=p.id) payment on true
-  left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from idoc.application_roles where user_id=u.id and revoked_at is null) app_roles on true`;
+  left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from idoc.application_roles where user_id=u.id and revoked_at is null) app_roles on true
+  left join lateral (select true has_support_history from idoc.support_conversations where member_user_id=u.id limit 1) support on true`;
 
 async function authorize() { const actor = await requireAccountAccess('administration'); requireAdministrator(actor); return actor; }
 
@@ -216,7 +223,7 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
+    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };

@@ -7,12 +7,11 @@ import * as React from "react";
 import { DataTableDateFilter } from "@/components/data-table/data-table-date-filter";
 import { DataTableFacetedFilter } from "@/components/data-table/data-table-faceted-filter";
 import { DataTableSliderFilter } from "@/components/data-table/data-table-slider-filter";
-import { DataTableViewOptions } from "@/components/data-table/data-table-view-options";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
+interface DataTableToolbarProps<TData> extends Omit<React.ComponentProps<"div">, "children"> {
   table: Table<TData>;
   /** Extra controls rendered before the auto-generated per-column filters, e.g. a search input. */
   leading?: React.ReactNode;
@@ -20,8 +19,6 @@ interface DataTableToolbarProps<TData> extends React.ComponentProps<"div"> {
   onReset?: () => void;
   /** OR'd with the column-filter-driven detection to decide whether the Reset button shows. */
   isFiltered?: boolean;
-  /** Extra controls rendered after View, at the very end of the toolbar (e.g. a download/export icon). */
-  trailing?: React.ReactNode;
   /** Whether the surrounding table is currently applying a search/filter/sort/pagination change --
    * the same value passed to the table's own `loading` prop. Reset's spinner and visibility follow
    * this rather than an internal transition around `resetColumnFilters()`: that call only updates
@@ -36,9 +33,7 @@ export function DataTableToolbar<TData>({
   leading,
   onReset: onResetProp,
   isFiltered: isFilteredProp,
-  trailing,
   pending,
-  children,
   className,
   ...props
 }: DataTableToolbarProps<TData>) {
@@ -72,37 +67,30 @@ export function DataTableToolbar<TData>({
       role="toolbar"
       aria-orientation="horizontal"
       className={cn(
-        "flex w-full items-start justify-between gap-2 p-1",
+        "flex w-full flex-wrap items-center gap-2 p-1",
         className,
       )}
       {...props}
     >
-      <div className="flex flex-1 flex-wrap items-center gap-2">
-        {leading}
-        {columns.map((column) => (
-          <DataTableToolbarFilter key={column.id} column={column} />
-        ))}
-        {showReset && (
-          <Button
-            data-idoc-table-control
-            aria-label="Reset filters"
-            title="Reset filters"
-            aria-busy={isResetting}
-            variant="outline"
-            size="icon-sm"
-            className="border-dashed"
-            disabled={isResetting}
-            onClick={onReset}
-          >
-            {isResetting ? <LoaderCircle className="animate-spin" /> : <X />}
-          </Button>
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        {children}
-        <DataTableViewOptions table={table} align="end" />
-        {trailing}
-      </div>
+      {leading}
+      {columns.map((column) => (
+        <DataTableToolbarFilter key={column.id} column={column} />
+      ))}
+      {showReset && (
+        <Button
+          data-idoc-table-control
+          aria-label="Reset filters"
+          title="Reset filters"
+          aria-busy={isResetting}
+          variant="outline"
+          size="icon-sm"
+          className="border-dashed"
+          disabled={isResetting}
+          onClick={onReset}
+        >
+          {isResetting ? <LoaderCircle className="animate-spin" /> : <X />}
+        </Button>
+      )}
     </div>
   );
 }

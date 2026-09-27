@@ -44,3 +44,7 @@ test('a multi-select facet filter\'s selected values are read from react-table\'
   assert.match(resourceTable, /preferences\.audience = filterToken\(state\.columnFilters, 'audience'\)/);
   for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
 });
+
+test('the active-by-default Status view applies only when no table preference has ever been saved, so Reset can genuinely clear it', () => {
+  assert.match(membershipPage, /savedPreferences === null \? 'active' : undefined/);
+});

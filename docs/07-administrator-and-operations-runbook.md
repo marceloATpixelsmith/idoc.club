@@ -28,7 +28,7 @@ entries are not revenue; results remain grouped by currency.
 Selecting a member (`?profileId=`, the one query param this app still uses for a short-lived,
 single-step selection) opens a tabbed right-side Sheet rather than navigating to a separate page or
 jumping to an anchored section: Overview (seminar and payment history, read-only), Edit Info,
-Membership (extend expiration, correct entitlement, suspend/reinstate), Payment, Account
+Membership (extend expiration, correct entitlement, suspend/reinstate), Payment, Security
 (suspend/reinstate sign-in), Roles (Super Admin only: application roles plus the incident-response
 Force Revoke), Notifications (that member's delivery history), and Audit Trail. An optional `&tab=`
 param opens a specific tab directly -- e.g. the roster's Payment action link opens straight to the
@@ -45,6 +45,11 @@ these route changes). Every tab's fields are grouped into rounded card sections 
 responsive grid (multiple cards per row on wide viewports, one column on narrow ones) rather than a
 flat vertical stack. Email Member (in the Sheet header) is only a `mailto:` link to the current
 canonical account address.
+
+The roster's row actions also include a Support-conversations shortcut that opens `/admin/support`
+with the search box pre-filled to that member's email, showing only their conversations; it is
+disabled when the member has never submitted a support conversation, regardless of any existing
+conversation's current status.
 
 Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
 bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action

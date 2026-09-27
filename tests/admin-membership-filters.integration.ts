@@ -40,6 +40,27 @@ test('admin member search: a comma-joined single query param (the multi-select t
   assert.ok(profileIds.includes(secondProfile.id));
 });
 
+test('an absent status filter shows every status -- listAdminMembers itself no longer defaults to active-only', async () => {
+  // The active-by-default view a brand-new administrator sees is applied once, by the page itself,
+  // only when no table preference has ever been saved (app/(dashboard)/admin/members/page.tsx).
+  // listAdminMembers must not re-apply that default on its own: doing so previously made Reset
+  // unable to actually clear the Status filter, since a cleared filter and a never-set one both
+  // arrive here as an absent `status`.
+  const admin = await adminUser();
+  const activeUser = await createUser();
+  const activeProfile = await createProfile(activeUser.id);
+  await createMembership(activeProfile.id, true);
+  const expiredUser = await createUser();
+  const expiredProfile = await createProfile(expiredUser.id);
+  await createMembership(expiredProfile.id, false);
+
+  const listing = await asAdmin(admin.id, () => listAdminMembers({}));
+  assert.deepEqual(listing.filters.statuses, []);
+  const profileIds = listing.rows.map((row) => row.profileId);
+  assert.ok(profileIds.includes(activeProfile.id));
+  assert.ok(profileIds.includes(expiredProfile.id));
+});
+
 test('membership filters apply selectable country, federation, region, status exclusions and multiple sort priorities to real rows', async () => {
   const admin = await adminUser();
   const first = await createUser();
