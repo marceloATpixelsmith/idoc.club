@@ -129,7 +129,7 @@ test('a manual filter change (search text, date range) resets pagination to page
 test('persistAndRefresh in every table wrapper sequences router.refresh() after the preference-write promise settles, rather than firing it concurrently with a fire-and-forget PUT -- otherwise a refresh can render before the write commits, and the completed write triggers no follow-up refresh, leaving controls and results inconsistent', () => {
   assert.match(memberTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
   assert.match(resourceTable, /\.catch\(\(\) => setError\('Table preferences could not be saved\.'\)\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
-  assert.match(supportTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  assert.match(supportTable, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.replace\(pathname\)\)\);/);
 });
 
 test('useDataTable\'s notify cancels any pending debounced snapshot before dispatching an immediate one, since otherwise an older queued snapshot (e.g. from closing a facet popover) can fire after a newer immediate change (e.g. a sort click within the debounce window) and revert it', () => {

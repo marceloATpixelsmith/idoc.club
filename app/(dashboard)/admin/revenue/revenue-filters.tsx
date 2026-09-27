@@ -2,7 +2,7 @@
 
 import { CalendarIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -27,6 +27,14 @@ export function RevenueFilters({ from, origin, to }: { from?: string; origin?: s
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<DateRange>({ from: fromDateKey(from), to: fromDateKey(to) });
   const [originValue, setOriginValue] = useState(origin ?? 'all');
+
+  // Re-sync when the committed props change without a remount -- e.g. browser Back/Forward
+  // changing the URL's query params -- otherwise the controls keep showing a stale range/origin
+  // and Apply would push those stale values right back, undoing the navigation.
+  useEffect(() => {
+    setRange({ from: fromDateKey(from), to: fromDateKey(to) });
+    setOriginValue(origin ?? 'all');
+  }, [from, to, origin]);
 
   function apply() {
     const params = new URLSearchParams();

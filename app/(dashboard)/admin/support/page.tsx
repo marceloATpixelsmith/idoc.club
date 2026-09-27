@@ -15,7 +15,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
     activityTo: typeof saved?.activityTo === 'string' ? saved.activityTo : undefined,
     assigned: typeof saved?.assigned === 'string' ? saved.assigned : undefined,
     category: typeof saved?.category === 'string' ? saved.category : undefined,
-    page: typeof saved?.page === 'number' ? String(saved.page) : undefined,
+    // The one-time memberEmail shortcut must land on page 1 -- the admin's last-saved page number
+    // can easily exceed this one member's much smaller result set and render an empty table.
+    page: memberEmail ? undefined : typeof saved?.page === 'number' ? String(saved.page) : undefined,
     pageSize: typeof saved?.pageSize === 'number' ? String(saved.pageSize) : undefined,
     q: memberEmail || (typeof saved?.q === 'string' ? saved.q : undefined),
     sort: typeof saved?.sort === 'string' ? saved.sort : undefined,

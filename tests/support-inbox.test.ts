@@ -99,9 +99,11 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /No conversations match this view/);
   assert.match(table, /No support conversations exist/);
   assert.match(table, /persistTablePreferences\('support'/);
-  // router.refresh() must fire only after the preference write settles -- a fire-and-forget PUT
-  // racing an immediate refresh can read the database before the write commits.
-  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.refresh\(\)\)\);/);
+  // The navigation must fire only after the preference write settles -- a fire-and-forget PUT
+  // racing an immediate navigation can read the database before the write commits. It navigates
+  // to the bare pathname (not router.refresh(), which reuses whatever URL is currently shown) so
+  // the one-time `memberEmail` query param is dropped on the admin's first edit here.
+  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.replace\(pathname\)\)\);/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(error, /AdminErrorState/);
 });
