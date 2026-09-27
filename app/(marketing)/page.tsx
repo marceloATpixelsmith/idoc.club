@@ -22,6 +22,7 @@ export default async function Home() {
     listPublicArticles('1'),
     listCurrentSeminarsForMember(null),
   ]);
+  const recentNews = newsRows.slice(0, 4);
   const upcomingSeminars = seminarRows.slice(0, 4);
   return (
     <>
@@ -46,9 +47,9 @@ export default async function Home() {
             </div>
 
             <div className="mt-10 flex flex-col gap-6">
-              {newsRows.length === 0 ? (
+              {recentNews.length === 0 ? (
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
-              ) : newsRows.map((item) => (
+              ) : recentNews.map((item) => (
                 <Link key={String(item.slug)} href={`/news/${item.slug}`}>
                   <article className="card-midnight p-7">
                     <p className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">

@@ -202,8 +202,9 @@ test('every Actions column is non-hideable and uses the static (non-interactive)
   }
 });
 
-test('page navigation (page count + first/prev/next/last buttons) only renders once there is more than one page of results -- Rows-per-page stays regardless, since it is a standing preference rather than a navigation aid', () => {
-  assert.match(pagination, /const hasMultiplePages = table\.getFilteredRowModel\(\)\.rows\.length > table\.getState\(\)\.pagination\.pageSize;/);
+test('page navigation (page count + first/prev/next/last buttons) only renders once there is more than one page of results -- using getPageCount(), not getFilteredRowModel().rows.length, since every table here uses manualPagination and the filtered row model only ever holds the current page\'s already-fetched rows (never more than pageSize), which would otherwise hide navigation on every server-paginated table with real multiple pages; Rows-per-page stays regardless, since it is a standing preference rather than a navigation aid', () => {
+  assert.match(pagination, /const hasMultiplePages = table\.getPageCount\(\) > 1;/);
+  assert.doesNotMatch(pagination, /getFilteredRowModel\(\)\.rows\.length > table\.getState\(\)\.pagination\.pageSize/);
   assert.match(pagination, /\{hasMultiplePages && \(/);
   // "Rows per page" must appear before the conditional wrapper in source, i.e. outside it.
   assert.ok(pagination.indexOf('Rows per page') < pagination.indexOf('{hasMultiplePages && ('));

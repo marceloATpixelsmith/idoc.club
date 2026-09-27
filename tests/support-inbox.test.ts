@@ -122,8 +122,15 @@ test('a member can close their own conversation, mirroring the admin workflow ac
   assert.match(fn, /const actor = await requireSupportMember\(\);/);
   assert.match(fn, /where public_id=\$\{publicId\}::uuid and member_user_id=\$\{actor\.id\} for update/);
   const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
-  assert.match(memberActions, /export async function changeOwnConversationStatus/);
-  assert.match(memberActions, /setOwnConversationClosed\(publicId, close\)/);
-  assert.match(memberThread, /changeOwnConversationStatus/);
+  assert.match(memberActions, /export async function closeOwnConversation/);
+  assert.match(memberActions, /setOwnConversationClosed\(publicId, true\)/);
+  assert.match(memberThread, /closeOwnConversation/);
   assert.match(memberThread, /Close conversation/);
+});
+
+test('the member close action is close-only and never reads a client-supplied direction -- a member submitting the form with a tampered or missing field can\'t reopen their own conversation, since docs/08\'s Support Inbox contract reserves reopening for administrators', () => {
+  const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
+  const fn = memberActions.slice(memberActions.indexOf('export async function closeOwnConversation'));
+  assert.doesNotMatch(fn, /formData\.get\('operation'\)/);
+  assert.doesNotMatch(memberThread, /name="operation"/);
 });

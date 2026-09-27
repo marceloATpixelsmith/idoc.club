@@ -31,7 +31,10 @@ export function DataTablePagination<TData>({
   // Page navigation (the page count and first/prev/next/last buttons) is only meaningful once
   // there's more than one page of results -- with everything already on-screen it's just noise.
   // The Rows-per-page control stays regardless, since it's a standing preference, not a nav aid.
-  const hasMultiplePages = table.getFilteredRowModel().rows.length > table.getState().pagination.pageSize;
+  // Every admin table here uses manualPagination, so getFilteredRowModel() only ever holds the
+  // current page's already-fetched rows (never more than pageSize) -- getPageCount() is the real
+  // total, computed from the server-supplied `pageCount` table option instead.
+  const hasMultiplePages = table.getPageCount() > 1;
   return (
     <div
       className={cn(

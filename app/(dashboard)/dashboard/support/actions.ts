@@ -32,14 +32,16 @@ export async function replyToSupportConversation(_state: SupportFormState, formD
 
 /** The member's own equivalent of the admin's changeSupportConversationStatus -- typically used
  * once an administrator's fix is confirmed working, so the member can close the request out
- * themselves rather than leaving it open indefinitely. Reopening is offered symmetrically. */
-export async function changeOwnConversationStatus(_state: SupportFormState, formData: FormData): Promise<SupportFormState> {
+ * themselves rather than leaving it open indefinitely. Close-only, deliberately: per
+ * docs/08's Support Inbox contract only an administrator may reopen a conversation, so this
+ * never reads a client-supplied direction (an `operation`/boolean field a tampered request could
+ * flip to reopen) -- it always calls setOwnConversationClosed with `true`. */
+export async function closeOwnConversation(_state: SupportFormState, formData: FormData): Promise<SupportFormState> {
   const publicId = String(formData.get('publicId'));
-  const close = formData.get('operation') === 'close';
   try {
     await csrf(formData);
-    await setOwnConversationClosed(publicId, close);
+    await setOwnConversationClosed(publicId, true);
   } catch (error) { return errorState(error); }
   revalidatePath(`/dashboard/support/${publicId}`);
-  return { success: close ? 'Conversation closed.' : 'Conversation reopened.' };
+  return { success: 'Conversation closed.' };
 }
