@@ -64,4 +64,3 @@ test('Sentry environment and error-only defaults use Vercel deployment context',
   assert.equal(options.sendDefaultPii, false);
   assert.equal(options.tracesSampleRate, 0);
 });
-
