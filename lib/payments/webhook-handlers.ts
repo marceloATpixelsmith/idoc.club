@@ -225,7 +225,23 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
       session.payment_status === 'paid';
     if (isCanceledPayment && stripe.refunds) {
       const idempotencyKey = `idoc-seminar-refund-${registrationId}-${paymentIntentId}`;
-      const refund = await stripe.refunds.create({ amount: priceCents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: paymentIntentId }, { idempotencyKey });
+      let refund: Stripe.Refund;
+      try {
+        refund = await stripe.refunds.create({ amount: priceCents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: paymentIntentId }, { idempotencyKey });
+      } catch (error) {
+        await tx.insert(paymentRefunds).values({ amountCents: priceCents, failureCode: 'stripe_request_failed',
+          idempotencyKey, providerEvidence: { message: error instanceof Error ? error.message : 'Stripe refund request failed.' },
+          reason: 'Automatic full refund after concurrent payment for a canceled seminar.',
+          seminarRegistrationId: registrationId, status: 'failed' })
+          .onConflictDoUpdate({ target: paymentRefunds.idempotencyKey, set: { failureCode: 'stripe_request_failed', status: 'failed', updatedAt: new Date() } });
+        await tx.update(seminarRegistrations).set({ checkoutStatus: 'complete', paidAt: new Date(), paymentStatus: 'refund_failed',
+          paymentStatusUpdatedAt: new Date(), stripePaymentIntentId: paymentIntentId, updatedAt: new Date() })
+          .where(eq(seminarRegistrations.id, registrationId));
+        await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
+          summary: 'Automatic refund failed for a payment completed after seminar cancellation.',
+          details: { registrationId, sessionId: session.id, paymentIntentId } });
+        return;
+      }
       const status = refund.status === 'succeeded' ? 'succeeded' : refund.status === 'failed' ? 'failed' : refund.status === 'canceled' ? 'canceled' : 'pending';
       await tx.insert(paymentRefunds).values({ amountCents: priceCents, externalRefundId: refund.id, idempotencyKey,
         providerEvidence: { id: refund.id, status: refund.status }, reason: 'Automatic full refund after concurrent payment for a canceled seminar.',
