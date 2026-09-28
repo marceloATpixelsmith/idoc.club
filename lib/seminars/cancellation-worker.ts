@@ -1,5 +1,6 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
 import { client } from '@/lib/db/drizzle';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
@@ -67,6 +68,7 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
           where id=${row.id} and checkout_status='open'`;
       }
     } catch (error) {
+      Sentry.captureException(error, { tags: { background_operation: 'seminar_cancellation_resolution' } });
       await client`insert into idoc.reconciliation_findings(kind,summary,details)
         values('seminar_payment_conflict','Canceled seminar payment requires retry or reconciliation.',
           ${JSON.stringify({ registrationId: row.id, message: error instanceof Error ? error.message : 'Unknown cancellation resolution error.' })}::jsonb)`;

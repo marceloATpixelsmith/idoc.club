@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import * as Sentry from '@sentry/nextjs';
 
 export const ACCOUNT_DELIVERY_BATCH_LIMIT = 20;
 export const ACCOUNT_DELIVERY_LEASE_MS = 5 * 60 * 1000;
@@ -34,7 +35,8 @@ export async function handleAccountDeliveryCron(request: Request, dependencies: 
   if (!authorized(request, dependencies.secret)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     return Response.json(await dependencies.processBatch());
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error);
     await dependencies.reportFailure();
     return Response.json({ error: 'Worker failed' }, { status: 500 });
   }
