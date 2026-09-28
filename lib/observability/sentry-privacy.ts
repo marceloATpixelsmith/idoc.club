@@ -1,6 +1,10 @@
 const SENSITIVE_KEY = /(?:authorization|cookie|password|passwd|secret|token|mfa|totp|recovery|card|payment|stripe|body|form|payload)/i;
 const URL_VALUE = /([?&][^=&#]+)=([^&#]*)/g;
 const BEARER_VALUE = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const EMAIL_VALUE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const IPV4_VALUE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+const RECOVERY_CODE_VALUE = /\b(recovery(?:\s+code)?\s*[:=]?\s*)[A-Z0-9-]{6,}\b/gi;
+const MFA_CODE_VALUE = /\b((?:mfa|totp|otp)(?:\s+code)?\s*[:=]?\s*)\d{4,10}\b/gi;
 
 type SentryLikeEvent = {
   contexts?: Record<string, unknown>;
