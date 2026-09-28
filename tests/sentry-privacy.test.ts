@@ -4,7 +4,7 @@ import { sanitizeSentryEvent } from '../lib/observability/sentry-privacy.ts';
 import { sentryEnvironment, sentryOptions } from '../lib/observability/sentry-options.ts';
 
 test('Sentry sanitization removes request content and attaches the IDOC request id', () => {
-  const sanitized = sanitizeSentryEvent({
+  const sanitized = sanitizeSentryEvent<Record<string, any>>({
     extra: { nested: { password: 'not-for-sentry', safe: 'diagnostic' }, stripeSecret: 'sk_test_secret' },
     request: {
       cookies: { session: 'private' },
