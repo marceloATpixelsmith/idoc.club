@@ -111,17 +111,26 @@ test('every member and guest Server Action requires CSRF evidence before any mut
     assert.ok(fn, `${name} not found`);
     assert.match(fn as string, /requireCsrfToken\(/);
   }
-  // registerAsGuestForSeminarAction is wrapped in validatedAction, which enforces requireCsrfToken
-  // itself (lib/auth/middleware.ts) before this action's own callback ever runs.
-  assert.match(guestActions, /export const registerAsGuestForSeminarAction = validatedAction\(/);
+  // Deliberately not wrapped in the shared validatedAction helper: that helper's own zod parse would
+  // reject a bad field before this action's callback ever ran, with no chance to echo the submitted
+  // name/email back to the form -- so this action does its own CSRF + validation instead.
+  const fn = guestActions.match(/export async function registerAsGuestForSeminarAction[\s\S]*?\n\}/)?.[0];
+  assert.ok(fn, 'registerAsGuestForSeminarAction not found');
+  assert.match(fn as string, /requireCsrfToken\(/);
 });
 
 test('the anonymous guest seminar registration action is gated by Turnstile and a per-email/per-origin rate limit, the same anonymous-write pattern the public contact form uses', () => {
   assert.match(guestActions, /verifyTurnstile\(turnstileToken, origin, 'seminar_guest_registration'\)/);
   assert.match(guestActions, /checkRateLimit\('seminar_guest_registration', email, origin\)/);
-  const guestForm = readFileSync('components/seminars/guest-registration-form.tsx', 'utf8');
-  assert.match(guestForm, /TurnstileWidget/);
-  assert.match(guestForm, /name="turnstileToken"/);
+  const registrationForm = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.match(registrationForm, /TurnstileWidget/);
+  assert.match(registrationForm, /name="turnstileToken"/);
+});
+
+test('the guest registration action echoes the submitted name/email back on every failure path, so a validation or Turnstile/rate-limit error never wipes what the visitor typed', () => {
+  assert.match(guestActions, /const echo = \{ ?email:/);
+  const failureReturns = guestActions.match(/return \{ \.\.\.echo,/g) ?? [];
+  assert.ok(failureReturns.length >= 3, 'every failure branch (validation, turnstile, rate limit, registration error) should echo the submitted values back');
 });
 
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
@@ -234,13 +243,61 @@ test('the member Seminars page separates prominent current registrations, availa
   assert.match(memberPage, /const available/);
 });
 
-test('the public seminar catalog shows both the member and non-member price, and offers both joining and true anonymous guest checkout', () => {
+test('the public seminar catalog shows both the member and non-member price, with each seminar linking to its own detail page for registration', () => {
   const publicPage = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
   assert.match(publicPage, /PublicSeminarsCatalog/);
   assert.match(memberPage, /export async function PublicSeminarsCatalog/);
   assert.match(memberPage, /Members: .*Non-members:/);
-  assert.match(memberPage, /GuestRegistrationForm/);
-  assert.match(memberPage, /\/sign-up/);
+  assert.match(memberPage, /href=\{`\/seminars\/\$\{seminar\.id\}`\}/);
+});
+
+test('every seminar listing card (available, my seminars, public catalog) is a single clickable link to that seminar\'s detail page, not just its title', () => {
+  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
+  const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
+  const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
+  assert.ok(availableBlock && /<Link className="card-midnight block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
+  assert.ok(myBlock && /<Link className="absolute inset-0" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(myBlock), 'My Seminars keeps its Cancel action independently clickable via a stretched overlay link, not a wrapping one');
+  assert.ok(publicBlock && /<Link className="card-midnight block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
+});
+
+test('the My Seminars card only raises the actually-interactive Cancel form above its stretched overlay link, not the whole noninteractive status block, so clicks on the status text still navigate', () => {
+  const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
+  assert.ok(myBlock, 'MySeminars not found');
+  assert.doesNotMatch(myBlock as string, /<div className="relative z-10 mt-3">\s*<p className="text-sm">Your registration:/, 'the registration-status block must not be raised above the stretched link -- only the Cancel form should be');
+  assert.match(myBlock as string, /<div className="relative z-10 mt-2">\s*<SeminarForm/, 'only the Cancel form itself should be raised above the overlay link');
+});
+
+test('a signed-in profile without current entitlement (a lapsed membership) sees both prices on Available Seminars, since the detail page will route it to guest/non-member pricing', () => {
+  assert.match(memberPage, /showBothPrices/);
+  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
+  assert.ok(availableBlock && /showBothPrices \? `Members: .*Non-members:/.test(availableBlock));
+  const dispatchBlock = memberPage.match(/export async function MemberRegistrations[\s\S]*?\n\}/)?.[0];
+  assert.ok(dispatchBlock && /isEntitled\(member\.entitlement/.test(dispatchBlock) && /showBothPrices=\{!entitled\}/.test(dispatchBlock));
+});
+
+test('the seminar detail page presents full details and offers a member registration form, a join-or-guest choice, or the visitor\'s existing registration status', () => {
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detailPage, /getSeminarForRegistrant/);
+  assert.match(detailPage, /Directors and Application Details/);
+  assert.match(detailPage, /SeminarRegistrationForm/);
+  assert.match(detailPage, /SeminarRegistrationPanel/);
+  assert.match(detailPage, /isEntitled\(member\.entitlement/);
+});
+
+test('the seminar registration panel offers "Create an account" and "Register as a guest" buttons, revealing the shared registration form for the guest path', () => {
+  const panel = readFileSync('components/seminars/seminar-registration-panel.tsx', 'utf8');
+  assert.match(panel, /Create an account/);
+  assert.match(panel, /Register as a guest/);
+  assert.match(panel, /href="\/sign-up"/);
+  assert.match(panel, /SeminarRegistrationForm/);
+});
+
+test('the shared seminar registration form pre-fills and locks the name\/email fields for a member, and shows them as editable inputs for a guest', () => {
+  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.match(form, /registerForSeminarAction/);
+  assert.match(form, /registerAsGuestForSeminarAction/);
+  assert.match(form, /readOnly=\{isMember\}/);
+  assert.match(form, /required=\{!isMember\}/);
 });
 
 test('the admin seminar edit page has no Quick Actions box and offers a "View registrations" and an icon-only "Download registrations" action instead', () => {

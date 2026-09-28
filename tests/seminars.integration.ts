@@ -268,6 +268,15 @@ test('a guest\'s name is stored exactly as submitted -- HTML escaping happens on
   assert.equal(row.guest_name, '<script>evil</script>');
 });
 
+test('an administrator can change either price while a seminar has no registrations, and the new values actually persist', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { memberPrice: '45.00', nonMemberPrice: '65.00' });
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ memberPrice: '99.00', nonMemberPrice: '150.00' })));
+  const [row] = await sql`select member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId}`;
+  assert.equal(row.member_price_cents, 9900, 'member price must actually be written to the row, not silently dropped from the update');
+  assert.equal(row.non_member_price_cents, 15000, 'non-member price must actually be written to the row, not silently dropped from the update');
+});
+
 test('an administrator cannot change either price once a seminar has any registration', async () => {
   const admin = await adminUser();
   const { user } = await paidMember();

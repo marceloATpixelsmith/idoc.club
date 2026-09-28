@@ -103,6 +103,24 @@ export async function listCurrentSeminarsForMember(profileId: number | null) {
   return rows.map(withAvailability);
 }
 
+/** One seminar's public detail (the /seminars/[id] page) -- the same visibility rule as
+ * listCurrentSeminarsForMember (published, or one this profile has a registration for) but not
+ * restricted to "not yet past", so a direct link to an already-ended seminar a member registered
+ * for still resolves instead of 404ing. A null profileId (a signed-out visitor) simply never
+ * matches the left join, the same public detail every visitor sees. */
+export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId: number | null) {
+  const seminarId = idSchema.safeParse(seminarIdValue);
+  if (!seminarId.success) return null;
+  const [row] = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    (s.end_date + s.end_time) at time zone s.timezone ends_at,
+    (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
+    r.registration_status,r.payment_status,r.registered_at
+    from idoc.seminars s left join idoc.seminar_registrations r on r.seminar_id=s.id and r.profile_id=${profileId}
+    where s.id=${seminarId.data} and (s.status='published' or r.id is not null) limit 1`;
+  return row ? withAvailability(row) : null;
+}
+
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
