@@ -230,12 +230,12 @@ test('an administrator can edit a registration\'s guest details without being fo
   await sql`update idoc.seminar_payment_methods set enabled=false where canonical_id in ('bank_transfer','cash_event')`;
   // Saving an unrelated field change (the guest's name) must not be blocked by, or silently change,
   // a payment method that was valid at registration time but has since been disabled.
-  await asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestName: 'Jamie R. Guest', paymentMethod: 'bank_transfer' }));
+  await asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestFirstName: 'Jamie R.', guestLastName: 'Guest', guestPhone: '+353 1 555 0100', paymentMethod: 'bank_transfer' }));
   const [row] = await sql`select guest_name,payment_method_canonical_id from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(row.guest_name, 'Jamie R. Guest');
   assert.equal(row.payment_method_canonical_id, 'bank_transfer', 'the unchanged, since-disabled payment method must be preserved, not silently replaced');
   // Switching to a *different* method that is also disabled must still be rejected.
-  await assert.rejects(asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestName: 'Jamie R. Guest', paymentMethod: 'cash_event' })), SeminarRegistrationError);
+  await assert.rejects(asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestFirstName: 'Jamie R.', guestLastName: 'Guest', guestPhone: '+353 1 555 0100', paymentMethod: 'cash_event' })), SeminarRegistrationError);
 });
 
 test('recording a manual payment is rejected while a registration has an open Stripe checkout session, so the registrant cannot still complete it and be charged a second time', async () => {
@@ -282,7 +282,7 @@ test('a guest\'s name is stored exactly as submitted -- HTML escaping happens on
   const seminarId = await publishedSeminar(admin.id, { memberPrice: '10.00', nonMemberPrice: '10.00' });
   const { registrationId } = await registerAsGuestForSeminar(seminarId, '<script>evil</script>', 'Guest', 'jamie.guest@example.test', '+353 1 555 0100', 'bank_transfer');
   const [row] = await sql`select guest_name from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.guest_name, '<script>evil</script>');
+  assert.equal(row.guest_name, '<script>evil</script> Guest');
 });
 
 test('an administrator can change either price while a seminar has no registrations, and the new values actually persist', async () => {
