@@ -36,7 +36,7 @@ export async function handleAccountDeliveryCron(request: Request, dependencies: 
   try {
     return Response.json(await dependencies.processBatch());
   } catch (error) {
-    Sentry.captureException(error);
+    if (typeof Sentry.captureException === 'function') Sentry.captureException(error);
     await dependencies.reportFailure();
     return Response.json({ error: 'Worker failed' }, { status: 500 });
   }
