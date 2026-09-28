@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
-import { cancelSeminar, createSeminar, setSeminarStatus, updateSeminar } from '@/lib/seminars/seminars';
+import { cancelSeminar, createSeminar, getAdminSeminar, setSeminarStatus, updateSeminar } from '@/lib/seminars/seminars';
 import { markRegistrationPaymentReceived } from '@/lib/seminars/registrations';
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
@@ -48,7 +48,17 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
 
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar saved.', `/admin/seminars/${id}`);
+  return run(formData, async () => {
+    const fields = seminarFields(formData);
+    if (fields.status === 'canceled') {
+      const existing = await getAdminSeminar(id);
+      if (!existing) throw new Error('Seminar not found.');
+      await updateSeminar(id, { ...fields, status: existing.status });
+      await cancelSeminar(id);
+      return;
+    }
+    await updateSeminar(id, fields);
+  }, 'Seminar saved.', `/admin/seminars/${id}`);
 }
 
 export async function publishSeminarAction(_state: AdminSeminarState, formData: FormData) {
