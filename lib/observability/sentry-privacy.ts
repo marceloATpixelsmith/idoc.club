@@ -19,7 +19,13 @@ type SentryLikeEvent = {
 };
 
 function redactString(value: string): string {
-  return value.replace(BEARER_VALUE, 'Bearer [Filtered]').replace(URL_VALUE, '$1=[Filtered]');
+  return value
+    .replace(BEARER_VALUE, 'Bearer [Filtered]')
+    .replace(URL_VALUE, '$1=[Filtered]')
+    .replace(EMAIL_VALUE, '[Filtered email]')
+    .replace(IPV4_VALUE, '[Filtered IP]')
+    .replace(RECOVERY_CODE_VALUE, '$1[Filtered]')
+    .replace(MFA_CODE_VALUE, '$1[Filtered]');
 }
 
 function sanitizeValue(value: unknown, depth = 0): unknown {
