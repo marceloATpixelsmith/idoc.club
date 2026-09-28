@@ -88,8 +88,11 @@ test('a not-yet-entitled member sees payment directly on My Membership, with no 
   // entitlement themselves before rendering (AUTH-AUTHZ-010).
   await page.goto('/dashboard/support');
   await expect(page).toHaveURL(/\/dashboard\/membership$/);
-  await page.goto('/seminars');
-  await expect(page).toHaveURL(/\/seminars$/);
+  // Available Seminars (not My Seminars) is the default landing view at bare /seminars for every
+  // visitor, entitled or not (docs/08) -- this expired member reaches their own registration
+  // history via the explicit My Seminars tab (?view=my), same as any other member.
+  await page.goto('/seminars?view=my');
+  await expect(page).toHaveURL(/\/seminars\?view=my$/);
   await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();
   await context.close();
 });
