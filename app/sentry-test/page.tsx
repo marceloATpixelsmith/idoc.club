@@ -7,7 +7,7 @@ export default function SentryVerificationPage() {
   const [status, setStatus] = useState('');
 
   function requireStagingHost() {
-    if (window.location.hostname !== 'redesign.idoc.club' && !window.location.hostname.endsWith('.vercel.app')) {
+    if (window.location.hostname !== 'staging.idoc.club' && !window.location.hostname.endsWith('.vercel.app')) {
       throw new Error('Sentry verification is disabled on this host');
     }
   }
