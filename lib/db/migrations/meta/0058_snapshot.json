@@ -1,5 +1,5 @@
 {
-  "id": "9834de24-4d3e-44f6-85f4-e565ec984bbd",
+  "id": "c6a16280-3007-4e7e-b2ce-3ac8be7446c1",
   "prevId": "9c68686f-1374-4d90-a809-7a41ee517708",
   "version": "7",
   "dialect": "postgresql",
@@ -4966,7 +4966,7 @@
         },
         "seminars_levels_valid_check": {
           "name": "seminars_levels_valid_check",
-          "value": "\"idoc\".\"seminars\".\"levels\" <@ ARRAY['level_1','level_2','level_3','all_levels']::varchar(20)[]"
+          "value": "\"idoc\".\"seminars\".\"levels\" <@ ARRAY['level_1','level_2','level_3','all_levels']::varchar(20)[] and (not ('all_levels' = any(\"idoc\".\"seminars\".\"levels\")) or cardinality(\"idoc\".\"seminars\".\"levels\") = 1)"
         }
       },
       "isRLSEnabled": false

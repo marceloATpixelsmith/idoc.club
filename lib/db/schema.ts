@@ -518,7 +518,11 @@ export const seminars = idocSchema.table('seminars', {
   check('seminars_member_price_check', sql`${table.memberPriceCents} >= 0`),
   check('seminars_non_member_price_check', sql`${table.nonMemberPriceCents} >= 0`),
   check('seminars_date_order_check', sql`${table.endDate} > ${table.startDate} or (${table.endDate} = ${table.startDate} and ${table.endTime} > ${table.startTime})`),
-  check('seminars_levels_valid_check', sql`${table.levels} <@ ARRAY['level_1','level_2','level_3','all_levels']::varchar(20)[]`),
+  // all_levels always stands alone (lib/seminars/seminars.ts's parseLevels enforces this at the
+  // application layer) -- this constraint enforces the same invariant at the database layer, so a
+  // write that bypasses parseLevels (a manual repair, a future import) can never persist the
+  // contradictory ['all_levels', 'level_1'] that formatLevels would otherwise silently misrepresent.
+  check('seminars_levels_valid_check', sql`${table.levels} <@ ARRAY['level_1','level_2','level_3','all_levels']::varchar(20)[] and (not ('all_levels' = any(${table.levels})) or cardinality(${table.levels}) = 1)`),
   index('seminars_status_date_idx').on(table.status, table.startDate),
 ]);
 
