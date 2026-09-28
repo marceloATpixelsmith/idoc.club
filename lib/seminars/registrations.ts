@@ -27,7 +27,7 @@ async function requireSeminarAdministrator() {
  * there); a seminar never stores or edits its own copy. Any authenticated member may read it once
  * they need to know how to pay -- it carries no administrative or payment-configuration data. */
 export async function listEnabledRegistrationPaymentMethods(): Promise<{ canonical_id: string; display_label: string }[]> {
-  return client<{ canonical_id: string; display_label: string }[]>\`select canonical_id,display_label from idoc.seminar_payment_methods where enabled=true order by display_order\`;
+  return client<{ canonical_id: string; display_label: string }[]>`select canonical_id,display_label from idoc.seminar_payment_methods where enabled=true order by display_order`;
 }
 
 export async function getSeminarPaymentMethodInstructions(canonicalId: string): Promise<string | null> {
