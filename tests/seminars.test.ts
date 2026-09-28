@@ -145,13 +145,21 @@ test('a guest\'s attacker-controlled name is HTML-escaped before interpolation i
 });
 
 test('recording a manual payment is refused while a registration has an open Stripe checkout session, to prevent a double charge', () => {
-  assert.match(registrationsSource, /checkout_status === 'open'/);
+  assert.match(registrationsSource, /checkoutStatus === 'open'/);
 });
 
-test('reactivating a canceled registration re-runs the seminar open\/deadline\/capacity gate rather than skipping it', () => {
+test('reactivating a canceled registration re-runs the seminar open\/deadline\/capacity gate rather than skipping it, and acquires the seminar lock before the registration\'s own lock to match registerForSeminar\'s lock order', () => {
   const fn = registrationsSource.match(/export async function setAdminRegistrationStatus[\s\S]*?\n\}/)?.[0];
   assert.ok(fn, 'setAdminRegistrationStatus not found');
-  assert.match(fn as string, /requireSeminarOpenForRegistration\(sql, existing\.seminar_id\)/);
+  const body = fn as string;
+  assert.match(body, /requireSeminarOpenForRegistration\(sql, peek\.seminar_id\)/);
+  const seminarLockIndex = body.indexOf('requireSeminarOpenForRegistration(sql, peek.seminar_id)');
+  const registrationLockIndex = body.indexOf('for update`');
+  assert.ok(seminarLockIndex < registrationLockIndex, 'the seminar lock must be acquired before the registration row is locked "for update"');
+});
+
+test('recording a manual payment refreshes a stale, locally-open Stripe checkout status against Stripe itself rather than trusting it forever', () => {
+  assert.match(registrationsSource, /checkout\.sessions\.retrieve\(existing\.stripe_checkout_session_id\)/);
 });
 
 test('the CSV export route exposes only the documented columns, including guest registrants, and is BOM-prefixed for spreadsheet compatibility', () => {
