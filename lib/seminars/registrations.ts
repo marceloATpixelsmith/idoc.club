@@ -450,7 +450,7 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
   const requestedMethod = typeof fields.paymentMethod === 'string' ? fields.paymentMethod.trim() : '';
   try {
     await client.begin(async (sql) => {
-      const [existing] = await sql<{ guest_email: string | null; guest_name: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_name,payment_method_canonical_id,profile_id
+      const [existing] = await sql<{ guest_email: string | null; guest_first_name: string | null; guest_last_name: string | null; guest_name: string | null; guest_phone: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_first_name,guest_last_name,guest_name,guest_phone,payment_method_canonical_id,profile_id
         from idoc.seminar_registrations where id=${registrationId.data} for update`;
       if (!existing) throw new SeminarRegistrationError('Registration not found.');
       // Leaving the payment method exactly as it already was is always allowed, even if an
@@ -459,14 +459,22 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
       const paymentMethod = requestedMethod === existing.payment_method_canonical_id
         ? requestedMethod : validatePaymentMethod(await listEnabledSeminarPaymentMethods(), requestedMethod);
       if (existing.profile_id === null) {
-        const firstNameResult = guestNameSchema.safeParse(fields.guestFirstName);
-        const lastNameResult = guestNameSchema.safeParse(fields.guestLastName);
-        if (!firstNameResult.success || !lastNameResult.success) throw new SeminarRegistrationError("Enter the guest's first and last name.");
+        const rawFirstName = typeof fields.guestFirstName === 'string' ? fields.guestFirstName.trim() : '';
+        const rawLastName = typeof fields.guestLastName === 'string' ? fields.guestLastName.trim() : '';
+        const rawPhone = typeof fields.guestPhone === 'string' ? fields.guestPhone.trim() : '';
+        const firstNameResult = rawFirstName ? guestNameSchema.safeParse(rawFirstName) : null;
+        const lastNameResult = rawLastName ? guestNameSchema.safeParse(rawLastName) : null;
+        const phoneResult = rawPhone ? guestPhoneSchema.safeParse(rawPhone) : null;
+        if (firstNameResult && !firstNameResult.success) throw new SeminarRegistrationError("Enter a valid guest first name.");
+        if (lastNameResult && !lastNameResult.success) throw new SeminarRegistrationError("Enter a valid guest last name.");
+        if (phoneResult && !phoneResult.success) throw new SeminarRegistrationError('Enter a valid guest phone number.');
         const emailResult = guestEmailSchema.safeParse(fields.guestEmail);
         if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid guest email address.');
-        const phoneResult = guestPhoneSchema.safeParse(fields.guestPhone);
-        if (!phoneResult.success) throw new SeminarRegistrationError('Enter a valid guest phone number.');
-        await sql`update idoc.seminar_registrations set guest_name=${`${firstNameResult.data} ${lastNameResult.data}`},guest_first_name=${firstNameResult.data},guest_last_name=${lastNameResult.data},guest_phone=${phoneResult.data},guest_email=${emailResult.data.toLowerCase()},
+        const firstName = firstNameResult?.success ? firstNameResult.data : existing.guest_first_name;
+        const lastName = lastNameResult?.success ? lastNameResult.data : existing.guest_last_name;
+        const phone = phoneResult?.success ? phoneResult.data : existing.guest_phone;
+        const structuredName = [firstName, lastName].filter(Boolean).join(' ');
+        await sql`update idoc.seminar_registrations set guest_name=${structuredName || existing.guest_name},guest_first_name=${firstName},guest_last_name=${lastName},guest_phone=${phone},guest_email=${emailResult.data.toLowerCase()},
           payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
       } else {
         await sql`update idoc.seminar_registrations set payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
