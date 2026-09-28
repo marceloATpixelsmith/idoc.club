@@ -21,17 +21,19 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
 }) {
   const [revealed, setRevealed] = useState(false);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const knownVisitor = Boolean(memberDetails) || Boolean(ownProfileDetails) || isSignedIn;
 
   if (revealed) {
-    return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethods={paymentMethods} seminarId={seminarId} />;
+    return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethod={paymentMethod!} seminarId={seminarId} />;
   }
 
   return (
     <>
       <Button
         className="w-full text-xs uppercase tracking-[0.2em]"
-        onClick={() => (knownVisitor ? setRevealed(true) : setJoinDialogOpen(true))}
+        onClick={() => (knownVisitor ? setPaymentDialogOpen(true) : setJoinDialogOpen(true))}
         size="lg"
         type="button"
       >
@@ -49,12 +51,27 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
             </Button>
             <Button
               className="w-full"
-              onClick={() => { setJoinDialogOpen(false); setRevealed(true); }}
+              onClick={() => { setJoinDialogOpen(false); setPaymentDialogOpen(true); }}
               type="button"
               variant="ghost"
             >
               Register as a guest
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog onOpenChange={setPaymentDialogOpen} open={paymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>How would you like to pay?</DialogTitle>
+            <DialogDescription>Choose a payment method for this seminar registration.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {paymentMethods.map((method) => (
+              <Button key={String(method.canonical_id)} onClick={() => { setPaymentMethod(String(method.canonical_id)); setPaymentDialogOpen(false); setRevealed(true); }} type="button" variant="outline">
+                {String(method.display_label)}
+              </Button>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
