@@ -4696,8 +4696,8 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "seminar_registrations_payment_method_fk": {
-          "name": "seminar_registrations_payment_method_fk",
+        "seminar_registrations_payment_method_canonical_id_seminar_payment_methods_canonical_id_fk": {
+          "name": "seminar_registrations_payment_method_canonical_id_seminar_payment_methods_canonical_id_fk",
           "tableFrom": "seminar_registrations",
           "tableTo": "seminar_payment_methods",
           "schemaTo": "idoc",
@@ -4753,10 +4753,6 @@
         "seminar_registrations_identity_check": {
           "name": "seminar_registrations_identity_check",
           "value": "(\"idoc\".\"seminar_registrations\".\"profile_id\" is not null and num_nonnulls(\"idoc\".\"seminar_registrations\".\"guest_first_name\",\"idoc\".\"seminar_registrations\".\"guest_last_name\",\"idoc\".\"seminar_registrations\".\"guest_email\",\"idoc\".\"seminar_registrations\".\"guest_phone\") = 0) or (\"idoc\".\"seminar_registrations\".\"profile_id\" is null and num_nonnulls(\"idoc\".\"seminar_registrations\".\"guest_first_name\",\"idoc\".\"seminar_registrations\".\"guest_last_name\",\"idoc\".\"seminar_registrations\".\"guest_email\",\"idoc\".\"seminar_registrations\".\"guest_phone\") = 4)"
-        },
-        "seminar_registrations_guest_email_normalized_check": {
-          "name": "seminar_registrations_guest_email_normalized_check",
-          "value": "\"idoc\".\"seminar_registrations\".\"guest_email\" is null or \"idoc\".\"seminar_registrations\".\"guest_email\" = lower(trim(\"idoc\".\"seminar_registrations\".\"guest_email\"))"
         }
       },
       "isRLSEnabled": false
