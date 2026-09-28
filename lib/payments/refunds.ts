@@ -50,10 +50,19 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
       await sql`update idoc.seminar_registrations set registration_status=${status === 'succeeded' ? 'refunded' : 'canceled'},canceled_at=coalesce(canceled_at,now()),refunded_at=${status === 'succeeded' ? new Date() : null},
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
-      if (status === 'succeeded' && row.email) await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
-        from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} and r.profile_id is not null on conflict(dedupe_key) do nothing`;
     });
+    // Notification delivery must never roll back a provider-confirmed refund. The member outbox
+    // requires a profile id, so guest delivery is handled separately from this profile-backed queue.
+    if (status === 'succeeded' && row.email) {
+      try {
+        await client`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
+          select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
+          from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
+          where r.id=${registrationId} and r.profile_id is not null on conflict(dedupe_key) do nothing`;
+      } catch {
+        // Refund settlement is authoritative; notification failures are non-transactional.
+      }
+    }
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
