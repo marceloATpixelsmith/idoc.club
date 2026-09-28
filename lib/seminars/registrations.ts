@@ -82,7 +82,7 @@ async function requireOwnProfileIdRegardlessOfEntitlement(): Promise<{ actorId: 
 }
 
 type SeminarAvailabilityRow = {
-  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; is_fei: boolean; location: string;
+  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; is_fei: boolean; levels: string[]; location: string;
   member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
   registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
   start_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
@@ -104,7 +104,7 @@ function withAvailability(row: SeminarAvailabilityRow) {
  * catalog with no registration_status/payment_method_canonical_id attached to any row. */
 export async function listCurrentSeminarsForMember(profileId: number | null) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -122,7 +122,7 @@ export async function listCurrentSeminarsForMember(profileId: number | null) {
  * this member's own registration history). */
 export async function listPastPublishedSeminars() {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,
     null::varchar(40) payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
@@ -142,7 +142,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) return null;
   const [row] = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -154,7 +154,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at

@@ -38,7 +38,9 @@
 --    registration record. Every such value is marked "ASSUMPTION" in scripts/data-import
 --    generation (see the per-row SQL comments below) and MUST be reviewed by an administrator
 --    before the imported seminars are relied on for real registrations:
---      - start_time / end_time: no time-of-day was ever published; defaulted to 09:00-17:00.
+--      - start_time / end_time: no time-of-day was ever published, and none is shown or collected
+--        for any seminar (migration 0058); defaulted to the same 00:00-23:59 anchor every seminar
+--        gets, so date-based availability/deadline math behaves identically to any other seminar.
 --      - registration_deadline: defaulted to 14 days before the seminar where the source gave no
 --        explicit application deadline.
 --      - non_member_price_cents: the legacy site never distinguished a member from a non-member
@@ -1797,8 +1799,8 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
     '2026-06-27'::date,
-    '09:00'::time,
-    '17:00'::time,
+    '00:00'::time,
+    '23:59'::time,
     'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     10,
@@ -1880,8 +1882,8 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
     '2026-06-27'::date,
-    '09:00'::time,
-    '17:00'::time,
+    '00:00'::time,
+    '23:59'::time,
     'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     20,
@@ -1975,8 +1977,8 @@ TBD
 Nearest airports: Malmö SWE (50km) or Copenhagen DEN (48 km)',
     '2026-07-10'::date,
     '2026-07-10'::date,
-    '09:00'::time,
-    '17:00'::time,
+    '00:00'::time,
+    '23:59'::time,
     'Europe/Stockholm',
     'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
     20,
@@ -2026,8 +2028,8 @@ COURSE FEE
 EUR 350 (IDOC members)',
     '2026-08-06'::date,
     '2026-08-06'::date,
-    '09:00'::time,
-    '17:00'::time,
+    '00:00'::time,
+    '23:59'::time,
     'Europe/Berlin',
     'Verden, Germany',
     30,

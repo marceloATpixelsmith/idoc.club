@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 58);
+  assert.equal(count, 59);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 58);
+    assert.equal(count, 59);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -118,11 +118,53 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 52, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
+    assert.equal(count, 53, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
   }
+});
+
+test('migration 0058 backfills every pre-existing seminar\'s start_time/end_time to 00:00/23:59, so date-based availability keeps working for a seminar created before time-of-day was removed', async () => {
+  // A Codex review finding on this migration: a same-day seminar created (or legacy-imported) before
+  // 0058, with a real end_time earlier than 23:59, would otherwise keep transitioning to Past at that
+  // old, no-longer-displayed clock time instead of end of day -- silently rejecting registration hours
+  // before a visitor looking at the now date-only UI would expect.
+  await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
+  const through0057 = await mkdtemp(join(tmpdir(), 'idoc-through-0057-'));
+  try {
+    await mkdir(join(through0057, 'meta'));
+    const migrationNames = (await readdir(migrationsFolder))
+      .filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= 57);
+    for (const name of migrationNames) await cp(join(migrationsFolder, name), join(through0057, name));
+    const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+    journal.entries = journal.entries.filter(({ idx }: { idx: number }) => idx <= 57);
+    await writeFile(join(through0057, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+
+    await migrate(database, { migrationsFolder: through0057, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+
+    const [user] = await sql`insert into idoc.users (email,password_hash) values ('legacy-seminar-admin@idoc.club','hash') returning id`;
+    const [legacySeminar] = await sql`insert into idoc.seminars
+      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
+      values ('Legacy Seminar','Imported before time-of-day was removed.','2026-01-01','09:00','2026-01-01','17:00','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${user.id},${user.id})
+      returning id`;
+
+    await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+
+    const [row] = await sql`select start_time,end_time from idoc.seminars where id=${legacySeminar.id}`;
+    assert.equal(String(row.start_time).slice(0, 5), '00:00', 'a pre-0058 seminar\'s start_time must be backfilled to 00:00');
+    assert.equal(String(row.end_time).slice(0, 5), '23:59', 'a pre-0058 seminar\'s end_time must be backfilled to 23:59, not left at its old real clock time');
+  } finally {
+    await rm(through0057, { force: true, recursive: true });
+  }
+});
+
+test('the seminars_levels_valid_check constraint rejects all_levels alongside any other level, even bypassing application-layer parseLevels', async () => {
+  const [user] = await sql`insert into idoc.users (email,password_hash) values ('levels-check-admin@idoc.club','hash') returning id`;
+  await assert.rejects(sql`insert into idoc.seminars
+    (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
+    values ('Bad Levels','desc','2026-01-01','00:00','2026-01-01','23:59','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
+    /seminars_levels_valid_check/, 'the database must reject all_levels combined with any other level, not just the application layer');
 });
 
 test('migration 0035 removes passkey/WebAuthn support without a foreign-key violation against a real historical satisfied_factor_id reference', async () => {
@@ -313,14 +355,14 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
 
-  // Migrations 0055/0056/0057 reshaped these two tables after this frozen snapshot was taken (payment
-  // method moved from the seminar to each registration; multi-day dates; dual member/non-member
-  // prices; guest registration; the FEI-affiliation flag). Rather than hand-patching every
-  // column/constraint/index delta here, this substitutes the two tables' definitions straight from
-  // 0057_snapshot.json -- itself generated by drizzle-kit from the current lib/db/schema.ts (see
-  // tests/migration-immutability.test.ts), so it is exactly as authoritative as the frozen 0051
-  // snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0057_snapshot.json'), 'utf8'));
+  // Migrations 0055/0056/0057/0058 reshaped these two tables after this frozen snapshot was taken
+  // (payment method moved from the seminar to each registration; multi-day dates; dual
+  // member/non-member prices; guest registration; the FEI-affiliation flag; the levels field).
+  // Rather than hand-patching every column/constraint/index delta here, this substitutes the two
+  // tables' definitions straight from 0058_snapshot.json -- itself generated by drizzle-kit from
+  // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
+  // authoritative as the frozen 0051 snapshot was for everything else.
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0058_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
 
@@ -471,7 +513,10 @@ function normalizeSql(value: unknown) {
     .toLowerCase()
     .replaceAll('"', '')
     .replaceAll(/idoc\.[a-z0-9_]+\./g, '')
-    .replaceAll(/::(?:character varying|text|timestamp without time zone)(?:\[\])?/g, '')
+    // Postgres renders an array-typed default's cast with its canonical spelling and length modifier
+    // (::character varying(20)[]) while a hand-written migration or drizzle-generated snapshot may
+    // spell it as ::varchar(20)[] -- both must normalize to the same thing (levels, migration 0058).
+    .replaceAll(/::(?:character varying|varchar|text|timestamp without time zone)(?:\(\d+\))?(?:\[\])?/g, '')
     .replaceAll(/=\s*any[\s(]*array\[([^\]]+)\][^a-z]*/g, 'in ($1)')
     .replaceAll(/\bin\s*\(([^()]*)\)/g, 'in $1')
     .replaceAll(/[()\s]+/g, ' ')
@@ -485,7 +530,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 58);
+  assert.equal(count, 59);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {
