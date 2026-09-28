@@ -87,9 +87,17 @@ type SeminarAvailabilityRow = {
   registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
   start_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
 };
+function dateOnly(value: string | Date): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
 function withAvailability(row: SeminarAvailabilityRow) {
   return {
     ...row,
+    start_date: dateOnly(row.start_date),
+    end_date: dateOnly(row.end_date),
+    start_time: String(row.start_time),
+    end_time: String(row.end_time),
     availability: computeSeminarAvailability({
       activeRegistrationCount: row.registered_count, capacity: row.capacity, endsAtUtc: new Date(row.ends_at),
       registrationDeadline: row.registration_deadline, status: row.status,
