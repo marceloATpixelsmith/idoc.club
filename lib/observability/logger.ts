@@ -46,7 +46,8 @@ async function log(sink: (...args: unknown[]) => void, event: SecurityEventName,
   // win over anything a caller's meta might (redundantly, or by drift) also supply under those keys.
   const context = { requestId, ...safeMeta, attribution, category, resource, retentionClass };
   sink(event, context);
-  if (reportToSentry && 'sentry' in SECURITY_EVENT_TAXONOMY[event] && SECURITY_EVENT_TAXONOMY[event].sentry === true) {
+  const definition = SECURITY_EVENT_TAXONOMY[event] as SecurityEventDefinition;
+  if (reportToSentry && definition.sentry === true) {
     Sentry.withScope((scope) => {
       scope.setLevel('error');
       scope.setTag('idoc_event', event);
