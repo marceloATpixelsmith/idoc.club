@@ -122,6 +122,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
+  'app/api/cron/seminar-cancellation-resolution/route.ts': 'shared-secret-header',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
   'app/api/brevo/webhook/route.ts': 'shared-secret-query-param',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
@@ -319,6 +320,10 @@ test('the renewal-notice Cron Route Handlers are gated by the shared secret befo
   for (const file of ['app/api/cron/renewal-notice-scan/route.ts', 'app/api/cron/renewal-notice-delivery/route.ts']) {
     const source = readFileSync(path.join(root, file), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
   }
+});
+
+test('the seminar-cancellation-resolution Cron Route Handler is gated by the shared secret before batch processing', () => {
+  const source = readFileSync(path.join(root, 'app/api/cron/seminar-cancellation-resolution/route.ts'), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
 });
 
 test('the reconciliation-scan Cron Route Handler is gated by the shared secret before batch processing', () => {
