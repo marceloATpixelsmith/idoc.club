@@ -38,6 +38,23 @@ test('Sentry sanitization drops non-internal user identity and redacts URL value
   assert.equal(sanitized.extra?.value, 'Bearer [Filtered]');
 });
 
+test('Sentry sanitization redacts PII and authentication codes from free-form exception strings', () => {
+  const sanitized = sanitizeSentryEvent({
+    exception: {
+      values: [{ value: 'Failed for member@example.test from 192.168.1.42; recovery code 123456; MFA code 654321' }],
+    },
+    extra: { message: 'Contact member@example.test from 10.0.0.8 with TOTP 123456' },
+  });
+
+  const exceptionValue = (sanitized.exception as { values: Array<{ value: string }> }).values[0]?.value ?? '';
+  assert.equal(exceptionValue.includes('member@example.test'), false);
+  assert.equal(exceptionValue.includes('192.168.1.42'), false);
+  assert.equal(exceptionValue.includes('123456'), false);
+  assert.equal(exceptionValue.includes('654321'), false);
+  assert.equal(String(sanitized.extra?.message).includes('member@example.test'), false);
+  assert.equal(String(sanitized.extra?.message).includes('10.0.0.8'), false);
+});
+
 test('Sentry environment and error-only defaults use Vercel deployment context', () => {
   assert.equal(sentryEnvironment({ VERCEL_ENV: 'production' }), 'production');
   assert.equal(sentryEnvironment({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'staging' }), 'staging');
