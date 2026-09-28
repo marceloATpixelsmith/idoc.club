@@ -260,6 +260,21 @@ test('every seminar listing card (available, my seminars, public catalog) is a s
   assert.ok(publicBlock && /<Link className="card-midnight block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
 });
 
+test('the My Seminars card only raises the actually-interactive Cancel form above its stretched overlay link, not the whole noninteractive status block, so clicks on the status text still navigate', () => {
+  const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
+  assert.ok(myBlock, 'MySeminars not found');
+  assert.doesNotMatch(myBlock as string, /<div className="relative z-10 mt-3">\s*<p className="text-sm">Your registration:/, 'the registration-status block must not be raised above the stretched link -- only the Cancel form should be');
+  assert.match(myBlock as string, /<div className="relative z-10 mt-2">\s*<SeminarForm/, 'only the Cancel form itself should be raised above the overlay link');
+});
+
+test('a signed-in profile without current entitlement (a lapsed membership) sees both prices on Available Seminars, since the detail page will route it to guest/non-member pricing', () => {
+  assert.match(memberPage, /showBothPrices/);
+  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
+  assert.ok(availableBlock && /showBothPrices \? `Members: .*Non-members:/.test(availableBlock));
+  const dispatchBlock = memberPage.match(/export async function MemberRegistrations[\s\S]*?\n\}/)?.[0];
+  assert.ok(dispatchBlock && /isEntitled\(member\.entitlement/.test(dispatchBlock) && /showBothPrices=\{!entitled\}/.test(dispatchBlock));
+});
+
 test('the seminar detail page presents full details and offers a member registration form, a join-or-guest choice, or the visitor\'s existing registration status', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /getSeminarForRegistrant/);

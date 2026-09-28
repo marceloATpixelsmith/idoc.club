@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { SeminarForm } from '@/components/seminars/seminar-form';
 import { getUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
+import { isEntitled } from '@/lib/membership/entitlement';
 import { sanitizeBankInstructions } from '@/lib/organization/format';
 import { formatSchedule, money } from '@/lib/seminars/format';
 import { getSeminarPaymentMethodInstructions, listCurrentSeminarsForMember, listPastSeminarsForMember } from '@/lib/seminars/registrations';
@@ -11,8 +12,11 @@ import { cancelSeminarRegistrationAction } from '@/app/(dashboard)/dashboard/sem
 /** "Available Seminars": the database-backed catalog of upcoming, published seminars this member
  * has not yet registered for. Each card is a single clickable link to that seminar's own detail
  * page (/seminars/[id]), where the actual registration form lives -- the listing itself is just a
- * scannable summary, not a form. */
-async function AvailableSeminars({ profileId }: { profileId: number }) {
+ * scannable summary, not a form. `showBothPrices` covers a signed-in profile that currently lacks
+ * entitlement (e.g. a lapsed membership): the detail page routes them to guest/non-member pricing
+ * (only a currently entitled member gets the member-price form), so the card must advertise the
+ * price they can actually pay rather than always showing the member price they cannot get. */
+async function AvailableSeminars({ profileId, showBothPrices }: { profileId: number; showBothPrices: boolean }) {
   const seminars = await listCurrentSeminarsForMember(profileId);
   const notRegistered = seminars.filter((seminar) => seminar.registration_status === null);
   const available = notRegistered.filter((seminar) => seminar.availability === 'open');
@@ -22,7 +26,9 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
       <Link className="card-midnight block cursor-pointer p-6" href={`/seminars/${seminar.id}`}>
         <h3 className="text-xl">{seminar.title}</h3>
         <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">{formatSchedule(seminar)} · {seminar.location}</p>
-        <p className="mt-2 text-sm font-medium">{money(seminar.member_price_cents)}</p>
+        <p className="mt-2 text-sm font-medium">
+          {showBothPrices ? `Members: ${money(seminar.member_price_cents)} · Non-members: ${money(seminar.non_member_price_cents)}` : money(seminar.member_price_cents)}
+        </p>
       </Link>
     </li>
   );
@@ -50,11 +56,15 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
       <h3 className="text-xl">{seminar.title}</h3>
       <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">{formatSchedule(seminar)} · {seminar.location}</p>
       <p className="mt-2 text-sm font-medium">{money(seminar.member_price_cents)}</p>
-      <div className="relative z-10 mt-3">
+      <div className="mt-3">
         <p className="text-sm">Your registration: <strong>{registrationDisplayLabel(seminar.registration_status as RegistrationStatus, (seminar.payment_status ?? 'unpaid') as PaymentStatus)}</strong></p>
         {seminar.payment_status === 'bank_transfer_pending' && bankInstructionsHtml ? <div className="mt-2 rounded border p-3 text-sm" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} /> : null}
         {seminar.payment_status === 'cash_pending' ? <p className="mt-2 text-sm">Pay in cash at the event.</p> : null}
-        {!past && seminar.registration_status === 'registered' ? <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm> : null}
+        {!past && seminar.registration_status === 'registered' ? (
+          <div className="relative z-10 mt-2">
+            <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm>
+          </div>
+        ) : null}
       </div>
     </li>
   );
@@ -105,8 +115,15 @@ export async function MemberRegistrations({ tab, view }: { tab?: string; view?: 
   }
   // "Available Seminars" is the default landing tab for every visitor, signed in or not (docs/08) --
   // a signed-in user with no member profile at all (an administrator, most commonly) sees the same
-  // public, dual-priced catalog a signed-out visitor does, rather than being blocked entirely.
-  if (view !== 'my') return member ? <AvailableSeminars profileId={member.profile.id} /> : <PublicSeminarsCatalog />;
+  // public, dual-priced catalog a signed-out visitor does, rather than being blocked entirely. A
+  // profile that currently lacks entitlement (a lapsed membership) still gets its own profile-scoped
+  // catalog (so seminars it's already registered for are correctly excluded), but with both prices
+  // shown -- the detail page routes it to guest/non-member pricing, same as no profile at all.
+  if (view !== 'my') {
+    if (!member) return <PublicSeminarsCatalog />;
+    const entitled = isEntitled(member.entitlement, new Date().toISOString().slice(0, 10));
+    return <AvailableSeminars profileId={member.profile.id} showBothPrices={!entitled} />;
+  }
   // "My Seminars" is this member's own registration history -- registration and payment status are
   // independent, durable facts (docs/02) that outlive a lapsed membership, so viewing them only
   // requires an actual profile to exist, never active entitlement. (Registering in the first place
