@@ -46,7 +46,7 @@ async function paidMember() {
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
-    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '11:00', location: 'Arena 3, IDOC Headquarters',
+    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '11:00', isFei: false, location: 'Arena 3, IDOC Headquarters',
     memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48),
     startDate, startTime: '09:00', status: 'published', timezone: 'Europe/Berlin', title: 'Judging Clinic', ...overrides,
   };
@@ -275,6 +275,16 @@ test('an administrator can change either price while a seminar has no registrati
   const [row] = await sql`select member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId}`;
   assert.equal(row.member_price_cents, 9900, 'member price must actually be written to the row, not silently dropped from the update');
   assert.equal(row.non_member_price_cents, 15000, 'non-member price must actually be written to the row, not silently dropped from the update');
+});
+
+test('the FEI-affiliation flag persists through create and update, on both the true and false paths', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { isFei: true });
+  const [created] = await sql`select is_fei from idoc.seminars where id=${seminarId}`;
+  assert.equal(created.is_fei, true, 'is_fei must actually be written on create, not silently dropped');
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ isFei: false })));
+  const [updated] = await sql`select is_fei from idoc.seminars where id=${seminarId}`;
+  assert.equal(updated.is_fei, false, 'is_fei must actually be written on update, not silently dropped');
 });
 
 test('an administrator cannot change either price once a seminar has any registration', async () => {

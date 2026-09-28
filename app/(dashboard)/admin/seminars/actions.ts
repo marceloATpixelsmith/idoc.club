@@ -15,7 +15,7 @@ export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; succ
 function seminarFields(formData: FormData) {
   return {
     capacity: formData.get('capacity'), description: formData.get('description'), endDate: formData.get('endDate'),
-    endTime: formData.get('endTime'), location: formData.get('location'), memberPrice: formData.get('memberPrice'),
+    endTime: formData.get('endTime'), isFei: formData.get('isFei'), location: formData.get('location'), memberPrice: formData.get('memberPrice'),
     nonMemberPrice: formData.get('nonMemberPrice'), registrationDeadline: formData.get('registrationDeadline'),
     startDate: formData.get('startDate'), startTime: formData.get('startTime'), status: formData.get('status'),
     timezone: formData.get('timezone'), title: formData.get('title'),

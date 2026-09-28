@@ -220,6 +220,19 @@ test('the seminar fieldset asks for "Directors and Application Details", multi-d
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
 });
 
+test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted through create and update, and shown on the public listing cards and detail page', () => {
+  assert.match(seminarFieldset, /name="isFei"/);
+  assert.match(seminarFieldset, /type="checkbox"/);
+  assert.match(seminarsSource, /const isFei = input\.isFei === 'on' \|\| input\.isFei === true/);
+  assert.match(seminarsSource, /status,is_fei,created_by_user_id/);
+  assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
+  assert.match(memberPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
+  assert.match(memberPage, /seminar\.is_fei \? <FeiBadge/);
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detailPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
+  assert.match(detailPage, /seminar\.is_fei \? <div[\s\S]*?<FeiBadge/);
+});
+
 test('a locked (disabled) price input still submits its value via a hidden mirror field, so editing a seminar with registrations never fails price validation', () => {
   const memberPriceBlock = seminarFieldset.match(/id="memberPrice"[\s\S]*?<\/div>/)?.[0];
   const nonMemberPriceBlock = seminarFieldset.match(/id="nonMemberPrice"[\s\S]*?<\/div>/)?.[0];
@@ -235,12 +248,35 @@ test('the member Seminars page renders registration and payment status labels', 
   }
 });
 
-test('the member Seminars page separates prominent current registrations, available seminars, and past registrations', () => {
-  for (const label of ['Your upcoming and current registrations', 'Available seminars', 'Past']) {
+test('the member Seminars page separates current registrations from available seminars, with no redundant sub-heading repeating what the tab already says', () => {
+  for (const label of ['Available seminars', 'My seminar registrations', 'Past seminars']) {
     assert.match(memberPage, new RegExp(label));
   }
   assert.match(memberPage, /const registered/);
-  assert.match(memberPage, /const available/);
+  assert.match(memberPage, /const upcoming/);
+  // "My seminar registrations" already says what this list is -- a second, identical sub-heading
+  // directly under it is pure noise, and it previously stayed visible on the Past tab too, since it
+  // never depended on which tab was selected.
+  assert.doesNotMatch(memberPage, /Your upcoming and current registrations/);
+});
+
+test('Available Seminars is one flat list (open, full, or closed together, not split into a second confusingly-named section), with a status tag replacing the old separate heading', () => {
+  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
+  assert.ok(availableBlock, 'AvailableSeminars not found');
+  assert.doesNotMatch(memberPage, /Other upcoming seminars/);
+  assert.match(availableBlock as string, /AvailabilityTag/);
+});
+
+test('both the member catalog and the signed-out public catalog show an already-ended, published seminar under a white "Past seminars" heading', () => {
+  assert.match(memberPage, /listPastPublishedSeminars/);
+  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
+  const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
+  for (const block of [availableBlock, publicBlock]) {
+    assert.ok(block, 'catalog block not found');
+    assert.match(block as string, /<h3 className="text-lg font-semibold text-foreground">Past seminars<\/h3>/);
+  }
+  assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
+  assert.match(registrationsSource, /s\.status='published' and \(s\.end_date \+ s\.end_time\) at time zone s\.timezone <= now\(\)/);
 });
 
 test('the public seminar catalog shows both the member and non-member price, with each seminar linking to its own detail page for registration', () => {
@@ -255,9 +291,9 @@ test('every seminar listing card (available, my seminars, public catalog) is a s
   const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
   const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
   const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
-  assert.ok(availableBlock && /<Link className="card-midnight block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
+  assert.ok(availableBlock && /<Link className="card-midnight relative block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
   assert.ok(myBlock && /<Link className="absolute inset-0" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(myBlock), 'My Seminars keeps its Cancel action independently clickable via a stretched overlay link, not a wrapping one');
-  assert.ok(publicBlock && /<Link className="card-midnight block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
+  assert.ok(publicBlock && /<Link className="card-midnight relative block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
 });
 
 test('the My Seminars card only raises the actually-interactive Cancel form above its stretched overlay link, not the whole noninteractive status block, so clicks on the status text still navigate', () => {
@@ -282,6 +318,18 @@ test('the seminar detail page presents full details and offers a member registra
   assert.match(detailPage, /SeminarRegistrationForm/);
   assert.match(detailPage, /SeminarRegistrationPanel/);
   assert.match(detailPage, /isEntitled\(member\.entitlement/);
+});
+
+test('a signed-in visitor without member pricing (a lapsed membership, or an account with no profile at all) goes straight to the registration form, never the signed-out "Create an account" / "Register as a guest" panel', () => {
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detailPage, /import \{ getUser \} from '@\/lib\/db\/queries'/);
+  assert.match(detailPage, /const isSignedIn = Boolean\(user\)/);
+  assert.match(detailPage, /\) : isSignedIn \? \(\s*<SeminarRegistrationForm/);
+  assert.match(detailPage, /guestDefaults=\{member \? \{ email: member\.email, name:/);
+  // The signed-out panel must remain the final fallback, reachable only when isSignedIn is false too.
+  const registerBlock = detailPage.match(/\{alreadyRegistered \? \([\s\S]*?<SeminarRegistrationPanel[\s\S]*?\)\}/)?.[0];
+  assert.ok(registerBlock, 'register branch not found');
+  assert.match(registerBlock as string, /\) : \(\s*<SeminarRegistrationPanel/);
 });
 
 test('the seminar registration panel offers "Create an account" and "Register as a guest" buttons, revealing the shared registration form for the guest path', () => {

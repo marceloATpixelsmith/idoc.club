@@ -70,7 +70,7 @@ async function requireOwnProfileId(): Promise<{ actorId: number; profileId: numb
 }
 
 type SeminarAvailabilityRow = {
-  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; location: string;
+  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; is_fei: boolean; location: string;
   member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
   registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
   start_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
@@ -92,7 +92,7 @@ function withAvailability(row: SeminarAvailabilityRow) {
  * catalog with no registration_status/payment_method_canonical_id attached to any row. */
 export async function listCurrentSeminarsForMember(profileId: number | null) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -100,6 +100,24 @@ export async function listCurrentSeminarsForMember(profileId: number | null) {
     where (s.status='published' or r.id is not null)
     and (s.end_date + s.end_time) at time zone s.timezone > now()
     order by s.start_date,s.start_time`;
+  return rows.map(withAvailability);
+}
+
+/** The public archive of already-ended, published seminars -- shown under a "Past seminars" heading
+ * on the catalog (docs/08) so a visitor can see what IDOC has actually run, not just what's next.
+ * Not member-scoped: registration is always closed for a past seminar regardless of who's viewing,
+ * so there's nothing profile-specific to join in here (unlike listPastSeminarsForMember, which is
+ * this member's own registration history). */
+export async function listPastPublishedSeminars() {
+  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,
+    null::varchar(40) payment_method_canonical_id,
+    (s.end_date + s.end_time) at time zone s.timezone ends_at,
+    (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
+    null::varchar(20) registration_status,null::varchar(30) payment_status,null::timestamptz registered_at
+    from idoc.seminars s
+    where s.status='published' and (s.end_date + s.end_time) at time zone s.timezone <= now()
+    order by s.start_date desc,s.start_time desc`;
   return rows.map(withAvailability);
 }
 
@@ -112,7 +130,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) return null;
   const [row] = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -124,7 +142,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at

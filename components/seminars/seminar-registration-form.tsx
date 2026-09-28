@@ -19,7 +19,11 @@ const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-tran
  * never sees a materially different form than the guest path they'd otherwise have used. Both
  * useActionState hooks are always called (React's rules of hooks); only the one matching the
  * current mode is ever wired to the visible form. */
-export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminarId }: {
+export function SeminarRegistrationForm({ guestDefaults, memberDetails, paymentMethods, seminarId }: {
+  /** Pre-fills (but does not lock) the guest-mode name/email for a signed-in visitor who isn't on
+   * the member-price path -- e.g. a lapsed member with their own profile still on file -- so they
+   * never have to retype what the account already knows. Ignored once `memberDetails` is set. */
+  guestDefaults?: { email: string; name: string };
   memberDetails?: { email: string; name: string };
   paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>;
   seminarId: number;
@@ -57,7 +61,7 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
           <Label htmlFor="registrantName">Full name</Label>
           <Input
             aria-invalid={Boolean(fieldErrors?.name)}
-            defaultValue={isMember ? memberDetails?.name : guestState.name ?? ''}
+            defaultValue={isMember ? memberDetails?.name : guestState.name ?? guestDefaults?.name ?? ''}
             id="registrantName" maxLength={200} name={isMember ? undefined : 'name'} readOnly={isMember} required={!isMember}
           />
           {fieldErrors?.name ? <p className="text-sm text-destructive" role="alert">{fieldErrors.name}</p> : null}
@@ -66,7 +70,7 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
           <Label htmlFor="registrantEmail">Email</Label>
           <Input
             aria-invalid={Boolean(fieldErrors?.email)}
-            defaultValue={isMember ? memberDetails?.email : guestState.email ?? ''}
+            defaultValue={isMember ? memberDetails?.email : guestState.email ?? guestDefaults?.email ?? ''}
             id="registrantEmail" maxLength={255} name={isMember ? undefined : 'email'} readOnly={isMember} required={!isMember} type="email"
           />
           {fieldErrors?.email ? <p className="text-sm text-destructive" role="alert">{fieldErrors.email}</p> : null}
