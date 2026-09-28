@@ -31,7 +31,7 @@ export type ResourceRow = {
   publication?: string;
   updated?: string;
   date?: string;
-  payment?: string;
+  prices?: string;
   registrations?: string;
   audience?: string;
 };
@@ -56,7 +56,7 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Scheduled', value: 'scheduled' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
   },
   seminars: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'date', label: 'Date' }, { id: 'status', label: 'Status' }, { id: 'payment', label: 'Payment Method' }, { id: 'registrations', label: 'Registered / Capacity' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'date', label: 'Date' }, { id: 'status', label: 'Status' }, { id: 'prices', label: 'Prices' }, { id: 'registrations', label: 'Registered / Capacity' }],
     dateFilter: true,
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
@@ -156,7 +156,7 @@ export function ResourceDataTable({
             <Link href={`${config.path}/${row.original.id}/preview`}><Eye aria-hidden="true" /></Link>
           </Button>}
           {tableType === 'seminars' && <Button asChild aria-label="Registrations" size="icon-sm" title="Registrations" variant="ghost">
-            <Link href={`${config.path}/${row.original.id}#registrations`}><ClipboardList aria-hidden="true" /></Link>
+            <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`}><ClipboardList aria-hidden="true" /></Link>
           </Button>}
         </div>,
       },

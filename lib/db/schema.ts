@@ -474,25 +474,32 @@ export const contentPageRevisions = idocSchema.table('content_page_revisions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('content_page_revisions_number_unique').on(table.pageId, table.revisionNumber)]);
 
-/** Administrator-authored seminars. `paymentMethodCanonicalId` references the same canonical
- * `seminar_payment_methods` identities Organization Settings owns (migration 0038) -- a seminar
- * never invents its own payment-method identity. `priceCents`/`paymentMethodCanonicalId` become
- * immutable at the application layer once any registration exists (lib/seminars/seminars.ts),
- * and `capacity` may only be lowered to at least the current active-registration count. */
+/** Administrator-authored seminars. Payment method is deliberately not a seminar-level field:
+ * every seminar accepts whichever canonical `seminar_payment_methods` are currently enabled
+ * (Organization Settings, migration 0038) -- Online via Stripe always, Bank Transfer/Cash at the
+ * Event whenever enabled -- and the registrant picks one at registration time
+ * (`seminarRegistrations.paymentMethodCanonicalId`, migration 0055). A seminar may span multiple
+ * days (`startDate`/`startTime` and `endDate`/`endTime`, both in `timezone`'s local wall-clock
+ * time) -- a single-day seminar simply has `endDate = startDate`. Two prices apply uniformly to
+ * every seminar (migration 0056): `memberPriceCents` for an entitled logged-in member,
+ * `nonMemberPriceCents` for a guest registrant. Both prices become immutable at the application
+ * layer once any registration exists (lib/seminars/seminars.ts), and `capacity` may only be
+ * lowered to at least the current active-registration count. */
 export const seminars = idocSchema.table('seminars', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').notNull(),
-  seminarDate: date('seminar_date').notNull(),
+  startDate: date('start_date').notNull(),
   startTime: time('start_time').notNull(),
+  endDate: date('end_date').notNull(),
   endTime: time('end_time').notNull(),
   timezone: varchar('timezone', { length: 60 }).notNull(),
   location: text('location').notNull(),
   capacity: integer('capacity').notNull(),
-  priceCents: integer('price_cents').notNull(),
+  memberPriceCents: integer('member_price_cents').notNull(),
+  nonMemberPriceCents: integer('non_member_price_cents').notNull(),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
-  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
   createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
   updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -503,22 +510,35 @@ export const seminars = idocSchema.table('seminars', {
   check('seminars_description_length_check', sql`char_length(${table.description}) between 1 and 10000`),
   check('seminars_location_length_check', sql`char_length(${table.location}) between 1 and 2000`),
   check('seminars_capacity_check', sql`${table.capacity} > 0`),
-  check('seminars_price_check', sql`${table.priceCents} >= 0`),
-  check('seminars_time_order_check', sql`${table.endTime} > ${table.startTime}`),
-  index('seminars_status_date_idx').on(table.status, table.seminarDate),
+  check('seminars_member_price_check', sql`${table.memberPriceCents} >= 0`),
+  check('seminars_non_member_price_check', sql`${table.nonMemberPriceCents} >= 0`),
+  check('seminars_date_order_check', sql`${table.endDate} > ${table.startDate} or (${table.endDate} = ${table.startDate} and ${table.endTime} > ${table.startTime})`),
+  index('seminars_status_date_idx').on(table.status, table.startDate),
 ]);
 
-/** One row per member registration; canceling reuses the same row (registration_status flips back
- * to 'registered' on re-registration) rather than inserting a second row, so the unique constraint
- * on (seminar_id, profile_id) is a real, permanent duplicate-registration guard, not just a
- * point-in-time check. `paymentStatus` and `registrationStatus` are deliberately independent
- * columns -- canceling a registration never overwrites its payment history and vice versa. */
+/** One row per registration, member or guest; canceling reuses the same row (registration_status
+ * flips back to 'registered' on re-registration) rather than inserting a second row, so the unique
+ * constraint on (seminar_id, profile_id) is a real, permanent duplicate-registration guard for a
+ * member, not just a point-in-time check. A guest registrant (no IDOC account) has `profileId`
+ * null and `guestName`/`guestEmail` set instead -- exactly one of the two identities is ever
+ * present (migration 0056); a partial unique index guards against the same guest email
+ * double-registering the same seminar the same way the member index does. `paymentStatus` and
+ * `registrationStatus` are deliberately independent columns -- canceling a registration never
+ * overwrites its payment history and vice versa. `paymentMethodCanonicalId` is the registrant's
+ * own choice at registration time (migration 0055), not inherited from the seminar -- re-registering
+ * after canceling may pick a different one. `paymentReference` is an optional administrator note
+ * recorded when manually confirming a bank-transfer/cash payment (migration 0056), mirroring
+ * `payments.reference`'s evidence trail for membership payments. */
 export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   id: serial('id').primaryKey(),
   seminarId: integer('seminar_id').notNull().references(() => seminars.id),
-  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  profileId: integer('profile_id').references(() => profiles.id),
+  guestName: varchar('guest_name', { length: 200 }),
+  guestEmail: varchar('guest_email', { length: 255 }),
   registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
+  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
+  paymentReference: text('payment_reference'),
   stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }).unique(),
   expectedAmountCents: integer('expected_amount_cents'),
@@ -539,7 +559,9 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   check('seminar_registrations_expected_amount_check', sql`${table.expectedAmountCents} is null or ${table.expectedAmountCents} >= 0`),
   check('seminar_registrations_currency_check', sql`${table.currency} = 'EUR'`),
   check('seminar_registrations_checkout_status_check', sql`${table.checkoutStatus} is null or ${table.checkoutStatus} in ('open', 'complete', 'expired', 'superseded')`),
+  check('seminar_registrations_registrant_identity_check', sql`(${table.profileId} is not null and ${table.guestName} is null and ${table.guestEmail} is null) or (${table.profileId} is null and ${table.guestName} is not null and ${table.guestEmail} is not null)`),
   uniqueIndex('seminar_registrations_seminar_profile_unique').on(table.seminarId, table.profileId),
+  uniqueIndex('seminar_registrations_seminar_guest_email_unique').on(table.seminarId, sql`lower(${table.guestEmail})`).where(sql`${table.profileId} is null`),
   index('seminar_registrations_seminar_status_idx').on(table.seminarId, table.registrationStatus),
   index('seminar_registrations_profile_idx').on(table.profileId),
 ]);

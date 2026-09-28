@@ -41,12 +41,17 @@
 --      - start_time / end_time: no time-of-day was ever published; defaulted to 09:00-17:00.
 --      - registration_deadline: defaulted to 14 days before the seminar where the source gave no
 --        explicit application deadline.
---      - payment_method_canonical_id: the legacy site could list multiple payment options (or an
---        external third-party payment link) per seminar, but this schema allows only one
---        canonical method per seminar row; the closest match was chosen.
+--      - non_member_price_cents: the legacy site never distinguished a member from a non-member
+--        fee (this split is new -- see lib/db/migrations/0056_seminars_multiday_dual_price_guest.sql),
+--        so it is imported equal to member_price_cents; an administrator should set a real
+--        non-member price before relying on public/guest registration for these rows.
 --      - Two of the four seminars were multi-day events on the legacy site (e.g. "June 27th-28th,
---        2026"); idoc.seminars has only a single `seminar_date` column, so `seminar_date` holds
---        the first day and the full date range is preserved in the `description` text.
+--        2026"); this import still holds `end_date = start_date` for both (the first day only,
+--        with the full date range preserved in the `description` text) even though the schema now
+--        supports a genuine multi-day `end_date` -- an administrator should correct the true end
+--        date for these two rows.
+--      - There is no seminar-level payment method to assume: `payment_method_canonical_id` moved
+--        to each registration (migration 0055), chosen by the registrant, not the administrator.
 --
 -- 2. created_by_user_id / updated_by_user_id (idoc.news_articles and idoc.seminars) are NOT NULL
 --    foreign keys to idoc.users with no legacy equivalent (the legacy WordPress authorship isn't
@@ -57,7 +62,7 @@
 --
 -- 3. This script is idempotent: idoc.news_articles rows use ON CONFLICT (slug) DO NOTHING (slugs
 --    are the legacy WordPress slugs, already unique on the source site), and idoc.seminars rows
---    use a WHERE NOT EXISTS guard keyed on (title, seminar_date) since that table has no unique
+--    use a WHERE NOT EXISTS guard keyed on (title, start_date) since that table has no unique
 --    business key. Re-running this script after a partial run will not create duplicates. Each
 --    insert is wrapped in a `WITH ins AS (INSERT ... RETURNING ...)` CTE so a row skipped by one
 --    of those guards also skips its idoc.audit_log entry (point 6) -- audit rows are written only
@@ -68,7 +73,7 @@
 --    (publication_date/published_at for news_articles). Two seminars are the exception -- see
 --    point 7. This is a one-time data import, NOT a numbered schema migration (see
 --    lib/db/migrations/ + tests/migration-immutability.test.ts) and should be run by hand against
---    the target database once, after migrations 0040 and 0041 are applied.
+--    the target database once, after migrations 0040, 0041, 0055, and 0056 are applied.
 --
 -- 5. One homepage-news post, "ga-assembly2024" (IDOC/FEI Seminar Frankfurt + General Assembly
 --    Program 2024), is intentionally excluded. Its legacy page body is a MemberPress
@@ -86,11 +91,12 @@
 -- 7. Both Hartpury Para Dressage courses (wp post ids 3242, 3244) stated their legacy course fee
 --    in GBP 150, not EUR. idoc.seminars has no currency column -- docs/07-administrator-and-
 --    operations-runbook.md documents seminar price as EUR, and lib/seminars/checkout.ts hard-codes
---    Stripe currency:'eur' -- so storing 150 as price_cents=15000 would silently sell a GBP 150
---    course for EUR 150. Both rows are therefore imported with status='draft' (never public,
---    never open for registration) rather than 'published', with the GBP amount preserved as-is in
---    price_cents/description for an administrator to correct (and republish) once a real
---    EUR-equivalent price and payment route are decided.
+--    Stripe currency:'eur' -- so storing 150 as member_price_cents=15000 (and the same for
+--    non_member_price_cents) would silently sell a GBP 150 course for EUR 150. Both rows are
+--    therefore imported with status='draft' (never public, never open for registration) rather
+--    than 'published', with the GBP amount preserved as-is in member_price_cents/
+--    non_member_price_cents/description for an administrator to correct (and republish) once real
+--    EUR-equivalent member and non-member prices are decided.
 --
 -- Usage: psql "$DATABASE_URL" -f scripts/data-import/legacy-idoc-club-content-import.sql
 
@@ -1729,7 +1735,7 @@ FROM ins;
 -- Seminars (legacy category: seminars) (4 rows) ----------------------------------
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/ (wp post id 3242)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L2 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/
@@ -1790,31 +1796,31 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
+    '2026-06-27'::date,
     '09:00'::time,
     '17:00'::time,
     'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     10,
     15000,
+    15000,
     '2026-05-15T23:59:00Z'::timestamptz,
     'draft',
-    'online_stripe',
     (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
   WHERE NOT EXISTS (
     SELECT 1 FROM idoc.seminars s
-    WHERE s.title = 'Para Dressage Transfer Up Course for L2 Judges' AND s.seminar_date = '2026-06-27'::date
+    WHERE s.title = 'Para Dressage Transfer Up Course for L2 Judges' AND s.start_date = '2026-06-27'::date
   )
-  RETURNING id, title, status, capacity, payment_method_canonical_id
+  RETURNING id, title, status, capacity
 )
 INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
 SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
-  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
-    'status', ins.status, 'title', ins.title)
+  jsonb_build_object('capacity', ins.capacity, 'status', ins.status, 'title', ins.title)
 FROM ins;
 
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/ (wp post id 3244)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L3 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/
@@ -1873,31 +1879,31 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
+    '2026-06-27'::date,
     '09:00'::time,
     '17:00'::time,
     'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     20,
     15000,
+    15000,
     '2026-05-15T23:59:00Z'::timestamptz,
     'draft',
-    'online_stripe',
     (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
   WHERE NOT EXISTS (
     SELECT 1 FROM idoc.seminars s
-    WHERE s.title = 'Para Dressage Transfer Up Course for L3 Judges' AND s.seminar_date = '2026-06-27'::date
+    WHERE s.title = 'Para Dressage Transfer Up Course for L3 Judges' AND s.start_date = '2026-06-27'::date
   )
-  RETURNING id, title, status, capacity, payment_method_canonical_id
+  RETURNING id, title, status, capacity
 )
 INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
 SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
-  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
-    'status', ins.status, 'title', ins.title)
+  jsonb_build_object('capacity', ins.capacity, 'status', ins.status, 'title', ins.title)
 FROM ins;
 
 -- source: https://idoc.club/dress-judge-maintenance-course-falstervbo/ (wp post id 3346)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Dressage Judge Maintenance Course',
     'Source: https://idoc.club/dress-judge-maintenance-course-falstervbo/
@@ -1968,31 +1974,31 @@ TBD
 
 Nearest airports: Malmö SWE (50km) or Copenhagen DEN (48 km)',
     '2026-07-10'::date,
+    '2026-07-10'::date,
     '09:00'::time,
     '17:00'::time,
     'Europe/Stockholm',
     'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
     20,
     30000,
+    30000,
     '2026-06-02T23:59:00Z'::timestamptz,
     'published',
-    'bank_transfer',
     (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
   WHERE NOT EXISTS (
     SELECT 1 FROM idoc.seminars s
-    WHERE s.title = 'Dressage Judge Maintenance Course' AND s.seminar_date = '2026-07-10'::date
+    WHERE s.title = 'Dressage Judge Maintenance Course' AND s.start_date = '2026-07-10'::date
   )
-  RETURNING id, title, status, capacity, payment_method_canonical_id
+  RETURNING id, title, status, capacity
 )
 INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
 SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
-  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
-    'status', ins.status, 'title', ins.title)
+  jsonb_build_object('capacity', ins.capacity, 'status', ins.status, 'title', ins.title)
 FROM ins;
 
 -- source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/ (wp post id 3299)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, seminar_date, start_time, end_time, timezone, location, capacity, price_cents, registration_deadline, status, payment_method_canonical_id, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Young Horse Seminar, Verden 2026 – Save the Date!',
     'Source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/
@@ -2019,26 +2025,26 @@ COURSE FEE
 
 EUR 350 (IDOC members)',
     '2026-08-06'::date,
+    '2026-08-06'::date,
     '09:00'::time,
     '17:00'::time,
     'Europe/Berlin',
     'Verden, Germany',
     30,
     35000,
+    35000,
     '2026-07-23T23:59:00Z'::timestamptz,
     'published',
-    'online_stripe',
     (SELECT id FROM _import_admin), (SELECT id FROM _import_admin)
   WHERE NOT EXISTS (
     SELECT 1 FROM idoc.seminars s
-    WHERE s.title = 'Young Horse Seminar, Verden 2026 – Save the Date!' AND s.seminar_date = '2026-08-06'::date
+    WHERE s.title = 'Young Horse Seminar, Verden 2026 – Save the Date!' AND s.start_date = '2026-08-06'::date
   )
-  RETURNING id, title, status, capacity, payment_method_canonical_id
+  RETURNING id, title, status, capacity
 )
 INSERT INTO idoc.audit_log (actor_id, action, entity_type, entity_id, after_json)
 SELECT (SELECT id FROM _import_admin), 'admin.seminar.created', 'seminar', ins.id::text,
-  jsonb_build_object('capacity', ins.capacity, 'paymentMethodId', ins.payment_method_canonical_id,
-    'status', ins.status, 'title', ins.title)
+  jsonb_build_object('capacity', ins.capacity, 'status', ins.status, 'title', ins.title)
 FROM ins;
 
 

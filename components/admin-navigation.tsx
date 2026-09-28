@@ -4,6 +4,7 @@ import {
   BookOpen,
   Files,
   Building2,
+  ClipboardList,
   FileDown,
   GraduationCap,
   Headphones,
@@ -30,6 +31,7 @@ const SHARED_ITEMS = [
   { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
   { href: '/admin/pages', icon: Files, label: 'Pages' },
   { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars' },
+  { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [

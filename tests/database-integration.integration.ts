@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 55);
+  assert.equal(count, 57);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 55);
+    assert.equal(count, 57);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 49, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
+    assert.equal(count, 51, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -251,6 +251,12 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
+  // Migrations 0055/0056 renamed/removed these columns off of idoc.seminars: seminar_date -> start_date
+  // (plus a new end_date), price_cents -> member_price_cents (plus a new non_member_price_cents), and
+  // payment_method_canonical_id moved from the seminar to each registration -- see 0056_snapshot.json.
+  const columnsRemovedAfterSnapshot: Record<string, Set<string>> = {
+    'idoc.seminars': new Set(['seminar_date', 'price_cents', 'payment_method_canonical_id']),
+  };
   for (const tableName of Object.keys(snapshot.tables)) {
     if (tablesRemovedAfterSnapshot.has(tableName)) continue;
     const [schemaName, name] = tableName.split('.');
@@ -258,6 +264,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
     assert.ok(rows.length > 0, `${tableName} from the Drizzle snapshot must exist`);
     const migratedColumns = new Set(rows.map(({ column_name }) => column_name));
     for (const columnName of Object.keys(snapshot.tables[tableName].columns)) {
+      if (columnsRemovedAfterSnapshot[tableName]?.has(columnName)) continue;
       assert.ok(migratedColumns.has(columnName), `${tableName}.${columnName} must exist`);
     }
   }
@@ -305,6 +312,16 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // purpose (lib/auth/email-otp.ts) after this frozen snapshot was taken.
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
+
+  // Migrations 0055/0056 reshaped these two tables after this frozen snapshot was taken (payment
+  // method moved from the seminar to each registration; multi-day dates; dual member/non-member
+  // prices; guest registration). Rather than hand-patching every column/constraint/index delta here,
+  // this substitutes the two tables' definitions straight from 0056_snapshot.json -- itself generated
+  // by drizzle-kit from the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it
+  // is exactly as authoritative as the frozen 0051 snapshot was for everything else.
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0056_snapshot.json'), 'utf8'));
+  expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
+  expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
@@ -467,7 +484,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 55);
+  assert.equal(count, 57);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

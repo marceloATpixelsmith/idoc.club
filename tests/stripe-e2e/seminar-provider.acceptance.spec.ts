@@ -28,7 +28,8 @@ type Registration = {
 
 async function registration(): Promise<Registration> {
   const [row] = await sql<Registration[]>`select r.id registration_id,r.profile_id,r.seminar_id,r.registration_status,r.payment_status,
-    r.stripe_checkout_session_id,r.stripe_payment_intent_id,r.checkout_status,r.expected_amount_cents,r.currency,s.price_cents,
+    r.stripe_checkout_session_id,r.stripe_payment_intent_id,r.checkout_status,r.expected_amount_cents,r.currency,
+    coalesce(r.expected_amount_cents, case when r.profile_id is null then s.non_member_price_cents else s.member_price_cents end) price_cents,
     b.external_customer_id customer_id,(select count(*)::int from idoc.memberships m where m.profile_id=r.profile_id) membership_count,
     (select count(*)::int from idoc.audit_log a where a.entity_type='seminar_registration' and a.entity_id=r.id::text) audit_count
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id

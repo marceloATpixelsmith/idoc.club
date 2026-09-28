@@ -1,36 +1,28 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ClipboardList, Download } from 'lucide-react';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { SeminarFieldset } from '@/components/seminars/seminar-fieldset';
 import { SeminarForm } from '@/components/seminars/seminar-form';
-import { SeminarRefundForm } from '@/components/seminars/refund-form';
-import { getAdminSeminar, listEnabledSeminarPaymentMethods, seminarEndsAtUtc } from '@/lib/seminars/seminars';
-import { listAdminSeminarRegistrations } from '@/lib/seminars/registrations';
-import { AVAILABILITY_LABELS, computeSeminarAvailability, PAYMENT_STATUS_LABELS } from '@/lib/seminars/status';
-import {
-  cancelSeminarAction, markSeminarRegistrationPaidAction,
-  publishSeminarAction, revertSeminarToDraftAction, updateSeminarAction,
-} from '../actions';
+import { getAdminSeminar, seminarEndsAtUtc } from '@/lib/seminars/seminars';
+import { getSeminarRegistrationCounts } from '@/lib/seminars/registrations';
+import { AVAILABILITY_LABELS, computeSeminarAvailability } from '@/lib/seminars/status';
+import { updateSeminarAction } from '../actions';
 
 const STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', draft: 'Draft', published: 'Published' };
 
-export default async function EditSeminarPage({ params, searchParams }: {
-  params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function EditSeminarPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const { id } = await params;
-  const query = await searchParams;
-  const [seminar, paymentMethods] = await Promise.all([getAdminSeminar(id), listEnabledSeminarPaymentMethods()]);
+  const seminar = await getAdminSeminar(id);
   if (!seminar) notFound();
-  const { rows: registrations } = await listAdminSeminarRegistrations(id, query);
-  const registeredCount = registrations.filter((row) => row.registration_status === 'registered').length;
+  const { active: registeredCount, total: registeredTotal } = await getSeminarRegistrationCounts(id);
   const availability = computeSeminarAvailability({
     activeRegistrationCount: registeredCount, capacity: Number(seminar.capacity),
-    endsAtUtc: seminarEndsAtUtc({ endTime: String(seminar.end_time), seminarDate: String(seminar.seminar_date), timezone: String(seminar.timezone) }),
+    endsAtUtc: seminarEndsAtUtc({ endDate: String(seminar.end_date), endTime: String(seminar.end_time), timezone: String(seminar.timezone) }),
     registrationDeadline: seminar.registration_deadline as string, status: seminar.status as never,
   });
   const status = String(seminar.status);
@@ -40,80 +32,31 @@ export default async function EditSeminarPage({ params, searchParams }: {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-gold">{String(seminar.title)}</h1>
-          <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} / {String(seminar.capacity)} registered</p>
+          <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} registered ({registeredTotal} total)</p>
         </div>
-        <a className="underline" download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}>Export registrations (CSV)</a>
+        <div className="flex items-center gap-1">
+          <Button asChild aria-label="View registrations" size="icon-sm" title="View this seminar's registrations" variant="ghost">
+            <Link href={`/admin/seminars/registrations?seminarId=${id}`}><ClipboardList aria-hidden="true" /></Link>
+          </Button>
+          <Button asChild aria-label="Download registrations" size="icon-sm" title="Download this seminar's registrations" variant="ghost">
+            <a download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}><Download aria-hidden="true" /></a>
+          </Button>
+        </div>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_16rem]">
-        <SeminarForm action={updateSeminarAction} submitLabel="Save changes">
-          <input name="id" type="hidden" value={id} />
-          <SeminarFieldset
-            allowCanceled
-            lockPriceAndMethod={registrations.length > 0}
-            paymentMethods={paymentMethods}
-            seminar={{
-              capacity: Number(seminar.capacity), description: String(seminar.description), end_time: String(seminar.end_time),
-              location: String(seminar.location), payment_method_canonical_id: String(seminar.payment_method_canonical_id),
-              price_cents: Number(seminar.price_cents), registration_deadline: seminar.registration_deadline as string,
-              seminar_date: String(seminar.seminar_date), start_time: String(seminar.start_time), status, timezone: String(seminar.timezone), title: String(seminar.title),
-            }}
-          />
-        </SeminarForm>
-        <aside className="space-y-4">
-          <section className="rounded-lg border p-4">
-            <h2 className="mb-3 font-bold uppercase tracking-wider text-gold">Quick actions</h2>
-            <div className="space-y-3">
-              {status !== 'published' ? <SeminarForm action={publishSeminarAction} pendingLabel="Publishing" submitLabel="Publish"><input name="id" type="hidden" value={id} /></SeminarForm> : null}
-              {status !== 'canceled' ? <SeminarForm action={cancelSeminarAction} pendingLabel="Canceling" submitLabel="Cancel seminar"><input name="id" type="hidden" value={id} /></SeminarForm> : null}
-              {status !== 'draft' ? <SeminarForm action={revertSeminarToDraftAction} pendingLabel="Reverting" submitLabel="Move to draft"><input name="id" type="hidden" value={id} /></SeminarForm> : null}
-            </div>
-          </section>
-        </aside>
-      </section>
-
-      <section id="registrations">
-        <h2 className="mb-3 text-lg font-semibold">Registrations</h2>
-        <form className="mb-3 grid gap-3 md:grid-cols-4" method="get">
-          <Input defaultValue={Array.isArray(query.q) ? query.q[0] : query.q} name="q" placeholder="Search member name or email" />
-          <select className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs" defaultValue={Array.isArray(query.registrationStatus) ? query.registrationStatus[0] : query.registrationStatus} name="registrationStatus">
-            <option value="">Any registration status</option>
-            <option value="registered">Registered</option>
-            <option value="canceled">Canceled</option>
-          </select>
-          <select className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs" defaultValue={Array.isArray(query.paymentStatus) ? query.paymentStatus[0] : query.paymentStatus} name="paymentStatus">
-            <option value="">Any payment status</option>
-            {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <Button type="submit">Filter</Button>
-        </form>
-        {registrations.length === 0 ? <p>No registrations match these filters.</p> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead><tr><th className="p-2">Member</th><th>Email</th><th>Registration</th><th>Payment</th><th>Registered</th><th /></tr></thead>
-              <tbody>
-                {registrations.map((row) => (
-                  <tr className="border-t" key={String(row.id)}>
-                    <td className="p-2">{String(row.member_name)}</td>
-                    <td>{String(row.member_email)}</td>
-                    <td>{row.registration_status === 'canceled' ? 'Canceled' : 'Registered'}</td>
-                    <td>{PAYMENT_STATUS_LABELS[row.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? String(row.payment_status)}</td>
-                    <td>{new Date(String(row.registered_at)).toLocaleString()}</td>
-                    <td>
-                      {['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(String(row.payment_status)) ? (
-                        <SeminarForm action={markSeminarRegistrationPaidAction} pendingLabel="Saving" submitLabel="Mark paid">
-                          <input name="seminarId" type="hidden" value={id} />
-                          <input name="registrationId" type="hidden" value={String(row.id)} />
-                        </SeminarForm>
-                      ) : ['paid', 'refund_failed'].includes(String(row.payment_status)) ? <><span>{PAYMENT_STATUS_LABELS[row.payment_status as keyof typeof PAYMENT_STATUS_LABELS]}</span><SeminarRefundForm registrationId={String(row.id)} seminarId={id} /></> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <SeminarForm action={updateSeminarAction} submitLabel="Save changes">
+        <input name="id" type="hidden" value={id} />
+        <SeminarFieldset
+          allowCanceled
+          lockPrices={registeredTotal > 0}
+          seminar={{
+            capacity: Number(seminar.capacity), description: String(seminar.description), end_date: String(seminar.end_date),
+            end_time: String(seminar.end_time), location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
+            non_member_price_cents: Number(seminar.non_member_price_cents), registration_deadline: seminar.registration_deadline as string,
+            start_date: String(seminar.start_date), start_time: String(seminar.start_time), status, timezone: String(seminar.timezone), title: String(seminar.title),
+          }}
+        />
+      </SeminarForm>
     </main>
   );
 }

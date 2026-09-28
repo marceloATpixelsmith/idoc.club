@@ -51,9 +51,11 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
-      date: `${String(row.seminar_date)} ${String(row.start_time).slice(0, 5)}`,
+      date: row.start_date === row.end_date
+        ? `${String(row.start_date)} ${String(row.start_time).slice(0, 5)}`
+        : `${String(row.start_date)} – ${String(row.end_date)}`,
       status: String(row.status),
-      payment: String(row.payment_method_canonical_id).replaceAll('_', ' '),
+      prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)} / €${(Number(row.non_member_price_cents) / 100).toFixed(2)}`,
       registrations: `${String(row.registered_count)} / ${String(row.capacity)}`,
     }));
   } else {

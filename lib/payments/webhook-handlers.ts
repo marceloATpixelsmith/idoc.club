@@ -6,6 +6,8 @@ import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, notificationOutbox, paymentRefunds, payments, profiles, reconciliationFindings, renewalPreferences, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -186,28 +188,35 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     ? await stripe.checkout.sessions.retrieve(deliveredSession.id)
     : deliveredSession;
   const registrationId = Number(session.metadata?.registrationId);
-  const metadataProfileId = Number(session.metadata?.profileId);
+  // A guest checkout's metadata carries no profileId at all (see createSeminarCheckoutSession);
+  // treat that absence as `null` rather than `Number(undefined)` (NaN) or `Number('')` (0), so it
+  // compares equal to the guest registration's own real `null` profileId below.
+  const metadataProfileIdRaw = session.metadata?.profileId;
+  const metadataProfileId = metadataProfileIdRaw ? Number(metadataProfileIdRaw) : null;
   const metadataSeminarId = Number(session.metadata?.seminarId);
-  if (!Number.isInteger(registrationId) || !Number.isInteger(metadataProfileId) || !Number.isInteger(metadataSeminarId)) return;
+  if (!Number.isInteger(registrationId) || (metadataProfileId !== null && !Number.isInteger(metadataProfileId)) || !Number.isInteger(metadataSeminarId)) return;
   const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
   if (!paymentIntentId) return;
   const [registration] = await tx.select({ checkoutSessionId: seminarRegistrations.stripeCheckoutSessionId,
-    expectedAmountCents: seminarRegistrations.expectedAmountCents, paymentStatus: seminarRegistrations.paymentStatus,
-    priceCents: seminars.priceCents, profileId: seminarRegistrations.profileId,
-    registrationStatus: seminarRegistrations.registrationStatus, seminarId: seminarRegistrations.seminarId,
-    customerId: billingAccounts.externalCustomerId }).from(seminarRegistrations)
+    expectedAmountCents: seminarRegistrations.expectedAmountCents, guestEmail: seminarRegistrations.guestEmail,
+    guestName: seminarRegistrations.guestName, memberPriceCents: seminars.memberPriceCents,
+    nonMemberPriceCents: seminars.nonMemberPriceCents, paymentStatus: seminarRegistrations.paymentStatus,
+    profileId: seminarRegistrations.profileId, registrationStatus: seminarRegistrations.registrationStatus,
+    seminarId: seminarRegistrations.seminarId, customerId: billingAccounts.externalCustomerId }).from(seminarRegistrations)
     .innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
     .leftJoin(billingAccounts, eq(billingAccounts.profileId, seminarRegistrations.profileId))
     .where(eq(seminarRegistrations.id, registrationId)).limit(1);
   if (!registration) return;
   // Grant credit only against this seminar's own current fee, matching the amount/currency
-  // tamper check the membership one-time-fee path already performs (docs/04 §3).
+  // tamper check the membership one-time-fee path already performs (docs/04 §3). A guest has no
+  // billing-account Customer to match, so that half of the check only applies to members.
+  const priceCents = registration.profileId === null ? registration.nonMemberPriceCents : registration.memberPriceCents;
   const valid = registration.registrationStatus === 'registered' && registration.profileId === metadataProfileId &&
     registration.seminarId === metadataSeminarId && registration.checkoutSessionId === session.id &&
-    registration.expectedAmountCents === registration.priceCents && session.amount_total === registration.priceCents &&
-    session.metadata?.amountCents === String(registration.priceCents) && session.metadata?.currency === 'EUR' &&
+    registration.expectedAmountCents === priceCents && session.amount_total === priceCents &&
+    session.metadata?.amountCents === String(priceCents) && session.metadata?.currency === 'EUR' &&
     session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid' &&
-    resolvedCustomerId(session.customer) === registration.customerId;
+    (registration.profileId === null || resolvedCustomerId(session.customer) === registration.customerId);
   if (!valid) {
     await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
       summary: 'A paid seminar Checkout Session did not match its active local registration.',
@@ -222,15 +231,29 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     .returning({ id: seminarRegistrations.id });
   if (!updated[0]) return;
   await tx.insert(auditLog).values({
-    action: 'seminar.payment_confirmed', afterJson: { amountCents: registration.priceCents, paymentIntentId, sessionId: session.id },
+    action: 'seminar.payment_confirmed', afterJson: { amountCents: priceCents, paymentIntentId, sessionId: session.id },
     entityId: String(registrationId), entityType: 'seminar_registration',
   });
-  const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-    .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
-  await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
-    kind: 'seminar.payment_confirmed', payload: { amountCents: registration.priceCents, firstName: contact?.firstName,
-      registrationId, to: contact?.email }, profileId: registration.profileId })
-    .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+  if (registration.profileId !== null) {
+    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
+    await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
+      kind: 'seminar.payment_confirmed', payload: { amountCents: priceCents, firstName: contact?.firstName,
+        registrationId, to: contact?.email }, profileId: registration.profileId })
+      .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+  } else if (registration.guestEmail) {
+    // Guests have no profile row, so notification_outbox (profile_id NOT NULL) can't queue this --
+    // send directly and best-effort, the same way registerAsGuestForSeminar's own confirmation does.
+    try {
+      await sendTransactionalEmail({
+        html: renderTransactionalEmail({
+          bodyHtml: `<p>Hello ${registration.guestName ?? ''},</p><p>Your payment for this seminar was received. Thank you.</p>`,
+          heading: 'Seminar payment confirmed',
+        }),
+        subject: 'Your IDOC seminar payment', to: registration.guestEmail,
+      }, { signal: AbortSignal.timeout(10_000) });
+    } catch { /* best-effort -- the payment itself already committed above */ }
+  }
 }
 
 async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, stripe: WebhookStripeClient) {
@@ -257,14 +280,17 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
   }
   const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id;
   if (!paymentIntentId) return;
-  const [registration] = await tx.select({ id: seminarRegistrations.id, priceCents: seminars.priceCents,
-    profileId: seminarRegistrations.profileId }).from(seminarRegistrations).innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
+  const [registration] = await tx.select({ id: seminarRegistrations.id, guestEmail: seminarRegistrations.guestEmail,
+    guestName: seminarRegistrations.guestName, memberPriceCents: seminars.memberPriceCents,
+    nonMemberPriceCents: seminars.nonMemberPriceCents, profileId: seminarRegistrations.profileId })
+    .from(seminarRegistrations).innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
     .where(eq(seminarRegistrations.stripePaymentIntentId, paymentIntentId)).limit(1);
   if (!registration) {
     await tx.insert(reconciliationFindings).values({ kind: 'refund_conflict', summary: 'Stripe reported a refund without a matching local seminar payment.',
       details: { paymentIntentId, refundId: refund.id, status: refund.status } });
     return;
   }
+  const priceCents = registration.profileId === null ? registration.nonMemberPriceCents : registration.memberPriceCents;
   const amount = refund.amount;
   const [existing] = await tx.select({ id: paymentRefunds.id }).from(paymentRefunds).where(eq(paymentRefunds.externalRefundId, refund.id)).limit(1);
   if (existing) await tx.update(paymentRefunds).set({ providerEvidence: { id: refund.id, status: refund.status }, status, updatedAt: new Date(),
@@ -272,21 +298,33 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
   else await tx.insert(paymentRefunds).values({ amountCents: amount, currency: 'EUR', externalRefundId: refund.id,
     idempotencyKey: `stripe-reported-${refund.id}`, providerEvidence: { id: refund.id, status: refund.status }, reason: 'Initiated directly in Stripe',
     refundedAt: status === 'succeeded' ? new Date() : null, seminarRegistrationId: registration.id, status });
-  const full = amount === registration.priceCents;
+  const full = amount === priceCents;
   await tx.update(seminarRegistrations).set({ paymentStatus: status === 'failed' ? 'refund_failed' :
     status === 'succeeded' ? (full ? 'refunded' : 'partially_refunded') : 'paid', paymentStatusUpdatedAt: new Date(),
     registrationStatus: status === 'succeeded' && full ? 'canceled' : undefined,
     canceledAt: status === 'succeeded' && full ? new Date() : undefined, updatedAt: new Date() }).where(eq(seminarRegistrations.id, registration.id));
   if (!full || !existing) await tx.insert(reconciliationFindings).values({ kind: 'refund_conflict', profileId: registration.profileId,
     summary: full ? 'A Stripe-initiated seminar refund requires administrator review.' : 'Stripe reported a partial seminar refund, which is outside IDOC policy.',
-    details: { amount, expectedAmount: registration.priceCents, refundId: refund.id } });
+    details: { amount, expectedAmount: priceCents, refundId: refund.id } });
   if (status === 'succeeded') {
-    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
-    await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.refund_confirmed:${refund.id}`,
-      kind: 'seminar.refund_confirmed', payload: { amountCents: amount, firstName: contact?.firstName,
-        refundId: refund.id, registrationId: registration.id, to: contact?.email }, profileId: registration.profileId })
-      .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+    if (registration.profileId !== null) {
+      const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+        .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
+      await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.refund_confirmed:${refund.id}`,
+        kind: 'seminar.refund_confirmed', payload: { amountCents: amount, firstName: contact?.firstName,
+          refundId: refund.id, registrationId: registration.id, to: contact?.email }, profileId: registration.profileId })
+        .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+    } else if (registration.guestEmail) {
+      try {
+        await sendTransactionalEmail({
+          html: renderTransactionalEmail({
+            bodyHtml: `<p>Hello ${registration.guestName ?? ''},</p><p>Your seminar refund has been processed.</p>`,
+            heading: 'Seminar refund confirmed',
+          }),
+          subject: 'Your IDOC seminar refund', to: registration.guestEmail,
+        }, { signal: AbortSignal.timeout(10_000) });
+      } catch { /* best-effort -- the refund record itself already committed above */ }
+    }
   }
 }
 

@@ -24,9 +24,9 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   bank_transfer_pending: 'Bank transfer pending', cash_pending: 'Cash pending', chargeback: 'Chargeback', disputed: 'Disputed', paid: 'Paid', partially_refunded: 'Partially refunded', pending: 'Payment pending', refund_failed: 'Refund failed', refunded: 'Refunded', unpaid: 'Unpaid',
 };
 
-/** Combines the seminar's own date/end-time/timezone into the UTC instant the seminar ends. */
-export function seminarEndsAtUtc(input: { endTime: string; seminarDate: string; timezone: string }): Date {
-  return zonedDateTimeToUtc(input.seminarDate, input.endTime, input.timezone);
+/** Combines the seminar's own end-date/end-time/timezone into the UTC instant the seminar ends. */
+export function seminarEndsAtUtc(input: { endDate: string; endTime: string; timezone: string }): Date {
+  return zonedDateTimeToUtc(input.endDate, input.endTime, input.timezone);
 }
 
 export function computeSeminarAvailability(
