@@ -226,9 +226,9 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     action: 'seminar.payment_confirmed', afterJson: { amountCents: registration.priceCents, paymentIntentId, sessionId: session.id },
     entityId: String(registrationId), entityType: 'seminar_registration',
   });
-  const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-    .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, profileId!)).limit(1);
   if (profileId !== null) {
+    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, profileId)).limit(1);
     await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
       kind: 'seminar.payment_confirmed', payload: { amountCents: registration.priceCents, firstName: contact?.firstName,
         registrationId, to: contact?.email }, profileId })
