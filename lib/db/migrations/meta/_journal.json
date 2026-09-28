@@ -407,6 +407,13 @@
       "when": 1790625800000,
       "tag": "0057_seminar_fei_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1790625900000,
+      "tag": "0058_seminar_levels",
+      "breakpoints": true
     }
   ]
 }

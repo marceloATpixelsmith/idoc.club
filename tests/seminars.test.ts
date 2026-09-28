@@ -226,13 +226,31 @@ test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted thr
   assert.match(seminarFieldset, /name="isFei"/);
   assert.match(seminarFieldset, /type="checkbox"/);
   assert.match(seminarsSource, /const isFei = input\.isFei === 'on' \|\| input\.isFei === true/);
-  assert.match(seminarsSource, /status,is_fei,created_by_user_id/);
+  assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
   assert.match(memberPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
   assert.match(memberPage, /seminar\.is_fei \? <FeiBadge/);
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
   assert.match(detailPage, /seminar\.is_fei \? <div[\s\S]*?<FeiBadge/);
+});
+
+test('a seminar can be assigned one or more officiating levels via a multi-checkbox admin control, and picking All Levels always displays as the literal "All levels"', () => {
+  assert.match(seminarFieldset, /name="levels" type="checkbox" value=\{value\}/);
+  assert.match(seminarFieldset, /\{ label: 'Level 1', value: 'level_1' \}/);
+  assert.match(seminarFieldset, /\{ label: 'Level 2', value: 'level_2' \}/);
+  assert.match(seminarFieldset, /\{ label: 'Level 3', value: 'level_3' \}/);
+  assert.match(seminarFieldset, /\{ label: 'All Levels', value: 'all_levels' \}/);
+  assert.match(seminarsSource, /SEMINAR_LEVELS = \['level_1', 'level_2', 'level_3', 'all_levels'\]/);
+  assert.match(seminarsSource, /selected\.includes\('all_levels'\) \? \['all_levels'\] : \[\.\.\.new Set\(selected\)\]/);
+  const formatSource = readFileSync('lib/seminars/format.ts', 'utf8');
+  assert.match(formatSource, /if \(levels\.includes\('all_levels'\)\) return 'All levels'/);
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detailPage, /formatLevels/);
+  // The levels row sits directly above the FEI badge in the icon-block list.
+  const levelsIndex = detailPage.indexOf('InfoRow icon={Layers}');
+  const feiIndex = detailPage.indexOf('seminar.is_fei ? <div');
+  assert.ok(levelsIndex > -1 && feiIndex > -1 && levelsIndex < feiIndex, 'the Levels row must appear directly above the FEI badge');
 });
 
 test('a locked (disabled) price input still submits its value via a hidden mirror field, so editing a seminar with registrations never fails price validation', () => {
@@ -313,29 +331,36 @@ test('a signed-in profile without current entitlement (a lapsed membership) sees
   assert.ok(dispatchBlock && /isEntitled\(member\.entitlement/.test(dispatchBlock) && /showBothPrices=\{!entitled\}/.test(dispatchBlock));
 });
 
-test('the seminar detail page presents full details and offers a member registration form, a join-or-guest choice, or the visitor\'s existing registration status', () => {
+test('the seminar detail page presents full details and offers the Register CTA, or the visitor\'s existing registration status', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /getSeminarForRegistrant/);
   assert.match(detailPage, /Directors and Application Details/);
-  assert.match(detailPage, /SeminarRegistrationForm/);
-  assert.match(detailPage, /SeminarRegistrationPanel/);
+  assert.match(detailPage, /SeminarRegisterCta/);
   assert.match(detailPage, /isEntitled\(member\.entitlement/);
+  // The whole page uses the site's full fixed-width container, left-aligned like every other page.
+  assert.match(detailPage, /max-w-7xl/);
+  assert.doesNotMatch(detailPage, /max-w-4xl/);
+  // The shadcn Card component bakes in `py-6` unconditionally (components/ui/card.tsx), regardless
+  // of CardContent's own padding -- the icon-block info Card must cancel it with `py-0`, or the
+  // Card's own vertical padding stacks on top of each InfoRow's `p-5`, leaving visibly excess empty
+  // space above the first row and below the FEI badge.
+  const infoCardBlock = detailPage.match(/<Card[^>]*>\s*<CardContent className="space-y-0 p-0">/)?.[0];
+  assert.ok(infoCardBlock && /<Card className="py-0">/.test(infoCardBlock), 'the icon-block info Card must cancel the base Card component\'s py-6 with py-0');
 });
 
-test('a signed-in visitor without member pricing goes straight to the registration form, never the signed-out "Create an account" / "Register as a guest" panel', () => {
+test('a signed-in visitor without member pricing registers under their own profile at the non-member price, never the anonymous guest identity, once they click Register', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /import \{ getUser \} from '@\/lib\/db\/queries'/);
   assert.match(detailPage, /const isSignedIn = Boolean\(user\)/);
-  // A signed-in visitor with their own profile (a lapsed membership) gets the locked form tied to
-  // their real profileId, at the non-member price -- never the guest identity.
-  assert.match(detailPage, /\) : member \? \(\s*<SeminarRegistrationForm\s*\n\s*ownProfileDetails=\{\{ email: member\.email, name:/);
-  // Only a signed-in visitor with no profile at all falls back to the true (typed, Turnstile-gated)
-  // guest form -- still skipping the signed-out panel.
-  assert.match(detailPage, /\) : isSignedIn \? \(\s*<SeminarRegistrationForm paymentMethods=\{paymentMethods\} seminarId=\{seminar\.id\} \/>/);
-  // The signed-out panel must remain the final fallback, reachable only when isSignedIn is false too.
-  const registerBlock = detailPage.match(/\{alreadyRegistered \? \([\s\S]*?<SeminarRegistrationPanel[\s\S]*?\)\}/)?.[0];
-  assert.ok(registerBlock, 'register branch not found');
-  assert.match(registerBlock as string, /\) : \(\s*<SeminarRegistrationPanel/);
+  // A signed-in visitor with their own profile (a lapsed membership) gets ownProfileDetails, tied to
+  // their real profileId at the non-member price -- never the guest identity.
+  assert.match(detailPage, /ownProfileDetails=\{!isEntitledMember && member \? \{ email: member\.email, name:/);
+  assert.match(detailPage, /memberDetails=\{isEntitledMember && member \? \{ email: member\.email, name:/);
+  const ctaSource = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  // A signed-in visitor (with or without a profile) always reveals the form directly -- the
+  // join-or-guest dialog is reachable only when isSignedIn is false too.
+  assert.match(ctaSource, /const knownVisitor = Boolean\(memberDetails\) \|\| Boolean\(ownProfileDetails\) \|\| isSignedIn/);
+  assert.match(ctaSource, /knownVisitor \? setRevealed\(true\) : setJoinDialogOpen\(true\)/);
 });
 
 test('a signed-in visitor with their own profile registers at the non-member price under their real profileId (registerForSeminarAtNonMemberPrice), not the anonymous guest mechanism, and canceling a registration never requires current entitlement', () => {
@@ -349,12 +374,15 @@ test('a signed-in visitor with their own profile registers at the non-member pri
   assert.match(form, /registerAtNonMemberPriceAction/);
 });
 
-test('the seminar registration panel offers "Create an account" and "Register as a guest" buttons, revealing the shared registration form for the guest path', () => {
-  const panel = readFileSync('components/seminars/seminar-registration-panel.tsx', 'utf8');
-  assert.match(panel, /Create an account/);
-  assert.match(panel, /Register as a guest/);
-  assert.match(panel, /href="\/sign-up"/);
-  assert.match(panel, /SeminarRegistrationForm/);
+test('the Register CTA is a single full-width button; a signed-out visitor sees a branded join-or-guest dialog instead of a separate boxed panel', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /className="w-full text-xs uppercase tracking-\[0\.2em\]"/);
+  assert.match(cta, />\s*Register\s*</);
+  assert.match(cta, /Join to get member pricing of \{memberPriceLabel\}/);
+  assert.match(cta, /Register as a guest/);
+  assert.match(cta, /href="\/sign-up"/);
+  assert.match(cta, /import \{ Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle \} from '@\/components\/ui\/dialog'/);
+  assert.match(cta, /SeminarRegistrationForm/);
 });
 
 test('the shared seminar registration form pre-fills and locks the name/email fields for a member or a signed-in profile owner, and shows them as editable inputs only for a true anonymous guest', () => {

@@ -5,9 +5,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { TimezoneInput } from '@/components/seminars/timezone-input';
 
 type ExistingSeminar = {
-  capacity: number; description: string; end_date: string; end_time: string; is_fei: boolean; location: string;
+  capacity: number; description: string; end_date: string; is_fei: boolean; levels: string[]; location: string;
   member_price_cents: number; non_member_price_cents: number; registration_deadline: string | Date;
-  start_date: string; start_time: string; status: string; timezone: string; title: string;
+  start_date: string; status: string; timezone: string; title: string;
 };
 
 function toDatetimeLocalUtc(value: unknown): string {
@@ -15,6 +15,10 @@ function toDatetimeLocalUtc(value: unknown): string {
 }
 
 const STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', draft: 'Draft', published: 'Published' };
+const LEVEL_OPTIONS = [
+  { label: 'Level 1', value: 'level_1' }, { label: 'Level 2', value: 'level_2' }, { label: 'Level 3', value: 'level_3' },
+  { label: 'All Levels', value: 'all_levels' },
+] as const;
 
 export function SeminarFieldset({ allowCanceled = false, lockPrices = false, seminar }: {
   allowCanceled?: boolean; lockPrices?: boolean; seminar?: ExistingSeminar;
@@ -54,6 +58,17 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
             </Label>
             <p className="mt-1 text-xs text-muted-foreground">Shows the FEI logo on this seminar's listing card and detail page.</p>
           </div>
+          <div className="col-span-2 space-y-1.5">
+            <Label>Levels</Label>
+            <fieldset className="flex flex-wrap gap-4">
+              {LEVEL_OPTIONS.map(({ label, value }) => (
+                <Label className="flex items-center gap-2 font-normal" key={value}>
+                  <input defaultChecked={seminar?.levels?.includes(value) ?? false} name="levels" type="checkbox" value={value} />
+                  {label}
+                </Label>
+              ))}
+            </fieldset>
+          </div>
         </CardContent>
       </Card>
 
@@ -67,16 +82,8 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
             <Input defaultValue={seminar?.start_date} id="startDate" name="startDate" required type="date" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="startTime">Start time</Label>
-            <Input defaultValue={seminar?.start_time?.slice(0, 5)} id="startTime" name="startTime" required type="time" />
-          </div>
-          <div className="space-y-1.5">
             <Label htmlFor="endDate">End date</Label>
             <Input defaultValue={seminar?.end_date} id="endDate" name="endDate" required type="date" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="endTime">End time</Label>
-            <Input defaultValue={seminar?.end_time?.slice(0, 5)} id="endTime" name="endTime" required type="time" />
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="registrationDeadline">Registration deadline (UTC)</Label>

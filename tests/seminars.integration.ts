@@ -46,9 +46,9 @@ async function paidMember() {
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
-    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '11:00', isFei: false, location: 'Arena 3, IDOC Headquarters',
+    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, isFei: false, levels: [], location: 'Arena 3, IDOC Headquarters',
     memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48),
-    startDate, startTime: '09:00', status: 'published', timezone: 'Europe/Berlin', title: 'Judging Clinic', ...overrides,
+    startDate, status: 'published', timezone: 'Europe/Berlin', title: 'Judging Clinic', ...overrides,
   };
 }
 
@@ -66,18 +66,17 @@ test('capacity, prices, dates, and timezone are constrained server-side with doc
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ capacity: 0 }))), SeminarValidationError);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ memberPrice: -5 }))), SeminarValidationError);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ nonMemberPrice: -5 }))), SeminarValidationError);
-  await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ endTime: '08:00' }))), SeminarValidationError, 'end time must be after start time on a same-day seminar');
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ timezone: 'Not/AZone' }))), SeminarValidationError);
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const earlierEndDate = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ endDate: earlierEndDate, startDate }))), SeminarValidationError, 'end date cannot precede start date');
 });
 
-test('a multi-day seminar (end date after start date) is accepted even when the end time is earlier in the day than the start time', async () => {
+test('a multi-day seminar (end date after start date) is accepted', async () => {
   const admin = await adminUser();
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const endDate = new Date(Date.now() + 9 * 86_400_000).toISOString().slice(0, 10);
-  const seminarId = await publishedSeminar(admin.id, { endDate, endTime: '10:00', startDate, startTime: '14:00' });
+  const seminarId = await publishedSeminar(admin.id, { endDate, startDate });
   const seminar = await asAdmin(admin.id, () => getAdminSeminar(seminarId));
   assert.equal(seminar?.start_date, startDate);
   assert.equal(seminar?.end_date, endDate);
@@ -303,6 +302,16 @@ test('the FEI-affiliation flag persists through create and update, on both the t
   await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ isFei: false })));
   const [updated] = await sql`select is_fei from idoc.seminars where id=${seminarId}`;
   assert.equal(updated.is_fei, false, 'is_fei must actually be written on update, not silently dropped');
+});
+
+test('the seminar levels field persists a selected subset, and checking all_levels always normalizes to that single value alone', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { levels: ['level_1', 'level_2'] });
+  const [created] = await sql`select levels from idoc.seminars where id=${seminarId}`;
+  assert.deepEqual([...created.levels].sort(), ['level_1', 'level_2']);
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ levels: ['level_1', 'all_levels'] })));
+  const [updated] = await sql`select levels from idoc.seminars where id=${seminarId}`;
+  assert.deepEqual(updated.levels, ['all_levels'], 'checking All Levels must discard any individually-checked level, never combine them');
 });
 
 test('an administrator cannot change either price once a seminar has any registration', async () => {
@@ -591,8 +600,8 @@ test('past seminars only ever show this member\'s own registration history, and 
   const admin = await adminUser();
   const { profile, user } = await paidMember();
   const registeredPastId = await asAdmin(admin.id, () => createSeminar(seminarInput({
-    endDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10), endTime: '10:00',
-    registrationDeadline: past(96), startDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10), startTime: '09:00',
+    endDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
+    registrationDeadline: past(96), startDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
   })));
   await sql`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id) values (${registeredPastId},${profile.id},'paid','online_stripe')`;
   await asAdmin(admin.id, () => createSeminar(seminarInput({ status: 'canceled', title: 'Never Touched' })));

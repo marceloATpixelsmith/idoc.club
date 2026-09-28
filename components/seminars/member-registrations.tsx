@@ -25,7 +25,7 @@ function AvailabilityTag({ availability }: { availability: keyof typeof AVAILABI
  * else this particular list needs on the right (price, an availability tag, a registration-status
  * line, a Cancel action) -- everything that varies between Available Seminars, Past seminars, the
  * public catalog, and My Seminars. */
-function SeminarRow({ children, seminar }: { children?: React.ReactNode; seminar: { end_date: string; end_time: string; is_fei: boolean; location: string; start_date: string; start_time: string; title: string } }) {
+function SeminarRow({ children, seminar }: { children?: React.ReactNode; seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string } }) {
   return (
     <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
       <div>

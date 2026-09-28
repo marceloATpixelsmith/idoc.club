@@ -52,7 +52,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
       date: row.start_date === row.end_date
-        ? `${String(row.start_date)} ${String(row.start_time).slice(0, 5)}`
+        ? String(row.start_date)
         : `${String(row.start_date)} – ${String(row.end_date)}`,
       status: String(row.status),
       prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)} / €${(Number(row.non_member_price_cents) / 100).toFixed(2)}`,

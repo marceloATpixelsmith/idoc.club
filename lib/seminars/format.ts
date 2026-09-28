@@ -18,25 +18,25 @@ export function formatDate(value: string): string {
   return localDateOnly(value).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** "9:00 AM" from a stored "HH:MM" or "HH:MM:SS" 24-hour string. */
-export function formatTime(value: string): string {
-  const [hours, minutes] = value.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const hour12 = hours % 12 || 12;
-  return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
-}
-
-/** Same-day seminars show one date/time; a seminar spanning multiple days shows both ends of the
- * range instead, per docs/08's multi-day requirement. Human-readable throughout (no raw ISO), since
- * this is the string members and guests actually read. */
-export function formatSchedule(seminar: { end_date: string; end_time: string; start_date: string; start_time: string }): string {
-  const startTime = formatTime(seminar.start_time);
-  const endTime = formatTime(seminar.end_time);
+/** A single date for a same-day seminar; a seminar spanning multiple days shows both ends of the
+ * range instead, per docs/08's multi-day requirement. Seminars carry no time-of-day of their own
+ * (docs/08) -- only the date is ever shown, wherever a seminar's schedule appears on the site. */
+export function formatSchedule(seminar: { end_date: string; start_date: string }): string {
   return seminar.start_date === seminar.end_date
-    ? `${formatDate(seminar.start_date)} · ${startTime}–${endTime}`
-    : `${formatDate(seminar.start_date)}, ${startTime} – ${formatDate(seminar.end_date)}, ${endTime}`;
+    ? formatDate(seminar.start_date)
+    : `${formatDate(seminar.start_date)} – ${formatDate(seminar.end_date)}`;
 }
 
 export function money(cents: number): string {
   return cents > 0 ? new Intl.NumberFormat('en-IE', { currency: 'EUR', style: 'currency' }).format(cents / 100) : 'No fee';
+}
+
+const LEVEL_LABELS: Record<string, string> = { level_1: 'Level 1', level_2: 'Level 2', level_3: 'Level 3' };
+
+/** "all_levels" always stands alone (lib/seminars/seminars.ts's parseLevels enforces this at the
+ * data layer) and displays as the literal "All levels" rather than being combined with individual
+ * levels. */
+export function formatLevels(levels: string[]): string {
+  if (levels.includes('all_levels')) return 'All levels';
+  return levels.map((level) => LEVEL_LABELS[level] ?? level).join(', ');
 }
