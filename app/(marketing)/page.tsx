@@ -94,7 +94,10 @@ export default async function Home() {
                           <MapPin className="size-3.5 text-gold" /> {s.location}
                         </span>
                         <span className="inline-flex items-center gap-2">
-                          <CalendarDays className="size-3.5 text-gold" /> {new Date(`${s.seminar_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                          <CalendarDays className="size-3.5 text-gold" />
+                          {s.start_date === s.end_date
+                            ? new Date(`${s.start_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+                            : `${new Date(`${s.start_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })} – ${new Date(`${s.end_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`}
                         </span>
                       </div>
                     </div>

@@ -16,26 +16,37 @@ export type SeminarCheckoutStripeClient = {
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
 
-/** Creates one server-priced EUR payment session. The row lock, stable Stripe idempotency key and
- * persisted open-session identity prevent parallel clicks from producing multiple active sessions. */
+/** Creates one server-priced EUR payment session, for a member's own registration or an anonymous
+ * guest's -- there is no session to verify a guest's ownership against, so a guest registration id
+ * is usable by anyone who has it, the same way a public "pay for your registration" link from any
+ * external registration system works; it never exposes anything beyond the seminar name and price.
+ * A member registration keeps its existing ownership check (the caller's session must actually be
+ * the member who registered). The row lock, stable Stripe idempotency key and persisted open-session
+ * identity prevent parallel clicks from producing multiple active sessions either way. */
 export async function createSeminarCheckoutSession(registrationIdValue: unknown, testStripeClient?: SeminarCheckoutStripeClient): Promise<string> {
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
-  const actor = await requireAccountAccess('member');
   const registrationId = Number(registrationIdValue);
   if (!Number.isInteger(registrationId) || registrationId <= 0) throw new SeminarRegistrationError('Registration not found.');
-  const [identity] = await client<{ email: string; profile_id: number; user_id: number }[]>`select r.profile_id,p.user_id,u.email from idoc.seminar_registrations r
-    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
-  if (!identity || identity.user_id !== actor.id) throw new SeminarRegistrationError('Registration not found.');
   const stripe = (testStripeClient ?? getStripeServerClient()) as SeminarCheckoutStripeClient;
-  const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, identity.profile_id);
   return client.begin(async (sql) => {
     const [row] = await sql<{
-      checkout_status: string | null; payment_method_canonical_id: string; payment_status: string; price_cents: number; profile_id: number; registered_at: Date | string;
-      registration_status: string; seminar_id: number; stripe_checkout_session_id: string | null; title: string;
-    }[]>`select r.registration_status,r.payment_status,r.profile_id,r.seminar_id,r.stripe_checkout_session_id,r.checkout_status,r.registered_at,
-      s.title,s.price_cents,s.payment_method_canonical_id from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-      where r.id=${registrationId} for update`;
-    if (!row || row.profile_id !== identity.profile_id) throw new SeminarRegistrationError('Registration not found.');
+      checkout_status: string | null; email: string | null; guest_email: string | null; payment_method_canonical_id: string; payment_status: string;
+      price_cents: number; profile_id: number | null; registered_at: Date | string; registration_status: string; seminar_id: number;
+      stripe_checkout_session_id: string | null; title: string; user_id: number | null;
+    }[]>`select r.registration_status,r.payment_status,r.profile_id,r.guest_email,r.seminar_id,r.stripe_checkout_session_id,r.checkout_status,r.registered_at,
+      r.payment_method_canonical_id,s.title,coalesce(r.expected_amount_cents, case when r.profile_id is null then s.non_member_price_cents else s.member_price_cents end) price_cents,
+      p.user_id,u.email from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+      left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
+      where r.id=${registrationId} for update of r`;
+    if (!row) throw new SeminarRegistrationError('Registration not found.');
+    let customerId: string | undefined;
+    let email: string | null = row.guest_email;
+    if (row.profile_id !== null) {
+      const actor = await requireAccountAccess('member');
+      if (row.user_id !== actor.id) throw new SeminarRegistrationError('Registration not found.');
+      email = row.email;
+      customerId = await resolveOrCreateBillingAccount(stripe, actor.id, row.profile_id);
+    }
     if (row.registration_status !== 'registered') throw new SeminarRegistrationError('This registration is not active.');
     if (row.payment_method_canonical_id !== 'online_stripe') throw new SeminarRegistrationError('This registration is not payable through Stripe.');
     if (['paid', 'refunded', 'partially_refunded', 'disputed', 'chargeback'].includes(row.payment_status)) throw new SeminarRegistrationError('This registration does not have an outstanding Stripe payment.');
@@ -48,13 +59,14 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
     const baseUrl = baseUrlForServer();
     const cycle = new Date(row.registered_at).getTime();
     const session = await stripe.checkout.sessions.create({
-      cancel_url: `${baseUrl}/seminars?checkout=canceled`, customer: customerId,
+      cancel_url: `${baseUrl}/seminars?checkout=canceled`,
+      ...(customerId ? { customer: customerId } : email ? { customer_email: email } : {}),
       line_items: [{ price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents }, quantity: 1 }],
       metadata: { amountCents: String(row.price_cents), currency: 'EUR', kind: 'seminar_registration',
-        profileId: String(row.profile_id), registrationId: String(registrationId), seminarId: String(row.seminar_id),
-        ...(identity.email?.startsWith('stripe-e2e-') && identity.email.endsWith('@example.test') ? { testRun: identity.email } : {}) },
+        profileId: row.profile_id !== null ? String(row.profile_id) : '', registrationId: String(registrationId), seminarId: String(row.seminar_id),
+        ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) },
       mode: 'payment', payment_intent_data: { metadata: { kind: 'seminar_registration', registrationId: String(registrationId),
-        ...(identity.email?.startsWith('stripe-e2e-') && identity.email.endsWith('@example.test') ? { testRun: identity.email } : {}) } },
+        ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) } },
       success_url: `${baseUrl}/seminars?checkout=success`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');

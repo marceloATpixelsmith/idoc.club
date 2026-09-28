@@ -4,6 +4,8 @@ import type Stripe from 'stripe';
 import { client } from '@/lib/db/drizzle';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { getStripeServerClient } from './stripe-client';
 
 export class RefundError extends Error { constructor(message: string) { super(message); this.name = 'RefundError'; } }
@@ -21,9 +23,12 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const registrationId = Number(registrationIdValue); if (!Number.isInteger(registrationId) || registrationId <= 0) throw new RefundError('Registration not found.');
   const explanation = reason(reasonValue);
-  const [row] = await client<{ email: string; payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents,u.email
-    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
+  // The amount actually charged is the registration's own `expected_amount_cents` (set when the
+  // Checkout Session was created), not the seminar's current price -- a member and a guest were
+  // charged different prices, and refunding must match what Stripe actually collected either way.
+  const [row] = await client<{ email: string | null; first_name: string | null; payment_status: string; price_cents: number; profile_id: number | null; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,r.expected_amount_cents price_cents,r.profile_id,
+    coalesce(u.email,r.guest_email) email,coalesce(p.first_name,r.guest_name) first_name
+    from idoc.seminar_registrations r left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
   if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
@@ -50,10 +55,23 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
-      if (status === 'succeeded') await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-        select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
-        from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} on conflict(dedupe_key) do nothing`;
+      if (status === 'succeeded' && row.profile_id !== null) await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
+        values(${row.profile_id},'seminar.refund_confirmed',${JSON.stringify({ amountCents: row.price_cents, firstName: row.first_name, refundId: refund.id, registrationId, to: row.email })}::jsonb,${`seminar.refund_confirmed:${refund.id}`})
+        on conflict(dedupe_key) do nothing`;
     });
+    // A guest registration has no profile row, so notification_outbox (profile_id NOT NULL) can't
+    // queue this -- send directly and best-effort, matching the webhook-driven refund path.
+    if (status === 'succeeded' && row.profile_id === null && row.email) {
+      try {
+        await sendTransactionalEmail({
+          html: renderTransactionalEmail({
+            bodyHtml: `<p>Hello ${row.first_name ?? ''},</p><p>Your seminar refund has been processed.</p>`,
+            heading: 'Seminar refund confirmed',
+          }),
+          subject: 'Your IDOC seminar refund', to: row.email,
+        }, { signal: AbortSignal.timeout(10_000) });
+      } catch { /* best-effort -- the refund itself already committed above */ }
+    }
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;

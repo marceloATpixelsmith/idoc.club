@@ -1,13 +1,20 @@
 import 'server-only';
 
+import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
+import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
 
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
+const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
+const guestNameSchema = z.string().trim().min(1).max(200);
+const guestEmailSchema = z.string().trim().email().max(255);
 
 export class SeminarRegistrationError extends Error {
   constructor(message: string) {
@@ -24,11 +31,34 @@ async function requireSeminarAdministrator() {
 
 /** Bank Transfer instructions are the same organization-wide, already-sanitized rich text Super
  * Admins maintain at /admin/organization (docs/05 -- sanitizeBankInstructions runs at write time
- * there); a seminar never stores or edits its own copy. Any authenticated member may read it once
- * they need to know how to pay -- it carries no administrative or payment-configuration data. */
+ * there); a seminar never stores or edits its own copy. Deliberately reachable by anyone, member or
+ * guest, once they need to know how to pay -- it carries no administrative or payment-configuration
+ * data. */
 export async function getSeminarPaymentMethodInstructions(canonicalId: string): Promise<string | null> {
   const [row] = await client<{ instructions_html: string | null }[]>`select instructions_html from idoc.seminar_payment_methods where canonical_id=${canonicalId} limit 1`;
   return row?.instructions_html ?? null;
+}
+
+/** The set of payment methods a registrant -- member or guest -- may currently choose from.
+ * Deliberately public (no auth): a signed-out visitor must see this before deciding whether to
+ * register as a guest at all. */
+export async function listEnabledSeminarPaymentMethods() {
+  return client<{ canonical_id: string; display_label: string }[]>`select canonical_id,display_label from idoc.seminar_payment_methods where enabled=true order by display_order`;
+}
+
+/** Every canonical payment method, enabled or not -- for the admin registration-detail drawer's
+ * select, which must still show and preserve a registration's own current method even if an
+ * administrator has since disabled it in Organization Settings (see updateSeminarRegistrationDetails,
+ * which allows keeping that same value even though it would fail validation as a new choice). */
+export async function listAllSeminarPaymentMethodsForAdmin() {
+  await requireSeminarAdministrator();
+  return client<{ canonical_id: string; display_label: string }[]>`select canonical_id,display_label from idoc.seminar_payment_methods order by display_order`;
+}
+
+function validatePaymentMethod(rows: { canonical_id: string }[], value: unknown): string {
+  const method = typeof value === 'string' ? value.trim() : '';
+  if (!rows.some((row) => row.canonical_id === method)) throw new SeminarRegistrationError('Choose one of the currently accepted payment methods.');
+  return method;
 }
 
 async function requireOwnProfileId(): Promise<{ actorId: number; profileId: number }> {
@@ -39,10 +69,10 @@ async function requireOwnProfileId(): Promise<{ actorId: number; profileId: numb
 }
 
 type SeminarAvailabilityRow = {
-  capacity: number; description: string; end_time: string; ends_at: Date | string; id: number; location: string;
-  payment_method_canonical_id: string; payment_status: PaymentStatus | null; price_cents: number; registered_at: Date | string | null;
-  registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
-  seminar_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
+  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; location: string;
+  member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
+  registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
+  start_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
 };
 function withAvailability(row: SeminarAvailabilityRow) {
   return {
@@ -56,30 +86,32 @@ function withAvailability(row: SeminarAvailabilityRow) {
 
 /** "Current" seminars: every published, not-yet-past seminar (a browsable catalog, whether or not
  * this member is registered) plus any not-yet-past seminar this member has a registration for
- * regardless of its current publication state (e.g. one the administrator later canceled). */
+ * regardless of its current publication state (e.g. one the administrator later canceled). A null
+ * profileId (a signed-out visitor) simply never matches the left join, yielding the same public
+ * catalog with no registration_status/payment_method_canonical_id attached to any row. */
 export async function listCurrentSeminarsForMember(profileId: number | null) {
-  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.seminar_date,s.start_time,s.end_time,s.timezone,s.location,
-    s.capacity,s.price_cents,s.registration_deadline,s.status,s.payment_method_canonical_id,
-    (s.seminar_date + s.end_time) at time zone s.timezone ends_at,
+  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
     from idoc.seminars s left join idoc.seminar_registrations r on r.seminar_id=s.id and r.profile_id=${profileId}
     where (s.status='published' or r.id is not null)
-    and (s.seminar_date + s.end_time) at time zone s.timezone > now()
-    order by s.seminar_date,s.start_time`;
+    and (s.end_date + s.end_time) at time zone s.timezone > now()
+    order by s.start_date,s.start_time`;
   return rows.map(withAvailability);
 }
 
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
-  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.seminar_date,s.start_time,s.end_time,s.timezone,s.location,
-    s.capacity,s.price_cents,s.registration_deadline,s.status,s.payment_method_canonical_id,
-    (s.seminar_date + s.end_time) at time zone s.timezone ends_at,
+  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
     from idoc.seminars s join idoc.seminar_registrations r on r.seminar_id=s.id and r.profile_id=${profileId}
-    where (s.seminar_date + s.end_time) at time zone s.timezone <= now()
-    order by s.seminar_date desc,s.start_time desc`;
+    where (s.end_date + s.end_time) at time zone s.timezone <= now()
+    order by s.start_date desc,s.start_time desc`;
   return rows.map(withAvailability);
 }
 
@@ -91,51 +123,61 @@ export async function listAdminSeminarHistoryForMember(profileIdValue: unknown) 
   return client<{
     id: number; location: string; paymentStatus: string; registeredAt: Date | string;
     registrationStatus: string; seminarDate: string; seminarStatus: string; title: string;
-  }[]>`select s.id,s.title,s.seminar_date "seminarDate",s.location,s.status "seminarStatus",
+  }[]>`select s.id,s.title,s.start_date "seminarDate",s.location,s.status "seminarStatus",
     r.registration_status "registrationStatus",r.payment_status "paymentStatus",r.registered_at "registeredAt"
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    where r.profile_id=${profileId.data} order by s.seminar_date desc,s.start_time desc,s.id desc`;
+    where r.profile_id=${profileId.data} order by s.start_date desc,s.start_time desc,s.id desc`;
+}
+
+async function requireSeminarOpenForRegistration(sql: TransactionSql<Record<string, never>>, seminarId: number) {
+  const [seminar] = await sql<{
+    capacity: number; ends_at: Date; member_price_cents: number; non_member_price_cents: number; registration_deadline: Date; status: string;
+  }[]>`select capacity,member_price_cents,non_member_price_cents,registration_deadline,status,
+    (end_date + end_time) at time zone timezone ends_at from idoc.seminars where id=${seminarId} for update`;
+  if (!seminar || seminar.status !== 'published') throw new SeminarRegistrationError('This seminar is not open for registration.');
+  const now = new Date();
+  if (now > new Date(seminar.registration_deadline) || now >= new Date(seminar.ends_at)) {
+    throw new SeminarRegistrationError('Registration for this seminar is closed.');
+  }
+  const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations
+    where seminar_id=${seminarId} and registration_status='registered'`;
+  if (activeCount >= seminar.capacity) throw new SeminarRegistrationError('This seminar is full.');
+  return seminar;
 }
 
 /** Registers the authenticated member for a seminar, atomically enforcing capacity and duplicate
  * prevention under a row lock on the seminar itself -- two concurrent registration attempts for the
  * last open seat serialize on this lock, so exactly one succeeds. Canceling and re-registering
  * reuses the same row (the unique (seminar_id, profile_id) index is a permanent guard, not just a
- * point-in-time check), which resets payment evidence for a fresh registration cycle. */
-export async function registerForSeminar(seminarIdValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+ * point-in-time check), which resets payment evidence for a fresh registration cycle. The member
+ * pays memberPriceCents -- always the lower of the seminar's two prices in practice, though nothing
+ * here assumes that ordering. */
+export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
   const { profileId } = await requireOwnProfileId();
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
+  const enabledMethods = await listEnabledSeminarPaymentMethods();
+  const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
   return client.begin(async (sql) => {
-    const [seminar] = await sql<{
-      capacity: number; ends_at: Date; payment_method_canonical_id: string; registration_deadline: Date; status: string;
-    }[]>`select capacity,payment_method_canonical_id,registration_deadline,status,
-      (seminar_date + end_time) at time zone timezone ends_at from idoc.seminars where id=${seminarId.data} for update`;
-    if (!seminar || seminar.status !== 'published') throw new SeminarRegistrationError('This seminar is not open for registration.');
-    const now = new Date();
-    if (now > new Date(seminar.registration_deadline) || now >= new Date(seminar.ends_at)) {
-      throw new SeminarRegistrationError('Registration for this seminar is closed.');
-    }
-    const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations
-      where seminar_id=${seminarId.data} and registration_status='registered'`;
+    const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
       where seminar_id=${seminarId.data} and profile_id=${profileId} for update`;
     if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('You are already registered for this seminar.');
     if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
-    if (activeCount >= seminar.capacity) throw new SeminarRegistrationError('This seminar is full.');
-    const paymentStatus = initialPaymentStatusForMethod(seminar.payment_method_canonical_id);
+    const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
     if (existing) {
       await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
-        stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,expected_amount_cents=null,
+        payment_method_canonical_id=${paymentMethod},expected_amount_cents=${seminar.member_price_cents},currency='EUR',
+        stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,
         stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),
         registered_at=now(),canceled_at=null,updated_at=now() where id=${existing.id}`;
       registrationId = existing.id;
     } else {
-      const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status)
-        values (${seminarId.data},${profileId},${paymentStatus}) returning id`;
+      const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
+        values (${seminarId.data},${profileId},${paymentStatus},${paymentMethod},${seminar.member_price_cents},'EUR') returning id`;
       registrationId = row.id;
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
@@ -143,8 +185,67 @@ export async function registerForSeminar(seminarIdValue: unknown): Promise<{ pay
     await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
       (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',u.email::text,'firstName',p.first_name::text)
         from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
-    return { paymentMethod: seminar.payment_method_canonical_id, registrationId };
+    return { paymentMethod, registrationId };
   });
+}
+
+/** Registers an anonymous, non-member visitor at the seminar's non-member price -- no IDOC account
+ * required. Mirrors registerForSeminar's capacity/deadline/duplicate guards exactly, scoped to a
+ * guest identity (name + email) instead of a profileId; the partial unique index on
+ * (seminar_id, lower(guest_email)) is the guest equivalent of the member unique-registration guard.
+ * There is no notification_outbox path for a guest (it requires a real profileId), so confirmation
+ * is a best-effort direct send -- a delivery failure here must never fail the registration itself,
+ * since the registration is already durably committed by the time it's attempted. */
+export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameValue: unknown, emailValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+  const seminarId = idSchema.safeParse(seminarIdValue);
+  if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
+  const nameResult = guestNameSchema.safeParse(nameValue);
+  if (!nameResult.success) throw new SeminarRegistrationError('Enter your full name.');
+  const emailResult = guestEmailSchema.safeParse(emailValue);
+  if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid email address.');
+  const name = nameResult.data;
+  const email = emailResult.data.toLowerCase();
+  const enabledMethods = await listEnabledSeminarPaymentMethods();
+  const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
+  let seminarTitle = '';
+  const { registrationId } = await client.begin(async (sql) => {
+    const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
+    const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
+      where seminar_id=${seminarId.data} and profile_id is null and lower(guest_email)=${email} for update`;
+    if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('This email is already registered for this seminar.');
+    if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
+      throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
+    }
+    const [{ title }] = await sql<{ title: string }[]>`select title from idoc.seminars where id=${seminarId.data} limit 1`;
+    seminarTitle = title;
+    const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
+    let registrationId: number;
+    if (existing) {
+      await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
+        payment_method_canonical_id=${paymentMethod},expected_amount_cents=${seminar.non_member_price_cents},currency='EUR',guest_name=${name},
+        stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,
+        stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),
+        registered_at=now(),canceled_at=null,updated_at=now() where id=${existing.id}`;
+      registrationId = existing.id;
+    } else {
+      const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,guest_name,guest_email,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
+        values (${seminarId.data},${name},${email},${paymentStatus},${paymentMethod},${seminar.non_member_price_cents},'EUR') returning id`;
+      registrationId = row.id;
+    }
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+      (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
+    return { registrationId };
+  });
+  try {
+    await sendTransactionalEmail({
+      html: renderTransactionalEmail({
+        bodyHtml: `<p>Hello ${name},</p><p>Your registration for <strong>${seminarTitle}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
+        heading: 'Seminar registration received',
+      }),
+      subject: 'Your IDOC seminar registration', to: email,
+    }, { signal: AbortSignal.timeout(10_000) });
+  } catch { /* best-effort -- the registration itself already committed above */ }
+  return { paymentMethod, registrationId };
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
@@ -164,52 +265,212 @@ export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<vo
   });
 }
 
-export async function markRegistrationPaymentReceived(registrationIdValue: unknown): Promise<void> {
+/** Manually confirms a bank-transfer/cash payment (Stripe payments are marked paid automatically by
+ * the webhook and never go through here) -- records which method was actually used (it may differ
+ * from what the registrant originally selected) and an optional reference note, mirroring the
+ * evidence trail lib/payments/manual-payments.ts keeps for membership payments. */
+export async function recordManualSeminarPayment(registrationIdValue: unknown, methodValue: unknown, referenceValue: unknown): Promise<void> {
   const actor = await requireSeminarAdministrator();
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
+  const method = typeof methodValue === 'string' ? methodValue.trim() : '';
+  if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Bank Transfer or Cash.');
+  const reference = typeof referenceValue === 'string' && referenceValue.trim() ? referenceValue.trim().slice(0, 1000) : null;
   await client.begin(async (sql) => {
     const [existing] = await sql<{ payment_status: PaymentStatus }[]>`select payment_status from idoc.seminar_registrations where id=${registrationId.data} for update`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');
     if (existing.payment_status === 'paid') return;
-    await sql`update idoc.seminar_registrations set payment_status='paid',paid_at=now(),marked_paid_by_user_id=${actor.id},updated_at=now() where id=${registrationId.data}`;
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json) values
-      (${actor.id},'admin.seminar_registration.payment_marked_paid','seminar_registration',${String(registrationId.data)},${JSON.stringify({ paymentStatus: existing.payment_status })}::jsonb)`;
+    await sql`update idoc.seminar_registrations set payment_status='paid',payment_method_canonical_id=${method},payment_reference=${reference},
+      paid_at=now(),marked_paid_by_user_id=${actor.id},payment_status_updated_at=now(),updated_at=now() where id=${registrationId.data}`;
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
+      (${actor.id},'admin.seminar_registration.payment_marked_paid','seminar_registration',${String(registrationId.data)},
+      ${JSON.stringify({ paymentStatus: existing.payment_status })}::jsonb,${JSON.stringify({ method, reference })}::jsonb)`;
   });
 }
 
-export async function listAdminSeminarRegistrations(seminarIdValue: unknown, input: Record<string, string | string[] | undefined>) {
+/** Directly changes a registration's own status (e.g. an administrator canceling one person's
+ * registration without canceling the whole seminar) -- distinct from the cascade in
+ * lib/seminars/seminars.ts's updateSeminar, which cancels every registration at once. */
+export async function setAdminRegistrationStatus(registrationIdValue: unknown, statusValue: unknown): Promise<void> {
+  const actor = await requireSeminarAdministrator();
+  const registrationId = idSchema.safeParse(registrationIdValue);
+  if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
+  const status = typeof statusValue === 'string' ? statusValue.trim() : '';
+  if (!(REGISTRATION_STATUSES as readonly string[]).includes(status)) throw new SeminarRegistrationError('Choose a valid registration status.');
+  await client.begin(async (sql) => {
+    const [existing] = await sql<{ registration_status: string }[]>`select registration_status from idoc.seminar_registrations where id=${registrationId.data} for update`;
+    if (!existing) throw new SeminarRegistrationError('Registration not found.');
+    if (existing.registration_status === status) return;
+    if (status === 'canceled') await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where id=${registrationId.data}`;
+    else await sql`update idoc.seminar_registrations set registration_status=${status},canceled_at=null,updated_at=now() where id=${registrationId.data}`;
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
+      (${actor.id},'admin.seminar_registration.status_changed','seminar_registration',${String(registrationId.data)},
+      ${JSON.stringify({ registrationStatus: existing.registration_status })}::jsonb,${JSON.stringify({ registrationStatus: status })}::jsonb)`;
+  });
+}
+
+function isGuestEmailRaceViolation(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === '23505'
+    && (error as { constraint_name?: unknown }).constraint_name === 'seminar_registrations_seminar_guest_email_unique';
+}
+
+/** Lets an administrator edit a guest registration's own contact details and either registrant's
+ * chosen payment method -- the identity split (member vs. guest) itself is never editable here,
+ * since a registration's profileId/guestName+email pairing is fixed at creation (docs/02 §12). */
+export async function updateSeminarRegistrationDetails(registrationIdValue: unknown, fields: { guestEmail?: unknown; guestName?: unknown; paymentMethod?: unknown }): Promise<void> {
+  const actor = await requireSeminarAdministrator();
+  const registrationId = idSchema.safeParse(registrationIdValue);
+  if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
+  const requestedMethod = typeof fields.paymentMethod === 'string' ? fields.paymentMethod.trim() : '';
+  try {
+    await client.begin(async (sql) => {
+      const [existing] = await sql<{ guest_email: string | null; guest_name: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_name,payment_method_canonical_id,profile_id
+        from idoc.seminar_registrations where id=${registrationId.data} for update`;
+      if (!existing) throw new SeminarRegistrationError('Registration not found.');
+      // Leaving the payment method exactly as it already was is always allowed, even if an
+      // administrator has since disabled that method in Organization Settings -- only switching to
+      // a genuinely different method requires it to be currently enabled.
+      const paymentMethod = requestedMethod === existing.payment_method_canonical_id
+        ? requestedMethod : validatePaymentMethod(await listEnabledSeminarPaymentMethods(), requestedMethod);
+      if (existing.profile_id === null) {
+        const nameResult = guestNameSchema.safeParse(fields.guestName);
+        if (!nameResult.success) throw new SeminarRegistrationError("Enter the guest's full name.");
+        const emailResult = guestEmailSchema.safeParse(fields.guestEmail);
+        if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid guest email address.');
+        await sql`update idoc.seminar_registrations set guest_name=${nameResult.data},guest_email=${emailResult.data.toLowerCase()},
+          payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
+      } else {
+        await sql`update idoc.seminar_registrations set payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
+      }
+      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
+        (${actor.id},'admin.seminar_registration.details_updated','seminar_registration',${String(registrationId.data)},
+        ${JSON.stringify({ guestEmail: existing.guest_email, guestName: existing.guest_name, paymentMethod: existing.payment_method_canonical_id })}::jsonb,
+        ${JSON.stringify({ paymentMethod })}::jsonb)`;
+    });
+  } catch (error) {
+    if (isGuestEmailRaceViolation(error)) throw new SeminarRegistrationError('Another registration for this seminar already uses that email.');
+    throw error;
+  }
+}
+
+/** The seminar edit page's own registration counts -- distinct from listAdminAllSeminarRegistrations,
+ * which is paginated and would need every page fetched to total correctly. */
+export async function getSeminarRegistrationCounts(seminarIdValue: unknown): Promise<{ active: number; total: number }> {
   await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(seminarIdValue);
-  if (!seminarId.success) return { rows: [] };
+  if (!seminarId.success) return { active: 0, total: 0 };
+  const [row] = await client<{ active: number; total: number }[]>`select count(*) filter(where registration_status='registered')::int active,count(*)::int total
+    from idoc.seminar_registrations where seminar_id=${seminarId.data}`;
+  return row ?? { active: 0, total: 0 };
+}
+
+/** Seminars an administrator can filter the registrations roster by -- published only, per the
+ * Registrations page's own filter contract (a draft/canceled seminar isn't a meaningful facet
+ * option there even though its historical registrations still show up unfiltered). */
+export async function listPublishedSeminarsForRegistrationFilter() {
+  await requireSeminarAdministrator();
+  return client<{ id: number; title: string }[]>`select id,title from idoc.seminars where status='published' order by start_date desc`;
+}
+
+function registrationsWhere(input: Record<string, string | string[] | undefined>) {
   const firstValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
-  const registrationStatusValue = firstValue(input.registrationStatus);
-  const registrationStatus: string | null = REGISTRATION_STATUSES.includes(registrationStatusValue as never) ? (registrationStatusValue ?? null) : null;
-  const paymentStatusValue = firstValue(input.paymentStatus);
-  const paymentStatus: string | null = PAYMENT_STATUSES.includes(paymentStatusValue as never) ? (paymentStatusValue ?? null) : null;
+  const seminarIds = many(input.seminarId).map(Number).filter((value) => Number.isInteger(value) && value > 0);
+  const paymentStatuses = many(input.paymentStatus).filter((value) => (PAYMENT_STATUSES as readonly string[]).includes(value));
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
-  const rows = await client`select r.id,r.registration_status,r.payment_status,r.registered_at,r.canceled_at,r.paid_at,
-    p.id profile_id,coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email
-    from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
-    where r.seminar_id=${seminarId.data}
-    and (${registrationStatus}::text is null or r.registration_status=${registrationStatus})
-    and (${paymentStatus}::text is null or r.payment_status=${paymentStatus})
-    and (${search}='' or coalesce(p.first_name||' '||p.last_name,'') ilike ${`%${search}%`} or u.email ilike ${`%${search}%`})
-    order by r.registered_at desc`;
-  return { rows };
+  const fromValue = firstValue(input.from) ?? '';
+  const toValue = firstValue(input.to) ?? '';
+  const from = listDate(fromValue);
+  const to = listDate(toValue);
+  return { from, paymentStatuses, search, seminarIds, to };
+}
+
+/** The cross-seminar registrations roster (Admin Dashboard > Registrations): every registration,
+ * member or guest, searchable by registrant name/email and filterable by seminar, payment status,
+ * and registration date range -- the seminar-scoped table this superseded only ever showed one
+ * seminar's rows at a time. */
+export async function listAdminAllSeminarRegistrations(input: Record<string, string | string[] | undefined>) {
+  await requireSeminarAdministrator();
+  const page = listPage(input);
+  const limit = listPageSize(input);
+  const offset = (page - 1) * limit;
+  const { from, paymentStatuses, search, seminarIds, to } = registrationsWhere(input);
+  const order = listOrder(input, {
+    registered: 'r.registered_at', registrant: 'registrant_name', seminar: 's.title', status: 'r.payment_status',
+  }, 'registered', 'r.id');
+  const seminarWhere = seminarIds.length ? client`r.seminar_id in ${client(seminarIds)}` : client`true`;
+  const paymentStatusWhere = paymentStatuses.length ? client`r.payment_status in ${client(paymentStatuses)}` : client`true`;
+  const advancedWhere = advancedListWhere(input, { status: 'r.payment_status' }, PAYMENT_STATUSES);
+  const rows = await client`select r.id,r.registration_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
+    r.registered_at,r.canceled_at,r.paid_at,s.id seminar_id,s.title seminar_title,
+    coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,coalesce(u.email_display,u.email,r.guest_email) registrant_email,
+    (r.profile_id is null) is_guest,count(*) over()::int total_count
+    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
+    where (${seminarWhere}) and (${paymentStatusWhere})
+    and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
+    and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
+    and (${advancedWhere})
+    order by ${order} limit ${limit + 1} offset ${offset}`;
+  return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
+}
+
+export async function exportAllSeminarRegistrationsCsvRows(input: Record<string, string | string[] | undefined>) {
+  const actor = await requireSeminarAdministrator();
+  const { from, paymentStatuses, search, seminarIds, to } = registrationsWhere(input);
+  const seminarWhere = seminarIds.length ? client`r.seminar_id in ${client(seminarIds)}` : client`true`;
+  const paymentStatusWhere = paymentStatuses.length ? client`r.payment_status in ${client(paymentStatuses)}` : client`true`;
+  const advancedWhere = advancedListWhere(input, { status: 'r.payment_status' }, PAYMENT_STATUSES);
+  const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,
+    coalesce(u.email_display,u.email,r.guest_email) registrant_email,(r.profile_id is null) is_guest,
+    r.registration_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
+    r.registered_at,r.canceled_at,r.paid_at,
+    (select string_agg(pr.external_refund_id, ';' order by pr.requested_at) from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refund_ids,
+    (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
+    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
+    where (${seminarWhere}) and (${paymentStatusWhere})
+    and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
+    and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
+    and (${advancedWhere})
+    order by r.registered_at limit ${REGISTRATION_EXPORT_LIMIT + 1}`;
+  if (rows.length > REGISTRATION_EXPORT_LIMIT) throw new SeminarRegistrationError(`Export exceeds the safe limit of ${REGISTRATION_EXPORT_LIMIT} registrations. Narrow the filters and retry.`);
+  await client`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+    (${actor.id},'admin.seminar_registrations.exported','seminar_registration',${'all'},${JSON.stringify({ resultCount: rows.length })}::jsonb)`;
+  return rows;
+}
+
+export type AdminSeminarRegistrationRow = {
+  canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; guest_email: string | null; guest_name: string | null;
+  id: number; member_email: string | null; member_name: string | null; paid_at: Date | string | null; payment_method_canonical_id: string;
+  payment_reference: string | null; payment_status: PaymentStatus; profile_id: number | null; registered_at: Date | string;
+  registration_status: 'canceled' | 'registered'; seminar_id: number; seminar_title: string;
+};
+export async function getAdminSeminarRegistration(registrationIdValue: unknown): Promise<AdminSeminarRegistrationRow | null> {
+  await requireSeminarAdministrator();
+  const registrationId = idSchema.safeParse(registrationIdValue);
+  if (!registrationId.success) return null;
+  const [row] = await client<AdminSeminarRegistrationRow[]>`select r.id,r.seminar_id,s.title seminar_title,r.profile_id,
+    coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,r.guest_name,r.guest_email,
+    r.registration_status,r.payment_status,r.payment_method_canonical_id,r.payment_reference,r.expected_amount_cents,r.currency,
+    r.registered_at,r.canceled_at,r.paid_at
+    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
+    where r.id=${registrationId.data} limit 1`;
+  return row ?? null;
 }
 
 export async function exportSeminarRegistrationsCsvRows(seminarIdValue: unknown) {
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
-  const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,'') member_name,
-    coalesce(u.email_display,u.email) member_email,r.registration_status,r.payment_status,r.expected_amount_cents,r.currency,
+  const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,
+    coalesce(u.email_display,u.email,r.guest_email) registrant_email,(r.profile_id is null) is_guest,
+    r.registration_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at,
     (select string_agg(pr.external_refund_id, ';' order by pr.requested_at) from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refund_ids,
     (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
+    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
     where r.seminar_id=${seminarId.data} order by r.registered_at limit ${REGISTRATION_EXPORT_LIMIT + 1}`;
   if (rows.length > REGISTRATION_EXPORT_LIMIT) throw new SeminarRegistrationError(`Export exceeds the safe limit of ${REGISTRATION_EXPORT_LIMIT} registrations. Narrow the filters and retry.`);
   await client`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values

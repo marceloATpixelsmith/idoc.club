@@ -15,7 +15,7 @@ export async function registerForSeminarAction(_state: MemberSeminarState, formD
   let outcome: { paymentMethod: string; registrationId: number };
   try {
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-    outcome = await registerForSeminar(seminarId);
+    outcome = await registerForSeminar(seminarId, formData.get('paymentMethod'));
   } catch (error) {
     if (error instanceof Error && KNOWN_ERROR_NAMES.includes(error.name)) return { error: error.message };
     return { error: 'Registration could not be completed.' };

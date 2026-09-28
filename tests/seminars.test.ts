@@ -9,31 +9,45 @@ const registrationsSource = readFileSync('lib/seminars/registrations.ts', 'utf8'
 const checkoutSource = readFileSync('lib/seminars/checkout.ts', 'utf8');
 const adminActions = readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8');
 const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
-const migration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
+const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
+const originalMigration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
+const paymentMethodMigration = readFileSync('lib/db/migrations/0055_seminar_registration_payment_method.sql', 'utf8');
+const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday_dual_price_guest.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
+const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 
-test('seminar and registration states, and their documented length/value limits, are constrained in the migration', () => {
-  assert.match(migration, /"status" in \('draft', 'published', 'canceled'\)/);
-  assert.match(migration, /"registration_status" in \('registered', 'canceled'\)/);
-  assert.match(migration, /"payment_status" in \('unpaid', 'bank_transfer_pending', 'cash_pending', 'paid'\)/);
-  assert.match(migration, /char_length\("idoc"\."seminars"\."title"\) between 1 and 200/);
-  assert.match(migration, /char_length\("idoc"\."seminars"\."description"\) between 1 and 10000/);
-  assert.match(migration, /char_length\("idoc"\."seminars"\."location"\) between 1 and 2000/);
-  assert.match(migration, /"idoc"\."seminars"\."capacity" > 0/);
-  assert.match(migration, /"idoc"\."seminars"\."price_cents" >= 0/);
-  assert.match(migration, /"idoc"\."seminars"\."end_time" > "idoc"\."seminars"\."start_time"/);
+test('seminar and registration states, and their documented length limits, are constrained in the migration', () => {
+  assert.match(originalMigration, /"status" in \('draft', 'published', 'canceled'\)/);
+  assert.match(originalMigration, /"registration_status" in \('registered', 'canceled'\)/);
+  assert.match(originalMigration, /char_length\("idoc"\."seminars"\."title"\) between 1 and 200/);
+  assert.match(originalMigration, /char_length\("idoc"\."seminars"\."description"\) between 1 and 10000/);
+  assert.match(originalMigration, /char_length\("idoc"\."seminars"\."location"\) between 1 and 2000/);
+  assert.match(originalMigration, /"idoc"\."seminars"\."capacity" > 0/);
+});
+
+test('a seminar\'s start/end date and both its member and non-member prices are constrained non-negative and ordered in the migration', () => {
+  assert.match(multiDayMigration, /"end_date" > "start_date" OR \("end_date" = "start_date" AND "end_time" > "start_time"\)/);
+  assert.match(multiDayMigration, /"member_price_cents" >= 0/);
+  assert.match(multiDayMigration, /"non_member_price_cents" >= 0/);
+});
+
+test('a registration belongs to exactly one identity -- a real member profile, or a guest name+email, never both or neither -- enforced by a database check constraint and a partial unique index', () => {
+  assert.match(multiDayMigration, /CHECK \(\("profile_id" IS NOT NULL AND "guest_name" IS NULL AND "guest_email" IS NULL\) OR \("profile_id" IS NULL AND "guest_name" IS NOT NULL AND "guest_email" IS NOT NULL\)\)/);
+  assert.match(multiDayMigration, /CREATE UNIQUE INDEX "seminar_registrations_seminar_guest_email_unique" ON "idoc"\."seminar_registrations" USING btree \("seminar_id", lower\("guest_email"\)\) WHERE "profile_id" IS NULL/);
 });
 
 test('capacity and duplicate-registration races are enforced by a unique constraint and a row lock, not application memory alone', () => {
-  assert.match(migration, /CONSTRAINT "seminar_registrations_seminar_profile_unique" UNIQUE|CREATE UNIQUE INDEX "seminar_registrations_seminar_profile_unique"/);
+  assert.match(originalMigration, /CONSTRAINT "seminar_registrations_seminar_profile_unique" UNIQUE|CREATE UNIQUE INDEX "seminar_registrations_seminar_profile_unique"/);
   assert.match(registrationsSource, /for update/);
   assert.match(registrationsSource, /client\.begin\(async \(sql\) => \{/);
 });
 
-test('registration payment methods reference the same canonical seminar_payment_methods identities Organization Settings owns', () => {
-  assert.match(migration, /REFERENCES "idoc"."seminar_payment_methods"\("canonical_id"\)/);
-  assert.match(seminarsSource, /'online_stripe', 'bank_transfer', 'cash_event'/);
+test('the payment method a registrant chooses is a per-registration column referencing the same canonical seminar_payment_methods identities Organization Settings owns -- not a per-seminar admin choice', () => {
+  assert.match(paymentMethodMigration, /ADD COLUMN "payment_method_canonical_id"/);
+  assert.match(paymentMethodMigration, /REFERENCES "idoc"\."seminar_payment_methods"\("canonical_id"\)/);
+  assert.match(paymentMethodMigration, /ALTER TABLE "idoc"\."seminars" DROP COLUMN "payment_method_canonical_id"/);
+  assert.doesNotMatch(seminarsSource, /paymentMethodId|payment_method_canonical_id/);
 });
 
 test('every admin-facing seminar and registration function re-authorizes as an administrator server-side', () => {
@@ -48,10 +62,16 @@ test('member-facing registration functions derive the actor\'s own profile serve
   assert.doesNotMatch(registrationsSource, /input\.profileId|profileId: unknown/);
 });
 
-test('price and payment method become immutable once a seminar has any registration', () => {
-  assert.match(seminarsSource, /price cannot change once a seminar has registrations/i);
-  assert.match(seminarsSource, /payment method cannot change once a seminar has registrations/i);
+test('a guest can register without an account, identified only by name and email, validated against a real email schema', () => {
+  assert.match(registrationsSource, /export async function registerAsGuestForSeminar/);
+  assert.match(registrationsSource, /guestEmailSchema = z\.string\(\)\.trim\(\)\.email\(\)/);
+  assert.match(registrationsSource, /profile_id is null and lower\(guest_email\)/);
+});
+
+test('both prices become immutable once a seminar has any registration, and payment method is no longer a seminar-level concept at all', () => {
+  assert.match(seminarsSource, /Prices cannot change once a seminar has registrations/i);
   assert.match(seminarsSource, /totalCount > 0/);
+  assert.match(seminarsSource, /memberPriceCents !== existing\.member_price_cents \|\| fields\.nonMemberPriceCents !== existing\.non_member_price_cents/);
 });
 
 test('capacity cannot be reduced below the current count of active registrations', () => {
@@ -59,11 +79,16 @@ test('capacity cannot be reduced below the current count of active registrations
   assert.match(seminarsSource, /registration_status='registered'/);
 });
 
-test('seminar creation, edits, status changes, and registration/payment mutations are all audited', () => {
-  for (const action of ['admin.seminar.created', 'admin.seminar.edited', 'admin.seminar.status_changed']) {
+test('canceling a seminar cascades to cancel its still-active registrations, with its own audited action, distinct from a member canceling their own registration', () => {
+  assert.match(seminarsSource, /admin\.seminar\.registrations_canceled_by_cascade/);
+  assert.match(seminarsSource, /existing\.status !== 'canceled' && fields\.status === 'canceled'/);
+});
+
+test('seminar creation, edits, and registration/payment/status mutations are all audited', () => {
+  for (const action of ['admin.seminar.created', 'admin.seminar.edited']) {
     assert.match(seminarsSource, new RegExp(action.replaceAll('.', '\\.')));
   }
-  for (const action of ['member.seminar_registration.registered', 'member.seminar_registration.canceled', 'admin.seminar_registration.payment_marked_paid']) {
+  for (const action of ['member.seminar_registration.registered', 'guest.seminar_registration.registered', 'member.seminar_registration.canceled', 'admin.seminar_registration.payment_marked_paid', 'admin.seminar_registration.status_changed', 'admin.seminar_registration.details_updated']) {
     assert.match(registrationsSource, new RegExp(action.replaceAll('.', '\\.')));
   }
 });
@@ -71,19 +96,24 @@ test('seminar creation, edits, status changes, and registration/payment mutation
 test('every admin Server Action requires CSRF evidence before any mutation, directly or through the shared run() helper', () => {
   const runHelper = adminActions.match(/async function run\([\s\S]*?\n\}/)?.[0];
   assert.ok(runHelper); assert.match(runHelper as string, /requireCsrfToken\(/);
-  for (const name of ['createSeminarAction', 'updateSeminarAction', 'publishSeminarAction', 'cancelSeminarAction', 'revertSeminarToDraftAction', 'markSeminarRegistrationPaidAction']) {
+  for (const name of ['createSeminarAction', 'updateSeminarAction', 'recordManualSeminarPaymentAction', 'setAdminRegistrationStatusAction', 'updateSeminarRegistrationDetailsAction', 'refundSeminarRegistrationAction']) {
     const fn = adminActions.match(new RegExp(`export async function ${name}[\\s\\S]*?\\n\\}`))?.[0];
     assert.ok(fn, `${name} not found`);
     assert.ok(/requireCsrfToken\(/.test(fn as string) || /\brun\(/.test(fn as string), `${name} must call requireCsrfToken directly or via run()`);
   }
+  // The Quick Actions status-shortcut Server Actions this superseded must actually be gone, not just unused.
+  assert.doesNotMatch(adminActions, /publishSeminarAction|cancelSeminarAction|revertSeminarToDraftAction|markSeminarRegistrationPaidAction/);
 });
 
-test('every member Server Action requires CSRF evidence before any mutation', () => {
+test('every member and guest Server Action requires CSRF evidence before any mutation', () => {
   for (const name of ['registerForSeminarAction', 'cancelSeminarRegistrationAction']) {
     const fn = memberActions.match(new RegExp(`export async function ${name}[\\s\\S]*?\\n\\}`))?.[0];
     assert.ok(fn, `${name} not found`);
     assert.match(fn as string, /requireCsrfToken\(/);
   }
+  const guestFn = guestActions.match(/export async function registerAsGuestForSeminarAction[\s\S]*?\n\}/)?.[0];
+  assert.ok(guestFn, 'registerAsGuestForSeminarAction not found');
+  assert.match(guestFn as string, /requireCsrfToken\(/);
 });
 
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
@@ -91,12 +121,13 @@ test('seminar payments are classified separately from membership billing: the ch
   assert.match(checkoutSource, /kind: 'seminar_registration'/);
 });
 
-test('the CSV export route exposes only the documented columns and is BOM-prefixed for spreadsheet compatibility', () => {
-  assert.match(exportRoute, /toCsv\(rows, \['seminar_title', 'member_name', 'member_email', 'registration_status', 'payment_status', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'\]\)/);
-  // Either source spelling of the BOM (a literal embedded character, or a six-character JS unicode
-  // escape sequence spelling out code point 0xfeff -- the convention the other four admin CSV
-  // export routes use) is correct: both produce the same runtime character before Excel ever sees
-  // the response body.
+test('a guest checkout session is priced against the non-member fee and uses customer_email, never a managed billing-account Customer', () => {
+  assert.match(checkoutSource, /customer_email: email/);
+  assert.match(checkoutSource, /profile_id is null then s\.non_member_price_cents else s\.member_price_cents/);
+});
+
+test('the CSV export route exposes only the documented columns, including guest registrants, and is BOM-prefixed for spreadsheet compatibility', () => {
+  assert.match(exportRoute, /toCsv\(rows, \['seminar_title', 'registrant_name', 'registrant_email', 'is_guest', 'registration_status', 'payment_status', 'payment_method_canonical_id', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'\]\)/);
   const bom = String.fromCharCode(0xfeff);
   const escapeSequenceSpelling = '`' + String.fromCharCode(92, 117, 70, 69, 70, 70) + '${toCsv';
   assert.ok(exportRoute.includes(`\`${bom}$\{toCsv`) || exportRoute.includes(escapeSequenceSpelling), 'the response body must be BOM-prefixed for spreadsheet compatibility');
@@ -135,6 +166,15 @@ test('registrationDisplayLabel prioritizes Canceled over any stale payment statu
   assert.equal(registrationDisplayLabel('registered', 'unpaid'), 'Unpaid');
 });
 
+test('the seminar fieldset asks for "Directors and Application Details", multi-day start/end dates, dual member/non-member prices, and no payment method field', () => {
+  assert.match(seminarFieldset, /Directors and Application Details/);
+  assert.match(seminarFieldset, /name="startDate"/);
+  assert.match(seminarFieldset, /name="endDate"/);
+  assert.match(seminarFieldset, /name="memberPrice"/);
+  assert.match(seminarFieldset, /name="nonMemberPrice"/);
+  assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
+});
+
 test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /registrationDisplayLabel/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
@@ -151,12 +191,33 @@ test('the member Seminars page separates prominent current registrations, availa
   assert.match(memberPage, /const available/);
 });
 
-test('the admin edit page offers Publish, Cancel, and Move-to-draft quick actions, and a "Mark paid" control per unpaid registration', () => {
+test('the public seminar catalog shows both the member and non-member price, and offers both joining and true anonymous guest checkout', () => {
+  const publicPage = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
+  assert.match(publicPage, /PublicSeminarsCatalog/);
+  assert.match(memberPage, /export async function PublicSeminarsCatalog/);
+  assert.match(memberPage, /Members: .*Non-members:/);
+  assert.match(memberPage, /registerAsGuestForSeminarAction/);
+  assert.match(memberPage, /\/sign-up/);
+});
+
+test('the admin seminar edit page has no Quick Actions box and offers a "View registrations" and an icon-only "Download registrations" action instead', () => {
   const adminEditPage = readFileSync('app/(dashboard)/admin/seminars/[id]/page.tsx', 'utf8');
-  assert.match(adminEditPage, /publishSeminarAction/);
-  assert.match(adminEditPage, /cancelSeminarAction/);
-  assert.match(adminEditPage, /revertSeminarToDraftAction/);
-  assert.match(adminEditPage, /markSeminarRegistrationPaidAction/);
+  assert.doesNotMatch(adminEditPage, /Quick [Aa]ctions/);
+  assert.doesNotMatch(adminEditPage, /publishSeminarAction|cancelSeminarAction|revertSeminarToDraftAction|markSeminarRegistrationPaidAction/);
+  assert.doesNotMatch(adminEditPage, /id="registrations"/);
+  assert.match(adminEditPage, /seminars\/registrations\?seminarId=/);
+  assert.match(adminEditPage, /title="Download this seminar's registrations"/);
+});
+
+test('the admin Registrations page is a cross-seminar roster with search, seminar/payment-status filters, sort, and a download-all-filtered-results action', () => {
+  const registrationsPage = readFileSync('app/(dashboard)/admin/seminars/registrations/page.tsx', 'utf8');
+  const registrationsTable = readFileSync('app/(dashboard)/admin/seminars/registrations/registrations-table.tsx', 'utf8');
+  assert.match(registrationsPage, /listAdminAllSeminarRegistrations/);
+  assert.match(registrationsPage, /listPublishedSeminarsForRegistrationFilter/);
+  assert.match(registrationsTable, /DataTableSortList/);
+  assert.match(registrationsTable, /seminar-all-registrations/);
+  const navigation = readFileSync('components/admin-navigation.tsx', 'utf8');
+  assert.match(navigation, /\/admin\/seminars\/registrations/);
 });
 
 test('the admin seminar list page supports search and status filtering', () => {
@@ -173,7 +234,7 @@ test('the admin seminar table provides Dice UI date, sorting, pagination, and vi
   assert.match(page, /ResourceListPage/);
   for (const value of ['DataTableToolbar', 'DataTableSortList', 'pageSizeOptions', 'DateRangeFilter', 'table.getState().columnVisibility']) assert.match(table, new RegExp(value.replaceAll('(', '\\(').replaceAll(')', '\\)')));
   assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
-  assert.match(seminarsSource, /date: 's\.seminar_date'/);
+  assert.match(seminarsSource, /date: 's\.start_date'/);
 });
 
 test('Seminars is removed from the member dashboard and retained on the public website', () => {

@@ -56,44 +56,37 @@ async function requireSeminarAdministrator() {
 }
 
 type SeminarInput = {
-  capacity: unknown; description: unknown; endTime: unknown; location: unknown; paymentMethodId: unknown;
-  price: unknown; registrationDeadline: unknown; seminarDate: unknown; startTime: unknown; status: unknown;
-  timezone: unknown; title: unknown;
+  capacity: unknown; description: unknown; endDate: unknown; endTime: unknown; location: unknown;
+  memberPrice: unknown; nonMemberPrice: unknown; registrationDeadline: unknown; startDate: unknown;
+  startTime: unknown; status: unknown; timezone: unknown; title: unknown;
 };
 
 function validateFields(input: SeminarInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
-  const description = parse(descriptionSchema, input.description, 'Description is required and must be 10,000 characters or fewer.');
+  const description = parse(descriptionSchema, input.description, 'Directors and application details are required and must be 10,000 characters or fewer.');
   const location = parse(locationSchema, input.location, 'Location or meeting link is required and must be 2,000 characters or fewer.');
-  const seminarDate = parse(dateSchema, input.seminarDate, 'Enter a valid seminar date.');
+  const startDate = parse(dateSchema, input.startDate, 'Enter a valid start date.');
+  const endDate = parse(dateSchema, input.endDate, 'Enter a valid end date.');
   const startTime = parse(timeSchema, input.startTime, 'Enter a valid start time.');
   const endTime = parse(timeSchema, input.endTime, 'Enter a valid end time.');
-  if (endTime <= startTime) throw new SeminarValidationError('End time must be after start time.');
+  if (endDate < startDate || (endDate === startDate && endTime <= startTime)) {
+    throw new SeminarValidationError('The seminar must end after it starts.');
+  }
   const timezone = typeof input.timezone === 'string' ? input.timezone.trim() : '';
   if (!isValidIanaTimeZone(timezone)) throw new SeminarValidationError('Choose a valid timezone.');
   const capacity = parse(capacitySchema, input.capacity, 'Capacity must be a whole number of at least 1.');
-  const price = parse(priceSchema, input.price, 'Price must be zero or a positive amount.');
-  const priceCents = Math.round(price * 100);
+  const memberPrice = parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.');
+  const memberPriceCents = Math.round(memberPrice * 100);
+  const nonMemberPrice = parse(priceSchema, input.nonMemberPrice, 'Non-member price must be zero or a positive amount.');
+  const nonMemberPriceCents = Math.round(nonMemberPrice * 100);
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const deadlineIso = parse(isoDateTimeSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
   const registrationDeadline = parseDeadlineAsUtc(deadlineIso);
-  const startsAtUtc = zonedDateTimeToUtc(seminarDate, startTime, timezone);
+  const startsAtUtc = zonedDateTimeToUtc(startDate, startTime, timezone);
   if (registrationDeadline.getTime() > startsAtUtc.getTime()) {
     throw new SeminarValidationError('The registration deadline must be at or before the seminar start time.');
   }
-  const paymentMethodId = typeof input.paymentMethodId === 'string' ? input.paymentMethodId.trim() : '';
-  if (!['online_stripe', 'bank_transfer', 'cash_event'].includes(paymentMethodId)) {
-    throw new SeminarValidationError('Choose a valid payment method.');
-  }
-  return { capacity, description, endTime, location, paymentMethodId, priceCents, registrationDeadline, seminarDate, startTime, status, timezone, title };
-}
-
-/** Any Administrator (not only Super Admin) may read which seminar payment methods are currently
- * enabled to choose one for a seminar; only Organization Settings (Super Admin only) may change
- * which methods are enabled or edit Bank Transfer instructions. */
-export async function listEnabledSeminarPaymentMethods() {
-  await requireSeminarAdministrator();
-  return client<{ canonical_id: string; display_label: string }[]>`select canonical_id,display_label from idoc.seminar_payment_methods where enabled=true order by display_order`;
+  return { capacity, description, endDate, endTime, location, memberPriceCents, nonMemberPriceCents, registrationDeadline, startDate, startTime, status, timezone, title };
 }
 
 export async function listAdminSeminars(input: Record<string, string | string[] | undefined>) {
@@ -108,25 +101,26 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   const from = listDate(fromValue);
   const to = listDate(toValue);
   const order = listOrder(input, {
-    date: 's.seminar_date', title: 's.title', status: 's.status',
+    date: 's.start_date', title: 's.title', status: 's.status',
     registrations: '(select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
   }, 'date', 's.id');
   const advancedWhere = advancedListWhere(input, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select s.id,s.title,s.status,s.seminar_date,s.start_time,s.capacity,s.payment_method_canonical_id,count(*) over()::int total_count,
+  const rows = await client`select s.id,s.title,s.status,s.start_date,s.start_time,s.end_date,s.end_time,s.capacity,
+    s.member_price_cents,s.non_member_price_cents,count(*) over()::int total_count,
     (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
     from idoc.seminars s
     where (${statusWhere}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
-    and (${from}::date is null or s.seminar_date>=${from}::date) and (${to}::date is null or s.seminar_date<=${to}::date) and (${advancedWhere})
+    and (${from}::date is null or s.start_date>=${from}::date) and (${to}::date is null or s.start_date<=${to}::date) and (${advancedWhere})
     order by ${order} limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
 }
 
 export type AdminSeminarRow = {
-  capacity: number; created_at: Date; created_by_user_id: number; description: string; end_time: string; id: number;
-  location: string; payment_method_canonical_id: string; price_cents: number; registration_deadline: Date | string;
-  seminar_date: string; start_time: string; status: SeminarStatus; timezone: string; title: string; updated_at: Date; updated_by_user_id: number;
+  capacity: number; created_at: Date; created_by_user_id: number; description: string; end_date: string; end_time: string; id: number;
+  location: string; member_price_cents: number; non_member_price_cents: number; registration_deadline: Date | string;
+  start_date: string; start_time: string; status: SeminarStatus; timezone: string; title: string; updated_at: Date; updated_by_user_id: number;
 };
 export async function getAdminSeminar(value: unknown): Promise<AdminSeminarRow | null> {
   await requireSeminarAdministrator();
@@ -140,14 +134,12 @@ export async function createSeminar(input: SeminarInput) {
   const actor = await requireSeminarAdministrator();
   const fields = validateFields(input);
   return client.begin(async (sql) => {
-    const [enabledMethod] = await sql<{ enabled: boolean }[]>`select enabled from idoc.seminar_payment_methods where canonical_id=${fields.paymentMethodId} limit 1`;
-    if (!enabledMethod?.enabled) throw new SeminarValidationError('The selected payment method is not currently enabled in Organization Settings.');
     const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
-      (title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
-      values (${fields.title},${fields.description},${fields.seminarDate},${fields.startTime},${fields.endTime},${fields.timezone},${fields.location},${fields.capacity},${fields.priceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.paymentMethodId},${actor.id},${actor.id})
+      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
+      values (${fields.title},${fields.description},${fields.startDate},${fields.startTime},${fields.endDate},${fields.endTime},${fields.timezone},${fields.location},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
-      (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, paymentMethodId: fields.paymentMethodId, status: fields.status, title: fields.title })}::jsonb)`;
+      (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
     return row.id;
   });
 }
@@ -158,52 +150,43 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   const fields = validateFields(input);
   await client.begin(async (sql) => {
     const [existing] = await sql<{
-      capacity: number; payment_method_canonical_id: string; price_cents: number; status: SeminarStatus; title: string;
-    }[]>`select capacity,payment_method_canonical_id,price_cents,status,title from idoc.seminars where id=${id} for update`;
+      capacity: number; member_price_cents: number; non_member_price_cents: number; status: SeminarStatus; title: string;
+    }[]>`select capacity,member_price_cents,non_member_price_cents,status,title from idoc.seminars where id=${id} for update`;
     if (!existing) throw new SeminarValidationError('Seminar not found.');
     const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations where seminar_id=${id} and registration_status='registered'`;
     const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations where seminar_id=${id}`;
-    if (totalCount > 0) {
-      if (fields.paymentMethodId !== existing.payment_method_canonical_id) {
-        throw new SeminarValidationError('The payment method cannot change once a seminar has registrations.');
-      }
-      if (fields.priceCents !== existing.price_cents) {
-        throw new SeminarValidationError('The price cannot change once a seminar has registrations.');
-      }
-    } else if (fields.paymentMethodId !== existing.payment_method_canonical_id) {
-      const [enabledMethod] = await sql<{ enabled: boolean }[]>`select enabled from idoc.seminar_payment_methods where canonical_id=${fields.paymentMethodId} limit 1`;
-      if (!enabledMethod?.enabled) throw new SeminarValidationError('The selected payment method is not currently enabled in Organization Settings.');
+    if (totalCount > 0 && (fields.memberPriceCents !== existing.member_price_cents || fields.nonMemberPriceCents !== existing.non_member_price_cents)) {
+      throw new SeminarValidationError('Prices cannot change once a seminar has registrations.');
     }
     if (fields.capacity < activeCount) {
       throw new SeminarValidationError(`Capacity cannot be reduced below the ${activeCount} current active registration(s).`);
     }
-    await sql`update idoc.seminars set title=${fields.title},description=${fields.description},seminar_date=${fields.seminarDate},
-      start_time=${fields.startTime},end_time=${fields.endTime},timezone=${fields.timezone},location=${fields.location},
+    await sql`update idoc.seminars set title=${fields.title},description=${fields.description},start_date=${fields.startDate},
+      start_time=${fields.startTime},end_date=${fields.endDate},end_time=${fields.endTime},timezone=${fields.timezone},location=${fields.location},
       capacity=${fields.capacity},registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
+    // Canceling a seminar cascades: every still-active registration cancels with it, so the
+    // registrant's own record and the roster both reflect reality. Payment/refund handling stays a
+    // separate, explicit administrator decision (the existing refund action) -- never automatic here.
+    let canceledRegistrations = 0;
+    if (existing.status !== 'canceled' && fields.status === 'canceled') {
+      const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
+        where seminar_id=${id} and registration_status='registered' returning id`;
+      canceledRegistrations = canceled.length;
+      if (canceledRegistrations) {
+        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+          (${actor.id},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((row) => row.id) })}::jsonb)`;
+      }
+    }
     const changedFields = [
       existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
-      existing.capacity !== fields.capacity && 'capacity', existing.payment_method_canonical_id !== fields.paymentMethodId && 'paymentMethodId',
-      existing.price_cents !== fields.priceCents && 'priceCents',
+      existing.capacity !== fields.capacity && 'capacity', existing.member_price_cents !== fields.memberPriceCents && 'memberPriceCents',
+      existing.non_member_price_cents !== fields.nonMemberPriceCents && 'nonMemberPriceCents',
     ].filter(Boolean);
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar.edited','seminar',${String(id)},
-      ${JSON.stringify({ capacity: existing.capacity, paymentMethodId: existing.payment_method_canonical_id, priceCents: existing.price_cents, status: existing.status, title: existing.title })}::jsonb,
-      ${JSON.stringify({ changedFields, capacity: fields.capacity, paymentMethodId: fields.paymentMethodId, priceCents: fields.priceCents, status: fields.status, title: fields.title })}::jsonb)`;
-  });
-}
-
-export async function setSeminarStatus(idValue: unknown, statusValue: unknown) {
-  const actor = await requireSeminarAdministrator();
-  const id = parse(idSchema, idValue, 'Seminar not found.');
-  const status = parse(statusSchema, statusValue, 'Choose a valid publication status.');
-  await client.begin(async (sql) => {
-    const [existing] = await sql<{ status: SeminarStatus }[]>`select status from idoc.seminars where id=${id} for update`;
-    if (!existing) throw new SeminarValidationError('Seminar not found.');
-    if (existing.status === status) return;
-    await sql`update idoc.seminars set status=${status},updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
-      (${actor.id},'admin.seminar.status_changed','seminar',${String(id)},${JSON.stringify({ status: existing.status })}::jsonb,${JSON.stringify({ status })}::jsonb)`;
+      ${JSON.stringify({ capacity: existing.capacity, memberPriceCents: existing.member_price_cents, nonMemberPriceCents: existing.non_member_price_cents, status: existing.status, title: existing.title })}::jsonb,
+      ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
   });
 }
 
