@@ -202,14 +202,15 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
   if (!registration) return;
   // Grant credit only against this seminar's own current fee, matching the amount/currency
   // tamper check the membership one-time-fee path already performs (docs/04 §3).
-  const valid = registration.registrationStatus === 'registered' && registration.profileId === metadataProfileId &&
+  const profileId = registration.profileId;
+  const valid = profileId !== null && registration.registrationStatus === 'registered' && profileId === metadataProfileId &&
     registration.seminarId === metadataSeminarId && registration.checkoutSessionId === session.id &&
     registration.expectedAmountCents === registration.priceCents && session.amount_total === registration.priceCents &&
     session.metadata?.amountCents === String(registration.priceCents) && session.metadata?.currency === 'EUR' &&
     session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid' &&
     resolvedCustomerId(session.customer) === registration.customerId;
   if (!valid) {
-    await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
+    await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId,
       summary: 'A paid seminar Checkout Session did not match its active local registration.',
       details: { registrationId, sessionId: session.id, paymentIntentId } });
     return;
@@ -225,12 +226,14 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     action: 'seminar.payment_confirmed', afterJson: { amountCents: registration.priceCents, paymentIntentId, sessionId: session.id },
     entityId: String(registrationId), entityType: 'seminar_registration',
   });
-  const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-    .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
-  await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
-    kind: 'seminar.payment_confirmed', payload: { amountCents: registration.priceCents, firstName: contact?.firstName,
-      registrationId, to: contact?.email }, profileId: registration.profileId })
-    .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+  if (profileId !== null) {
+    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, profileId)).limit(1);
+    await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
+      kind: 'seminar.payment_confirmed', payload: { amountCents: registration.priceCents, firstName: contact?.firstName,
+        registrationId, to: contact?.email }, profileId })
+      .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+  }
 }
 
 async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, stripe: WebhookStripeClient) {
@@ -275,17 +278,18 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
   const full = amount === registration.priceCents;
   await tx.update(seminarRegistrations).set({ paymentStatus: status === 'failed' ? 'refund_failed' :
     status === 'succeeded' ? (full ? 'refunded' : 'partially_refunded') : 'paid', paymentStatusUpdatedAt: new Date(),
-    registrationStatus: status === 'succeeded' && full ? 'canceled' : undefined,
-    canceledAt: status === 'succeeded' && full ? new Date() : undefined, updatedAt: new Date() }).where(eq(seminarRegistrations.id, registration.id));
+    registrationStatus: status === 'succeeded' && full ? 'refunded' : undefined,
+    canceledAt: status === 'succeeded' && full ? new Date() : undefined, refundedAt: status === 'succeeded' && full ? new Date() : undefined, updatedAt: new Date() }).where(eq(seminarRegistrations.id, registration.id));
   if (!full || !existing) await tx.insert(reconciliationFindings).values({ kind: 'refund_conflict', profileId: registration.profileId,
     summary: full ? 'A Stripe-initiated seminar refund requires administrator review.' : 'Stripe reported a partial seminar refund, which is outside IDOC policy.',
     details: { amount, expectedAmount: registration.priceCents, refundId: refund.id } });
-  if (status === 'succeeded') {
+  if (status === 'succeeded' && registration.profileId !== null) {
+    const profileId = registration.profileId;
     const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
+      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, profileId)).limit(1);
     await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.refund_confirmed:${refund.id}`,
       kind: 'seminar.refund_confirmed', payload: { amountCents: amount, firstName: contact?.firstName,
-        refundId: refund.id, registrationId: registration.id, to: contact?.email }, profileId: registration.profileId })
+        refundId: refund.id, registrationId: registration.id, to: contact?.email }, profileId })
       .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
   }
 }

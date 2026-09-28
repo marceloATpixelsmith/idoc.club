@@ -303,3 +303,9 @@ Every authenticated Administrator or Super Admin action requiring fresh TOTP aut
 ### Completed payment-lifecycle slice
 
 Migration `0049` completes dynamic seminar Checkout concurrency, verified/idempotent webhook confirmation, distinct registration/payment/refund/dispute states, protected administrator full refunds, durable provider evidence, notifications, exports, and reconciliation. It also supplies the same protected full-refund initiation for eligible Stripe membership payments without changing prospective member cancellation. [10 Refund Policy](10-refund-policy.md) is authoritative; partial and automatic refunds remain out of scope.
+
+### Seminar registration identity, payment choice, and cancellation (September 2026)
+
+Seminar payment method is selected per registration from enabled organization-wide methods; seminars no longer own a payment-method or timezone field. Authenticated registrations remain linked exclusively through `profile_id`. Guest registrations instead store normalized contact fields and never create or infer a user/profile from email. Database constraints require exactly one identity model, and active registrations of either model consume capacity identically.
+
+Canceling a seminar retains it as `canceled`, cancels every active registration, and automatically requests full refunds only for confirmed Stripe payments through the durable idempotent refund ledger. A successful full Stripe refund produces registration and payment status `refunded`; offline payments retain their truthful payment status, and failed Stripe attempts remain canceled with `refund_failed` for administrative remediation.

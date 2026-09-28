@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, registrationDisplayLabel } from '../lib/seminars/status.ts';
-import { isValidIanaTimeZone, zonedDateTimeToUtc } from '../lib/seminars/timezone.ts';
 
 const seminarsSource = readFileSync('lib/seminars/seminars.ts', 'utf8');
 const registrationsSource = readFileSync('lib/seminars/registrations.ts', 'utf8');
 const checkoutSource = readFileSync('lib/seminars/checkout.ts', 'utf8');
 const adminActions = readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8');
 const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
-const migration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
+const migration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8') + readFileSync('lib/db/migrations/0055_seminar_registration_choices_and_guests.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 
@@ -33,7 +32,7 @@ test('capacity and duplicate-registration races are enforced by a unique constra
 
 test('registration payment methods reference the same canonical seminar_payment_methods identities Organization Settings owns', () => {
   assert.match(migration, /REFERENCES "idoc"."seminar_payment_methods"\("canonical_id"\)/);
-  assert.match(seminarsSource, /'online_stripe', 'bank_transfer', 'cash_event'/);
+  assert.match(registrationsSource, /'online_stripe', 'bank_transfer', 'cash_event'/);
 });
 
 test('every admin-facing seminar and registration function re-authorizes as an administrator server-side', () => {
@@ -48,9 +47,9 @@ test('member-facing registration functions derive the actor\'s own profile serve
   assert.doesNotMatch(registrationsSource, /input\.profileId|profileId: unknown/);
 });
 
-test('price and payment method become immutable once a seminar has any registration', () => {
+test('price becomes immutable once a seminar has any registration while payment method belongs to each registration', () => {
   assert.match(seminarsSource, /price cannot change once a seminar has registrations/i);
-  assert.match(seminarsSource, /payment method cannot change once a seminar has registrations/i);
+  assert.match(registrationsSource, /payment_method_canonical_id/);
   assert.match(seminarsSource, /totalCount > 0/);
 });
 
@@ -106,13 +105,6 @@ test('the CSV export route exposes only the documented columns and is BOM-prefix
 test('bank transfer instructions are rendered only from the pre-sanitized organization-wide field, re-sanitized again before render', () => {
   assert.match(memberPage, /sanitizeBankInstructions/);
   assert.match(memberPage, /dangerouslySetInnerHTML/);
-});
-
-test('zonedDateTimeToUtc correctly accounts for daylight saving time using only built-in Intl (no date-library dependency)', () => {
-  assert.equal(zonedDateTimeToUtc('2026-01-15', '10:00:00', 'Europe/Berlin').toISOString(), '2026-01-15T09:00:00.000Z');
-  assert.equal(zonedDateTimeToUtc('2026-07-15', '10:00:00', 'Europe/Berlin').toISOString(), '2026-07-15T08:00:00.000Z');
-  assert.equal(isValidIanaTimeZone('Europe/Berlin'), true);
-  assert.equal(isValidIanaTimeZone('Not/AZone'), false);
 });
 
 test('computeSeminarAvailability derives draft, canceled, past, closed, full, and open from status/deadline/capacity/end time', () => {

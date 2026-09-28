@@ -26,7 +26,7 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
   const card = (seminar: (typeof seminars)[number]) => <li className="card-midnight p-6" key={seminar.id}>
     <h3 className="text-xl">{seminar.title}</h3>
     {seminarMeta(seminar)}
-    <div className="mt-3"><SeminarForm action={registerForSeminarAction} pendingLabel="Registering" submitLabel="Register"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div>
+    <div className="mt-3"><SeminarForm action={registerForSeminarAction} pendingLabel="Registering" submitLabel="Register"><input name="seminarId" type="hidden" value={seminar.id} /><fieldset className="space-y-2"><legend className="text-sm font-medium">Payment method</legend>{[['online_stripe','Online'],['bank_transfer','Bank Transfer'],['cash_event','Cash at Event']].map(([value,label]) => <label className="flex gap-2 text-sm" key={value}><input name="paymentMethod" required type="radio" value={value} />{label}</label>)}</fieldset></SeminarForm></div>
   </li>;
 
   return <section className="mt-12 border-t border-border pt-10" aria-labelledby="available-seminars-heading">

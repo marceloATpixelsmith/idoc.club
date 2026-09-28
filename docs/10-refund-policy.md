@@ -52,3 +52,7 @@ If Stripe reports a refund, dispute, or chargeback that does not match the local
 The refund acceptance evidence is mapped by `docs/27-stripe-payment-acceptance-gate.json`. Its
 repository checks must stay executable and unskipped; an actual hosted provider run remains required
 before release and cannot be replaced by a source-code assertion or a manually inserted final row.
+
+### Administrator-canceled seminars
+
+The general rule above is superseded when an administrator cancels the seminar itself. All active registrations stop consuming capacity immediately. Confirmed Stripe payments are submitted for a full refund using the durable refund attempt and idempotency-key workflow. Provider-confirmed success sets both registration and payment status to `refunded`; a provider failure leaves registration status `canceled` and payment status `refund_failed`. Bank Transfer and Cash registrations are canceled without claiming an offline refund, preserving pending or paid payment state. Repeating cancellation is safe and retries only recoverable failed Stripe attempts; succeeded attempts are never duplicated.

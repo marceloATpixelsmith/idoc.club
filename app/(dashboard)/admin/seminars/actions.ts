@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
-import { createSeminar, setSeminarStatus, updateSeminar } from '@/lib/seminars/seminars';
+import { cancelSeminar, createSeminar, getAdminSeminar, setSeminarStatus, updateSeminar } from '@/lib/seminars/seminars';
 import { markRegistrationPaymentReceived } from '@/lib/seminars/registrations';
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
@@ -15,9 +15,9 @@ export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; succ
 function seminarFields(formData: FormData) {
   return {
     capacity: formData.get('capacity'), description: formData.get('description'), endTime: formData.get('endTime'),
-    location: formData.get('location'), paymentMethodId: formData.get('paymentMethodId'), price: formData.get('price'),
+    location: formData.get('location'), price: formData.get('price'),
     registrationDeadline: formData.get('registrationDeadline'), seminarDate: formData.get('seminarDate'),
-    startTime: formData.get('startTime'), status: formData.get('status'), timezone: formData.get('timezone'), title: formData.get('title'),
+    startTime: formData.get('startTime'), status: formData.get('status'), title: formData.get('title'),
   };
 }
 
@@ -48,7 +48,17 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
 
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar saved.', `/admin/seminars/${id}`);
+  return run(formData, async () => {
+    const fields = seminarFields(formData);
+    if (fields.status === 'canceled') {
+      const existing = await getAdminSeminar(id);
+      if (!existing) throw new Error('Seminar not found.');
+      await updateSeminar(id, { ...fields, status: existing.status });
+      await cancelSeminar(id);
+      return;
+    }
+    await updateSeminar(id, fields);
+  }, 'Seminar saved.', `/admin/seminars/${id}`);
 }
 
 export async function publishSeminarAction(_state: AdminSeminarState, formData: FormData) {
@@ -56,9 +66,19 @@ export async function publishSeminarAction(_state: AdminSeminarState, formData: 
   return run(formData, () => setSeminarStatus(id, 'published'), 'Seminar published.', `/admin/seminars/${id}`);
 }
 
-export async function cancelSeminarAction(_state: AdminSeminarState, formData: FormData) {
+export async function cancelSeminarAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
   const id = formData.get('id');
-  return run(formData, () => setSeminarStatus(id, 'canceled'), 'Seminar canceled.', `/admin/seminars/${id}`);
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const result = await cancelSeminar(id);
+    revalidatePath(`/admin/seminars/${id}`);
+    revalidatePath('/seminars');
+    if (result.failedRefunds > 0) return { error: `Seminar canceled. ${result.failedRefunds} Stripe refund(s) require administrator retry.` };
+    return { success: 'Seminar canceled and all applicable refunds completed.' };
+  } catch (error) {
+    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
+    return { error: 'The seminar could not be canceled.' };
+  }
 }
 
 export async function revertSeminarToDraftAction(_state: AdminSeminarState, formData: FormData) {
