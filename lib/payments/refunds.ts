@@ -47,7 +47,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
       await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
         refunded_at=now(),updated_at=now() where id=${request.id}`;
       if (status !== 'succeeded') await sql`update idoc.payment_refunds set refunded_at=null where id=${request.id}`;
-      await sql`update idoc.seminar_registrations set registration_status=${status === 'succeeded' ? 'refunded' : 'canceled'},canceled_at=coalesce(canceled_at,now()),refunded_at=${status === 'succeeded' ? new Date() : null},
+      await sql`update idoc.seminar_registrations set registration_status=${status === 'succeeded' ? 'refunded' : 'canceled'},canceled_at=coalesce(canceled_at,now()),refunded_at=${status === 'succeeded' ? new Date().toISOString() : null},
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
     });
@@ -66,7 +66,6 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
-    console.error('seminar refund settlement failed', { registrationId, error });
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
     await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
