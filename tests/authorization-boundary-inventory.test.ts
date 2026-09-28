@@ -123,6 +123,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
   'app/api/cron/seminar-cancellation-resolution/route.ts': 'shared-secret-header',
+  'app/api/diagnostics/sentry-test/route.ts': 'staging-only-no-data-access',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
   'app/api/brevo/webhook/route.ts': 'shared-secret-query-param',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
