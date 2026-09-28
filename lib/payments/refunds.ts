@@ -5,7 +5,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { getStripeServerClient } from './stripe-client';
 
 export class RefundError extends Error { constructor(message: string) { super(message); this.name = 'RefundError'; } }
@@ -65,7 +65,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
       try {
         await sendTransactionalEmail({
           html: renderTransactionalEmail({
-            bodyHtml: `<p>Hello ${row.first_name ?? ''},</p><p>Your seminar refund has been processed.</p>`,
+            bodyHtml: `<p>Hello ${escapeHtml(row.first_name ?? '')},</p><p>Your seminar refund has been processed.</p>`,
             heading: 'Seminar refund confirmed',
           }),
           subject: 'Your IDOC seminar refund', to: row.email,

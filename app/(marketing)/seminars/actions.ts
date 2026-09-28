@@ -2,25 +2,42 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
-import { requireCsrfToken } from '@/lib/security/csrf';
-import { registerAsGuestForSeminar } from '@/lib/seminars/registrations';
+import { z } from 'zod';
+import { validatedAction, type ActionState } from '@/lib/auth/middleware';
+import { verifyTurnstile } from '@/lib/auth/turnstile';
+import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
-export type GuestSeminarState = { error?: string; success?: string };
-const KNOWN_ERROR_NAMES = ['CsrfError', 'SeminarRegistrationError'];
+export type GuestSeminarState = ActionState;
 
-/** The anonymous, no-account seminar registration path -- reuses requireCsrfToken's existing
- * pre-authentication support (see sign-up/actions.ts's own null session/subject calls) rather than
- * the multi-step pending-nonce variant, since this is a single-step form. */
-export async function registerAsGuestForSeminarAction(_state: GuestSeminarState, formData: FormData): Promise<GuestSeminarState> {
-  const seminarId = formData.get('seminarId');
+const guestSeminarSchema = z.object({
+  email: z.string().trim().email('Enter a valid email address.').max(255),
+  name: z.string().trim().min(1, 'Enter your full name.').max(200),
+  paymentMethod: z.string().min(1, 'Choose a payment method.'),
+  seminarId: z.string().min(1, 'Seminar not found.'),
+  turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
+});
+
+/** The anonymous, no-account seminar registration path -- reuses validatedAction's existing
+ * pre-authentication CSRF support (null session/subject, see sign-up/actions.ts) plus the same
+ * Turnstile + per-email/per-origin rate limit every other anonymous write/email surface in this app
+ * requires (lib/(marketing)/contact/actions.ts). Without it, an anonymous caller with nothing but a
+ * CSRF token could reserve unlimited seats under distinct emails and trigger unlimited outbound
+ * confirmation email with no account to hold accountable. */
+export const registerAsGuestForSeminarAction = validatedAction(guestSeminarSchema, async ({ email, name, paymentMethod, seminarId, turnstileToken }) => {
+  const origin = await requestOrigin();
+  if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
+    return { error: 'Verification challenge failed. Please try again.' };
+  }
+  if (!(await checkRateLimit('seminar_guest_registration', email, origin))) {
+    return { error: 'Too many attempts. Please try again in a few minutes.' };
+  }
   let outcome: { paymentMethod: string; registrationId: number };
   try {
-    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-    outcome = await registerAsGuestForSeminar(seminarId, formData.get('name'), formData.get('email'), formData.get('paymentMethod'));
+    outcome = await registerAsGuestForSeminar(seminarId, name, email, paymentMethod);
   } catch (error) {
-    if (error instanceof Error && KNOWN_ERROR_NAMES.includes(error.name)) return { error: error.message };
+    if (error instanceof SeminarRegistrationError) return { error: error.message };
     return { error: 'Registration could not be completed.' };
   }
   revalidatePath('/seminars');
@@ -32,4 +49,4 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
     return { error: error instanceof Error ? error.message : 'Payment could not be started.' };
   }
   redirect(checkoutUrl);
-}
+});

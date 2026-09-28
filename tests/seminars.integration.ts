@@ -9,8 +9,8 @@ import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
 import {
   cancelOwnRegistration, exportSeminarRegistrationsCsvRows, getSeminarPaymentMethodInstructions,
   listAdminAllSeminarRegistrations, listCurrentSeminarsForMember, listPastSeminarsForMember,
-  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, SeminarRegistrationError,
-  updateSeminarRegistrationDetails,
+  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, setAdminRegistrationStatus,
+  SeminarRegistrationError, updateSeminarRegistrationDetails,
 } from '../lib/seminars/registrations.ts';
 import { createSeminar, getAdminSeminar, listAdminSeminars, SeminarValidationError, updateSeminar } from '../lib/seminars/seminars.ts';
 import {
@@ -219,6 +219,53 @@ test('an administrator can edit a registration\'s guest details without being fo
   assert.equal(row.payment_method_canonical_id, 'bank_transfer', 'the unchanged, since-disabled payment method must be preserved, not silently replaced');
   // Switching to a *different* method that is also disabled must still be rejected.
   await assert.rejects(asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestName: 'Jamie R. Guest', paymentMethod: 'cash_event' })), SeminarRegistrationError);
+});
+
+test('recording a manual payment is rejected while a registration has an open Stripe checkout session, so the registrant cannot still complete it and be charged a second time', async () => {
+  const admin = await adminUser();
+  const { user } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id);
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
+  await sql`update idoc.seminar_registrations set stripe_checkout_session_id='cs_open_fixture',checkout_status='open',payment_status='pending' where id=${registrationId}`;
+  const stillOpenClient = { checkout: { sessions: { retrieve: async () => ({ status: 'open' }) } } };
+  await assert.rejects(asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, stillOpenClient)), SeminarRegistrationError);
+  const [stillPending] = await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(stillPending.payment_status, 'pending');
+  // The local checkout_status column only updates when createSeminarCheckoutSession is revisited, so
+  // an abandoned session that the registrant never came back to would otherwise stay 'open' forever
+  // and permanently block a legitimate manual payment -- recordManualSeminarPayment must refresh it
+  // against Stripe itself rather than trusting that possibly-stale local column.
+  const expiredClient = { checkout: { sessions: { retrieve: async () => ({ status: 'expired' }) } } };
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, expiredClient));
+  const [paid] = await sql`select checkout_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(paid.payment_status, 'paid');
+  assert.equal(paid.checkout_status, 'expired', 'the refreshed status must be persisted, not just used in-memory for this one decision');
+});
+
+test('reactivating a canceled registration re-enforces the seminar\'s open/deadline/capacity gate, the same as a brand-new registration', async () => {
+  const admin = await adminUser();
+  const { user: first } = await paidMember();
+  const { user: second } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id, { capacity: 1 });
+  const { registrationId } = await asMember(first.id, () => registerForSeminar(seminarId, 'online_stripe'));
+  await asMember(first.id, () => cancelOwnRegistration(seminarId));
+  await asMember(second.id, () => registerForSeminar(seminarId, 'online_stripe'));
+  // The seminar (capacity 1) is now full with the second member's active registration -- reactivating
+  // the first member's canceled row must not be allowed to exceed that capacity.
+  await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationStatus(registrationId, 'registered')), /full/);
+  const [stillCanceled] = await sql`select registration_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(stillCanceled.registration_status, 'canceled');
+  // Canceling the seminar itself must also block reactivation of any of its registrations.
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ capacity: 1, status: 'canceled' })));
+  await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationStatus(registrationId, 'registered')), /not open for registration/);
+});
+
+test('a guest\'s name is stored exactly as submitted -- HTML escaping happens only at email-render time (see tests/seminars.test.ts)', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { memberPrice: '10.00', nonMemberPrice: '10.00' });
+  const { registrationId } = await registerAsGuestForSeminar(seminarId, '<script>evil</script>', 'jamie.guest@example.test', 'bank_transfer');
+  const [row] = await sql`select guest_name from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(row.guest_name, '<script>evil</script>');
 });
 
 test('an administrator cannot change either price once a seminar has any registration', async () => {

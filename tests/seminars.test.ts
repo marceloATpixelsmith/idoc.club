@@ -111,9 +111,17 @@ test('every member and guest Server Action requires CSRF evidence before any mut
     assert.ok(fn, `${name} not found`);
     assert.match(fn as string, /requireCsrfToken\(/);
   }
-  const guestFn = guestActions.match(/export async function registerAsGuestForSeminarAction[\s\S]*?\n\}/)?.[0];
-  assert.ok(guestFn, 'registerAsGuestForSeminarAction not found');
-  assert.match(guestFn as string, /requireCsrfToken\(/);
+  // registerAsGuestForSeminarAction is wrapped in validatedAction, which enforces requireCsrfToken
+  // itself (lib/auth/middleware.ts) before this action's own callback ever runs.
+  assert.match(guestActions, /export const registerAsGuestForSeminarAction = validatedAction\(/);
+});
+
+test('the anonymous guest seminar registration action is gated by Turnstile and a per-email/per-origin rate limit, the same anonymous-write pattern the public contact form uses', () => {
+  assert.match(guestActions, /verifyTurnstile\(turnstileToken, origin, 'seminar_guest_registration'\)/);
+  assert.match(guestActions, /checkRateLimit\('seminar_guest_registration', email, origin\)/);
+  const guestForm = readFileSync('components/seminars/guest-registration-form.tsx', 'utf8');
+  assert.match(guestForm, /TurnstileWidget/);
+  assert.match(guestForm, /name="turnstileToken"/);
 });
 
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
@@ -124,6 +132,34 @@ test('seminar payments are classified separately from membership billing: the ch
 test('a guest checkout session is priced against the non-member fee and uses customer_email, never a managed billing-account Customer', () => {
   assert.match(checkoutSource, /customer_email: email/);
   assert.match(checkoutSource, /profile_id is null then s\.non_member_price_cents else s\.member_price_cents/);
+});
+
+test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
+  assert.match(registrationsSource, /escapeHtml\(name\)/);
+  assert.match(registrationsSource, /escapeHtml\(seminarTitle\)/);
+  const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
+  assert.match(webhookSource, /escapeHtml\(registration\.guestName \?\? ''\)/g);
+  assert.equal(webhookSource.match(/escapeHtml\(registration\.guestName \?\? ''\)/g)?.length, 2, 'both the payment-confirmed and refund-confirmed guest emails must escape the guest name');
+  assert.match(refundsSource, /escapeHtml\(row\.first_name \?\? ''\)/);
+});
+
+test('recording a manual payment is refused while a registration has an open Stripe checkout session, to prevent a double charge', () => {
+  assert.match(registrationsSource, /checkoutStatus === 'open'/);
+});
+
+test('reactivating a canceled registration re-runs the seminar open\/deadline\/capacity gate rather than skipping it, and acquires the seminar lock before the registration\'s own lock to match registerForSeminar\'s lock order', () => {
+  const fn = registrationsSource.match(/export async function setAdminRegistrationStatus[\s\S]*?\n\}/)?.[0];
+  assert.ok(fn, 'setAdminRegistrationStatus not found');
+  const body = fn as string;
+  assert.match(body, /requireSeminarOpenForRegistration\(sql, peek\.seminar_id\)/);
+  const seminarLockIndex = body.indexOf('requireSeminarOpenForRegistration(sql, peek.seminar_id)');
+  const registrationLockIndex = body.indexOf('for update`');
+  assert.ok(seminarLockIndex < registrationLockIndex, 'the seminar lock must be acquired before the registration row is locked "for update"');
+});
+
+test('recording a manual payment refreshes a stale, locally-open Stripe checkout status against Stripe itself rather than trusting it forever', () => {
+  assert.match(registrationsSource, /checkout\.sessions\.retrieve\(existing\.stripe_checkout_session_id\)/);
 });
 
 test('the CSV export route exposes only the documented columns, including guest registrants, and is BOM-prefixed for spreadsheet compatibility', () => {
@@ -175,6 +211,13 @@ test('the seminar fieldset asks for "Directors and Application Details", multi-d
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
 });
 
+test('a locked (disabled) price input still submits its value via a hidden mirror field, so editing a seminar with registrations never fails price validation', () => {
+  const memberPriceBlock = seminarFieldset.match(/id="memberPrice"[\s\S]*?<\/div>/)?.[0];
+  const nonMemberPriceBlock = seminarFieldset.match(/id="nonMemberPrice"[\s\S]*?<\/div>/)?.[0];
+  assert.ok(memberPriceBlock && /type="hidden" value=\{\(seminar\.member_price_cents/.test(memberPriceBlock), 'memberPrice needs a hidden fallback for when the visible input is disabled');
+  assert.ok(nonMemberPriceBlock && /type="hidden" value=\{\(seminar\.non_member_price_cents/.test(nonMemberPriceBlock), 'nonMemberPrice needs a hidden fallback for when the visible input is disabled');
+});
+
 test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /registrationDisplayLabel/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
@@ -196,7 +239,7 @@ test('the public seminar catalog shows both the member and non-member price, and
   assert.match(publicPage, /PublicSeminarsCatalog/);
   assert.match(memberPage, /export async function PublicSeminarsCatalog/);
   assert.match(memberPage, /Members: .*Non-members:/);
-  assert.match(memberPage, /registerAsGuestForSeminarAction/);
+  assert.match(memberPage, /GuestRegistrationForm/);
   assert.match(memberPage, /\/sign-up/);
 });
 

@@ -6,8 +6,9 @@ import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } 
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
-import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
 
 const idSchema = z.coerce.number().int().positive();
@@ -239,7 +240,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameVal
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
-        bodyHtml: `<p>Hello ${name},</p><p>Your registration for <strong>${seminarTitle}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
+        bodyHtml: `<p>Hello ${escapeHtml(name)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
         heading: 'Seminar registration received',
       }),
       subject: 'Your IDOC seminar registration', to: email,
@@ -265,11 +266,14 @@ export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<vo
   });
 }
 
+type ManualPaymentStripeClient = { checkout: { sessions: { retrieve?: (id: string) => Promise<{ status?: string | null }> } } };
+
 /** Manually confirms a bank-transfer/cash payment (Stripe payments are marked paid automatically by
  * the webhook and never go through here) -- records which method was actually used (it may differ
  * from what the registrant originally selected) and an optional reference note, mirroring the
  * evidence trail lib/payments/manual-payments.ts keeps for membership payments. */
-export async function recordManualSeminarPayment(registrationIdValue: unknown, methodValue: unknown, referenceValue: unknown): Promise<void> {
+export async function recordManualSeminarPayment(registrationIdValue: unknown, methodValue: unknown, referenceValue: unknown, testStripeClient?: ManualPaymentStripeClient): Promise<void> {
+  if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const actor = await requireSeminarAdministrator();
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
@@ -277,9 +281,30 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
   if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Bank Transfer or Cash.');
   const reference = typeof referenceValue === 'string' && referenceValue.trim() ? referenceValue.trim().slice(0, 1000) : null;
   await client.begin(async (sql) => {
-    const [existing] = await sql<{ payment_status: PaymentStatus }[]>`select payment_status from idoc.seminar_registrations where id=${registrationId.data} for update`;
+    const [existing] = await sql<{ checkout_status: string | null; payment_status: PaymentStatus; stripe_checkout_session_id: string | null }[]>`select payment_status,checkout_status,stripe_checkout_session_id from idoc.seminar_registrations where id=${registrationId.data} for update`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');
     if (existing.payment_status === 'paid') return;
+    // A registrant with an open Stripe Checkout Session can still complete it after an administrator
+    // records a manual payment here -- the webhook then skips its own update because the local status
+    // is already 'paid', silently double-charging with no local record of the Stripe payment to
+    // refund. The local checkout_status only ever updates when createSeminarCheckoutSession is
+    // revisited, so an abandoned session (never expired against, since the registrant never came back)
+    // would otherwise stay 'open' forever and permanently block a legitimate manual payment -- refresh
+    // it against Stripe itself here rather than trusting the possibly-stale local column.
+    let checkoutStatus = existing.checkout_status;
+    if (checkoutStatus === 'open' && existing.stripe_checkout_session_id) {
+      // Resolved lazily, and only when a locally-open session actually needs checking, so a cash/bank-
+      // transfer registration (which never had a Stripe session) never requires Stripe configuration.
+      const stripe = testStripeClient ?? (getStripeServerClient() as ManualPaymentStripeClient);
+      if (stripe.checkout.sessions.retrieve) {
+        const session = await stripe.checkout.sessions.retrieve(existing.stripe_checkout_session_id);
+        checkoutStatus = session.status === 'open' ? 'open' : session.status === 'expired' ? 'expired' : 'superseded';
+        if (checkoutStatus !== 'open') {
+          await sql`update idoc.seminar_registrations set checkout_status=${checkoutStatus},updated_at=now() where id=${registrationId.data}`;
+        }
+      }
+    }
+    if (checkoutStatus === 'open') throw new SeminarRegistrationError('This registration has an open Stripe checkout session. Wait for it to expire, or ask the registrant to complete or abandon it, before recording a manual payment.');
     await sql`update idoc.seminar_registrations set payment_status='paid',payment_method_canonical_id=${method},payment_reference=${reference},
       paid_at=now(),marked_paid_by_user_id=${actor.id},payment_status_updated_at=now(),updated_at=now() where id=${registrationId.data}`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
@@ -298,11 +323,29 @@ export async function setAdminRegistrationStatus(registrationIdValue: unknown, s
   const status = typeof statusValue === 'string' ? statusValue.trim() : '';
   if (!(REGISTRATION_STATUSES as readonly string[]).includes(status)) throw new SeminarRegistrationError('Choose a valid registration status.');
   await client.begin(async (sql) => {
+    // An unlocked peek first, so a reactivation's seminar lock (below) can be acquired before this
+    // registration's own lock -- the same order registerForSeminar/registerAsGuestForSeminar already
+    // use. Taking them in the opposite order (registration first, seminar second, as an earlier
+    // version of this function did) would deadlock against a concurrent registration attempt on the
+    // same seminar. The actual correctness gate is still the locked re-read just below, so staleness
+    // here has no effect beyond possibly taking (and safely releasing) an unnecessary seminar lock.
+    const [peek] = await sql<{ registration_status: string; seminar_id: number }[]>`select registration_status,seminar_id from idoc.seminar_registrations where id=${registrationId.data}`;
+    if (!peek) throw new SeminarRegistrationError('Registration not found.');
+    // Reactivating a canceled registration must clear the same seminar-status/deadline/capacity gate a
+    // brand-new registration goes through -- otherwise an administrator could reactivate one after the
+    // seminar was itself canceled (the cascade in updateSeminar) or after other registrations already
+    // filled its capacity, producing an active registration for a canceled or over-capacity seminar.
+    if (peek.registration_status === 'canceled' && status === 'registered') {
+      await requireSeminarOpenForRegistration(sql, peek.seminar_id);
+    }
     const [existing] = await sql<{ registration_status: string }[]>`select registration_status from idoc.seminar_registrations where id=${registrationId.data} for update`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');
     if (existing.registration_status === status) return;
-    if (status === 'canceled') await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where id=${registrationId.data}`;
-    else await sql`update idoc.seminar_registrations set registration_status=${status},canceled_at=null,updated_at=now() where id=${registrationId.data}`;
+    if (status === 'canceled') {
+      await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where id=${registrationId.data}`;
+    } else {
+      await sql`update idoc.seminar_registrations set registration_status=${status},canceled_at=null,updated_at=now() where id=${registrationId.data}`;
+    }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar_registration.status_changed','seminar_registration',${String(registrationId.data)},
       ${JSON.stringify({ registrationStatus: existing.registration_status })}::jsonb,${JSON.stringify({ registrationStatus: status })}::jsonb)`;
