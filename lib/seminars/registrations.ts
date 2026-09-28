@@ -109,6 +109,8 @@ export async function registerForSeminar(seminarIdValue: unknown, paymentMethodV
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
   return client.begin(async (sql) => {
+    const [enabledMethod] = await sql<{ canonical_id: string }[]>\`select canonical_id from idoc.seminar_payment_methods where canonical_id=${paymentMethod} and enabled=true limit 1\`;
+    if (!enabledMethod) throw new SeminarRegistrationError('That payment method is not currently available.');
     const [seminar] = await sql<{
       capacity: number; ends_at: Date; registration_deadline: Date; status: string;
     }[]>`select capacity,registration_deadline,status,
