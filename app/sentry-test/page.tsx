@@ -12,8 +12,9 @@ export default function SentryVerificationPage() {
     }
   }
 
-  function testBrowser() {
+  async function testBrowser() {
     setStatus('Browser test clicked; sending…');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     requireStagingHost();
     const error = new Error('IDOC_SENTRY_BROWSER_TEST');
     Sentry.captureException(error, { tags: { idoc_diagnostic: 'sentry-browser-test' } });
