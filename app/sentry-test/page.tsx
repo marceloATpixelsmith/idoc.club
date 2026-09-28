@@ -7,12 +7,14 @@ export default function SentryVerificationPage() {
   const [status, setStatus] = useState('');
 
   function requireStagingHost() {
-    if (window.location.hostname !== 'redesign.idoc.club' && !window.location.hostname.endsWith('.vercel.app')) {
+    if (window.location.hostname !== 'staging.idoc.club' && !window.location.hostname.endsWith('.vercel.app')) {
       throw new Error('Sentry verification is disabled on this host');
     }
   }
 
-  function testBrowser() {
+  async function testBrowser() {
+    setStatus('Browser test clicked; sending…');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     requireStagingHost();
     const error = new Error('IDOC_SENTRY_BROWSER_TEST');
     Sentry.captureException(error, { tags: { idoc_diagnostic: 'sentry-browser-test' } });
@@ -20,6 +22,7 @@ export default function SentryVerificationPage() {
   }
 
   async function testServer() {
+    setStatus('Server test clicked; sending…');
     requireStagingHost();
     const response = await fetch('/api/diagnostics/sentry-test', { method: 'POST' });
     const body = await response.json().catch(() => ({}));

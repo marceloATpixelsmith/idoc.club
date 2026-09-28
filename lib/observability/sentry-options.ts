@@ -2,9 +2,11 @@ import { sanitizeSentryEvent } from './sentry-privacy.ts';
 
 export function sentryEnvironment(environment: Partial<NodeJS.ProcessEnv> = process.env): string {
   if (environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT) return environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT;
-  if (environment.VERCEL_ENV === 'production') return 'production';
-  if (environment.VERCEL_ENV === 'preview' && environment.VERCEL_GIT_COMMIT_REF === 'staging') return 'staging';
-  if (environment.VERCEL_ENV) return environment.VERCEL_ENV;
+  const vercelEnvironment = environment.VERCEL_ENV ?? environment.NEXT_PUBLIC_VERCEL_ENV;
+  const gitRef = environment.VERCEL_GIT_COMMIT_REF ?? environment.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF;
+  if (vercelEnvironment === 'production') return 'production';
+  if (vercelEnvironment === 'preview' && gitRef === 'staging') return 'staging';
+  if (vercelEnvironment) return vercelEnvironment;
   if (environment.NODE_ENV) return environment.NODE_ENV;
   return 'development';
 }
