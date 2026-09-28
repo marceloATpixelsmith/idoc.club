@@ -163,7 +163,8 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     }
     await sql`update idoc.seminars set title=${fields.title},description=${fields.description},start_date=${fields.startDate},
       start_time=${fields.startTime},end_date=${fields.endDate},end_time=${fields.endTime},timezone=${fields.timezone},location=${fields.location},
-      capacity=${fields.capacity},registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},
+      capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
+      registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     // Canceling a seminar cascades: every still-active registration cancels with it, so the
     // registrant's own record and the roster both reflect reality. Payment/refund handling stays a
