@@ -43,11 +43,14 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
 
   const paymentMethods = await listEnabledSeminarPaymentMethods();
   const alreadyRegistered = seminar.registration_status !== null;
-  // Only a currently entitled member gets the pre-filled, member-price form directly. Anyone else
-  // who is actually signed in (no profile at all, e.g. a pure administrator, or a lapsed membership)
-  // still cannot complete the member-priced path, but they already have an account -- "Create an
-  // account" would make no sense to someone already logged in, so they go straight to the same
-  // registration form at the non-member price instead of the signed-out join-or-guest choice.
+  // Only a currently entitled member gets the pre-filled, member-price form directly. A signed-in
+  // visitor who has their own profile but cannot use the member price (a lapsed membership) still
+  // goes straight to the same form -- pre-filled and locked from their real profile, tied to their
+  // real profileId -- just at the non-member price, so it correctly shows up in their own My
+  // Seminars afterward instead of becoming an orphaned guest registration. Only a signed-in visitor
+  // with no profile at all (e.g. a pure administrator) falls back to the guest form -- there's no
+  // profile to tie a registration to either way -- but even then, "Create an account" would make no
+  // sense to someone already logged in, so they skip straight to the form instead of that choice.
   const isEntitledMember = Boolean(member && isEntitled(member.entitlement, new Date().toISOString().slice(0, 10)));
   const isSignedIn = Boolean(user);
   const dateRange = seminar.start_date === seminar.end_date
@@ -107,12 +110,14 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
                     paymentMethods={paymentMethods}
                     seminarId={seminar.id}
                   />
-                ) : isSignedIn ? (
+                ) : member ? (
                   <SeminarRegistrationForm
-                    guestDefaults={member ? { email: member.email, name: `${member.profile.firstName} ${member.profile.lastName}`.trim() } : undefined}
+                    ownProfileDetails={{ email: member.email, name: `${member.profile.firstName} ${member.profile.lastName}`.trim() }}
                     paymentMethods={paymentMethods}
                     seminarId={seminar.id}
                   />
+                ) : isSignedIn ? (
+                  <SeminarRegistrationForm paymentMethods={paymentMethods} seminarId={seminar.id} />
                 ) : (
                   <SeminarRegistrationPanel paymentMethods={paymentMethods} seminarId={seminar.id} />
                 )}

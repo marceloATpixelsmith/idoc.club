@@ -9,8 +9,8 @@ import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
 import {
   cancelOwnRegistration, exportSeminarRegistrationsCsvRows, getSeminarPaymentMethodInstructions,
   listAdminAllSeminarRegistrations, listCurrentSeminarsForMember, listPastSeminarsForMember,
-  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, setAdminRegistrationStatus,
-  SeminarRegistrationError, updateSeminarRegistrationDetails,
+  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, registerForSeminarAtNonMemberPrice,
+  setAdminRegistrationStatus, SeminarRegistrationError, updateSeminarRegistrationDetails,
 } from '../lib/seminars/registrations.ts';
 import { createSeminar, getAdminSeminar, listAdminSeminars, SeminarValidationError, updateSeminar } from '../lib/seminars/seminars.ts';
 import {
@@ -204,6 +204,24 @@ test('a guest can register anonymously at the non-member price, without an accou
   assert.equal(row.expected_amount_cents, 6500, 'a guest must be charged the non-member price');
   assert.equal(row.payment_status, 'unpaid');
   await assert.rejects(registerAsGuestForSeminar(seminarId, 'Jamie Guest', 'JAMIE.GUEST@example.test', 'online_stripe'), /already registered/);
+});
+
+test('a signed-in visitor with their own profile but a lapsed membership registers at the non-member price under their real profileId (not a guest identity), shows up in their own current seminars, and can cancel it themselves without needing current entitlement', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id, false);
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id);
+  const { registrationId } = await asMember(user.id, () => registerForSeminarAtNonMemberPrice(seminarId, 'online_stripe'));
+  const [row] = await sql`select expected_amount_cents,profile_id,guest_email,guest_name from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(row.profile_id, profile.id, "the registration must be tied to the visitor's own real profile, never a guest identity");
+  assert.equal(row.guest_name, null); assert.equal(row.guest_email, null);
+  assert.equal(row.expected_amount_cents, 6500, 'a lapsed member must be charged the non-member price, never the member price');
+  const current = await listCurrentSeminarsForMember(profile.id);
+  assert.ok(current.some((s) => s.id === seminarId && s.registration_status === 'registered'), 'the registration must show up in their own Available/current seminars list');
+  await asMember(user.id, () => cancelOwnRegistration(seminarId));
+  const [canceled] = await sql`select registration_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(canceled.registration_status, 'canceled', 'a lapsed member must be able to cancel their own registration without current entitlement');
 });
 
 test('an administrator can edit a registration\'s guest details without being forced off a payment method Organization Settings has since disabled, but cannot switch to a different disabled method', async () => {

@@ -106,10 +106,12 @@ test('every admin Server Action requires CSRF evidence before any mutation, dire
 });
 
 test('every member and guest Server Action requires CSRF evidence before any mutation', () => {
-  for (const name of ['registerForSeminarAction', 'cancelSeminarRegistrationAction']) {
+  const sharedHelper = memberActions.match(/async function runOwnProfileRegistration\([\s\S]*?\n\}/)?.[0];
+  assert.ok(sharedHelper); assert.match(sharedHelper as string, /requireCsrfToken\(/);
+  for (const name of ['registerForSeminarAction', 'registerAtNonMemberPriceAction', 'cancelSeminarRegistrationAction']) {
     const fn = memberActions.match(new RegExp(`export async function ${name}[\\s\\S]*?\\n\\}`))?.[0];
     assert.ok(fn, `${name} not found`);
-    assert.match(fn as string, /requireCsrfToken\(/);
+    assert.ok(/requireCsrfToken\(/.test(fn as string) || /\brunOwnProfileRegistration\(/.test(fn as string), `${name} must call requireCsrfToken directly or via runOwnProfileRegistration()`);
   }
   // Deliberately not wrapped in the shared validatedAction helper: that helper's own zod parse would
   // reject a bad field before this action's callback ever ran, with no chance to echo the submitted
@@ -291,16 +293,16 @@ test('every seminar listing card (available, my seminars, public catalog) is a s
   const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
   const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
   const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
-  assert.ok(availableBlock && /<Link className="card-midnight relative block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
+  assert.ok(availableBlock && /<Link className="block hover:opacity-90" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
   assert.ok(myBlock && /<Link className="absolute inset-0" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(myBlock), 'My Seminars keeps its Cancel action independently clickable via a stretched overlay link, not a wrapping one');
-  assert.ok(publicBlock && /<Link className="card-midnight relative block cursor-pointer p-6" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
+  assert.ok(publicBlock && /<Link className="block hover:opacity-90" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
 });
 
 test('the My Seminars card only raises the actually-interactive Cancel form above its stretched overlay link, not the whole noninteractive status block, so clicks on the status text still navigate', () => {
   const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
   assert.ok(myBlock, 'MySeminars not found');
-  assert.doesNotMatch(myBlock as string, /<div className="relative z-10 mt-3">\s*<p className="text-sm">Your registration:/, 'the registration-status block must not be raised above the stretched link -- only the Cancel form should be');
-  assert.match(myBlock as string, /<div className="relative z-10 mt-2">\s*<SeminarForm/, 'only the Cancel form itself should be raised above the overlay link');
+  assert.doesNotMatch(myBlock as string, /<div className="relative z-10[^"]*">\s*<p className="mt-2 text-sm">Your registration:/, 'the registration-status block must not be raised above the stretched link -- only the Cancel form should be');
+  assert.match(myBlock as string, /<div className="relative z-10 mt-3">\s*<SeminarForm/, 'only the Cancel form itself should be raised above the overlay link');
 });
 
 test('a signed-in profile without current entitlement (a lapsed membership) sees both prices on Available Seminars, since the detail page will route it to guest/non-member pricing', () => {
@@ -320,16 +322,31 @@ test('the seminar detail page presents full details and offers a member registra
   assert.match(detailPage, /isEntitled\(member\.entitlement/);
 });
 
-test('a signed-in visitor without member pricing (a lapsed membership, or an account with no profile at all) goes straight to the registration form, never the signed-out "Create an account" / "Register as a guest" panel', () => {
+test('a signed-in visitor without member pricing goes straight to the registration form, never the signed-out "Create an account" / "Register as a guest" panel', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /import \{ getUser \} from '@\/lib\/db\/queries'/);
   assert.match(detailPage, /const isSignedIn = Boolean\(user\)/);
-  assert.match(detailPage, /\) : isSignedIn \? \(\s*<SeminarRegistrationForm/);
-  assert.match(detailPage, /guestDefaults=\{member \? \{ email: member\.email, name:/);
+  // A signed-in visitor with their own profile (a lapsed membership) gets the locked form tied to
+  // their real profileId, at the non-member price -- never the guest identity.
+  assert.match(detailPage, /\) : member \? \(\s*<SeminarRegistrationForm\s*\n\s*ownProfileDetails=\{\{ email: member\.email, name:/);
+  // Only a signed-in visitor with no profile at all falls back to the true (typed, Turnstile-gated)
+  // guest form -- still skipping the signed-out panel.
+  assert.match(detailPage, /\) : isSignedIn \? \(\s*<SeminarRegistrationForm paymentMethods=\{paymentMethods\} seminarId=\{seminar\.id\} \/>/);
   // The signed-out panel must remain the final fallback, reachable only when isSignedIn is false too.
   const registerBlock = detailPage.match(/\{alreadyRegistered \? \([\s\S]*?<SeminarRegistrationPanel[\s\S]*?\)\}/)?.[0];
   assert.ok(registerBlock, 'register branch not found');
   assert.match(registerBlock as string, /\) : \(\s*<SeminarRegistrationPanel/);
+});
+
+test('a signed-in visitor with their own profile registers at the non-member price under their real profileId (registerForSeminarAtNonMemberPrice), not the anonymous guest mechanism, and canceling a registration never requires current entitlement', () => {
+  assert.match(registrationsSource, /export async function registerForSeminarAtNonMemberPrice/);
+  assert.match(registrationsSource, /async function requireOwnProfileIdRegardlessOfEntitlement\(\): Promise<\{ actorId: number; profileId: number \}> \{\s*\n\s*const actor = await requireAccountAccess\('account'\)/);
+  assert.match(registrationsSource, /export async function cancelOwnRegistration\([\s\S]*?requireOwnProfileIdRegardlessOfEntitlement\(\)/);
+  assert.match(memberActions, /export async function registerAtNonMemberPriceAction/);
+  assert.match(memberActions, /registerForSeminarAtNonMemberPrice/);
+  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.match(form, /ownProfileDetails/);
+  assert.match(form, /registerAtNonMemberPriceAction/);
 });
 
 test('the seminar registration panel offers "Create an account" and "Register as a guest" buttons, revealing the shared registration form for the guest path', () => {
@@ -340,12 +357,14 @@ test('the seminar registration panel offers "Create an account" and "Register as
   assert.match(panel, /SeminarRegistrationForm/);
 });
 
-test('the shared seminar registration form pre-fills and locks the name\/email fields for a member, and shows them as editable inputs for a guest', () => {
+test('the shared seminar registration form pre-fills and locks the name/email fields for a member or a signed-in profile owner, and shows them as editable inputs only for a true anonymous guest', () => {
   const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
   assert.match(form, /registerForSeminarAction/);
+  assert.match(form, /registerAtNonMemberPriceAction/);
   assert.match(form, /registerAsGuestForSeminarAction/);
-  assert.match(form, /readOnly=\{isMember\}/);
-  assert.match(form, /required=\{!isMember\}/);
+  assert.match(form, /const isLocked = isMember \|\| isOwnProfileNonMember/);
+  assert.match(form, /readOnly=\{isLocked\}/);
+  assert.match(form, /required=\{!isLocked\}/);
 });
 
 test('the admin seminar edit page has no Quick Actions box and offers a "View registrations" and an icon-only "Download registrations" action instead', () => {

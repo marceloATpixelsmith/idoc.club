@@ -12,9 +12,10 @@ function localDateOnly(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
-/** "Sep 29, 2026" -- the same short-month/day/year shape used for the FEI reference date format. */
+/** "September 29, 2026" -- the same full-month/day/year shape the homepage's Upcoming Seminars
+ * widget and the news pages already use, so a date reads identically everywhere on the site. */
 export function formatDate(value: string): string {
-  return localDateOnly(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return localDateOnly(value).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 /** "9:00 AM" from a stored "HH:MM" or "HH:MM:SS" 24-hour string. */
