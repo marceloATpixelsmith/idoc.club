@@ -88,8 +88,8 @@ test('article HTML is only ever rendered through the one sanitizing view compone
 
 test('the admin content editor re-sanitizes previously-stored article HTML immediately before rendering it, not just at the last save', () => {
   assert.match(articleContentEditor, /sanitizeArticleContent\(initialHtml\)/);
-  assert.match(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: sanitizedInitialHtml \}\}/);
-  assert.doesNotMatch(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: initialHtml \}\}/);
+  assert.match(articleContentEditor, /<RichTextEditor initialHtml=\{sanitizeArticleContent\(initialHtml\)\}/);
+  assert.doesNotMatch(articleContentEditor, /<RichTextEditor initialHtml=\{initialHtml\}/);
 });
 
 test('sanitizeArticleContent strips scripts, event handlers, and unsafe link schemes while preserving safe formatting', () => {
