@@ -473,6 +473,52 @@ exception text, credentials, or other free-form client/provider content to an ev
 
 Security events (`lib/observability/logger.ts`) remain a distinct channel from `idoc.audit_log` (`docs/07` elsewhere, `lib/db/schema.ts`): the audit log is the actor-attributed, append-oriented record of security-sensitive state *changes*; the security-event log is operational/diagnostic and covers failures, not committed mutations.
 
+## Sentry application error monitoring
+
+Sentry is the centralized exception-diagnostics channel for genuine browser, React, Next.js server,
+route-handler, Server Action, Edge, and explicitly caught background-worker failures. It does **not**
+replace the categorical security-event logger above or `idoc.audit_log`. In particular, expected
+login failures, authorization denials, rate limits, invalid input, provider webhook signature
+rejections, and other registered `logWarn`/`logError` outcomes must not be forwarded to Sentry merely
+because they were logged. Automatic Next.js instrumentation handles uncaught failures; explicit
+captures are limited to unexpected exceptions that a worker catches and prevents from escaping.
+
+Sentry SDK PII collection, performance tracing, and Session Replay are disabled. A defense-in-depth
+`beforeSend` sanitizer removes request bodies, form/payload data, query strings and values, cookies,
+authorization headers, token/password/MFA/recovery/payment fields, and all user attributes other than
+an explicitly supplied internal numeric ID. Do not add raw provider responses or application inputs
+as Sentry extras. When Sentry sees the middleware-generated `x-request-id`, it records it as the
+searchable `idoc_request_id` tag and `idoc.request_id` context. The existing occurrence-only
+`/api/client-error` route remains: an error boundary uses the fresh ID it returns for both its support
+reference and its direct browser-SDK capture, while the route continues to receive `{}` and never an
+exception message or stack.
+
+Configure the following in Vercel, with Preview values scoped to the `staging` branch where
+appropriate:
+
+| Variable | Exposure | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_SENTRY_DSN` | Browser-safe/public | Enables browser and server event ingestion. A DSN is an ingest identifier, not an authentication secret. Use the Sentry project's client-key DSN. |
+| `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | Browser-safe/public, optional | Explicit environment label such as `staging`. If absent, the server derives `production`, `staging` (Preview deployment of the staging branch), `preview`, or `development` from Vercel/Node metadata. Set this explicitly for the browser bundle on stable staging. |
+| `SENTRY_AUTH_TOKEN` | **Build-only secret** | Sentry token authorized only to upload release artifacts/source maps to the existing `pixelsmith-platform` organization and `idoc` project. The Vercel Marketplace integration normally supplies this value. Never expose it with a `NEXT_PUBLIC_` prefix or make it available to application users. |
+
+Enable Vercel's automatically exposed system environment variables so `VERCEL_ENV`,
+`VERCEL_GIT_COMMIT_REF`, and `VERCEL_GIT_COMMIT_SHA` identify deployments and releases. The Sentry
+project already exists as `pixelsmith-platform/idoc` and is linked through the Vercel Marketplace;
+do not create or link another project. Confirm that the integration supplies its DSN and build-only
+source-map upload token to the intended Vercel environments, add only the optional environment label
+where needed, redeploy, and confirm that the build log reports a successful artifact upload without
+printing the token. The build deletes emitted browser source maps after upload so they are not
+publicly served.
+
+For a safe local verification, set a non-production DSN and run
+`NODE_ENV=development pnpm exec tsx scripts/verify-sentry.ts` for the server event. For a browser
+event, run `pnpm dev`, open the local application, and execute
+`setTimeout(() => { throw new Error('IDOC local browser Sentry verification'); })` in browser developer
+tools. Both mechanisms rely on local access and credentials; no production error-trigger route is
+provided. Confirm each event in Sentry, confirm its environment/release, and inspect the event to
+ensure no cookies, authorization data, request body, query values, email, or IP address arrived.
+
 # 15. Production authentication configuration and UAT
 
 This section is the authoritative production-auth configuration inventory. The application is one Vercel-hosted Next.js deployment; its Cron route runs in that deployment and no separate authentication worker is deployed elsewhere. Put server-only values in **Vercel Project Settings → Environment Variables**. **`staging.idoc.club` is deliberately near-identical to production, not an isolated environment**: it intentionally shares `POSTGRES_URL`, `AUTH_SECRET`, the MFA encryption/signing keys, `CRON_SECRET`, `RATE_LIMIT_HASH_KEY`, and most of the rest of the inventory below verbatim with production (see "Branch, environment, and deployment workflow" above) — this is what makes staging's verification predictive of how a change will actually behave once promoted, and avoids paying for a second Render Postgres instance. The values that structurally have to differ do: `BASE_URL`/`GOOGLE_OAUTH_REDIRECT_URI` (each environment's own domain), the Turnstile keys (staging uses Cloudflare's own always-pass testing pair, scoped to the `staging` branch, because an automated Claude Code test run cannot solve a real interactive challenge), `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (must diverge at the go-live domain cutover — production needs a live key, staging/Preview always needs a test key), and `BREVO_API_KEY`/`BREVO_WEBHOOK_KEY` (kept distinct so staging's test traffic never hits real production email infrastructure). Each row below says explicitly which case it is. All instances within one environment must receive the same compatible values. Never put real values in `.env.example`, Git, documentation, issues, pull requests, chat, screenshots, build output, or runtime logs.

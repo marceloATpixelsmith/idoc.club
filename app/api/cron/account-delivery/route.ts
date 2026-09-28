@@ -1,5 +1,6 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
 import { processAccountDeliveryBatch } from '@/lib/notifications/account-delivery';
 import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import { processOperationalAlertBatch } from '@/lib/notifications/operational-alert-delivery';
@@ -17,17 +18,20 @@ export async function GET(request: Request) {
       // into 500.
       try {
         await processAuthSecurityNotificationBatch();
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error);
         await logError('auth_security_delivery_worker_failed');
       }
       try {
         await processOperationalAlertBatch();
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error);
         await logError('operational_alert_delivery_worker_failed');
       }
       try {
         await processStripeCustomerEmailSyncBatch();
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error);
         await logError('account_delivery_worker_failed');
       }
       return account;

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
 import { client } from '@/lib/db/drizzle';
 import { requireAdministrator } from '@/lib/membership/authorization';
@@ -80,6 +81,7 @@ export async function refundSeminarRegistrationCore(registrationIdValue: unknown
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
+    Sentry.captureException(error, { tags: { payment_operation: 'seminar_refund' } });
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
     await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
@@ -128,6 +130,7 @@ export async function refundMembershipPayment(paymentIdValue: unknown, reasonVal
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
+    Sentry.captureException(error, { tags: { payment_operation: 'membership_refund' } });
     await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id}`;
     throw new RefundError('Stripe could not complete the refund. The original payment was preserved.');
   }
