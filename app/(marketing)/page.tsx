@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowUpRight, CalendarDays, MapPin } from 'lucide-react';
+import { FeiBadge } from '@/components/seminars/fei-badge';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { blogPosts } from '@/lib/content/site';
 import { listPublicArticles } from '@/lib/news/articles';
+import { formatDate } from '@/lib/seminars/format';
 import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
 
 export const metadata: Metadata = {
@@ -96,11 +98,12 @@ export default async function Home() {
                         <span className="inline-flex items-center gap-2">
                           <CalendarDays className="size-3.5 text-gold" />
                           {s.start_date === s.end_date
-                            ? new Date(`${s.start_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
-                            : `${new Date(`${s.start_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })} – ${new Date(`${s.end_date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                            ? formatDate(s.start_date)
+                            : `${formatDate(s.start_date)} – ${formatDate(s.end_date)}`}
                         </span>
                       </div>
                     </div>
+                    {s.is_fei ? <FeiBadge className="h-4" /> : null}
                   </li>
                 ))}
               </ul>

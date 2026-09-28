@@ -51,7 +51,7 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           lockPrices={registeredTotal > 0}
           seminar={{
             capacity: Number(seminar.capacity), description: String(seminar.description), end_date: String(seminar.end_date),
-            end_time: String(seminar.end_time), location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
+            end_time: String(seminar.end_time), is_fei: Boolean(seminar.is_fei), location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
             non_member_price_cents: Number(seminar.non_member_price_cents), registration_deadline: seminar.registration_deadline as string,
             start_date: String(seminar.start_date), start_time: String(seminar.start_time), status, timezone: String(seminar.timezone), title: String(seminar.title),
           }}

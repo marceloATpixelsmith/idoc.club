@@ -78,7 +78,8 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     updateSeminarAction: 'delegates-to-data-access', updateSeminarRegistrationDetailsAction: 'delegates-to-data-access',
   },
   'app/(dashboard)/dashboard/seminars/actions.ts': {
-    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerForSeminarAction: 'delegates-to-data-access',
+    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerAtNonMemberPriceAction: 'delegates-to-data-access',
+    registerForSeminarAction: 'delegates-to-data-access',
   },
   // Anonymous guest seminar registration: no session on either side, the same shape as the
   // pre-authentication login/signup actions and the public contact form -- it just happens to live

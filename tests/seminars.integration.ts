@@ -9,8 +9,8 @@ import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
 import {
   cancelOwnRegistration, exportSeminarRegistrationsCsvRows, getSeminarPaymentMethodInstructions,
   listAdminAllSeminarRegistrations, listCurrentSeminarsForMember, listPastSeminarsForMember,
-  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, setAdminRegistrationStatus,
-  SeminarRegistrationError, updateSeminarRegistrationDetails,
+  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, registerForSeminarAtNonMemberPrice,
+  setAdminRegistrationStatus, SeminarRegistrationError, updateSeminarRegistrationDetails,
 } from '../lib/seminars/registrations.ts';
 import { createSeminar, getAdminSeminar, listAdminSeminars, SeminarValidationError, updateSeminar } from '../lib/seminars/seminars.ts';
 import {
@@ -46,7 +46,7 @@ async function paidMember() {
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
-    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '11:00', location: 'Arena 3, IDOC Headquarters',
+    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '11:00', isFei: false, location: 'Arena 3, IDOC Headquarters',
     memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48),
     startDate, startTime: '09:00', status: 'published', timezone: 'Europe/Berlin', title: 'Judging Clinic', ...overrides,
   };
@@ -206,6 +206,24 @@ test('a guest can register anonymously at the non-member price, without an accou
   await assert.rejects(registerAsGuestForSeminar(seminarId, 'Jamie Guest', 'JAMIE.GUEST@example.test', 'online_stripe'), /already registered/);
 });
 
+test('a signed-in visitor with their own profile but a lapsed membership registers at the non-member price under their real profileId (not a guest identity), shows up in their own current seminars, and can cancel it themselves without needing current entitlement', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id, false);
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id);
+  const { registrationId } = await asMember(user.id, () => registerForSeminarAtNonMemberPrice(seminarId, 'online_stripe'));
+  const [row] = await sql`select expected_amount_cents,profile_id,guest_email,guest_name from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(row.profile_id, profile.id, "the registration must be tied to the visitor's own real profile, never a guest identity");
+  assert.equal(row.guest_name, null); assert.equal(row.guest_email, null);
+  assert.equal(row.expected_amount_cents, 6500, 'a lapsed member must be charged the non-member price, never the member price');
+  const current = await listCurrentSeminarsForMember(profile.id);
+  assert.ok(current.some((s) => s.id === seminarId && s.registration_status === 'registered'), 'the registration must show up in their own Available/current seminars list');
+  await asMember(user.id, () => cancelOwnRegistration(seminarId));
+  const [canceled] = await sql`select registration_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.equal(canceled.registration_status, 'canceled', 'a lapsed member must be able to cancel their own registration without current entitlement');
+});
+
 test('an administrator can edit a registration\'s guest details without being forced off a payment method Organization Settings has since disabled, but cannot switch to a different disabled method', async () => {
   const admin = await adminUser();
   const seminarId = await publishedSeminar(admin.id);
@@ -275,6 +293,16 @@ test('an administrator can change either price while a seminar has no registrati
   const [row] = await sql`select member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId}`;
   assert.equal(row.member_price_cents, 9900, 'member price must actually be written to the row, not silently dropped from the update');
   assert.equal(row.non_member_price_cents, 15000, 'non-member price must actually be written to the row, not silently dropped from the update');
+});
+
+test('the FEI-affiliation flag persists through create and update, on both the true and false paths', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { isFei: true });
+  const [created] = await sql`select is_fei from idoc.seminars where id=${seminarId}`;
+  assert.equal(created.is_fei, true, 'is_fei must actually be written on create, not silently dropped');
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ isFei: false })));
+  const [updated] = await sql`select is_fei from idoc.seminars where id=${seminarId}`;
+  assert.equal(updated.is_fei, false, 'is_fei must actually be written on update, not silently dropped');
 });
 
 test('an administrator cannot change either price once a seminar has any registration', async () => {

@@ -8,24 +8,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { registerAsGuestForSeminarAction, type GuestSeminarState } from '@/app/(marketing)/seminars/actions';
-import { registerForSeminarAction, type MemberSeminarState } from '@/app/(dashboard)/dashboard/seminars/actions';
+import { registerAtNonMemberPriceAction, registerForSeminarAction, type MemberSeminarState } from '@/app/(dashboard)/dashboard/seminars/actions';
 
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
-/** The one seminar registration form, shared by a signed-in, entitled member (name/email pre-filled
- * and read-only from their own profile, paid via registerForSeminarAction at the member price) and
- * an anonymous guest (name/email are real inputs, paid via registerAsGuestForSeminarAction at the
- * non-member price, gated by Turnstile + a rate limit) -- both render the same layout, so a member
- * never sees a materially different form than the guest path they'd otherwise have used. Both
- * useActionState hooks are always called (React's rules of hooks); only the one matching the
- * current mode is ever wired to the visible form. */
-export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminarId }: {
+/** The one seminar registration form, shared by three registrants: a signed-in, entitled member
+ * (name/email pre-filled and locked, paid via registerForSeminarAction at the member price); a
+ * signed-in visitor with their own profile who cannot use the member price -- e.g. a lapsed
+ * membership -- (name/email pre-filled and locked the same way, but paid via
+ * registerAtNonMemberPriceAction, their own profileId at the non-member price, no Turnstile since
+ * they're already authenticated); and an anonymous guest (name/email are real inputs, paid via
+ * registerAsGuestForSeminarAction at the non-member price, gated by Turnstile + a rate limit). All
+ * three render the same layout. Every useActionState hook is always called (React's rules of hooks);
+ * only the one matching the current mode is ever wired to the visible form. */
+export function SeminarRegistrationForm({ memberDetails, ownProfileDetails, paymentMethods, seminarId }: {
   memberDetails?: { email: string; name: string };
+  ownProfileDetails?: { email: string; name: string };
   paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>;
   seminarId: number;
 }) {
   const isMember = Boolean(memberDetails);
+  const isOwnProfileNonMember = Boolean(ownProfileDetails);
+  const isLocked = isMember || isOwnProfileNonMember;
+  const lockedDetails = memberDetails ?? ownProfileDetails;
   const [memberState, memberFormAction, memberPending] = useActionState<MemberSeminarState, FormData>(registerForSeminarAction, {});
+  const [ownProfileState, ownProfileFormAction, ownProfilePending] = useActionState<MemberSeminarState, FormData>(registerAtNonMemberPriceAction, {});
   const [guestState, guestFormAction, guestPending] = useActionState<GuestSeminarState, FormData>(registerAsGuestForSeminarAction, {});
   const [turnstileToken, setTurnstileToken] = useState('');
   // A submitted token is consumed server-side whether or not the attempt ultimately succeeds --
@@ -34,16 +41,16 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!isMember && guestState.error) {
+    if (!isLocked && guestState.error) {
       setTurnstileToken('');
       setAttempt((value) => value + 1);
     }
-  }, [guestState, isMember]);
+  }, [guestState, isLocked]);
 
-  const state = isMember ? memberState : guestState;
-  const pending = isMember ? memberPending : guestPending;
-  const formAction = isMember ? memberFormAction : guestFormAction;
-  const fieldErrors = !isMember ? guestState.fieldErrors : undefined;
+  const state = isMember ? memberState : isOwnProfileNonMember ? ownProfileState : guestState;
+  const pending = isMember ? memberPending : isOwnProfileNonMember ? ownProfilePending : guestPending;
+  const formAction = isMember ? memberFormAction : isOwnProfileNonMember ? ownProfileFormAction : guestFormAction;
+  const fieldErrors = isLocked ? undefined : guestState.fieldErrors;
   const hasFieldErrors = Boolean(fieldErrors && Object.values(fieldErrors).some(Boolean));
 
   if (state.success) return <p className="text-sm text-green-700" role="status">{state.success}</p>;
@@ -57,8 +64,8 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
           <Label htmlFor="registrantName">Full name</Label>
           <Input
             aria-invalid={Boolean(fieldErrors?.name)}
-            defaultValue={isMember ? memberDetails?.name : guestState.name ?? ''}
-            id="registrantName" maxLength={200} name={isMember ? undefined : 'name'} readOnly={isMember} required={!isMember}
+            defaultValue={isLocked ? lockedDetails?.name : guestState.name ?? ''}
+            id="registrantName" maxLength={200} name={isLocked ? undefined : 'name'} readOnly={isLocked} required={!isLocked}
           />
           {fieldErrors?.name ? <p className="text-sm text-destructive" role="alert">{fieldErrors.name}</p> : null}
         </div>
@@ -66,8 +73,8 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
           <Label htmlFor="registrantEmail">Email</Label>
           <Input
             aria-invalid={Boolean(fieldErrors?.email)}
-            defaultValue={isMember ? memberDetails?.email : guestState.email ?? ''}
-            id="registrantEmail" maxLength={255} name={isMember ? undefined : 'email'} readOnly={isMember} required={!isMember} type="email"
+            defaultValue={isLocked ? lockedDetails?.email : guestState.email ?? ''}
+            id="registrantEmail" maxLength={255} name={isLocked ? undefined : 'email'} readOnly={isLocked} required={!isLocked} type="email"
           />
           {fieldErrors?.email ? <p className="text-sm text-destructive" role="alert">{fieldErrors.email}</p> : null}
         </div>
@@ -79,14 +86,14 @@ export function SeminarRegistrationForm({ memberDetails, paymentMethods, seminar
         </select>
         {fieldErrors?.paymentMethod ? <p className="text-sm text-destructive" role="alert">{fieldErrors.paymentMethod}</p> : null}
       </div>
-      {isMember ? null : (
+      {isLocked ? null : (
         <>
           <input name="turnstileToken" type="hidden" value={turnstileToken} />
           <TurnstileWidget action="seminar_guest_registration" key={attempt} onVerify={setTurnstileToken} theme="dark" />
         </>
       )}
       {state.error && !hasFieldErrors ? <p className="text-sm text-destructive" role="alert">{state.error}</p> : null}
-      <Button className="w-full sm:w-auto" disabled={pending || (!isMember && !turnstileToken)} type="submit">
+      <Button className="w-full sm:w-auto" disabled={pending || (!isLocked && !turnstileToken)} type="submit">
         {pending ? <AuthPendingLabel text="Registering" /> : 'Register'}
       </Button>
     </form>

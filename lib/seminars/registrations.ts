@@ -69,8 +69,20 @@ async function requireOwnProfileId(): Promise<{ actorId: number; profileId: numb
   return { actorId: actor.id, profileId: profile.id };
 }
 
+/** The looser counterpart to requireOwnProfileId: any signed-in account holder with a profile, not
+ * just a currently entitled one -- registration and payment status are independent, durable facts
+ * that outlive a lapsed membership (docs/02), so viewing/canceling/registering-at-the-non-member-price
+ * must not itself require entitlement the way the member-price path (registerForSeminar) correctly
+ * does. */
+async function requireOwnProfileIdRegardlessOfEntitlement(): Promise<{ actorId: number; profileId: number }> {
+  const actor = await requireAccountAccess('account');
+  const [profile] = await client<{ id: number }[]>`select id from idoc.profiles where user_id=${actor.id} limit 1`;
+  if (!profile) throw new SeminarRegistrationError('A member profile is required to register for seminars.');
+  return { actorId: actor.id, profileId: profile.id };
+}
+
 type SeminarAvailabilityRow = {
-  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; location: string;
+  capacity: number; description: string; end_date: string; end_time: string; ends_at: Date | string; id: number; is_fei: boolean; location: string;
   member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
   registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
   start_date: string; start_time: string; status: 'canceled' | 'draft' | 'published'; timezone: string; title: string;
@@ -92,7 +104,7 @@ function withAvailability(row: SeminarAvailabilityRow) {
  * catalog with no registration_status/payment_method_canonical_id attached to any row. */
 export async function listCurrentSeminarsForMember(profileId: number | null) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -100,6 +112,24 @@ export async function listCurrentSeminarsForMember(profileId: number | null) {
     where (s.status='published' or r.id is not null)
     and (s.end_date + s.end_time) at time zone s.timezone > now()
     order by s.start_date,s.start_time`;
+  return rows.map(withAvailability);
+}
+
+/** The public archive of already-ended, published seminars -- shown under a "Past seminars" heading
+ * on the catalog (docs/08) so a visitor can see what IDOC has actually run, not just what's next.
+ * Not member-scoped: registration is always closed for a past seminar regardless of who's viewing,
+ * so there's nothing profile-specific to join in here (unlike listPastSeminarsForMember, which is
+ * this member's own registration history). */
+export async function listPastPublishedSeminars() {
+  const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,
+    null::varchar(40) payment_method_canonical_id,
+    (s.end_date + s.end_time) at time zone s.timezone ends_at,
+    (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
+    null::varchar(20) registration_status,null::varchar(30) payment_status,null::timestamptz registered_at
+    from idoc.seminars s
+    where s.status='published' and (s.end_date + s.end_time) at time zone s.timezone <= now()
+    order by s.start_date desc,s.start_time desc`;
   return rows.map(withAvailability);
 }
 
@@ -112,7 +142,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) return null;
   const [row] = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -124,7 +154,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.start_time,s.end_date,s.end_time,s.timezone,s.location,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,r.payment_method_canonical_id,
     (s.end_date + s.end_time) at time zone s.timezone ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -171,14 +201,17 @@ async function requireSeminarOpenForRegistration(sql: TransactionSql<Record<stri
  * point-in-time check), which resets payment evidence for a fresh registration cycle. The member
  * pays memberPriceCents -- always the lower of the seminar's two prices in practice, though nothing
  * here assumes that ordering. */
-export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
-  const { profileId } = await requireOwnProfileId();
+async function registerOwnProfileForSeminar(
+  profileId: number, seminarIdValue: unknown, paymentMethodValue: unknown,
+  priceFor: (seminar: { member_price_cents: number; non_member_price_cents: number }) => number,
+): Promise<{ paymentMethod: string; registrationId: number }> {
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
   return client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
+    const priceCents = priceFor(seminar);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
       where seminar_id=${seminarId.data} and profile_id=${profileId} for update`;
     if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('You are already registered for this seminar.');
@@ -189,14 +222,14 @@ export async function registerForSeminar(seminarIdValue: unknown, paymentMethodV
     let registrationId: number;
     if (existing) {
       await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
-        payment_method_canonical_id=${paymentMethod},expected_amount_cents=${seminar.member_price_cents},currency='EUR',
+        payment_method_canonical_id=${paymentMethod},expected_amount_cents=${priceCents},currency='EUR',
         stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,
         stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),
         registered_at=now(),canceled_at=null,updated_at=now() where id=${existing.id}`;
       registrationId = existing.id;
     } else {
       const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
-        values (${seminarId.data},${profileId},${paymentStatus},${paymentMethod},${seminar.member_price_cents},'EUR') returning id`;
+        values (${seminarId.data},${profileId},${paymentStatus},${paymentMethod},${priceCents},'EUR') returning id`;
       registrationId = row.id;
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
@@ -206,6 +239,22 @@ export async function registerForSeminar(seminarIdValue: unknown, paymentMethodV
         from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     return { paymentMethod, registrationId };
   });
+}
+
+export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+  const { profileId } = await requireOwnProfileId();
+  return registerOwnProfileForSeminar(profileId, seminarIdValue, paymentMethodValue, (seminar) => seminar.member_price_cents);
+}
+
+/** Registers a signed-in visitor who has their own member profile but cannot use the member price
+ * (a lapsed membership, most commonly) -- ties the registration to their real profileId rather than
+ * a guest identity, so it correctly shows up in their own My Seminars, can be canceled the normal
+ * way, and a repeat visit to the detail page correctly shows their existing registration instead of
+ * the form again. Distinct from registerForSeminar (requires current entitlement, member price) and
+ * registerAsGuestForSeminar (no profile to tie to at all -- a true anonymous visitor). */
+export async function registerForSeminarAtNonMemberPrice(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+  const { profileId } = await requireOwnProfileIdRegardlessOfEntitlement();
+  return registerOwnProfileForSeminar(profileId, seminarIdValue, paymentMethodValue, (seminar) => seminar.non_member_price_cents);
 }
 
 /** Registers an anonymous, non-member visitor at the seminar's non-member price -- no IDOC account
@@ -268,7 +317,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameVal
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
-  const { profileId } = await requireOwnProfileId();
+  const { profileId } = await requireOwnProfileIdRegardlessOfEntitlement();
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
   await client.begin(async (sql) => {

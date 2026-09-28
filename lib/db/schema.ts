@@ -500,6 +500,7 @@ export const seminars = idocSchema.table('seminars', {
   nonMemberPriceCents: integer('non_member_price_cents').notNull(),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
+  isFei: boolean('is_fei').notNull().default(false),
   createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
   updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { TimezoneInput } from '@/components/seminars/timezone-input';
 
 type ExistingSeminar = {
-  capacity: number; description: string; end_date: string; end_time: string; location: string;
+  capacity: number; description: string; end_date: string; end_time: string; is_fei: boolean; location: string;
   member_price_cents: number; non_member_price_cents: number; registration_deadline: string | Date;
   start_date: string; start_time: string; status: string; timezone: string; title: string;
 };
@@ -46,6 +46,13 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
           <div className="space-y-1.5">
             <Label>Timezone</Label>
             <TimezoneInput defaultValue={seminar?.timezone} />
+          </div>
+          <div className="col-span-2">
+            <Label className="flex items-center gap-2 font-normal">
+              <input defaultChecked={seminar?.is_fei ?? false} name="isFei" type="checkbox" />
+              FEI seminar
+            </Label>
+            <p className="mt-1 text-xs text-muted-foreground">Shows the FEI logo on this seminar's listing card and detail page.</p>
           </div>
         </CardContent>
       </Card>

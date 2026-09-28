@@ -56,7 +56,7 @@ async function requireSeminarAdministrator() {
 }
 
 type SeminarInput = {
-  capacity: unknown; description: unknown; endDate: unknown; endTime: unknown; location: unknown;
+  capacity: unknown; description: unknown; endDate: unknown; endTime: unknown; isFei: unknown; location: unknown;
   memberPrice: unknown; nonMemberPrice: unknown; registrationDeadline: unknown; startDate: unknown;
   startTime: unknown; status: unknown; timezone: unknown; title: unknown;
 };
@@ -86,7 +86,8 @@ function validateFields(input: SeminarInput) {
   if (registrationDeadline.getTime() > startsAtUtc.getTime()) {
     throw new SeminarValidationError('The registration deadline must be at or before the seminar start time.');
   }
-  return { capacity, description, endDate, endTime, location, memberPriceCents, nonMemberPriceCents, registrationDeadline, startDate, startTime, status, timezone, title };
+  const isFei = input.isFei === 'on' || input.isFei === true;
+  return { capacity, description, endDate, endTime, isFei, location, memberPriceCents, nonMemberPriceCents, registrationDeadline, startDate, startTime, status, timezone, title };
 }
 
 export async function listAdminSeminars(input: Record<string, string | string[] | undefined>) {
@@ -118,7 +119,7 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
 }
 
 export type AdminSeminarRow = {
-  capacity: number; created_at: Date; created_by_user_id: number; description: string; end_date: string; end_time: string; id: number;
+  capacity: number; created_at: Date; created_by_user_id: number; description: string; end_date: string; end_time: string; id: number; is_fei: boolean;
   location: string; member_price_cents: number; non_member_price_cents: number; registration_deadline: Date | string;
   start_date: string; start_time: string; status: SeminarStatus; timezone: string; title: string; updated_at: Date; updated_by_user_id: number;
 };
@@ -135,8 +136,8 @@ export async function createSeminar(input: SeminarInput) {
   const fields = validateFields(input);
   return client.begin(async (sql) => {
     const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
-      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
-      values (${fields.title},${fields.description},${fields.startDate},${fields.startTime},${fields.endDate},${fields.endTime},${fields.timezone},${fields.location},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${actor.id},${actor.id})
+      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,created_by_user_id,updated_by_user_id)
+      values (${fields.title},${fields.description},${fields.startDate},${fields.startTime},${fields.endDate},${fields.endTime},${fields.timezone},${fields.location},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
@@ -164,7 +165,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     await sql`update idoc.seminars set title=${fields.title},description=${fields.description},start_date=${fields.startDate},
       start_time=${fields.startTime},end_date=${fields.endDate},end_time=${fields.endTime},timezone=${fields.timezone},location=${fields.location},
       capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
-      registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},
+      registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},is_fei=${fields.isFei},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     // Canceling a seminar cascades: every still-active registration cancels with it, so the
     // registrant's own record and the roster both reflect reality. Payment/refund handling stays a
