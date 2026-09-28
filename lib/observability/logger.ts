@@ -1,5 +1,7 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
+
 import { currentRequestId } from './request-id.ts';
 import { SECURITY_EVENT_TAXONOMY, type SecurityEventDefinition, type SecurityEventName } from './security-events.ts';
 
@@ -34,7 +36,7 @@ function minimizeMeta(event: SecurityEventName, meta: Record<string, unknown>): 
   return minimized;
 }
 
-async function log(sink: (...args: unknown[]) => void, event: SecurityEventName, meta: Record<string, unknown> = {}) {
+async function log(sink: (...args: unknown[]) => void, event: SecurityEventName, meta: Record<string, unknown> = {}, reportToSentry = false) {
   const requestId = await currentRequestId();
   const { attribution, category, resource, retentionClass } = SECURITY_EVENT_TAXONOMY[event];
   const safeMeta = minimizeMeta(event, meta);
@@ -42,8 +44,19 @@ async function log(sink: (...args: unknown[]) => void, event: SecurityEventName,
   if (!safeMeta) return;
   // category/resource/retentionClass are placed last so the taxonomy's registered values always
   // win over anything a caller's meta might (redundantly, or by drift) also supply under those keys.
-  sink(event, { requestId, ...safeMeta, attribution, category, resource, retentionClass });
+  const context = { requestId, ...safeMeta, attribution, category, resource, retentionClass };
+  sink(event, context);
+  if (reportToSentry && 'sentry' in SECURITY_EVENT_TAXONOMY[event] && SECURITY_EVENT_TAXONOMY[event].sentry === true) {
+    Sentry.withScope((scope) => {
+      scope.setLevel('error');
+      scope.setTag('idoc_event', event);
+      scope.setTag('idoc_request_id', requestId);
+      scope.setTag('idoc_resource', resource);
+      scope.setContext('idoc', context);
+      Sentry.captureMessage(event, 'error');
+    });
+  }
 }
 
 export const logWarn = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.warn, event, meta);
-export const logError = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.error, event, meta);
+export const logError = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.error, event, meta, true);
