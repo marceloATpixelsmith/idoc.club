@@ -474,11 +474,9 @@ export const contentPageRevisions = idocSchema.table('content_page_revisions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('content_page_revisions_number_unique').on(table.pageId, table.revisionNumber)]);
 
-/** Administrator-authored seminars. `paymentMethodCanonicalId` references the same canonical
- * `seminar_payment_methods` identities Organization Settings owns (migration 0038) -- a seminar
- * never invents its own payment-method identity. `priceCents`/`paymentMethodCanonicalId` become
- * immutable at the application layer once any registration exists (lib/seminars/seminars.ts),
- * and `capacity` may only be lowered to at least the current active-registration count. */
+/** Administrator-authored seminars. Payment choice belongs to each registration; seminar date
+ * and time are stored without a separate timezone and interpreted consistently as UTC. Price becomes
+ * immutable at the application layer once any registration exists. */
 export const seminars = idocSchema.table('seminars', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }).notNull(),
@@ -486,13 +484,11 @@ export const seminars = idocSchema.table('seminars', {
   seminarDate: date('seminar_date').notNull(),
   startTime: time('start_time').notNull(),
   endTime: time('end_time').notNull(),
-  timezone: varchar('timezone', { length: 60 }).notNull(),
   location: text('location').notNull(),
   capacity: integer('capacity').notNull(),
   priceCents: integer('price_cents').notNull(),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
-  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
   createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
   updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -508,7 +504,7 @@ export const seminars = idocSchema.table('seminars', {
   index('seminars_status_date_idx').on(table.status, table.seminarDate),
 ]);
 
-/** One row per member registration; canceling reuses the same row (registration_status flips back
+/** One row per authenticated-member or guest registration; canceling reuses the same row (registration_status flips back
  * to 'registered' on re-registration) rather than inserting a second row, so the unique constraint
  * on (seminar_id, profile_id) is a real, permanent duplicate-registration guard, not just a
  * point-in-time check. `paymentStatus` and `registrationStatus` are deliberately independent
@@ -516,7 +512,12 @@ export const seminars = idocSchema.table('seminars', {
 export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   id: serial('id').primaryKey(),
   seminarId: integer('seminar_id').notNull().references(() => seminars.id),
-  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  profileId: integer('profile_id').references(() => profiles.id),
+  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
+  guestFirstName: varchar('guest_first_name', { length: 100 }),
+  guestLastName: varchar('guest_last_name', { length: 100 }),
+  guestEmail: varchar('guest_email', { length: 255 }),
+  guestPhone: varchar('guest_phone', { length: 40 }),
   registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
   stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
@@ -532,14 +533,17 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   markedPaidByUserId: integer('marked_paid_by_user_id').references(() => users.id),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
   canceledAt: timestamp('canceled_at', { withTimezone: true }),
+  refundedAt: timestamp('refunded_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled')`),
+  check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled', 'refunded')`),
   check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback')`),
   check('seminar_registrations_expected_amount_check', sql`${table.expectedAmountCents} is null or ${table.expectedAmountCents} >= 0`),
   check('seminar_registrations_currency_check', sql`${table.currency} = 'EUR'`),
   check('seminar_registrations_checkout_status_check', sql`${table.checkoutStatus} is null or ${table.checkoutStatus} in ('open', 'complete', 'expired', 'superseded')`),
+  check('seminar_registrations_identity_check', sql`(${table.profileId} is not null and num_nonnulls(${table.guestFirstName},${table.guestLastName},${table.guestEmail},${table.guestPhone}) = 0) or (${table.profileId} is null and num_nonnulls(${table.guestFirstName},${table.guestLastName},${table.guestEmail},${table.guestPhone}) = 4)`),
   uniqueIndex('seminar_registrations_seminar_profile_unique').on(table.seminarId, table.profileId),
+  uniqueIndex('seminar_registrations_seminar_guest_email_unique').on(table.seminarId, sql`lower(${table.guestEmail})`).where(sql`${table.profileId} is null`),
   index('seminar_registrations_seminar_status_idx').on(table.seminarId, table.registrationStatus),
   index('seminar_registrations_profile_idx').on(table.profileId),
 ]);

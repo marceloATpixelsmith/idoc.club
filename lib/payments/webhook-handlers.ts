@@ -275,8 +275,8 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
   const full = amount === registration.priceCents;
   await tx.update(seminarRegistrations).set({ paymentStatus: status === 'failed' ? 'refund_failed' :
     status === 'succeeded' ? (full ? 'refunded' : 'partially_refunded') : 'paid', paymentStatusUpdatedAt: new Date(),
-    registrationStatus: status === 'succeeded' && full ? 'canceled' : undefined,
-    canceledAt: status === 'succeeded' && full ? new Date() : undefined, updatedAt: new Date() }).where(eq(seminarRegistrations.id, registration.id));
+    registrationStatus: status === 'succeeded' && full ? 'refunded' : undefined,
+    canceledAt: status === 'succeeded' && full ? new Date() : undefined, refundedAt: status === 'succeeded' && full ? new Date() : undefined, updatedAt: new Date() }).where(eq(seminarRegistrations.id, registration.id));
   if (!full || !existing) await tx.insert(reconciliationFindings).values({ kind: 'refund_conflict', profileId: registration.profileId,
     summary: full ? 'A Stripe-initiated seminar refund requires administrator review.' : 'Stripe reported a partial seminar refund, which is outside IDOC policy.',
     details: { amount, expectedAmount: registration.priceCents, refundId: refund.id } });

@@ -1,8 +1,6 @@
-import { TimezoneInput } from '@/components/seminars/timezone-input';
-
 type ExistingSeminar = {
-  capacity: number; description: string; end_time: string; location: string; payment_method_canonical_id: string;
-  price_cents: number; registration_deadline: string | Date; seminar_date: string; start_time: string; status: string; timezone: string; title: string;
+  capacity: number; description: string; end_time: string; location: string;
+  price_cents: number; registration_deadline: string | Date; seminar_date: string; start_time: string; status: string; title: string;
 };
 
 function toDatetimeLocalUtc(value: unknown): string {
@@ -25,7 +23,6 @@ export function SeminarFieldset({ allowCanceled = false, lockPriceAndMethod = fa
         <label className="block">Start time<input className="mt-1 block w-full border p-2" defaultValue={seminar?.start_time?.slice(0, 5)} name="startTime" required type="time" /></label>
         <label className="block">End time<input className="mt-1 block w-full border p-2" defaultValue={seminar?.end_time?.slice(0, 5)} name="endTime" required type="time" /></label>
       </div>
-      <label className="block">Timezone<TimezoneInput defaultValue={seminar?.timezone} /></label>
       <label className="block">Location or online meeting link
         <textarea className="mt-1 block w-full border p-2" defaultValue={seminar?.location} maxLength={2000} name="location" required />
       </label>
@@ -38,12 +35,6 @@ export function SeminarFieldset({ allowCanceled = false, lockPriceAndMethod = fa
       </div>
       <label className="block">Registration deadline (UTC)
         <input className="mt-1 block w-full border p-2" defaultValue={seminar ? toDatetimeLocalUtc(seminar.registration_deadline) : undefined} name="registrationDeadline" required type="datetime-local" />
-      </label>
-      <label className="block">Payment method
-        <select className="mt-1 block w-full border p-2" defaultValue={seminar?.payment_method_canonical_id} disabled={lockPriceAndMethod} name="paymentMethodId" required>
-          {paymentMethods.map((method) => <option key={String(method.canonical_id)} value={String(method.canonical_id)}>{String(method.display_label)}</option>)}
-        </select>
-        {lockPriceAndMethod ? <p className="text-xs text-muted-foreground">The payment method cannot change once this seminar has registrations.</p> : null}
       </label>
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Status</legend>

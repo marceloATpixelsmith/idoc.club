@@ -1,9 +1,7 @@
-import { zonedDateTimeToUtc } from './timezone.ts';
-
 export const SEMINAR_STATUSES = ['draft', 'published', 'canceled'] as const;
 export type SeminarStatus = (typeof SEMINAR_STATUSES)[number];
 
-export const REGISTRATION_STATUSES = ['registered', 'canceled'] as const;
+export const REGISTRATION_STATUSES = ['registered', 'canceled', 'refunded'] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
 
 export const PAYMENT_STATUSES = ['unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback'] as const;
@@ -24,9 +22,9 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   bank_transfer_pending: 'Bank transfer pending', cash_pending: 'Cash pending', chargeback: 'Chargeback', disputed: 'Disputed', paid: 'Paid', partially_refunded: 'Partially refunded', pending: 'Payment pending', refund_failed: 'Refund failed', refunded: 'Refunded', unpaid: 'Unpaid',
 };
 
-/** Combines the seminar's own date/end-time/timezone into the UTC instant the seminar ends. */
-export function seminarEndsAtUtc(input: { endTime: string; seminarDate: string; timezone: string }): Date {
-  return zonedDateTimeToUtc(input.seminarDate, input.endTime, input.timezone);
+/** Seminar date/time values are interpreted as UTC; seminars no longer store a timezone. */
+export function seminarEndsAtUtc(input: { endTime: string; seminarDate: string }): Date {
+  return new Date(`${input.seminarDate}T${input.endTime}Z`);
 }
 
 export function computeSeminarAvailability(
@@ -48,7 +46,9 @@ export function computeSeminarAvailability(
  * column); this only picks which one takes display priority -- a canceled registration always
  * shows as Canceled regardless of what its last known payment status was. */
 export function registrationDisplayLabel(registrationStatus: RegistrationStatus, paymentStatus: PaymentStatus): string {
-  return registrationStatus === 'canceled' ? 'Canceled' : PAYMENT_STATUS_LABELS[paymentStatus];
+  if (registrationStatus === 'canceled') return 'Canceled';
+  if (registrationStatus === 'refunded') return 'Refunded';
+  return PAYMENT_STATUS_LABELS[paymentStatus];
 }
 
 export function initialPaymentStatusForMethod(paymentMethod: string): PaymentStatus {

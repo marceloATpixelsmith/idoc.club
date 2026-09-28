@@ -21,9 +21,9 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const registrationId = Number(registrationIdValue); if (!Number.isInteger(registrationId) || registrationId <= 0) throw new RefundError('Registration not found.');
   const explanation = reason(reasonValue);
-  const [row] = await client<{ email: string; payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents,u.email
+  const [row] = await client<{ email: string; payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents,coalesce(u.email,r.guest_email) email
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
+    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
   if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
@@ -47,7 +47,7 @@ export async function refundSeminarRegistration(registrationIdValue: unknown, re
       await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
         refunded_at=now(),updated_at=now() where id=${request.id}`;
       if (status !== 'succeeded') await sql`update idoc.payment_refunds set refunded_at=null where id=${request.id}`;
-      await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
+      await sql`update idoc.seminar_registrations set registration_status=${status === 'succeeded' ? 'refunded' : 'canceled'},canceled_at=coalesce(canceled_at,now()),refunded_at=${status === 'succeeded' ? new Date() : null},
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
       if (status === 'succeeded') await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)

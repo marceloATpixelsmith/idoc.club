@@ -33,7 +33,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
       checkout_status: string | null; payment_method_canonical_id: string; payment_status: string; price_cents: number; profile_id: number; registered_at: Date | string;
       registration_status: string; seminar_id: number; stripe_checkout_session_id: string | null; title: string;
     }[]>`select r.registration_status,r.payment_status,r.profile_id,r.seminar_id,r.stripe_checkout_session_id,r.checkout_status,r.registered_at,
-      s.title,s.price_cents,s.payment_method_canonical_id from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
+      s.title,s.price_cents,r.payment_method_canonical_id from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
       where r.id=${registrationId} for update`;
     if (!row || row.profile_id !== identity.profile_id) throw new SeminarRegistrationError('Registration not found.');
     if (row.registration_status !== 'registered') throw new SeminarRegistrationError('This registration is not active.');

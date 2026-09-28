@@ -28,7 +28,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
   const registeredCount = registrations.filter((row) => row.registration_status === 'registered').length;
   const availability = computeSeminarAvailability({
     activeRegistrationCount: registeredCount, capacity: Number(seminar.capacity),
-    endsAtUtc: seminarEndsAtUtc({ endTime: String(seminar.end_time), seminarDate: String(seminar.seminar_date), timezone: String(seminar.timezone) }),
+    endsAtUtc: seminarEndsAtUtc({ endTime: String(seminar.end_time), seminarDate: String(seminar.seminar_date) }),
     registrationDeadline: seminar.registration_deadline as string, status: seminar.status as never,
   });
   const status = String(seminar.status);
@@ -38,7 +38,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{String(seminar.title)}</h1>
-          <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} / {String(seminar.capacity)} registered</p>
+          <p className="text-muted-foreground">Status: {status === 'canceled' ? <span className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-700">CANCELLED</span> : <strong>{STATUS_LABELS[status]}</strong>} · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} / {String(seminar.capacity)} registered</p>
         </div>
         <a className="underline" download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}>Export registrations (CSV)</a>
       </header>
@@ -52,9 +52,9 @@ export default async function EditSeminarPage({ params, searchParams }: {
             paymentMethods={paymentMethods}
             seminar={{
               capacity: Number(seminar.capacity), description: String(seminar.description), end_time: String(seminar.end_time),
-              location: String(seminar.location), payment_method_canonical_id: String(seminar.payment_method_canonical_id),
+              location: String(seminar.location),
               price_cents: Number(seminar.price_cents), registration_deadline: seminar.registration_deadline as string,
-              seminar_date: String(seminar.seminar_date), start_time: String(seminar.start_time), status, timezone: String(seminar.timezone), title: String(seminar.title),
+              seminar_date: String(seminar.seminar_date), start_time: String(seminar.start_time), status, title: String(seminar.title),
             }}
           />
         </SeminarForm>
@@ -77,7 +77,7 @@ export default async function EditSeminarPage({ params, searchParams }: {
           <select className="border p-2" defaultValue={Array.isArray(query.registrationStatus) ? query.registrationStatus[0] : query.registrationStatus} name="registrationStatus">
             <option value="">Any registration status</option>
             <option value="registered">Registered</option>
-            <option value="canceled">Canceled</option>
+            <option value="canceled">Canceled</option><option value="refunded">Refunded</option>
           </select>
           <select className="border p-2" defaultValue={Array.isArray(query.paymentStatus) ? query.paymentStatus[0] : query.paymentStatus} name="paymentStatus">
             <option value="">Any payment status</option>
@@ -88,13 +88,13 @@ export default async function EditSeminarPage({ params, searchParams }: {
         {registrations.length === 0 ? <p>No registrations match these filters.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead><tr><th className="p-2">Member</th><th>Email</th><th>Registration</th><th>Payment</th><th>Registered</th><th /></tr></thead>
+              <thead><tr><th className="p-2">Member</th><th>Email</th><th>Phone</th><th>Method</th><th>Registration</th><th>Payment</th><th>Registered</th><th /></tr></thead>
               <tbody>
                 {registrations.map((row) => (
                   <tr className="border-t" key={String(row.id)}>
                     <td className="p-2">{String(row.member_name)}</td>
-                    <td>{String(row.member_email)}</td>
-                    <td>{row.registration_status === 'canceled' ? 'Canceled' : 'Registered'}</td>
+                    <td>{String(row.member_email)}</td><td>{String(row.guest_phone ?? '—')}</td><td>{String(row.payment_method_canonical_id)}</td>
+                    <td>{row.registration_status === 'refunded' ? 'Refunded' : row.registration_status === 'canceled' ? 'Canceled' : 'Registered'}</td>
                     <td>{PAYMENT_STATUS_LABELS[row.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? String(row.payment_status)}</td>
                     <td>{new Date(String(row.registered_at)).toLocaleString()}</td>
                     <td>
