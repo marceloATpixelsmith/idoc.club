@@ -7,16 +7,18 @@ import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
-import { registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
+import { getSeminarPaymentMethodInstructions, registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
 export type GuestSeminarState = {
-  email?: string; error?: string; fieldErrors?: { email?: string; name?: string; paymentMethod?: string }; name?: string; success?: string;
+  email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
 };
 
 const guestSeminarSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
-  name: z.string().trim().min(1, 'Enter your full name.').max(200),
+  firstName: z.string().trim().min(1, 'Enter your first name.').max(100),
+  lastName: z.string().trim().min(1, 'Enter your last name.').max(100),
+  phone: z.string().trim().min(5, 'Enter a valid phone number.').max(40).regex(/^[+()\d\s.-]+$/, 'Enter a valid phone number.'),
   paymentMethod: z.string().min(1, 'Choose a payment method.'),
   seminarId: z.string().min(1, 'Seminar not found.'),
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
@@ -31,18 +33,18 @@ const guestSeminarSchema = z.object({
  * the form -- exactly the "your typed name and email vanish after a bad email" bug this replaces. */
 export async function registerAsGuestForSeminarAction(_state: GuestSeminarState, formData: FormData): Promise<GuestSeminarState> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-  const echo = { email: String(formData.get('email') ?? ''), name: String(formData.get('name') ?? '') };
+  const echo = { email: String(formData.get('email') ?? ''), firstName: String(formData.get('firstName') ?? ''), lastName: String(formData.get('lastName') ?? ''), phone: String(formData.get('phone') ?? '') };
 
   const result = guestSeminarSchema.safeParse(Object.fromEntries(formData));
   if (!result.success) {
     const fieldErrors: NonNullable<GuestSeminarState['fieldErrors']> = {};
     for (const issue of result.error.issues) {
       const field = issue.path[0];
-      if ((field === 'email' || field === 'name' || field === 'paymentMethod') && !fieldErrors[field]) fieldErrors[field] = issue.message;
+      if ((field === 'email' || field === 'firstName' || field === 'lastName' || field === 'phone' || field === 'paymentMethod') && !fieldErrors[field]) fieldErrors[field] = issue.message;
     }
     return { ...echo, error: result.error.issues[0]?.message ?? 'Check the highlighted fields and try again.', fieldErrors };
   }
-  const { email, name, paymentMethod, seminarId, turnstileToken } = result.data;
+  const { email, firstName, lastName, paymentMethod, phone, seminarId, turnstileToken } = result.data;
 
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
@@ -54,14 +56,19 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
 
   let outcome: { paymentMethod: string; registrationId: number };
   try {
-    outcome = await registerAsGuestForSeminar(seminarId, name, email, paymentMethod);
+    outcome = await registerAsGuestForSeminar(seminarId, firstName, lastName, email, phone, paymentMethod);
   } catch (error) {
     if (error instanceof SeminarRegistrationError) return { ...echo, error: error.message };
     return { ...echo, error: 'Registration could not be completed.' };
   }
   revalidatePath('/seminars');
   revalidatePath(`/seminars/${seminarId}`);
-  if (outcome.paymentMethod !== 'online_stripe') return { success: 'You are registered for this seminar. A confirmation email is on its way.' };
+  if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
+  if (outcome.paymentMethod === 'bank_transfer') {
+    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
+    const plainInstructions = instructions?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return { success: `You are registered. ${plainInstructions || 'Follow the bank transfer instructions provided by IDOC.'}` };
+  }
   let checkoutUrl: string;
   try {
     checkoutUrl = await createSeminarCheckoutSession(outcome.registrationId);

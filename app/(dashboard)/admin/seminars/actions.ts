@@ -14,11 +14,10 @@ export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; succ
 
 function seminarFields(formData: FormData) {
   return {
-    capacity: formData.get('capacity'), description: formData.get('description'), endDate: formData.get('endDate'),
+    capacity: formData.get('capacity'), description: formData.get('description'), endDate: formData.get('endDate'), endTime: formData.get('endTime'),
     isFei: formData.get('isFei'), levels: formData.getAll('levels'), location: formData.get('location'), memberPrice: formData.get('memberPrice'),
     nonMemberPrice: formData.get('nonMemberPrice'), registrationDeadline: formData.get('registrationDeadline'),
-    startDate: formData.get('startDate'), status: formData.get('status'),
-    timezone: formData.get('timezone'), title: formData.get('title'),
+    startDate: formData.get('startDate'), startTime: formData.get('startTime'), status: formData.get('status'), title: formData.get('title'),
   };
 }
 
@@ -65,7 +64,8 @@ export async function setAdminRegistrationStatusAction(_state: AdminSeminarState
 export async function updateSeminarRegistrationDetailsAction(_state: AdminSeminarState, formData: FormData) {
   const registrationId = formData.get('registrationId');
   return run(formData, () => updateSeminarRegistrationDetails(registrationId, {
-    guestEmail: formData.get('guestEmail'), guestName: formData.get('guestName'), paymentMethod: formData.get('paymentMethod'),
+    guestEmail: formData.get('guestEmail'), guestFirstName: formData.get('guestFirstName'), guestLastName: formData.get('guestLastName'),
+    guestPhone: formData.get('guestPhone'), paymentMethod: formData.get('paymentMethod'),
   }), 'Registration updated.', '/admin/seminars/registrations');
 }
 

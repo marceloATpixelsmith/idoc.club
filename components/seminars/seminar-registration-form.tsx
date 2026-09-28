@@ -10,8 +10,6 @@ import { Label } from '@/components/ui/label';
 import { registerAsGuestForSeminarAction, type GuestSeminarState } from '@/app/(marketing)/seminars/actions';
 import { registerAtNonMemberPriceAction, registerForSeminarAction, type MemberSeminarState } from '@/app/(dashboard)/dashboard/seminars/actions';
 
-const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
-
 /** The one seminar registration form, shared by three registrants: a signed-in, entitled member
  * (name/email pre-filled and locked, paid via registerForSeminarAction at the member price); a
  * signed-in visitor with their own profile who cannot use the member price -- e.g. a lapsed
@@ -21,10 +19,10 @@ const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-tran
  * registerAsGuestForSeminarAction at the non-member price, gated by Turnstile + a rate limit). All
  * three render the same layout. Every useActionState hook is always called (React's rules of hooks);
  * only the one matching the current mode is ever wired to the visible form. */
-export function SeminarRegistrationForm({ memberDetails, ownProfileDetails, paymentMethods, seminarId }: {
+export function SeminarRegistrationForm({ memberDetails, ownProfileDetails, paymentMethod, seminarId }: {
   memberDetails?: { email: string; name: string };
   ownProfileDetails?: { email: string; name: string };
-  paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>;
+  paymentMethod: string;
   seminarId: number;
 }) {
   const isMember = Boolean(memberDetails);
@@ -59,16 +57,18 @@ export function SeminarRegistrationForm({ memberDetails, ownProfileDetails, paym
     <form action={formAction} className="space-y-4">
       <CsrfField />
       <input name="seminarId" type="hidden" value={seminarId} />
+      <input name="paymentMethod" type="hidden" value={paymentMethod} />
       <div className="grid gap-4 sm:grid-cols-2" key={attempt}>
-        <div className="space-y-1.5">
-          <Label htmlFor="registrantName">Full name</Label>
+        {isLocked ? <div className="space-y-1.5">
+          <Label htmlFor="registrantName">Name</Label>
           <Input
-            aria-invalid={Boolean(fieldErrors?.name)}
-            defaultValue={isLocked ? lockedDetails?.name : guestState.name ?? ''}
-            id="registrantName" maxLength={200} name={isLocked ? undefined : 'name'} readOnly={isLocked} required={!isLocked}
+            defaultValue={lockedDetails?.name}
+            id="registrantName" readOnly
           />
-          {fieldErrors?.name ? <p className="text-sm text-destructive" role="alert">{fieldErrors.name}</p> : null}
-        </div>
+        </div> : <>
+          <div className="space-y-1.5"><Label htmlFor="guestFirstName">First name</Label><Input aria-invalid={Boolean(fieldErrors?.firstName)} defaultValue={guestState.firstName ?? ''} id="guestFirstName" maxLength={100} name="firstName" required />{fieldErrors?.firstName ? <p className="text-sm text-destructive" role="alert">{fieldErrors.firstName}</p> : null}</div>
+          <div className="space-y-1.5"><Label htmlFor="guestLastName">Last name</Label><Input aria-invalid={Boolean(fieldErrors?.lastName)} defaultValue={guestState.lastName ?? ''} id="guestLastName" maxLength={100} name="lastName" required />{fieldErrors?.lastName ? <p className="text-sm text-destructive" role="alert">{fieldErrors.lastName}</p> : null}</div>
+        </>}
         <div className="space-y-1.5">
           <Label htmlFor="registrantEmail">Email</Label>
           <Input
@@ -78,13 +78,7 @@ export function SeminarRegistrationForm({ memberDetails, ownProfileDetails, paym
           />
           {fieldErrors?.email ? <p className="text-sm text-destructive" role="alert">{fieldErrors.email}</p> : null}
         </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="paymentMethod">Payment method</Label>
-        <select className={SELECT_CLASSNAME} id="paymentMethod" name="paymentMethod" required>
-          {paymentMethods.map((method) => <option key={String(method.canonical_id)} value={String(method.canonical_id)}>{String(method.display_label)}</option>)}
-        </select>
-        {fieldErrors?.paymentMethod ? <p className="text-sm text-destructive" role="alert">{fieldErrors.paymentMethod}</p> : null}
+        {isLocked ? null : <div className="space-y-1.5"><Label htmlFor="guestPhone">Phone</Label><Input aria-invalid={Boolean(fieldErrors?.phone)} defaultValue={guestState.phone ?? ''} id="guestPhone" maxLength={40} name="phone" required type="tel" />{fieldErrors?.phone ? <p className="text-sm text-destructive" role="alert">{fieldErrors.phone}</p> : null}</div>}
       </div>
       {isLocked ? null : (
         <>

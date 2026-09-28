@@ -47,7 +47,7 @@ test('the payment method a registrant chooses is a per-registration column refer
   assert.match(paymentMethodMigration, /ADD COLUMN "payment_method_canonical_id"/);
   assert.match(paymentMethodMigration, /REFERENCES "idoc"\."seminar_payment_methods"\("canonical_id"\)/);
   assert.match(paymentMethodMigration, /ALTER TABLE "idoc"\."seminars" DROP COLUMN "payment_method_canonical_id"/);
-  assert.doesNotMatch(seminarsSource, /paymentMethodId|payment_method_canonical_id/);
+  assert.doesNotMatch(seminarsSource, /paymentMethodId/);
 });
 
 test('every admin-facing seminar and registration function re-authorizes as an administrator server-side', () => {
@@ -62,9 +62,12 @@ test('member-facing registration functions derive the actor\'s own profile serve
   assert.doesNotMatch(registrationsSource, /input\.profileId|profileId: unknown/);
 });
 
-test('a guest can register without an account, identified only by name and email, validated against a real email schema', () => {
+test('a guest can register without an account using structured contact details and a normalized email', () => {
   assert.match(registrationsSource, /export async function registerAsGuestForSeminar/);
   assert.match(registrationsSource, /guestEmailSchema = z\.string\(\)\.trim\(\)\.email\(\)/);
+  assert.match(registrationsSource, /guest_first_name/);
+  assert.match(registrationsSource, /guest_last_name/);
+  assert.match(registrationsSource, /guest_phone/);
   assert.match(registrationsSource, /profile_id is null and lower\(guest_email\)/);
 });
 
@@ -146,7 +149,7 @@ test('a guest checkout session is priced against the non-member fee and uses cus
 });
 
 test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
-  assert.match(registrationsSource, /escapeHtml\(name\)/);
+  assert.match(registrationsSource, /escapeHtml\(firstName\)/);
   assert.match(registrationsSource, /escapeHtml\(seminarTitle\)/);
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
@@ -357,10 +360,11 @@ test('a signed-in visitor without member pricing registers under their own profi
   assert.match(detailPage, /ownProfileDetails=\{!isEntitledMember && member \? \{ email: member\.email, name:/);
   assert.match(detailPage, /memberDetails=\{isEntitledMember && member \? \{ email: member\.email, name:/);
   const ctaSource = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  // A signed-in visitor (with or without a profile) always reveals the form directly -- the
-  // join-or-guest dialog is reachable only when isSignedIn is false too.
+  // A signed-in visitor (with or without a profile) opens the shared payment dialog directly --
+  // the join-or-guest dialog is reachable only when isSignedIn is false too.
   assert.match(ctaSource, /const knownVisitor = Boolean\(memberDetails\) \|\| Boolean\(ownProfileDetails\) \|\| isSignedIn/);
-  assert.match(ctaSource, /knownVisitor \? setRevealed\(true\) : setJoinDialogOpen\(true\)/);
+  assert.match(ctaSource, /knownVisitor \? setPaymentDialogOpen\(true\) : setJoinDialogOpen\(true\)/);
+  assert.match(ctaSource, /Choose a payment method/);
 });
 
 test('a signed-in visitor with their own profile registers at the non-member price under their real profileId (registerForSeminarAtNonMemberPrice), not the anonymous guest mechanism, and canceling a registration never requires current entitlement', () => {

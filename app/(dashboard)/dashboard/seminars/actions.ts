@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
-import { cancelOwnRegistration, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
+import { cancelOwnRegistration, getSeminarPaymentMethodInstructions, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
 export type MemberSeminarState = { error?: string; success?: string };
@@ -23,7 +23,11 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
   revalidatePath('/dashboard/seminars');
   revalidatePath('/seminars');
   revalidatePath(`/seminars/${String(seminarId)}`);
-  if (outcome.paymentMethod !== 'online_stripe') return { success: 'You are registered for this seminar.' };
+  if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
+  if (outcome.paymentMethod === 'bank_transfer') {
+    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
+    return { success: `You are registered. ${instructions?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || 'Follow the bank transfer instructions provided by IDOC.'}` };
+  }
   let checkoutUrl: string;
   try {
     checkoutUrl = await createSeminarCheckoutSession(outcome.registrationId);

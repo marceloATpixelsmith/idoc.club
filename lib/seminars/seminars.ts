@@ -5,8 +5,10 @@ import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { sanitizeArticleContent, hasVisibleContent } from '@/lib/news/sanitize';
 import { seminarEndsAtUtc, SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
-import { isValidIanaTimeZone, zonedDateTimeToUtc } from '@/lib/seminars/timezone';
+import { getStripeServerClient } from '@/lib/payments/stripe-client';
+import { refundSeminarRegistrationCore } from '@/lib/payments/refunds';
 
 export { SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
 
@@ -25,11 +27,7 @@ export class SeminarValidationError extends Error {
 export const SEMINAR_LEVELS = ['level_1', 'level_2', 'level_3', 'all_levels'] as const;
 export type SeminarLevel = (typeof SEMINAR_LEVELS)[number];
 
-/** Seminars carry no time-of-day of their own (docs/08) -- every seminar's start/end are pinned to
- * these fixed wall-clock values so the existing date-based availability/deadline-ordering logic
- * (computeSeminarAvailability, the deadline-before-start check below) keeps working unchanged. */
-const FIXED_START_TIME = '00:00';
-const FIXED_END_TIME = '23:59';
+const TIMEZONE_COMPATIBILITY_VALUE = 'UTC';
 
 const titleSchema = z.string().trim().min(1).max(SEMINAR_TITLE_MAX_LENGTH);
 const descriptionSchema = z.string().trim().min(1).max(SEMINAR_DESCRIPTION_MAX_LENGTH);
@@ -67,7 +65,8 @@ async function requireSeminarAdministrator() {
 type SeminarInput = {
   capacity: unknown; description: unknown; endDate: unknown; isFei: unknown; levels: unknown; location: unknown;
   memberPrice: unknown; nonMemberPrice: unknown; registrationDeadline: unknown; startDate: unknown;
-  status: unknown; timezone: unknown; title: unknown;
+  startTime: unknown; status: unknown; title: unknown;
+  endTime: unknown;
 };
 
 function parseLevels(value: unknown): SeminarLevel[] {
@@ -80,15 +79,15 @@ function parseLevels(value: unknown): SeminarLevel[] {
 
 function validateFields(input: SeminarInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
-  const description = parse(descriptionSchema, input.description, 'Directors and application details are required and must be 10,000 characters or fewer.');
+  const description = sanitizeArticleContent(typeof input.description === 'string' ? input.description : '');
+  if (!hasVisibleContent(description)) throw new SeminarValidationError('Directors and application details are required.');
+  parse(descriptionSchema, description, 'Directors and application details must be 10,000 characters or fewer.');
   const location = parse(locationSchema, input.location, 'Location or meeting link is required and must be 2,000 characters or fewer.');
   const startDate = parse(dateSchema, input.startDate, 'Enter a valid start date.');
   const endDate = parse(dateSchema, input.endDate, 'Enter a valid end date.');
-  if (endDate < startDate) {
-    throw new SeminarValidationError('The seminar must end on or after it starts.');
-  }
-  const timezone = typeof input.timezone === 'string' ? input.timezone.trim() : '';
-  if (!isValidIanaTimeZone(timezone)) throw new SeminarValidationError('Choose a valid timezone.');
+  const startTime = parse(timeSchema, input.startTime, 'Enter a valid start time.').slice(0, 5);
+  const endTime = parse(timeSchema, input.endTime, 'Enter a valid end time.').slice(0, 5);
+  if (`${endDate}T${endTime}` <= `${startDate}T${startTime}`) throw new SeminarValidationError('The seminar must end after it starts.');
   const capacity = parse(capacitySchema, input.capacity, 'Capacity must be a whole number of at least 1.');
   const memberPrice = parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.');
   const memberPriceCents = Math.round(memberPrice * 100);
@@ -97,15 +96,15 @@ function validateFields(input: SeminarInput) {
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const deadlineIso = parse(isoDateTimeSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
   const registrationDeadline = parseDeadlineAsUtc(deadlineIso);
-  const startsAtUtc = zonedDateTimeToUtc(startDate, FIXED_START_TIME, timezone);
+  const startsAtUtc = new Date(`${startDate}T${startTime}:00Z`);
   if (registrationDeadline.getTime() > startsAtUtc.getTime()) {
     throw new SeminarValidationError('The registration deadline must be at or before the seminar start date.');
   }
   const isFei = input.isFei === 'on' || input.isFei === true;
   const levels = parseLevels(input.levels);
   return {
-    capacity, description, endDate, endTime: FIXED_END_TIME, isFei, levels, location, memberPriceCents, nonMemberPriceCents,
-    registrationDeadline, startDate, startTime: FIXED_START_TIME, status, timezone, title,
+    capacity, description, endDate, endTime, isFei, levels, location, memberPriceCents, nonMemberPriceCents,
+    registrationDeadline, startDate, startTime, status, timezone: TIMEZONE_COMPATIBILITY_VALUE, title,
   };
 }
 
@@ -147,7 +146,12 @@ export async function getAdminSeminar(value: unknown): Promise<AdminSeminarRow |
   const parsedId = idSchema.safeParse(value);
   if (!parsedId.success) return null;
   const [row] = await client<AdminSeminarRow[]>`select * from idoc.seminars where id=${parsedId.data} limit 1`;
-  return row ?? null;
+  if (!row) return null;
+  return { ...row, end_date: dateOnly(row.end_date), end_time: String(row.end_time), start_date: dateOnly(row.start_date), start_time: String(row.start_time) };
+}
+
+function dateOnly(value: string | Date): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 }
 
 export async function createSeminar(input: SeminarInput) {
@@ -168,7 +172,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   const actor = await requireSeminarAdministrator();
   const id = parse(idSchema, idValue, 'Seminar not found.');
   const fields = validateFields(input);
-  await client.begin(async (sql) => {
+  const cancellation = await client.begin(async (sql) => {
     const [existing] = await sql<{
       capacity: number; member_price_cents: number; non_member_price_cents: number; status: SeminarStatus; title: string;
     }[]>`select capacity,member_price_cents,non_member_price_cents,status,title from idoc.seminars where id=${id} for update`;
@@ -190,7 +194,9 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     // registrant's own record and the roster both reflect reality. Payment/refund handling stays a
     // separate, explicit administrator decision (the existing refund action) -- never automatic here.
     let canceledRegistrations = 0;
+    let registrationsToResolve: Array<{ id: number; payment_status: string; payment_method_canonical_id: string; stripe_checkout_session_id: string | null }> = [];
     if (existing.status !== 'canceled' && fields.status === 'canceled') {
+      registrationsToResolve = await sql`select id,payment_status,payment_method_canonical_id,stripe_checkout_session_id from idoc.seminar_registrations where seminar_id=${id} and registration_status='registered' for update`;
       const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
         where seminar_id=${id} and registration_status='registered' returning id`;
       canceledRegistrations = canceled.length;
@@ -208,7 +214,37 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
       (${actor.id},'admin.seminar.edited','seminar',${String(id)},
       ${JSON.stringify({ capacity: existing.capacity, memberPriceCents: existing.member_price_cents, nonMemberPriceCents: existing.non_member_price_cents, status: existing.status, title: existing.title })}::jsonb,
       ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
+    return registrationsToResolve;
   });
+  // Provider calls deliberately happen after the short database transaction. A completed session
+  // is reconciled as a paid registration and refunded; an open one is expired idempotently.
+  if (cancellation.length) {
+    const stripe = getStripeServerClient();
+    for (const registration of cancellation) {
+      if (registration.payment_method_canonical_id !== 'online_stripe') continue;
+      if (registration.payment_status === 'paid' || registration.payment_status === 'refund_failed') {
+        try { await refundSeminarRegistrationCore(registration.id, 'Automatic full refund because the seminar was canceled.', actor.id); } catch { /* durable refund_failed evidence is retained */ }
+        continue;
+      }
+      if (registration.stripe_checkout_session_id) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(registration.stripe_checkout_session_id);
+          if (session.payment_status === 'paid') {
+            const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+            if (paymentIntentId) {
+              await client`update idoc.seminar_registrations set stripe_payment_intent_id=${paymentIntentId},payment_status='paid',checkout_status='complete',paid_at=coalesce(paid_at,now()),updated_at=now() where id=${registration.id}`;
+              try { await refundSeminarRegistrationCore(registration.id, 'Automatic full refund because the seminar was canceled.', actor.id); } catch { /* retryable */ }
+            }
+          } else if (session.status === 'open') {
+            await stripe.checkout.sessions.expire(registration.stripe_checkout_session_id);
+            await client`update idoc.seminar_registrations set checkout_status='expired',updated_at=now() where id=${registration.id}`;
+          }
+        } catch {
+          await client`insert into idoc.reconciliation_findings(kind,summary,details) values('seminar_payment_conflict','Canceled seminar Checkout session requires reconciliation.',${JSON.stringify({ registrationId: registration.id, sessionId: registration.stripe_checkout_session_id })}::jsonb)`;
+        }
+      }
+    }
+  }
 }
 
 export { seminarEndsAtUtc };

@@ -19,19 +19,20 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>;
   seminarId: number;
 }) {
-  const [revealed, setRevealed] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const knownVisitor = Boolean(memberDetails) || Boolean(ownProfileDetails) || isSignedIn;
 
-  if (revealed) {
-    return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethods={paymentMethods} seminarId={seminarId} />;
+  if (selectedPaymentMethod) {
+    return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethod={selectedPaymentMethod} seminarId={seminarId} />;
   }
 
   return (
     <>
       <Button
         className="w-full text-xs uppercase tracking-[0.2em]"
-        onClick={() => (knownVisitor ? setRevealed(true) : setJoinDialogOpen(true))}
+        onClick={() => (knownVisitor ? setPaymentDialogOpen(true) : setJoinDialogOpen(true))}
         size="lg"
         type="button"
       >
@@ -49,12 +50,24 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
             </Button>
             <Button
               className="w-full"
-              onClick={() => { setJoinDialogOpen(false); setRevealed(true); }}
+              onClick={() => { setJoinDialogOpen(false); setPaymentDialogOpen(true); }}
               type="button"
               variant="ghost"
             >
               Register as a guest
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog onOpenChange={setPaymentDialogOpen} open={paymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Choose a payment method</DialogTitle><DialogDescription>Your choice applies only to this registration.</DialogDescription></DialogHeader>
+          <div className="flex flex-col gap-3">
+            {paymentMethods.map((method) => (
+              <Button key={String(method.canonical_id)} onClick={() => { setSelectedPaymentMethod(String(method.canonical_id)); setPaymentDialogOpen(false); }} type="button" variant="outline">
+                {String(method.display_label)}
+              </Button>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

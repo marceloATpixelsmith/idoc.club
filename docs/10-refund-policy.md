@@ -52,3 +52,7 @@ If Stripe reports a refund, dispute, or chargeback that does not match the local
 The refund acceptance evidence is mapped by `docs/27-stripe-payment-acceptance-gate.json`. Its
 repository checks must stay executable and unskipped; an actual hosted provider run remains required
 before release and cannot be replaced by a source-code assertion or a manually inserted final row.
+
+## Entire-seminar cancellation exception
+
+The discretionary rule above governs an individual registrant cancellation. Canceling the seminar itself is different: IDOC automatically attempts a full Stripe refund for every confirmed Stripe seminar payment, expires open Checkout Sessions, and reconciles a Checkout completion racing with cancellation. A failed provider attempt leaves the registration canceled and `refund_failed`, with durable evidence and an administrator retry path. Offline pending or manually paid records are never represented as Stripe refunds and retain their payment evidence for administrator follow-up.

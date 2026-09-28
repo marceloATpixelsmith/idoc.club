@@ -50,8 +50,10 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
               <input name="registrationId" type="hidden" value={registration.id} />
               {isGuest ? (
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5"><Label htmlFor="guestName">Name</Label><Input defaultValue={registration.guest_name ?? ''} id="guestName" maxLength={200} name="guestName" required /></div>
+                  <div className="space-y-1.5"><Label htmlFor="guestFirstName">First name</Label><Input defaultValue={registration.guest_first_name ?? ''} id="guestFirstName" maxLength={100} name="guestFirstName" required /></div>
+                  <div className="space-y-1.5"><Label htmlFor="guestLastName">Last name</Label><Input defaultValue={registration.guest_last_name ?? ''} id="guestLastName" maxLength={100} name="guestLastName" required /></div>
                   <div className="space-y-1.5"><Label htmlFor="guestEmail">Email</Label><Input defaultValue={registration.guest_email ?? ''} id="guestEmail" maxLength={255} name="guestEmail" required type="email" /></div>
+                  <div className="space-y-1.5"><Label htmlFor="guestPhone">Phone</Label><Input defaultValue={registration.guest_phone ?? ''} id="guestPhone" maxLength={40} name="guestPhone" required type="tel" /></div>
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">

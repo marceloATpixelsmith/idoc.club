@@ -30,6 +30,18 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@tiptap/extension-link':
+        specifier: ^3.6.6
+        version: 3.6.6
+      '@tiptap/pm':
+        specifier: ^3.6.6
+        version: 3.6.6
+      '@tiptap/react':
+        specifier: ^3.6.6
+        version: 3.6.6(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@tiptap/starter-kit':
+        specifier: ^3.6.6
+        version: 3.6.6
       '@types/node':
         specifier: ^22.15.18
         version: 22.20.1
