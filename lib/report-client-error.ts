@@ -22,12 +22,14 @@ export async function reportClientError(error: Error & { digest?: string }): Pro
   } catch {
     // Sentry capture must still happen if the occurrence-only correlation request fails.
   }
-  Sentry.withScope((scope) => {
-    if (requestId) {
-      scope.setTag('idoc_request_id', requestId);
-      scope.setContext('idoc', { request_id: requestId });
-    }
-    Sentry.captureException(error);
-  });
+  if (typeof Sentry.withScope === 'function' && typeof Sentry.captureException === 'function') {
+    Sentry.withScope((scope) => {
+      if (requestId) {
+        scope.setTag('idoc_request_id', requestId);
+        scope.setContext('idoc', { request_id: requestId });
+      }
+      Sentry.captureException(error);
+    });
+  }
   return requestId;
 }
