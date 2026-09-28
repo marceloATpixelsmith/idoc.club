@@ -2,12 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { TimezoneInput } from '@/components/seminars/timezone-input';
+import { RichTextEditor } from '@/components/rich-text-editor';
 
 type ExistingSeminar = {
-  capacity: number; description: string; end_date: string; is_fei: boolean; levels: string[]; location: string;
+  capacity: number; description: string; end_date: string; end_time: string; is_fei: boolean; levels: string[]; location: string;
   member_price_cents: number; non_member_price_cents: number; registration_deadline: string | Date;
-  start_date: string; status: string; timezone: string; title: string;
+  start_date: string; start_time: string; status: string; title: string;
 };
 
 function toDatetimeLocalUtc(value: unknown): string {
@@ -36,8 +36,7 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
             <Input defaultValue={seminar?.title} id="title" maxLength={200} name="title" required />
           </div>
           <div className="col-span-2 space-y-1.5">
-            <Label htmlFor="description">Directors and Application Details</Label>
-            <Textarea className="min-h-32" defaultValue={seminar?.description} id="description" maxLength={10000} name="description" required />
+            <RichTextEditor initialHtml={seminar?.description} label="Directors and Application Details" name="description" />
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="location">Location or online meeting link</Label>
@@ -46,10 +45,6 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
           <div className="space-y-1.5">
             <Label htmlFor="capacity">Capacity</Label>
             <Input defaultValue={seminar?.capacity} id="capacity" min={1} name="capacity" required type="number" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Timezone</Label>
-            <TimezoneInput defaultValue={seminar?.timezone} />
           </div>
           <div className="col-span-2">
             <Label className="flex items-center gap-2 font-normal">
@@ -81,10 +76,12 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
             <Label htmlFor="startDate">Start date</Label>
             <Input defaultValue={seminar?.start_date} id="startDate" name="startDate" required type="date" />
           </div>
+          <div className="space-y-1.5"><Label htmlFor="startTime">Start time</Label><Input defaultValue={seminar?.start_time?.slice(0, 5)} id="startTime" name="startTime" required type="time" /></div>
           <div className="space-y-1.5">
             <Label htmlFor="endDate">End date</Label>
             <Input defaultValue={seminar?.end_date} id="endDate" name="endDate" required type="date" />
           </div>
+          <div className="space-y-1.5"><Label htmlFor="endTime">End time</Label><Input defaultValue={seminar?.end_time?.slice(0, 5)} id="endTime" name="endTime" required type="time" /></div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="registrationDeadline">Registration deadline (UTC)</Label>
             <Input defaultValue={seminar ? toDatetimeLocalUtc(seminar.registration_deadline) : undefined} id="registrationDeadline" name="registrationDeadline" required type="datetime-local" />

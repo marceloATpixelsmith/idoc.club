@@ -543,8 +543,13 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   id: serial('id').primaryKey(),
   seminarId: integer('seminar_id').notNull().references(() => seminars.id),
   profileId: integer('profile_id').references(() => profiles.id),
+  /** Legacy compatibility bridge: current code writes the structured fields below as well as this
+   * combined value until production has promoted the expand migration. */
   guestName: varchar('guest_name', { length: 200 }),
+  guestFirstName: varchar('guest_first_name', { length: 100 }),
+  guestLastName: varchar('guest_last_name', { length: 100 }),
   guestEmail: varchar('guest_email', { length: 255 }),
+  guestPhone: varchar('guest_phone', { length: 40 }),
   registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
   paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),

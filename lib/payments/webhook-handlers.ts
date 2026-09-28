@@ -24,6 +24,7 @@ export type WebhookStripeClient = {
   setupIntents?: { retrieve: (id: string) => Promise<Stripe.SetupIntent> };
   paymentMethods?: { retrieve: (id: string) => Promise<Stripe.PaymentMethod> };
   prices?: { create: (params: Stripe.PriceCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.Price> };
+  refunds?: { create: (params: Stripe.RefundCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.Refund> };
   subscriptions?: { cancel: (id: string, params?: Stripe.SubscriptionCancelParams, options?: Stripe.RequestOptions) => Promise<unknown> };
   subscriptionSchedules?: { create: (params: Stripe.SubscriptionScheduleCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.SubscriptionSchedule> };
 };
@@ -218,6 +219,42 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid' &&
     (registration.profileId === null || resolvedCustomerId(session.customer) === registration.customerId);
   if (!valid) {
+    const isCanceledPayment = registration.registrationStatus === 'canceled' && registration.profileId === metadataProfileId &&
+      registration.seminarId === metadataSeminarId && registration.checkoutSessionId === session.id &&
+      registration.expectedAmountCents === priceCents && session.amount_total === priceCents && session.currency?.toLowerCase() === 'eur' &&
+      session.payment_status === 'paid';
+    if (isCanceledPayment && stripe.refunds) {
+      const idempotencyKey = `idoc-seminar-refund-${registrationId}-${paymentIntentId}`;
+      let refund: Stripe.Refund;
+      try {
+        refund = await stripe.refunds.create({ amount: priceCents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: paymentIntentId }, { idempotencyKey });
+      } catch (error) {
+        await tx.insert(paymentRefunds).values({ amountCents: priceCents, failureCode: 'stripe_request_failed',
+          idempotencyKey, providerEvidence: { message: error instanceof Error ? error.message : 'Stripe refund request failed.' },
+          reason: 'Automatic full refund after concurrent payment for a canceled seminar.',
+          seminarRegistrationId: registrationId, status: 'failed' })
+          .onConflictDoUpdate({ target: paymentRefunds.idempotencyKey, set: { failureCode: 'stripe_request_failed', status: 'failed', updatedAt: new Date() } });
+        await tx.update(seminarRegistrations).set({ checkoutStatus: 'complete', paidAt: new Date(), paymentStatus: 'refund_failed',
+          paymentStatusUpdatedAt: new Date(), stripePaymentIntentId: paymentIntentId, updatedAt: new Date() })
+          .where(eq(seminarRegistrations.id, registrationId));
+        await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
+          summary: 'Automatic refund failed for a payment completed after seminar cancellation.',
+          details: { registrationId, sessionId: session.id, paymentIntentId } });
+        return;
+      }
+      const status = refund.status === 'succeeded' ? 'succeeded' : refund.status === 'failed' ? 'failed' : refund.status === 'canceled' ? 'canceled' : 'pending';
+      await tx.insert(paymentRefunds).values({ amountCents: priceCents, externalRefundId: refund.id, idempotencyKey,
+        providerEvidence: { id: refund.id, status: refund.status }, reason: 'Automatic full refund after concurrent payment for a canceled seminar.',
+        refundedAt: status === 'succeeded' ? new Date() : null, seminarRegistrationId: registrationId, status })
+        .onConflictDoNothing({ target: paymentRefunds.idempotencyKey });
+      await tx.update(seminarRegistrations).set({ checkoutStatus: 'complete', paidAt: new Date(),
+        paymentStatus: status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid',
+        paymentStatusUpdatedAt: new Date(), stripePaymentIntentId: paymentIntentId, updatedAt: new Date() })
+        .where(eq(seminarRegistrations.id, registrationId));
+      await tx.insert(auditLog).values({ action: 'seminar.canceled_payment_refunded',
+        afterJson: { amountCents: priceCents, paymentIntentId, refundId: refund.id, status }, entityId: String(registrationId), entityType: 'seminar_registration' });
+      return;
+    }
     await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict', profileId: registration.profileId,
       summary: 'A paid seminar Checkout Session did not match its active local registration.',
       details: { registrationId, sessionId: session.id, paymentIntentId } });

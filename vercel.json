@@ -17,6 +17,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/seminar-cancellation-resolution",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/data-retention-purge",
       "schedule": "0 8 * * *"
     },

@@ -50,10 +50,10 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           allowCanceled
           lockPrices={registeredTotal > 0}
           seminar={{
-            capacity: Number(seminar.capacity), description: String(seminar.description), end_date: String(seminar.end_date),
+            capacity: Number(seminar.capacity), description: String(seminar.description), end_date: seminar.end_date, end_time: seminar.end_time,
             is_fei: Boolean(seminar.is_fei), levels: seminar.levels ?? [], location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
             non_member_price_cents: Number(seminar.non_member_price_cents), registration_deadline: seminar.registration_deadline as string,
-            start_date: String(seminar.start_date), status, timezone: String(seminar.timezone), title: String(seminar.title),
+            start_date: seminar.start_date, start_time: seminar.start_time, status, title: String(seminar.title),
           }}
         />
       </SeminarForm>

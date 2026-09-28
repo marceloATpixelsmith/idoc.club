@@ -70,6 +70,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   operational_alert_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'operational-alert-outbox', retentionClass: 'operational' },
   rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security' },
   reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational' },
+  seminar_cancellation_resolution_failed: { attribution: 'system', category: 'operational', resource: 'seminar-cancellation-resolution', retentionClass: 'operational' },
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational' },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational' },
   stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['invalid_signature'] }, resource: 'stripe-webhook', retentionClass: 'security' },

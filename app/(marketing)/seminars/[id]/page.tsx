@@ -12,6 +12,7 @@ import { isEntitled } from '@/lib/membership/entitlement';
 import { formatDate, formatLevels, formatSchedule, money } from '@/lib/seminars/format';
 import { getSeminarForRegistrant, listEnabledSeminarPaymentMethods } from '@/lib/seminars/registrations';
 import { AVAILABILITY_LABELS, registrationDisplayLabel, type PaymentStatus, type RegistrationStatus } from '@/lib/seminars/status';
+import { sanitizeArticleContent } from '@/lib/news/sanitize';
 
 function InfoRow({ children, icon: Icon }: { children: React.ReactNode; icon: typeof Calendar }) {
   return (
@@ -112,7 +113,7 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
 
           <Card>
             <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-wider text-gold">Directors and Application Details</CardTitle></CardHeader>
-            <CardContent><p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{seminar.description}</p></CardContent>
+            <CardContent><div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(seminar.description.includes('<') ? seminar.description : `<p>${seminar.description.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')}</p>`) }} /></CardContent>
           </Card>
         </div>
       </div>

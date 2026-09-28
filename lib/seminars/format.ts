@@ -18,13 +18,16 @@ export function formatDate(value: string): string {
   return localDateOnly(value).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** A single date for a same-day seminar; a seminar spanning multiple days shows both ends of the
- * range instead, per docs/08's multi-day requirement. Seminars carry no time-of-day of their own
- * (docs/08) -- only the date is ever shown, wherever a seminar's schedule appears on the site. */
-export function formatSchedule(seminar: { end_date: string; start_date: string }): string {
+function formatTime(value: string): string {
+  const [hours, minutes] = value.slice(0, 5).split(':').map(Number);
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(2000, 0, 1, hours, minutes));
+}
+
+/** A same-day schedule displays both real times; multi-day schedules retain both endpoint times. */
+export function formatSchedule(seminar: { end_date: string; end_time: string; start_date: string; start_time: string }): string {
   return seminar.start_date === seminar.end_date
-    ? formatDate(seminar.start_date)
-    : `${formatDate(seminar.start_date)} – ${formatDate(seminar.end_date)}`;
+    ? `${formatDate(seminar.start_date)}, ${formatTime(seminar.start_time)}–${formatTime(seminar.end_time)}`
+    : `${formatDate(seminar.start_date)}, ${formatTime(seminar.start_time)} – ${formatDate(seminar.end_date)}, ${formatTime(seminar.end_time)}`;
 }
 
 export function money(cents: number): string {

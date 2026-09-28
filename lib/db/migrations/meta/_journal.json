@@ -414,6 +414,13 @@
       "when": 1790625900000,
       "tag": "0058_seminar_levels",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1790626000000,
+      "tag": "0059_seminar_guest_contact_fields",
+      "breakpoints": true
     }
   ]
 }

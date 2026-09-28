@@ -14,8 +14,9 @@ import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STAT
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
-const guestNameSchema = z.string().trim().min(1).max(200);
+const guestNameSchema = z.string().trim().min(1).max(100);
 const guestEmailSchema = z.string().trim().email().max(255);
+const guestPhoneSchema = z.string().trim().min(5).max(40).regex(/^[+()\d\s.-]+$/);
 
 export class SeminarRegistrationError extends Error {
   constructor(message: string) {
@@ -272,14 +273,20 @@ export async function registerForSeminarAtNonMemberPrice(seminarIdValue: unknown
  * There is no notification_outbox path for a guest (it requires a real profileId), so confirmation
  * is a best-effort direct send -- a delivery failure here must never fail the registration itself,
  * since the registration is already durably committed by the time it's attempted. */
-export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameValue: unknown, emailValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNameValue: unknown, lastNameValue: unknown, emailValue: unknown, phoneValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
-  const nameResult = guestNameSchema.safeParse(nameValue);
-  if (!nameResult.success) throw new SeminarRegistrationError('Enter your full name.');
+  const firstNameResult = guestNameSchema.safeParse(firstNameValue);
+  if (!firstNameResult.success) throw new SeminarRegistrationError('Enter your first name.');
+  const lastNameResult = guestNameSchema.safeParse(lastNameValue);
+  if (!lastNameResult.success) throw new SeminarRegistrationError('Enter your last name.');
   const emailResult = guestEmailSchema.safeParse(emailValue);
   if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid email address.');
-  const name = nameResult.data;
+  const phoneResult = guestPhoneSchema.safeParse(phoneValue);
+  if (!phoneResult.success) throw new SeminarRegistrationError('Enter a valid phone number.');
+  const firstName = firstNameResult.data;
+  const lastName = lastNameResult.data;
+  const name = `${firstName} ${lastName}`;
   const email = emailResult.data.toLowerCase();
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
@@ -299,13 +306,14 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameVal
     if (existing) {
       await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
         payment_method_canonical_id=${paymentMethod},expected_amount_cents=${seminar.non_member_price_cents},currency='EUR',guest_name=${name},
+        guest_first_name=${firstName},guest_last_name=${lastName},guest_phone=${phoneResult.data},guest_email=${email},
         stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,
         stripe_payment_intent_id=null,paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),
         registered_at=now(),canceled_at=null,updated_at=now() where id=${existing.id}`;
       registrationId = existing.id;
     } else {
-      const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,guest_name,guest_email,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
-        values (${seminarId.data},${name},${email},${paymentStatus},${paymentMethod},${seminar.non_member_price_cents},'EUR') returning id`;
+      const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,guest_name,guest_first_name,guest_last_name,guest_email,guest_phone,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
+        values (${seminarId.data},${name},${firstName},${lastName},${email},${phoneResult.data},${paymentStatus},${paymentMethod},${seminar.non_member_price_cents},'EUR') returning id`;
       registrationId = row.id;
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
@@ -315,7 +323,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, nameVal
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
-        bodyHtml: `<p>Hello ${escapeHtml(name)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
+        bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
         heading: 'Seminar registration received',
       }),
       subject: 'Your IDOC seminar registration', to: email,
@@ -435,14 +443,14 @@ function isGuestEmailRaceViolation(error: unknown): boolean {
 /** Lets an administrator edit a guest registration's own contact details and either registrant's
  * chosen payment method -- the identity split (member vs. guest) itself is never editable here,
  * since a registration's profileId/guestName+email pairing is fixed at creation (docs/02 §12). */
-export async function updateSeminarRegistrationDetails(registrationIdValue: unknown, fields: { guestEmail?: unknown; guestName?: unknown; paymentMethod?: unknown }): Promise<void> {
+export async function updateSeminarRegistrationDetails(registrationIdValue: unknown, fields: { guestEmail?: unknown; guestFirstName?: unknown; guestLastName?: unknown; guestPhone?: unknown; paymentMethod?: unknown }): Promise<void> {
   const actor = await requireSeminarAdministrator();
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
   const requestedMethod = typeof fields.paymentMethod === 'string' ? fields.paymentMethod.trim() : '';
   try {
     await client.begin(async (sql) => {
-      const [existing] = await sql<{ guest_email: string | null; guest_name: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_name,payment_method_canonical_id,profile_id
+      const [existing] = await sql<{ guest_email: string | null; guest_first_name: string | null; guest_last_name: string | null; guest_name: string | null; guest_phone: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_first_name,guest_last_name,guest_name,guest_phone,payment_method_canonical_id,profile_id
         from idoc.seminar_registrations where id=${registrationId.data} for update`;
       if (!existing) throw new SeminarRegistrationError('Registration not found.');
       // Leaving the payment method exactly as it already was is always allowed, even if an
@@ -451,11 +459,22 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
       const paymentMethod = requestedMethod === existing.payment_method_canonical_id
         ? requestedMethod : validatePaymentMethod(await listEnabledSeminarPaymentMethods(), requestedMethod);
       if (existing.profile_id === null) {
-        const nameResult = guestNameSchema.safeParse(fields.guestName);
-        if (!nameResult.success) throw new SeminarRegistrationError("Enter the guest's full name.");
+        const rawFirstName = typeof fields.guestFirstName === 'string' ? fields.guestFirstName.trim() : '';
+        const rawLastName = typeof fields.guestLastName === 'string' ? fields.guestLastName.trim() : '';
+        const rawPhone = typeof fields.guestPhone === 'string' ? fields.guestPhone.trim() : '';
+        const firstNameResult = rawFirstName ? guestNameSchema.safeParse(rawFirstName) : null;
+        const lastNameResult = rawLastName ? guestNameSchema.safeParse(rawLastName) : null;
+        const phoneResult = rawPhone ? guestPhoneSchema.safeParse(rawPhone) : null;
+        if (firstNameResult && !firstNameResult.success) throw new SeminarRegistrationError("Enter a valid guest first name.");
+        if (lastNameResult && !lastNameResult.success) throw new SeminarRegistrationError("Enter a valid guest last name.");
+        if (phoneResult && !phoneResult.success) throw new SeminarRegistrationError('Enter a valid guest phone number.');
         const emailResult = guestEmailSchema.safeParse(fields.guestEmail);
         if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid guest email address.');
-        await sql`update idoc.seminar_registrations set guest_name=${nameResult.data},guest_email=${emailResult.data.toLowerCase()},
+        const firstName = firstNameResult?.success ? firstNameResult.data : existing.guest_first_name;
+        const lastName = lastNameResult?.success ? lastNameResult.data : existing.guest_last_name;
+        const phone = phoneResult?.success ? phoneResult.data : existing.guest_phone;
+        const structuredName = [firstName, lastName].filter(Boolean).join(' ');
+        await sql`update idoc.seminar_registrations set guest_name=${structuredName || existing.guest_name},guest_first_name=${firstName},guest_last_name=${lastName},guest_phone=${phone},guest_email=${emailResult.data.toLowerCase()},
           payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
       } else {
         await sql`update idoc.seminar_registrations set payment_method_canonical_id=${paymentMethod},updated_at=now() where id=${registrationId.data}`;
@@ -559,6 +578,7 @@ export async function exportAllSeminarRegistrationsCsvRows(input: Record<string,
 
 export type AdminSeminarRegistrationRow = {
   canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; guest_email: string | null; guest_name: string | null;
+  guest_first_name: string | null; guest_last_name: string | null; guest_phone: string | null;
   id: number; member_email: string | null; member_name: string | null; paid_at: Date | string | null; payment_method_canonical_id: string;
   payment_reference: string | null; payment_status: PaymentStatus; profile_id: number | null; registered_at: Date | string;
   registration_status: 'canceled' | 'registered'; seminar_id: number; seminar_title: string;
@@ -568,7 +588,7 @@ export async function getAdminSeminarRegistration(registrationIdValue: unknown):
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) return null;
   const [row] = await client<AdminSeminarRegistrationRow[]>`select r.id,r.seminar_id,s.title seminar_title,r.profile_id,
-    coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,r.guest_name,r.guest_email,
+    coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,r.guest_name,r.guest_first_name,r.guest_last_name,r.guest_email,r.guest_phone,
     r.registration_status,r.payment_status,r.payment_method_canonical_id,r.payment_reference,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
