@@ -102,7 +102,7 @@ export async function listAdminSeminarHistoryForMember(profileIdValue: unknown) 
  * last open seat serialize on this lock, so exactly one succeeds. Canceling and re-registering
  * reuses the same row (the unique (seminar_id, profile_id) index is a permanent guard, not just a
  * point-in-time check), which resets payment evidence for a fresh registration cycle. */
-export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
+export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown = 'online_stripe'): Promise<{ paymentMethod: string; registrationId: number }> {
   const paymentMethod = String(paymentMethodValue ?? 'online_stripe');
   if (!['online_stripe', 'bank_transfer', 'cash_event'].includes(paymentMethod)) throw new SeminarRegistrationError('Choose a valid payment method.');
   const { profileId } = await requireOwnProfileId();
