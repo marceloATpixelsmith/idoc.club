@@ -188,9 +188,9 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
       capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
       registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},is_fei=${fields.isFei},levels=${sql.array(fields.levels)},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
-    // Canceling a seminar cascades: every still-active registration cancels with it, so the
-    // registrant's own record and the roster both reflect reality. Payment/refund handling stays a
-    // separate, explicit administrator decision (the existing refund action) -- never automatic here.
+    // Canceling a seminar atomically cancels active registrations. Stripe resolution is intentionally
+    // outside this request: the five-minute cancellation worker treats the resulting canceled online
+    // registration state as a durable queue, so refunds/session expiry survive request termination.
     let canceledRegistrations = 0;
     if (existing.status !== 'canceled' && fields.status === 'canceled') {
       const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
