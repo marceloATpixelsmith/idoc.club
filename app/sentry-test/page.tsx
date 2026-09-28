@@ -13,6 +13,7 @@ export default function SentryVerificationPage() {
   }
 
   function testBrowser() {
+    setStatus('Browser test clicked; sending…');
     requireStagingHost();
     const error = new Error('IDOC_SENTRY_BROWSER_TEST');
     Sentry.captureException(error, { tags: { idoc_diagnostic: 'sentry-browser-test' } });
@@ -20,6 +21,7 @@ export default function SentryVerificationPage() {
   }
 
   async function testServer() {
+    setStatus('Server test clicked; sending…');
     requireStagingHost();
     const response = await fetch('/api/diagnostics/sentry-test', { method: 'POST' });
     const body = await response.json().catch(() => ({}));
