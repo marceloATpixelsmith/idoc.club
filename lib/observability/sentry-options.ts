@@ -4,7 +4,9 @@ export function sentryEnvironment(environment: Partial<NodeJS.ProcessEnv> = proc
   if (environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT) return environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT;
   if (environment.VERCEL_ENV === 'production') return 'production';
   if (environment.VERCEL_ENV === 'preview' && environment.VERCEL_GIT_COMMIT_REF === 'staging') return 'staging';
-  return environment.VERCEL_ENV ?? environment.NODE_ENV ?? 'development';
+  if (environment.VERCEL_ENV) return environment.VERCEL_ENV;
+  if (environment.NODE_ENV) return environment.NODE_ENV;
+  return 'development';
 }
 
 export function sentryOptions(environment: Partial<NodeJS.ProcessEnv> = process.env) {
