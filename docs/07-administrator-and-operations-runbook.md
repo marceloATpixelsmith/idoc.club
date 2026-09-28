@@ -500,15 +500,16 @@ appropriate:
 |---|---|---|
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser-safe/public | Enables browser and server event ingestion. A DSN is an ingest identifier, not an authentication secret. Use the Sentry project's client-key DSN. |
 | `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | Browser-safe/public, optional | Explicit environment label such as `staging`. If absent, the server derives `production`, `staging` (Preview deployment of the staging branch), `preview`, or `development` from Vercel/Node metadata. Set this explicitly for the browser bundle on stable staging. |
-| `SENTRY_ORG` / `SENTRY_PROJECT` | Build configuration, non-secret | Select the Sentry organization and project for source-map upload. |
-| `SENTRY_AUTH_TOKEN` | **Build-only secret** | Sentry token authorized only to upload release artifacts/source maps. Never expose it with a `NEXT_PUBLIC_` prefix or make it available to application users. |
+| `SENTRY_AUTH_TOKEN` | **Build-only secret** | Sentry token authorized only to upload release artifacts/source maps to the existing `pixelsmith-platform` organization and `idoc` project. The Vercel Marketplace integration normally supplies this value. Never expose it with a `NEXT_PUBLIC_` prefix or make it available to application users. |
 
 Enable Vercel's automatically exposed system environment variables so `VERCEL_ENV`,
-`VERCEL_GIT_COMMIT_REF`, and `VERCEL_GIT_COMMIT_SHA` identify deployments and releases. In Sentry,
-create/select the Next.js project, copy its DSN, and issue a least-privilege source-map upload token.
-Set all four values in the matching Vercel environments, redeploy, and confirm that the build log
-reports a successful artifact upload without printing the token. The build deletes emitted browser
-source maps after upload so they are not publicly served.
+`VERCEL_GIT_COMMIT_REF`, and `VERCEL_GIT_COMMIT_SHA` identify deployments and releases. The Sentry
+project already exists as `pixelsmith-platform/idoc` and is linked through the Vercel Marketplace;
+do not create or link another project. Confirm that the integration supplies its DSN and build-only
+source-map upload token to the intended Vercel environments, add only the optional environment label
+where needed, redeploy, and confirm that the build log reports a successful artifact upload without
+printing the token. The build deletes emitted browser source maps after upload so they are not
+publicly served.
 
 For a safe local verification, set a non-production DSN and run
 `NODE_ENV=development pnpm exec tsx scripts/verify-sentry.ts` for the server event. For a browser

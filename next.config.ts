@@ -52,8 +52,8 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   disableLogger: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
+  org: 'pixelsmith-platform',
+  project: 'idoc',
   silent: !process.env.CI,
   sourcemaps: { deleteSourcemapsAfterUpload: true },
   telemetry: false,
