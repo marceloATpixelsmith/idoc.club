@@ -51,6 +51,9 @@ type SeminarAvailabilityRow = {
 function withAvailability(row: SeminarAvailabilityRow) {
   return {
     ...row,
+    seminar_date: row.seminar_date instanceof Date ? row.seminar_date.toISOString().slice(0, 10) : String(row.seminar_date),
+    start_time: String(row.start_time),
+    end_time: String(row.end_time),
     availability: computeSeminarAvailability({
       activeRegistrationCount: row.registered_count, capacity: row.capacity, endsAtUtc: new Date(row.ends_at),
       registrationDeadline: row.registration_deadline, status: row.status,
