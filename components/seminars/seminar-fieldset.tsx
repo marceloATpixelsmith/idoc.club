@@ -86,10 +86,15 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
           <div className="space-y-1.5">
             <Label htmlFor="memberPrice">Member price (EUR)</Label>
             <Input defaultValue={seminar ? (seminar.member_price_cents / 100).toFixed(2) : undefined} disabled={lockPrices} id="memberPrice" min={0} name="memberPrice" required step="0.01" type="number" />
+            {/* A disabled input is omitted from FormData entirely -- without this hidden mirror,
+              * submitting the form with lockPrices on (any seminar with registrations) would send no
+              * memberPrice at all, failing validation and blocking every edit, including cancellation. */}
+            {lockPrices && seminar ? <input name="memberPrice" type="hidden" value={(seminar.member_price_cents / 100).toFixed(2)} /> : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="nonMemberPrice">Non-member price (EUR)</Label>
             <Input defaultValue={seminar ? (seminar.non_member_price_cents / 100).toFixed(2) : undefined} disabled={lockPrices} id="nonMemberPrice" min={0} name="nonMemberPrice" required step="0.01" type="number" />
+            {lockPrices && seminar ? <input name="nonMemberPrice" type="hidden" value={(seminar.non_member_price_cents / 100).toFixed(2)} /> : null}
           </div>
           {lockPrices ? <p className="col-span-2 text-xs text-muted-foreground">Prices cannot change once this seminar has registrations.</p> : null}
         </CardContent>

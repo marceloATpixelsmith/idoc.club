@@ -7,7 +7,7 @@ import { sanitizeBankInstructions } from '@/lib/organization/format';
 import { getSeminarPaymentMethodInstructions, listCurrentSeminarsForMember, listEnabledSeminarPaymentMethods, listPastSeminarsForMember } from '@/lib/seminars/registrations';
 import { registrationDisplayLabel, type PaymentStatus, type RegistrationStatus } from '@/lib/seminars/status';
 import { cancelSeminarRegistrationAction, registerForSeminarAction } from '@/app/(dashboard)/dashboard/seminars/actions';
-import { registerAsGuestForSeminarAction } from '@/app/(marketing)/seminars/actions';
+import { GuestRegistrationForm } from '@/components/seminars/guest-registration-form';
 
 const money = (cents: number) => cents > 0 ? new Intl.NumberFormat('en-IE', { currency: 'EUR', style: 'currency' }).format(cents / 100) : 'No fee';
 
@@ -108,12 +108,7 @@ export async function PublicSeminarsCatalog() {
           <div className="rounded border p-4">
             <p className="text-sm font-semibold">Continue as a guest</p>
             <p className="mt-1 text-sm text-muted-foreground">Register now at the non-member price of {money(seminar.non_member_price_cents)}. No account required.</p>
-            <SeminarForm action={registerAsGuestForSeminarAction} pendingLabel="Registering" submitLabel="Register as guest">
-              <input name="seminarId" type="hidden" value={seminar.id} />
-              <label className="block text-sm">Full name<input className="mt-1 block w-full rounded-md border border-input bg-transparent p-2 text-sm" maxLength={200} name="name" required /></label>
-              <label className="block text-sm">Email<input className="mt-1 block w-full rounded-md border border-input bg-transparent p-2 text-sm" maxLength={255} name="email" required type="email" /></label>
-              <PaymentMethodField methods={paymentMethods} />
-            </SeminarForm>
+            <GuestRegistrationForm paymentMethods={paymentMethods} seminarId={seminar.id} />
           </div>
         </div>
       </details>

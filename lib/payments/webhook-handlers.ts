@@ -7,7 +7,7 @@ import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, not
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -247,7 +247,7 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     try {
       await sendTransactionalEmail({
         html: renderTransactionalEmail({
-          bodyHtml: `<p>Hello ${registration.guestName ?? ''},</p><p>Your payment for this seminar was received. Thank you.</p>`,
+          bodyHtml: `<p>Hello ${escapeHtml(registration.guestName ?? '')},</p><p>Your payment for this seminar was received. Thank you.</p>`,
           heading: 'Seminar payment confirmed',
         }),
         subject: 'Your IDOC seminar payment', to: registration.guestEmail,
@@ -318,7 +318,7 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
       try {
         await sendTransactionalEmail({
           html: renderTransactionalEmail({
-            bodyHtml: `<p>Hello ${registration.guestName ?? ''},</p><p>Your seminar refund has been processed.</p>`,
+            bodyHtml: `<p>Hello ${escapeHtml(registration.guestName ?? '')},</p><p>Your seminar refund has been processed.</p>`,
             heading: 'Seminar refund confirmed',
           }),
           subject: 'Your IDOC seminar refund', to: registration.guestEmail,
