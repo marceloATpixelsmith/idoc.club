@@ -468,3 +468,12 @@ test('initialPaymentStatusForMethod maps each canonical payment method to its ow
   assert.equal(initialPaymentStatusForMethod('bank_transfer'), 'bank_transfer_pending');
   assert.equal(initialPaymentStatusForMethod('cash_event'), 'cash_pending');
 });
+
+
+test('Stripe webhook processing failures are observable and retryable', () => {
+  const routeSource = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
+  const eventSource = readFileSync('lib/observability/security-events.ts', 'utf8');
+  assert.match(routeSource, /logError\('stripe_webhook_processing_failed'/);
+  assert.match(routeSource, /throw error/);
+  assert.match(eventSource, /stripe_webhook_processing_failed:[\s\S]*sentry: true/);
+});
