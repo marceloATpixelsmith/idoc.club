@@ -65,7 +65,7 @@ export function InternationalPhoneInput({
           aria-expanded={countryPickerOpen}
           aria-haspopup="listbox"
           aria-label="Choose phone country"
-          className="flex h-11 min-w-[5.25rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 py-0 text-sm leading-none text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-11 min-w-[5.25rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 text-sm text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setCountryPickerOpen((open) => !open)}
           type="button"
         >
@@ -106,10 +106,10 @@ export function InternationalPhoneInput({
           </div>
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-1 items-center rounded-r-md border border-input bg-surface focus-within:z-10 focus-within:ring-2 focus-within:ring-ring">
+      <div className="flex h-11 min-w-0 flex-1 items-center rounded-r-md border border-input bg-surface focus-within:z-10 focus-within:ring-2 focus-within:ring-ring">
         <input
           autoComplete="tel-national"
-          className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
           id={id}
           inputMode="tel"
           onChange={(event) => {
