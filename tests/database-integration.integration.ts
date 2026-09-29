@@ -365,6 +365,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0060_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
+  expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
