@@ -248,7 +248,7 @@ test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted thr
   assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
   assert.match(memberPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
-  assert.match(memberPage, /seminar\.is_fei \? <FeiBadge/);
+  assert.match(memberPage, /seminar\.is_fei \? <div[^>]*><FeiBadge/);
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
   assert.match(detailPage, /seminar\.is_fei \? <div[\s\S]*?<FeiBadge/);
@@ -324,20 +324,29 @@ test('the public seminar catalog shows both the member and non-member price, wit
   assert.match(memberPage, /href=\{`\/seminars\/\$\{seminar\.id\}`\}/);
 });
 
-test('every seminar listing card (available, my seminars, public catalog) is a single clickable link to that seminar\'s detail page, not just its title', () => {
-  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
-  const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
-  const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
-  assert.ok(availableBlock && /<Link className="block hover:opacity-90" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(availableBlock));
-  assert.ok(myBlock && /<Link className="absolute inset-0" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(myBlock), 'My Seminars keeps its Cancel action independently clickable via a stretched overlay link, not a wrapping one');
-  assert.ok(publicBlock && /<Link className="block hover:opacity-90" href=\{`\/seminars\/\$\{seminar\.id\}`\}>/.test(publicBlock));
+test('all seminar listing surfaces reuse a compact, uniformly constrained card with independent navigation and FEI links', () => {
+  const cardStart = memberPage.indexOf('export function SeminarListingCard');
+  const cardEnd = memberPage.indexOf('/** \"Available seminars\"', cardStart);
+  const cardBlock = memberPage.slice(cardStart, cardEnd);
+  assert.ok(cardStart > -1 && cardEnd > cardStart);
+  assert.match(cardBlock as string, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(cardBlock as string, /<Link aria-label=\{`View \${seminar\.title}`\} className="absolute inset-0 z-10"/);
+  assert.match(cardBlock as string, /relative z-20[^"]*sm:ml-4/);
+  const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
+  assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
+  assert.match(memberPage, /w-full max-w-3xl divide-y/);
+  const homePage = readFileSync('app/(marketing)/page.tsx', 'utf8');
+  assert.match(homePage, /SeminarListingCard/);
+  assert.match(homePage, /w-full max-w-3xl divide-y/);
 });
 
-test('the My Seminars card only raises the actually-interactive Cancel form above its stretched overlay link, not the whole noninteractive status block, so clicks on the status text still navigate', () => {
-  const myBlock = memberPage.match(/async function MySeminars[\s\S]*?\n\}/)?.[0];
-  assert.ok(myBlock, 'MySeminars not found');
-  assert.doesNotMatch(myBlock as string, /<div className="relative z-10[^"]*">\s*<p className="mt-2 text-sm">Your registration:/, 'the registration-status block must not be raised above the stretched link -- only the Cancel form should be');
-  assert.match(myBlock as string, /<div className="relative z-10 mt-3">\s*<SeminarForm/, 'only the Cancel form itself should be raised above the overlay link');
+test('pricing follows title and date-only metadata inside the shared seminar information column', () => {
+  const cardIndex = memberPage.indexOf('export function SeminarListingCard');
+  const metadataIndex = memberPage.indexOf('formatSchedule(seminar)', cardIndex);
+  const childrenIndex = memberPage.indexOf('{children ?', cardIndex);
+  const feiIndex = memberPage.indexOf('seminar.is_fei ?', cardIndex);
+  assert.ok(cardIndex > -1 && metadataIndex > cardIndex && childrenIndex > metadataIndex && feiIndex > childrenIndex);
+  assert.doesNotMatch(memberPage, /justify-between/);
 });
 
 test('a signed-in profile without current entitlement (a lapsed membership) sees both prices on Available Seminars, since the detail page will route it to guest/non-member pricing', () => {

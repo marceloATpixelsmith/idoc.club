@@ -19,29 +19,28 @@ function AvailabilityTag({ availability }: { availability: keyof typeof AVAILABI
   return <span className="inline-block rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{AVAILABILITY_LABELS[availability]}</span>;
 }
 
-/** One row of a seminar listing -- the same icon-row layout the homepage's Upcoming Seminars widget
- * already uses (title, then location/date with MapPin/CalendarDays icons in small uppercase tracked
- * text), so a seminar reads identically wherever it's listed on the site. `meta` renders whatever
- * else this particular list needs on the right (price, an availability tag, a registration-status
- * line, a Cancel action) -- everything that varies between Available Seminars, Past seminars, the
- * public catalog, and My Seminars. */
-function SeminarRow({ children, seminar }: { children?: React.ReactNode; seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string } }) {
+/** Shared compact seminar card for the homepage and every public/member seminar listing. The
+ * overlay link keeps the card navigable without nesting the independently clickable FEI link. */
+export function SeminarListingCard({ children, href, seminar }: {
+  children?: React.ReactNode; href: string;
+  seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string };
+}) {
   return (
-    <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
-      <div>
+    <article className="relative grid gap-5 py-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <Link aria-label={`View ${seminar.title}`} className="absolute inset-0 z-10" href={href} />
+      <div className="min-w-0">
         <h3 className="text-xl">{seminar.title}</h3>
-        <div className="mt-2 flex flex-wrap items-center gap-5 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-          <span className="inline-flex items-center gap-2"><MapPin className="size-3.5 text-gold" /> {seminar.location}</span>
-          <span className="inline-flex items-center gap-2"><CalendarDays className="size-3.5 text-gold" />{formatSchedule(seminar)}</span>
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="inline-flex min-w-0 items-center gap-2"><MapPin aria-hidden className="size-3.5 shrink-0 text-gold" /><span className="break-words">{seminar.location}</span></span>
+          <span className="inline-flex items-center gap-2"><CalendarDays aria-hidden className="size-3.5 shrink-0 text-gold" />{formatSchedule(seminar)}</span>
         </div>
+        {children ? <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">{children}</div> : null}
       </div>
-      <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-2">
-        {children}
-        {seminar.is_fei ? <FeiBadge className="h-4" /> : null}
-      </div>
-    </div>
+      {seminar.is_fei ? <div className="relative z-20 w-fit shrink-0 sm:ml-4"><FeiBadge className="h-4" /></div> : null}
+    </article>
   );
 }
+
 
 /** "Available seminars": the database-backed catalog of upcoming, published seminars this member
  * has not yet registered for -- one flat list, open or not (a full/closed seminar still belongs
@@ -59,22 +58,20 @@ async function AvailableSeminars({ profileId, showBothPrices }: { profileId: num
     showBothPrices ? `Members: ${money(seminar.member_price_cents)} · Non-members: ${money(seminar.non_member_price_cents)}` : money(seminar.member_price_cents);
   const row = (seminar: (typeof seminars)[number]) => (
     <li key={seminar.id}>
-      <Link className="block hover:opacity-90" href={`/seminars/${seminar.id}`}>
-        <SeminarRow seminar={seminar}>
-          <p className="text-sm font-medium">{priceLine(seminar)}</p>
-          <AvailabilityTag availability={seminar.availability} />
-        </SeminarRow>
-      </Link>
+      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
+        <p className="font-medium">{priceLine(seminar)}</p>
+        <AvailabilityTag availability={seminar.availability} />
+      </SeminarListingCard>
     </li>
   );
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
-    {upcoming.length ? <ul className="mt-6 divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars available to you.</p>}
+    {upcoming.length ? <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars available to you.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
         <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
-        <ul className="mt-4 divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
+        <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}
   </section>;
@@ -91,29 +88,14 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
   const needsBankInstructions = registered.some((seminar) => seminar.payment_method_canonical_id === 'bank_transfer' && seminar.payment_status === 'bank_transfer_pending');
   const bankInstructionsHtml = needsBankInstructions ? sanitizeBankInstructions((await getSeminarPaymentMethodInstructions('bank_transfer')) ?? '') : null;
   const row = (seminar: (typeof seminars)[number]) => (
-    <li className="relative py-6" key={seminar.id}>
-      <Link className="absolute inset-0" href={`/seminars/${seminar.id}`}><span className="sr-only">View {seminar.title}</span></Link>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-xl">{seminar.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-5 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-            <span className="inline-flex items-center gap-2"><MapPin className="size-3.5 text-gold" /> {seminar.location}</span>
-            <span className="inline-flex items-center gap-2"><CalendarDays className="size-3.5 text-gold" />{formatSchedule(seminar)}</span>
-          </div>
-          <p className="mt-2 text-sm">Your registration: <strong>{registrationDisplayLabel(seminar.registration_status as RegistrationStatus, (seminar.payment_status ?? 'unpaid') as PaymentStatus)}</strong></p>
-          {seminar.payment_status === 'bank_transfer_pending' && bankInstructionsHtml ? <div className="mt-2 rounded border p-3 text-sm" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} /> : null}
-          {seminar.payment_status === 'cash_pending' ? <p className="mt-2 text-sm">Pay in cash at the event.</p> : null}
-        </div>
-        <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-2">
-          <p className="text-sm font-medium">{money(seminar.member_price_cents)}</p>
-          {seminar.is_fei ? <FeiBadge className="h-4" /> : null}
-        </div>
-      </div>
-      {!past && seminar.registration_status === 'registered' ? (
-        <div className="relative z-10 mt-3">
-          <SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm>
-        </div>
-      ) : null}
+    <li key={seminar.id}>
+      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
+        <p className="font-medium">{money(seminar.member_price_cents)}</p>
+        <p>Your registration: <strong>{registrationDisplayLabel(seminar.registration_status as RegistrationStatus, (seminar.payment_status ?? 'unpaid') as PaymentStatus)}</strong></p>
+        {seminar.payment_status === 'bank_transfer_pending' && bankInstructionsHtml ? <div className="basis-full rounded border p-3" dangerouslySetInnerHTML={{ __html: bankInstructionsHtml }} /> : null}
+        {seminar.payment_status === 'cash_pending' ? <p className="basis-full">Pay in cash at the event.</p> : null}
+      </SeminarListingCard>
+      {!past && seminar.registration_status === 'registered' ? <div className="pb-6"><SeminarForm action={cancelSeminarRegistrationAction} pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
     </li>
   );
 
@@ -121,7 +103,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     <h2 className="text-2xl" id="my-registrations-heading">My seminar registrations</h2>
     <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars?view=my">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?view=my&tab=past">Past</Link></nav>
     <div className="mt-6">
-      {registered.length ? <ul className="divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar registrations.' : 'You have no upcoming seminar registrations.'}</p>}
+      {registered.length ? <ul className="w-full max-w-3xl divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar registrations.' : 'You have no upcoming seminar registrations.'}</p>}
     </div>
   </section>;
 }
@@ -135,22 +117,20 @@ export async function PublicSeminarsCatalog() {
   const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(null), listPastPublishedSeminars()]);
   const row = (seminar: (typeof seminars)[number]) => (
     <li key={seminar.id}>
-      <Link className="block hover:opacity-90" href={`/seminars/${seminar.id}`}>
-        <SeminarRow seminar={seminar}>
-          <p className="text-sm font-medium">Members: {money(seminar.member_price_cents)} · Non-members: {money(seminar.non_member_price_cents)}</p>
-          <AvailabilityTag availability={seminar.availability} />
-        </SeminarRow>
-      </Link>
+      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
+        <p className="font-medium">Members: {money(seminar.member_price_cents)} · Non-members: {money(seminar.non_member_price_cents)}</p>
+        <AvailabilityTag availability={seminar.availability} />
+      </SeminarListingCard>
     </li>
   );
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
-    {seminars.length ? <ul className="mt-6 divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
+    {seminars.length ? <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
         <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
-        <ul className="mt-4 divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
+        <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}
   </section>;
