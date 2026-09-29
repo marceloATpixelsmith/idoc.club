@@ -28,9 +28,10 @@ test('seminar and registration states, and their documented length limits, are c
 
 test('a seminar\'s start/end date and both its member and non-member prices are constrained non-negative and ordered in the migration', () => {
   assert.match(dateOnlyMigration, /CHECK \("end_date" >= "start_date"\)/);
-  assert.match(dateOnlyMigration, /DROP COLUMN "start_time"/);
-  assert.match(dateOnlyMigration, /DROP COLUMN "end_time"/);
-  assert.match(dateOnlyMigration, /DROP COLUMN "timezone"/);
+  // Legacy time/timezone columns remain nullable during the additive staging rollout so main and staging can safely share the database.
+  assert.match(dateOnlyMigration, /ALTER COLUMN "start_time" DROP NOT NULL/);
+  assert.match(dateOnlyMigration, /ALTER COLUMN "end_time" DROP NOT NULL/);
+  assert.match(dateOnlyMigration, /ALTER COLUMN "timezone" DROP NOT NULL/);
   assert.match(multiDayMigration, /"member_price_cents" >= 0/);
   assert.match(multiDayMigration, /"non_member_price_cents" >= 0/);
 });
