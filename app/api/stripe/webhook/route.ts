@@ -29,7 +29,12 @@ export async function POST(request: Request) {
     );
   }
 
-  await processStripeEvent(event, stripe);
+  try {
+    await processStripeEvent(event, stripe);
+  } catch (error) {
+    await logError('stripe_webhook_processing_failed', { reason: 'processing_failed' });
+    throw error;
+  }
 
   return Response.json({ received: true });
 }
