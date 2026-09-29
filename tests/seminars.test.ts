@@ -143,6 +143,11 @@ test('seminar payments are classified separately from membership billing: the ch
   assert.match(checkoutSource, /kind: 'seminar_registration'/);
 });
 
+test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () => {
+  assert.match(guestActions, /checkOriginRateLimit\('seminar_guest_checkout', origin\)/);
+  assert.doesNotMatch(guestActions, /seminar_guest_registration_checkout/);
+});
+
 test('anonymous online registration is Stripe-first: Checkout collects contact details and the paid webhook creates the guest registration', () => {
   assert.match(checkoutSource, /export async function createGuestSeminarCheckoutSession/);
   assert.match(checkoutSource, /kind: 'seminar_guest_registration'/);
