@@ -4995,10 +4995,6 @@
           "name": "seminars_title_length_check",
           "value": "char_length(\"idoc\".\"seminars\".\"title\") between 1 and 200"
         },
-        "seminars_description_length_check": {
-          "name": "seminars_description_length_check",
-          "value": "char_length(\"idoc\".\"seminars\".\"description\") between 1 and 10000"
-        },
         "seminars_location_length_check": {
           "name": "seminars_location_length_check",
           "value": "char_length(\"idoc\".\"seminars\".\"location\") between 1 and 2000"
