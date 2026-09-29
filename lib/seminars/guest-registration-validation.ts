@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isValidInternationalPhone } from '@/lib/phone';
+import { isValidInternationalPhone } from '../phone.ts';
 
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 
