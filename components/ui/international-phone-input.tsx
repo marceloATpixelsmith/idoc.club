@@ -65,7 +65,7 @@ export function InternationalPhoneInput({
           aria-expanded={countryPickerOpen}
           aria-haspopup="listbox"
           aria-label="Choose phone country"
-          className="flex h-11 min-w-[5.25rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 text-sm text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-11 min-w-[5.25rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 py-0 text-sm leading-none text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setCountryPickerOpen((open) => !open)}
           type="button"
         >
