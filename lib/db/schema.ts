@@ -480,8 +480,7 @@ export const contentPageRevisions = idocSchema.table('content_page_revisions', {
  * (Organization Settings, migration 0038) -- Online via Stripe always, Bank Transfer/Cash at the
  * Event whenever enabled -- and the registrant picks one at registration time
  * (`seminarRegistrations.paymentMethodCanonicalId`, migration 0055). A seminar may span multiple
- * days (`startDate`/`startTime` and `endDate`/`endTime`, both in `timezone`'s local wall-clock
- * time) -- a single-day seminar simply has `endDate = startDate`. Two prices apply uniformly to
+ * calendar days (`startDate` and `endDate`) -- a single-day seminar has `endDate = startDate`. Two prices apply uniformly to
  * every seminar (migration 0056): `memberPriceCents` for an entitled logged-in member,
  * `nonMemberPriceCents` for a guest registrant. Both prices become immutable at the application
  * layer once any registration exists (lib/seminars/seminars.ts), and `capacity` may only be
@@ -491,11 +490,19 @@ export const seminars = idocSchema.table('seminars', {
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').notNull(),
   startDate: date('start_date').notNull(),
-  startTime: time('start_time').notNull(),
   endDate: date('end_date').notNull(),
-  endTime: time('end_time').notNull(),
-  timezone: varchar('timezone', { length: 60 }).notNull(),
+  // Legacy rollout columns retained temporarily for compatibility with main; date-only code does not use them.
+  startTime: time('start_time'),
+  endTime: time('end_time'),
+  timezone: varchar('timezone', { length: 60 }),
   location: text('location').notNull(),
+  language: varchar('language', { length: 35 }).notNull().default('en'),
+  organizingNationalFederation: varchar('organizing_national_federation', { length: 2 }).notNull().default('IE'),
+  courseDirectors: text('course_directors').notNull().default(''),
+  participantProfile: text('participant_profile').notNull().default(''),
+  courseVenueInformation: text('course_venue_information').notNull().default(''),
+  application: text('application').notNull().default(''),
+  accommodationInformation: text('accommodation_information').notNull().default(''),
   capacity: integer('capacity').notNull(),
   memberPriceCents: integer('member_price_cents').notNull(),
   nonMemberPriceCents: integer('non_member_price_cents').notNull(),
@@ -513,12 +520,12 @@ export const seminars = idocSchema.table('seminars', {
 }, (table) => [
   check('seminars_status_check', sql`${table.status} in ('draft', 'published', 'canceled')`),
   check('seminars_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
-  check('seminars_description_length_check', sql`char_length(${table.description}) between 1 and 10000`),
   check('seminars_location_length_check', sql`char_length(${table.location}) between 1 and 2000`),
   check('seminars_capacity_check', sql`${table.capacity} > 0`),
   check('seminars_member_price_check', sql`${table.memberPriceCents} >= 0`),
   check('seminars_non_member_price_check', sql`${table.nonMemberPriceCents} >= 0`),
-  check('seminars_date_order_check', sql`${table.endDate} > ${table.startDate} or (${table.endDate} = ${table.startDate} and ${table.endTime} > ${table.startTime})`),
+  check('seminars_date_order_check', sql`${table.endDate} >= ${table.startDate}`),
+  check('seminars_language_length_check', sql`char_length(${table.language}) between 2 and 35`),
   // all_levels always stands alone (lib/seminars/seminars.ts's parseLevels enforces this at the
   // application layer) -- this constraint enforces the same invariant at the database layer, so a
   // write that bypasses parseLevels (a manual repair, a future import) can never persist the

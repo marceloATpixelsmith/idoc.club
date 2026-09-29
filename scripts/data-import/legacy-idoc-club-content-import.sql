@@ -38,8 +38,7 @@
 --    registration record. Every such value is marked "ASSUMPTION" in scripts/data-import
 --    generation (see the per-row SQL comments below) and MUST be reviewed by an administrator
 --    before the imported seminars are relied on for real registrations:
---      - start_time / end_time: no time-of-day was ever published, and none is shown or collected
---        for any seminar (migration 0058); defaulted to the same 00:00-23:59 anchor every seminar
+-- --        for any seminar (migration 0058); defaulted to the same 00:00-23:59 anchor every seminar
 --        gets, so date-based availability/deadline math behaves identically to any other seminar.
 --      - registration_deadline: defaulted to 14 days before the seminar where the source gave no
 --        explicit application deadline.
@@ -1737,7 +1736,7 @@ FROM ins;
 -- Seminars (legacy category: seminars) (4 rows) ----------------------------------
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/ (wp post id 3242)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L2 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/
@@ -1799,10 +1798,9 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
     '2026-06-27'::date,
-    '00:00'::time,
-    '23:59'::time,
-    'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
+    'en',
+    'GB',
     10,
     15000,
     15000,
@@ -1822,7 +1820,7 @@ FROM ins;
 
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/ (wp post id 3244)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L3 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/
@@ -1882,10 +1880,9 @@ Premier Inn, Gloucester (Barnwood), Centre Seven, Gloucester, GL4 3HR Room price
 https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/gloucester-barnwood.html? cid=BMF_GLOWHE',
     '2026-06-27'::date,
     '2026-06-27'::date,
-    '00:00'::time,
-    '23:59'::time,
-    'Europe/London',
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
+    'en',
+    'GB',
     20,
     15000,
     15000,
@@ -1905,7 +1902,7 @@ FROM ins;
 
 -- source: https://idoc.club/dress-judge-maintenance-course-falstervbo/ (wp post id 3346)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Dressage Judge Maintenance Course',
     'Source: https://idoc.club/dress-judge-maintenance-course-falstervbo/
@@ -1977,9 +1974,6 @@ TBD
 Nearest airports: Malmö SWE (50km) or Copenhagen DEN (48 km)',
     '2026-07-10'::date,
     '2026-07-10'::date,
-    '00:00'::time,
-    '23:59'::time,
-    'Europe/Stockholm',
     'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
     20,
     30000,
@@ -2000,7 +1994,7 @@ FROM ins;
 
 -- source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/ (wp post id 3299)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, start_time, end_time, timezone, location, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Young Horse Seminar, Verden 2026 – Save the Date!',
     'Source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/
@@ -2028,9 +2022,6 @@ COURSE FEE
 EUR 350 (IDOC members)',
     '2026-08-06'::date,
     '2026-08-06'::date,
-    '00:00'::time,
-    '23:59'::time,
-    'Europe/Berlin',
     'Verden, Germany',
     30,
     35000,

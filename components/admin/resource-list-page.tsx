@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ResourceDataTable, type ResourceRow } from '@/components/admin/resource-data-table';
+import { formatAdminDate } from '@/lib/seminars/format';
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { listAdminContentPages } from '@/lib/content/pages';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -51,10 +52,8 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
-      date: row.start_date === row.end_date
-        ? String(row.start_date)
-        : `${String(row.start_date)} – ${String(row.end_date)}`,
-      status: String(row.status),
+      start: formatAdminDate(String(row.start_date)), end: formatAdminDate(String(row.end_date)),
+      deadline: formatAdminDate(new Date(String(row.registration_deadline)).toISOString().slice(0, 10)), status: String(row.status),
       prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)} / €${(Number(row.non_member_price_cents) / 100).toFixed(2)}`,
       registrations: `${String(row.registered_count)} / ${String(row.capacity)}`,
     }));

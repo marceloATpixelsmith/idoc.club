@@ -1,15 +1,17 @@
-import { Banknote, Calendar, CalendarClock, Layers, MapPin } from 'lucide-react';
+import { Banknote, Calendar, CalendarClock, Languages, Layers, MapPin, Users, Flag } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FeiBadge } from '@/components/seminars/fei-badge';
 import { SeminarRegisterCta } from '@/components/seminars/seminar-register-cta';
 import { PageHeader } from '@/components/site/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { BackLink } from '@/components/ui/back-link';
 import { getUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
+import { countryNameForCode } from '@/lib/membership/countries';
+import { languageNameForTag } from '@/lib/seminars/language';
 import { formatDate, formatLevels, formatSchedule, money } from '@/lib/seminars/format';
 import { getSeminarForRegistrant, listEnabledSeminarPaymentMethods } from '@/lib/seminars/registrations';
 import { AVAILABILITY_LABELS, registrationDisplayLabel, type PaymentStatus, type RegistrationStatus } from '@/lib/seminars/status';
@@ -88,6 +90,9 @@ export default async function SeminarDetailPage({ params, searchParams }: { para
                 <div className="divide-y divide-border">
                   <InfoRow icon={Calendar}>{dateRange}</InfoRow>
                   <InfoRow icon={MapPin}>{seminar.location}</InfoRow>
+                  <InfoRow icon={Languages}>Language: {languageNameForTag(seminar.language)}</InfoRow>
+                  <InfoRow icon={Flag}>Organizing National Federation: {countryNameForCode(seminar.organizing_national_federation)}</InfoRow>
+                  <InfoRow icon={Users}>Number of participants: {seminar.capacity}</InfoRow>
                   <InfoRow icon={Banknote}>Members: {money(seminar.member_price_cents)} · Non-members: {money(seminar.non_member_price_cents)}</InfoRow>
                   {levelsLabel ? <InfoRow icon={Layers}>{levelsLabel}</InfoRow> : null}
                   <InfoRow icon={CalendarClock}>Registration deadline: {deadlineDate}</InfoRow>
@@ -116,8 +121,20 @@ export default async function SeminarDetailPage({ params, searchParams }: { para
           </div>
 
           <Card>
-            <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-wider text-gold">Directors and Application Details</CardTitle></CardHeader>
-            <CardContent><div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(seminar.description.includes('<') ? seminar.description : `<p>${seminar.description.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')}</p>`) }} /></CardContent>
+            <CardContent className="space-y-8 pt-6">
+              {([
+                ['Course Directors', seminar.course_directors],
+                ['Participant Profile', seminar.participant_profile],
+                ['Course Venue Information', seminar.course_venue_information],
+                ['Application', seminar.application],
+                ['Accommodation Information', seminar.accommodation_information],
+              ] as const).filter(([, html]) => html).map(([heading, html]) => (
+                <section key={heading}>
+                  <h2 className="mb-3 text-lg font-bold uppercase tracking-wider text-orange">{heading}</h2>
+                  <div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(html) }} />
+                </section>
+              ))}
+            </CardContent>
           </Card>
         </div>
       </div>

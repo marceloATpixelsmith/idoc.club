@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowUpRight, CalendarDays, MapPin } from 'lucide-react';
-import { FeiBadge } from '@/components/seminars/fei-badge';
+import { ArrowUpRight } from 'lucide-react';
+import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { blogPosts } from '@/lib/content/site';
 import { listPublicArticles } from '@/lib/news/articles';
-import { formatDate } from '@/lib/seminars/format';
 import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
 
 export const metadata: Metadata = {
@@ -83,27 +82,10 @@ export default async function Home() {
             {upcomingSeminars.length === 0 ? (
               <p className="mt-10 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
             ) : (
-              <ul className="mt-10 divide-y divide-border border-y border-border">
-                {upcomingSeminars.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <h3 className="text-xl">{s.title}</h3>
-                      <div className="mt-2 flex flex-wrap items-center gap-5 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                        <span className="inline-flex items-center gap-2">
-                          <MapPin className="size-3.5 text-gold" /> {s.location}
-                        </span>
-                        <span className="inline-flex items-center gap-2">
-                          <CalendarDays className="size-3.5 text-gold" />
-                          {s.start_date === s.end_date
-                            ? formatDate(s.start_date)
-                            : `${formatDate(s.start_date)} – ${formatDate(s.end_date)}`}
-                        </span>
-                      </div>
-                    </div>
-                    {s.is_fei ? <FeiBadge className="h-4" /> : null}
+              <ul className="mt-10 w-full max-w-3xl divide-y divide-border border-y border-border">
+                {upcomingSeminars.map((seminar) => (
+                  <li key={seminar.id}>
+                    <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
                   </li>
                 ))}
               </ul>

@@ -46,9 +46,9 @@ async function paidMember() {
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
-    capacity: 2, description: 'A hands-on judging clinic.', endDate: startDate, endTime: '16:30', isFei: false, levels: [], location: 'Arena 3, IDOC Headquarters',
+    accommodationInformation: '<p>Hotel details</p>', application: '<p>Apply online</p>', capacity: 2, courseDirectors: '<p>Director</p>', courseVenueInformation: '<p>Arena details</p>', endDate: startDate, isFei: false, language: 'en', levels: [], location: 'Arena 3, IDOC Headquarters', organizingNationalFederation: 'IE', participantProfile: '<p>Officials</p>',
     memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48),
-    startDate, startTime: '09:00', status: 'published', title: 'Judging Clinic', ...overrides,
+    startDate, status: 'published', title: 'Judging Clinic', ...overrides,
   };
 }
 
@@ -61,12 +61,11 @@ test('an authenticated non-administrator cannot create a seminar', async () => {
   await assert.rejects(asMember(user.id, () => createSeminar(seminarInput())), AuthorizationError);
 });
 
-test('capacity, prices, and real start/end datetimes are constrained server-side', async () => {
+test('capacity, prices, and date-only start/end values are constrained server-side', async () => {
   const admin = await adminUser();
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ capacity: 0 }))), SeminarValidationError);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ memberPrice: -5 }))), SeminarValidationError);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ nonMemberPrice: -5 }))), SeminarValidationError);
-  await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ endTime: '08:00', startTime: '09:00' }))), SeminarValidationError);
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const earlierEndDate = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ endDate: earlierEndDate, startDate }))), SeminarValidationError, 'end date cannot precede start date');
