@@ -143,9 +143,18 @@ test('seminar payments are classified separately from membership billing: the ch
   assert.match(checkoutSource, /kind: 'seminar_registration'/);
 });
 
-test('a guest checkout session is priced against the non-member fee and uses customer_email, never a managed billing-account Customer', () => {
-  assert.match(checkoutSource, /customer_email: email/);
-  assert.match(checkoutSource, /profile_id is null then s\.non_member_price_cents else s\.member_price_cents/);
+test('anonymous online registration is Stripe-first: Checkout collects contact details and the paid webhook creates the guest registration', () => {
+  assert.match(checkoutSource, /export async function createGuestSeminarCheckoutSession/);
+  assert.match(checkoutSource, /kind: 'seminar_guest_registration'/);
+  assert.match(checkoutSource, /phone_number_collection: \{ enabled: true \}/);
+  assert.match(checkoutSource, /key: 'first_name'/);
+  assert.match(checkoutSource, /key: 'last_name'/);
+  const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  assert.match(webhookSource, /handleGuestSeminarCheckoutSessionCompleted/);
+  assert.match(webhookSource, /session\.customer_details\?\.email/);
+  assert.match(webhookSource, /session\.customer_details\?\.phone/);
+  assert.match(webhookSource, /guestFirstName: firstName/);
+  assert.match(guestActions, /paymentMethod === 'online_stripe'/);
 });
 
 test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
@@ -387,6 +396,9 @@ test('the Register CTA is a single full-width button; a signed-out visitor sees 
   assert.match(cta, /href="\/sign-up"/);
   assert.match(cta, /import \{ Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle \} from '@\/components\/ui\/dialog'/);
   assert.match(cta, /SeminarRegistrationForm/);
+  assert.match(cta, /startGuestSeminarStripeCheckoutAction/);
+  assert.match(cta, /methodId === 'online_stripe'/);
+  assert.match(cta, /disabled=\{!guestTurnstileToken\}/);
 });
 
 test('the shared seminar registration form pre-fills and locks the name/email fields for a member or a signed-in profile owner, and shows them as editable inputs only for a true anonymous guest', () => {
