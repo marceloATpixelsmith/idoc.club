@@ -22,6 +22,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
   const [phone, setPhone] = useState('');
 
   useEffect(() => {
@@ -34,6 +35,8 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
   const fieldErrors = guestState.fieldErrors;
   const hasFieldErrors = Boolean(fieldErrors && Object.values(fieldErrors).some(Boolean));
   const formIsValid = guestContactSchema.safeParse({ email, firstName, lastName, phone }).success;
+  const emailIsValid = guestContactSchema.shape.email.safeParse(email).success;
+  const showEmailError = emailTouched && !emailIsValid;
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -66,8 +69,22 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
 
           <div className="space-y-1.5">
             <Label htmlFor="registrantEmail">Email</Label>
-            <Input aria-invalid={Boolean(fieldErrors?.email)} id="registrantEmail" maxLength={255} name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
-            {fieldErrors?.email ? <p className="text-sm text-destructive" role="alert">{fieldErrors.email}</p> : null}
+            <Input
+              aria-describedby={showEmailError ? 'registrantEmailError' : undefined}
+              aria-invalid={showEmailError || Boolean(fieldErrors?.email)}
+              id="registrantEmail"
+              maxLength={255}
+              name="email"
+              onBlur={() => setEmailTouched(true)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (emailTouched) setEmailTouched(true);
+              }}
+              required
+              type="email"
+              value={email}
+            />
+            {showEmailError ? <p className="text-sm text-destructive" id="registrantEmailError" role="alert">Enter a complete, valid email address.</p> : fieldErrors?.email ? <p className="text-sm text-destructive" role="alert">{fieldErrors.email}</p> : null}
           </div>
 
           <div className="space-y-1.5">
