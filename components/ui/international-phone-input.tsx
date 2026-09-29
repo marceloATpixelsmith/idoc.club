@@ -123,7 +123,15 @@ export function InternationalPhoneInput({
           value={nationalNumber}
         />
       </div>
-      <input name={name} type="hidden" value={value} />
+      <input
+        aria-hidden
+        className="pointer-events-none absolute h-px w-px opacity-0"
+        name={name}
+        onChange={() => undefined}
+        required={required}
+        tabIndex={-1}
+        value={value}
+      />
     </div>
   );
 }
