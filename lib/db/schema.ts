@@ -515,7 +515,6 @@ export const seminars = idocSchema.table('seminars', {
 }, (table) => [
   check('seminars_status_check', sql`${table.status} in ('draft', 'published', 'canceled')`),
   check('seminars_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
-  check('seminars_description_length_check', sql`char_length(${table.description}) between 1 and 10000`),
   check('seminars_location_length_check', sql`char_length(${table.location}) between 1 and 2000`),
   check('seminars_capacity_check', sql`${table.capacity} > 0`),
   check('seminars_member_price_check', sql`${table.memberPriceCents} >= 0`),
