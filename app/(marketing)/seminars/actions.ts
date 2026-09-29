@@ -92,7 +92,7 @@ export async function startGuestSeminarStripeCheckoutAction(state: GuestStripeCh
   if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
     return { attempt: (state.attempt ?? 0) + 1, error: 'Verification challenge failed. Please try again.' };
   }
-  if (!(await checkOriginRateLimit('seminar_guest_registration_checkout', origin))) {
+  if (!(await checkOriginRateLimit('seminar_guest_checkout', origin))) {
     return { attempt: (state.attempt ?? 0) + 1, error: 'Too many attempts. Please try again in a few minutes.' };
   }
   try {
