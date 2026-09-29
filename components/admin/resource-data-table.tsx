@@ -132,7 +132,7 @@ export function ResourceDataTable({
         id,
         accessorFn: (row) => row[id] ?? '',
         enableHiding: id !== 'title',
-        enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'start', 'registrations'].includes(id),
+        enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
         enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
         header: header(label),
         meta: id === 'status'
