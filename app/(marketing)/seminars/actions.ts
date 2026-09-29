@@ -45,6 +45,7 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
     return { ...echo, error: result.error.issues[0]?.message ?? 'Check the highlighted fields and try again.', fieldErrors };
   }
   const { email, firstName, lastName, paymentMethod, phone, seminarId, turnstileToken } = result.data;
+  if (paymentMethod === 'online_stripe') return { ...echo, error: 'Online payment must be completed in Stripe Checkout.' };
 
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
