@@ -480,8 +480,8 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
         const rawFirstName = typeof fields.guestFirstName === 'string' ? fields.guestFirstName.trim() : '';
         const rawLastName = typeof fields.guestLastName === 'string' ? fields.guestLastName.trim() : '';
         const rawPhone = typeof fields.guestPhone === 'string' ? fields.guestPhone.trim() : '';
-        const firstNameResult = rawFirstName ? guestNameSchema.safeParse(rawFirstName) : null;
-        const lastNameResult = rawLastName ? guestNameSchema.safeParse(rawLastName) : null;
+        const firstNameResult = rawFirstName ? guestFirstNameSchema.safeParse(rawFirstName) : null;
+        const lastNameResult = rawLastName ? guestLastNameSchema.safeParse(rawLastName) : null;
         const phoneResult = rawPhone ? guestPhoneSchema.safeParse(rawPhone) : null;
         if (firstNameResult && !firstNameResult.success) throw new SeminarRegistrationError("Enter a valid guest first name.");
         if (lastNameResult && !lastNameResult.success) throw new SeminarRegistrationError("Enter a valid guest last name.");
