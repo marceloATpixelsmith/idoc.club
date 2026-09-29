@@ -490,6 +490,10 @@ export const seminars = idocSchema.table('seminars', {
   description: text('description').notNull(),
   startDate: date('start_date').notNull(),
   endDate: date('end_date').notNull(),
+  // Legacy rollout columns retained temporarily for compatibility with main; date-only code does not use them.
+  startTime: timestamp('start_time', { withTimezone: true }),
+  endTime: timestamp('end_time', { withTimezone: true }),
+  timezone: varchar('timezone', { length: 100 }),
   location: text('location').notNull(),
   language: varchar('language', { length: 35 }).notNull().default('en'),
   organizingNationalFederation: varchar('organizing_national_federation', { length: 2 }).notNull().default('IE'),
