@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
-import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { checkOriginRateLimit, checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { getSeminarPaymentMethodInstructions, registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
 import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
@@ -82,16 +82,23 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
 
 /** Anonymous online payment is Stripe-first: IDOC asks for no contact information before redirect.
  * Turnstile/CSRF and an origin-scoped rate limit still protect creation of provider sessions. */
-export async function startGuestSeminarStripeCheckoutAction(formData: FormData): Promise<void> {
+export type GuestStripeCheckoutState = { error?: string; attempt?: number };
+
+export async function startGuestSeminarStripeCheckoutAction(state: GuestStripeCheckoutState, formData: FormData): Promise<GuestStripeCheckoutState> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   const seminarId = formData.get('seminarId');
   const turnstileToken = String(formData.get('turnstileToken') ?? '');
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
-    throw new SeminarRegistrationError('Verification challenge failed. Please try again.');
+    return { attempt: (state.attempt ?? 0) + 1, error: 'Verification challenge failed. Please try again.' };
   }
-  if (!(await checkRateLimit('seminar_guest_registration', 'stripe_checkout', origin))) {
-    throw new SeminarRegistrationError('Too many attempts. Please try again in a few minutes.');
+  if (!(await checkOriginRateLimit('seminar_guest_registration_checkout', origin))) {
+    return { attempt: (state.attempt ?? 0) + 1, error: 'Too many attempts. Please try again in a few minutes.' };
   }
-  redirect(await createGuestSeminarCheckoutSession(seminarId));
+  try {
+    redirect(await createGuestSeminarCheckoutSession(seminarId));
+  } catch (error) {
+    if (error instanceof SeminarRegistrationError) return { attempt: (state.attempt ?? 0) + 1, error: error.message };
+    throw error;
+  }
 }
