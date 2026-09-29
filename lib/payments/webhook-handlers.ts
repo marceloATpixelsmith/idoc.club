@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type Stripe from 'stripe';
-import { and, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, notificationOutbox, paymentRefunds, payments, profiles, reconciliationFindings, renewalPreferences, seminarRegistrations, seminars, stripeEvents, subscriptions, users } from '@/lib/db/schema';
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
@@ -176,6 +176,93 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
 // to persist here in Phase 1 (admin surfacing of this state is Phase 3 scope).
 async function handleInvoicePaymentActionRequired(_tx: Transaction, _event: Stripe.Event, _stripe: WebhookStripeClient) {
   return undefined;
+}
+
+function checkoutCustomText(session: Stripe.Checkout.Session, key: string): string {
+  const field = session.custom_fields?.find((candidate) => candidate.key === key);
+  return field?.text?.value?.trim() ?? '';
+}
+
+async function refundGuestCheckoutWithoutRegistration(tx: Transaction, session: Stripe.Checkout.Session, stripe: WebhookStripeClient, reason: string) {
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+  if (!paymentIntentId || !stripe.refunds || !session.amount_total) {
+    await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict',
+      summary: 'A paid guest seminar Checkout could not be converted to a registration and requires manual refund review.',
+      details: { reason, sessionId: session.id, paymentIntentId: paymentIntentId ?? null } });
+    return;
+  }
+  try {
+    const refund = await stripe.refunds.create({ amount: session.amount_total,
+      metadata: { kind: 'seminar_guest_registration', seminarId: session.metadata?.seminarId ?? '' },
+      payment_intent: paymentIntentId }, { idempotencyKey: `idoc-guest-seminar-refund-${session.id}` });
+    await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict',
+      summary: 'A paid guest seminar Checkout was automatically refunded because no valid registration could be created.',
+      details: { reason, sessionId: session.id, paymentIntentId, refundId: refund.id, refundStatus: refund.status } });
+  } catch (error) {
+    await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict',
+      summary: 'Automatic refund failed for a paid guest seminar Checkout that could not become a registration.',
+      details: { reason, sessionId: session.id, paymentIntentId, message: error instanceof Error ? error.message : 'Stripe refund request failed.' } });
+  }
+}
+
+/** Stripe-first anonymous registration. No guest identity is collected or persisted by IDOC before
+ * payment. The verified Checkout Session supplies first name, last name, email and phone; only then
+ * is the guest seminar registration created. */
+async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliveredSession: Stripe.Checkout.Session, stripe: WebhookStripeClient) {
+  const session = stripe.checkout.sessions.retrieve ? await stripe.checkout.sessions.retrieve(deliveredSession.id) : deliveredSession;
+  const seminarId = Number(session.metadata?.seminarId);
+  const firstName = checkoutCustomText(session, 'first_name');
+  const lastName = checkoutCustomText(session, 'last_name');
+  const email = session.customer_details?.email?.trim().toLowerCase() ?? '';
+  const phone = session.customer_details?.phone?.trim() ?? '';
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+  const contactFieldsFitStorage = firstName.length <= 100 && lastName.length <= 100 && `${firstName} ${lastName}`.length <= 200 && email.length <= 255 && phone.length <= 40;
+  if (!Number.isInteger(seminarId) || !paymentIntentId || session.payment_status !== 'paid' || !firstName || !lastName || !email || !phone || !contactFieldsFitStorage) {
+    await refundGuestCheckoutWithoutRegistration(tx, session, stripe, 'Stripe Checkout was missing required verified registration data.');
+    return;
+  }
+
+  const [seminar] = await tx.select({ capacity: seminars.capacity, nonMemberPriceCents: seminars.nonMemberPriceCents,
+    registrationDeadline: seminars.registrationDeadline, status: seminars.status, title: seminars.title })
+    .from(seminars).where(eq(seminars.id, seminarId)).limit(1).for('update');
+  const expectedAmount = seminar?.nonMemberPriceCents ?? null;
+  const validPayment = Boolean(seminar) && session.amount_total === expectedAmount &&
+    session.metadata?.amountCents === String(expectedAmount) && session.metadata?.currency === 'EUR' &&
+    session.currency?.toLowerCase() === 'eur';
+  if (!seminar || !validPayment || seminar.status !== 'published' || new Date(seminar.registrationDeadline).getTime() <= Date.now()) {
+    await refundGuestCheckoutWithoutRegistration(tx, session, stripe, 'Seminar state or authoritative price no longer matched Checkout.');
+    return;
+  }
+
+  const [existing] = await tx.select({ id: seminarRegistrations.id }).from(seminarRegistrations)
+    .where(and(eq(seminarRegistrations.seminarId, seminarId), sql`lower(${seminarRegistrations.guestEmail}) = ${email}`)).limit(1);
+  if (existing) {
+    await refundGuestCheckoutWithoutRegistration(tx, session, stripe, 'This email already has a registration for the seminar.');
+    return;
+  }
+  const [{ activeCount }] = await tx.select({ activeCount: sql<number>`count(*)::int` }).from(seminarRegistrations)
+    .where(and(eq(seminarRegistrations.seminarId, seminarId), eq(seminarRegistrations.registrationStatus, 'registered')));
+  if (activeCount >= seminar.capacity) {
+    await refundGuestCheckoutWithoutRegistration(tx, session, stripe, 'The seminar filled before Checkout completed.');
+    return;
+  }
+
+  const [created] = await tx.insert(seminarRegistrations).values({
+    checkoutCreatedAt: new Date(), checkoutStatus: 'complete', currency: 'EUR', expectedAmountCents: expectedAmount,
+    guestEmail: email, guestFirstName: firstName, guestLastName: lastName, guestName: `${firstName} ${lastName}`,
+    guestPhone: phone, markedPaidByUserId: null, paidAt: new Date(), paymentMethodCanonicalId: 'online_stripe',
+    paymentStatus: 'paid', paymentStatusUpdatedAt: new Date(), registrationStatus: 'registered', seminarId,
+    stripeCheckoutSessionId: session.id, stripePaymentIntentId: paymentIntentId,
+  }).returning({ id: seminarRegistrations.id });
+  await tx.insert(auditLog).values({ action: 'guest.seminar_registration.registered_and_paid',
+    afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
+  try {
+    await sendTransactionalEmail({
+      html: renderTransactionalEmail({ bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration and payment for <strong>${escapeHtml(seminar.title)}</strong> are confirmed.</p>`,
+        heading: 'Seminar registration confirmed' }),
+      subject: 'Your IDOC seminar registration', to: email,
+    }, { signal: AbortSignal.timeout(10_000) });
+  } catch { /* best-effort; payment and registration are already durable */ }
 }
 
 // Seminar payments are classified separately from membership billing and never touch membership
@@ -452,6 +539,7 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     return;
   }
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
+  if (session.metadata?.kind === 'seminar_guest_registration') return handleGuestSeminarCheckoutSessionCompleted(tx, session, stripe);
   if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session, stripe);
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;

@@ -44,8 +44,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-export default async function SeminarDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SeminarDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ checkout?: string }> }) {
   const { id } = await params;
+  const { checkout } = await searchParams;
   const [user, member] = await Promise.all([getUser(), ownMember()]);
   const seminar = await getSeminarForRegistrant(id, member?.profile.id ?? null);
   if (!seminar) notFound();
@@ -73,6 +74,8 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
       <PageHeader eyebrow="Seminar" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
       <div className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
         <Link className="text-sm text-muted-foreground underline underline-offset-4" href="/seminars">← Back to Seminars</Link>
+        {checkout === 'success' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Payment completed. Your seminar registration will be confirmed by email.</p> : null}
+        {checkout === 'canceled' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Online payment was canceled. No payment was taken.</p> : null}
 
         {/* Details + Register come first in the markup -- and so first on mobile and on the left on
           * desktop -- since that's what a visitor actually came here to do. The long description

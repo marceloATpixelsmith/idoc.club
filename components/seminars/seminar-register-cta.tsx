@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
+import { startGuestSeminarStripeCheckoutAction, type GuestStripeCheckoutState } from '@/app/(marketing)/seminars/actions';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SeminarRegistrationForm } from '@/components/seminars/seminar-registration-form';
+import { CsrfField } from '@/components/security/csrf-field';
+import { TurnstileWidget } from '@/components/turnstile-widget';
 
 /** The single full-width "Register" call to action on a seminar's detail page. A signed-in visitor
  * (member or not) always goes straight to the registration form, pre-filled from whatever member
@@ -22,7 +25,11 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
-  const knownVisitor = Boolean(memberDetails) || Boolean(ownProfileDetails) || isSignedIn;
+  const [guestTurnstileToken, setGuestTurnstileToken] = useState('');
+  const [guestCheckoutState, guestCheckoutAction, guestCheckoutPending] = useActionState<GuestStripeCheckoutState, FormData>(startGuestSeminarStripeCheckoutAction, {});
+  useEffect(() => { if (guestCheckoutState.error) setGuestTurnstileToken(''); }, [guestCheckoutState]);
+  const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
+  const knownVisitor = hasProfile || isSignedIn;
 
   if (selectedPaymentMethod) {
     return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethod={selectedPaymentMethod} seminarId={seminarId} />;
@@ -63,11 +70,28 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
         <DialogContent>
           <DialogHeader><DialogTitle>Choose a payment method</DialogTitle><DialogDescription>Your choice applies only to this registration.</DialogDescription></DialogHeader>
           <div className="flex flex-col gap-3">
-            {paymentMethods.map((method) => (
-              <Button key={String(method.canonical_id)} onClick={() => { setSelectedPaymentMethod(String(method.canonical_id)); setPaymentDialogOpen(false); }} type="button" variant="outline">
-                {String(method.display_label)}
-              </Button>
-            ))}
+            {paymentMethods.map((method) => {
+              const methodId = String(method.canonical_id);
+              if (!hasProfile && methodId === 'online_stripe') {
+                return (
+                  <form action={guestCheckoutAction} className="w-full" key={`${methodId}-${guestCheckoutState.attempt ?? 0}`}>
+                    <CsrfField />
+                    <input name="seminarId" type="hidden" value={seminarId} />
+                    <input name="turnstileToken" type="hidden" value={guestTurnstileToken} />
+                    <Button className="w-full" disabled={!guestTurnstileToken || guestCheckoutPending} type="submit" variant="outline">
+                      {String(method.display_label)}
+                    </Button>
+                  {guestCheckoutState.error ? <p className="mt-2 text-sm text-destructive" role="alert">{guestCheckoutState.error}</p> : null}
+                  </form>
+                );
+              }
+              return (
+                <Button key={methodId} onClick={() => { setSelectedPaymentMethod(methodId); setPaymentDialogOpen(false); }} type="button" variant="outline">
+                  {String(method.display_label)}
+                </Button>
+              );
+            })}
+            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
           </div>
         </DialogContent>
       </Dialog>

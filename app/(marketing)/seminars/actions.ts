@@ -6,9 +6,9 @@ import { z } from 'zod';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
-import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { checkOriginRateLimit, checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { getSeminarPaymentMethodInstructions, registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
-import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
+import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
 export type GuestSeminarState = {
   email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
@@ -45,6 +45,7 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
     return { ...echo, error: result.error.issues[0]?.message ?? 'Check the highlighted fields and try again.', fieldErrors };
   }
   const { email, firstName, lastName, paymentMethod, phone, seminarId, turnstileToken } = result.data;
+  if (paymentMethod === 'online_stripe') return { ...echo, error: 'Online payment must be completed in Stripe Checkout.' };
 
   const origin = await requestOrigin();
   if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
@@ -76,4 +77,28 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
     return { ...echo, error: error instanceof Error ? error.message : 'Payment could not be started.' };
   }
   redirect(checkoutUrl);
+}
+
+
+/** Anonymous online payment is Stripe-first: IDOC asks for no contact information before redirect.
+ * Turnstile/CSRF and an origin-scoped rate limit still protect creation of provider sessions. */
+export type GuestStripeCheckoutState = { error?: string; attempt?: number };
+
+export async function startGuestSeminarStripeCheckoutAction(state: GuestStripeCheckoutState, formData: FormData): Promise<GuestStripeCheckoutState> {
+  await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+  const seminarId = formData.get('seminarId');
+  const turnstileToken = String(formData.get('turnstileToken') ?? '');
+  const origin = await requestOrigin();
+  if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
+    return { attempt: (state.attempt ?? 0) + 1, error: 'Verification challenge failed. Please try again.' };
+  }
+  if (!(await checkOriginRateLimit('seminar_guest_registration_checkout', origin))) {
+    return { attempt: (state.attempt ?? 0) + 1, error: 'Too many attempts. Please try again in a few minutes.' };
+  }
+  try {
+    redirect(await createGuestSeminarCheckoutSession(seminarId));
+  } catch (error) {
+    if (error instanceof SeminarRegistrationError) return { attempt: (state.attempt ?? 0) + 1, error: error.message };
+    throw error;
+  }
 }
