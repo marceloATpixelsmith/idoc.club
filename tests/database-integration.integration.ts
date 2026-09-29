@@ -144,7 +144,7 @@ test('migration 0061 preserves existing seminar content while retaining nullable
     const [row] = await sql`select course_directors,application from idoc.seminars where id=${legacy.id}`;
     assert.equal(row.course_directors, 'Preserve this content');
     assert.equal(row.application, 'Preserve this content');
-    const legacyColumns = await sql<{ column_name: string; is_nullable: string }[]>\`select column_name,is_nullable from information_schema.columns where table_schema='idoc' and table_name='seminars' and column_name in ('start_time','end_time','timezone') order by column_name\`;
+    const legacyColumns = await sql<{ column_name: string; is_nullable: string }[]>`select column_name,is_nullable from information_schema.columns where table_schema='idoc' and table_name='seminars' and column_name in ('start_time','end_time','timezone') order by column_name`;
     assert.deepEqual(legacyColumns, [
       { column_name: 'end_time', is_nullable: 'YES' },
       { column_name: 'start_time', is_nullable: 'YES' },
