@@ -1,49 +1,25 @@
 'use client';
 
+import { Dialog } from 'radix-ui';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 
 export function AdminFormDrawer({ children, closeHref, title }: { children: ReactNode; closeHref: string; title: string }) {
   const router = useRouter();
-  const panelRef = useRef<HTMLElement>(null);
-
-  function close() {
-    router.push(closeHref);
-  }
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    panelRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="presentation">
-      <button aria-label="Close form" className="absolute inset-0 bg-black/50" onClick={close} type="button" />
-      <aside
-        aria-label={title}
-        aria-modal="true"
-        className="relative h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl md:w-[85vw]"
-        ref={panelRef}
-        role="dialog"
-        tabIndex={-1}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-5 py-4 backdrop-blur lg:px-8">
-          <h1 className="text-2xl font-semibold text-gold">{title}</h1>
-          <Button aria-label="Close" onClick={close} size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button>
-        </div>
-        {children}
-      </aside>
-    </div>
+    <Dialog.Root defaultOpen onOpenChange={(open) => { if (!open) router.push(closeHref); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content className="fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none md:w-[85vw]">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-5 py-4 backdrop-blur lg:px-8">
+            <Dialog.Title className="text-2xl font-semibold text-gold">{title}</Dialog.Title>
+            <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button></Dialog.Close>
+          </div>
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
