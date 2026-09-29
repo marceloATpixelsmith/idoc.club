@@ -8,6 +8,7 @@ import {
   uuid,
   boolean,
   date,
+  time,
   jsonb,
   primaryKey,
   uniqueIndex,
