@@ -13,7 +13,6 @@ type ExistingSeminar = {
   registration_deadline: string | Date; start_date: string; status: string; title: string;
 };
 
-function toDatetimeLocalUtc(value: unknown): string { return new Date(String(value)).toISOString().slice(0, 16); }
 const STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', draft: 'Draft', published: 'Published' };
 const LEVEL_OPTIONS = [{ label: 'Level 1', value: 'level_1' }, { label: 'Level 2', value: 'level_2' }, { label: 'Level 3', value: 'level_3' }, { label: 'All Levels', value: 'all_levels' }] as const;
 
@@ -32,7 +31,7 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
     <FormSection title="Schedule"><FormGrid className="sm:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="startDate">Start date</Label><Input defaultValue={seminar?.start_date} id="startDate" name="startDate" required type="date" /></div>
       <div className="space-y-1.5"><Label htmlFor="endDate">End date</Label><Input defaultValue={seminar?.end_date} id="endDate" name="endDate" required type="date" /></div>
-      <div className="space-y-1.5"><Label htmlFor="registrationDeadline">Registration deadline (UTC)</Label><Input defaultValue={seminar ? toDatetimeLocalUtc(seminar.registration_deadline) : undefined} id="registrationDeadline" name="registrationDeadline" required type="datetime-local" /></div>
+      <div className="space-y-1.5"><Label htmlFor="registrationDeadline">Registration deadline</Label><Input defaultValue={seminar ? new Date(String(seminar.registration_deadline)).toISOString().slice(0, 10) : undefined} id="registrationDeadline" name="registrationDeadline" required type="date" /></div>
     </FormGrid></FormSection>
 
     <div className="xl:col-span-2"><FormSection title="Seminar information"><div className="grid gap-6 lg:grid-cols-2">
