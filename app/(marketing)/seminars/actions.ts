@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { guestContactSchema } from '@/lib/seminars/guest-registration-validation';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
@@ -14,11 +15,7 @@ export type GuestSeminarState = {
   email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
 };
 
-const guestSeminarSchema = z.object({
-  email: z.string().trim().email('Enter a valid email address.').max(255),
-  firstName: z.string().trim().min(1, 'Enter your first name.').max(100),
-  lastName: z.string().trim().min(1, 'Enter your last name.').max(100),
-  phone: z.string().trim().min(5, 'Enter a valid phone number.').max(40).regex(/^[+()\d\s.-]+$/, 'Enter a valid phone number.'),
+const guestSeminarSchema = guestContactSchema.extend({
   paymentMethod: z.string().min(1, 'Choose a payment method.'),
   seminarId: z.string().min(1, 'Seminar not found.'),
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
@@ -66,9 +63,8 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
   revalidatePath(`/seminars/${seminarId}`);
   if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
   if (outcome.paymentMethod === 'bank_transfer') {
-    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    const plainInstructions = instructions?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    return { success: `You are registered. ${plainInstructions || 'Follow the bank transfer instructions provided by IDOC.'}` };
+    await getSeminarPaymentMethodInstructions('bank_transfer');
+    return { success: 'Your confirmation will have the information to make the bank transfer.' };
   }
   let checkoutUrl: string;
   try {
