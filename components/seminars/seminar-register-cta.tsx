@@ -26,7 +26,8 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [guestTurnstileToken, setGuestTurnstileToken] = useState('');
-  const knownVisitor = Boolean(memberDetails) || Boolean(ownProfileDetails) || isSignedIn;
+  const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
+  const knownVisitor = hasProfile || isSignedIn;
 
   if (selectedPaymentMethod) {
     return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethod={selectedPaymentMethod} seminarId={seminarId} />;
@@ -69,7 +70,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
           <div className="flex flex-col gap-3">
             {paymentMethods.map((method) => {
               const methodId = String(method.canonical_id);
-              if (!knownVisitor && methodId === 'online_stripe') {
+              if (!hasProfile && methodId === 'online_stripe') {
                 return (
                   <form action={startGuestSeminarStripeCheckoutAction} className="w-full" key={methodId}>
                     <CsrfField />
@@ -87,7 +88,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                 </Button>
               );
             })}
-            {!knownVisitor ? <TurnstileWidget action="seminar_guest_registration" onVerify={setGuestTurnstileToken} theme="dark" /> : null}
+            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" onVerify={setGuestTurnstileToken} theme="dark" /> : null}
           </div>
         </DialogContent>
       </Dialog>
