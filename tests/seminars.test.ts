@@ -392,6 +392,7 @@ test('authenticated seminar registration never renders the contact form and alwa
   assert.match(cta, /if \(isSignedIn\)/);
   assert.match(cta, /action=\{authenticatedAction\}/);
   assert.match(cta, /name="paymentMethod"/);
+  assert.match(cta, /!hasProfile \? <TurnstileWidget/);
   assert.doesNotMatch(cta, /<SeminarRegistrationForm memberDetails=/);
   const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
   assert.doesNotMatch(form, /registerForSeminarAction|registerAtNonMemberPriceAction|memberDetails|ownProfileDetails|readOnly/);
