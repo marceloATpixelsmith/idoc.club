@@ -475,7 +475,7 @@ Security events (`lib/observability/logger.ts`) remain a distinct channel from `
 
 ## Sentry application error monitoring
 
-Sentry is the centralized exception-diagnostics channel for genuine browser, React, Next.js server,
+Sentry is the centralized application-error inbox for genuine browser, React, Next.js server,
 route-handler, Server Action, Edge, and explicitly caught background-worker failures. It does **not**
 replace the categorical security-event logger above or `idoc.audit_log`. In particular, expected
 login failures, authorization denials, rate limits, invalid input, provider webhook signature
