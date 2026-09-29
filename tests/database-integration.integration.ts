@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 55, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
+    assert.equal(count, 56, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -145,7 +145,7 @@ test('migration 0061 preserves existing seminar content while retaining nullable
     assert.equal(row.course_directors, 'Preserve this content');
     assert.equal(row.application, 'Preserve this content');
     const legacyColumns = await sql<{ column_name: string; is_nullable: string }[]>`select column_name,is_nullable from information_schema.columns where table_schema='idoc' and table_name='seminars' and column_name in ('start_time','end_time','timezone') order by column_name`;
-    assert.deepEqual(legacyColumns, [
+    assert.deepEqual([...legacyColumns], [
       { column_name: 'end_time', is_nullable: 'YES' },
       { column_name: 'start_time', is_nullable: 'YES' },
       { column_name: 'timezone', is_nullable: 'YES' },
