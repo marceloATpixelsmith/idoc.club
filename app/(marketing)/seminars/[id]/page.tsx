@@ -6,6 +6,7 @@ import { FeiBadge } from '@/components/seminars/fei-badge';
 import { SeminarRegisterCta } from '@/components/seminars/seminar-register-cta';
 import { PageHeader } from '@/components/site/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BackLink } from '@/components/ui/back-link';
 import { getUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
@@ -73,14 +74,14 @@ export default async function SeminarDetailPage({ params, searchParams }: { para
     <>
       <PageHeader eyebrow="Seminar" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
       <div className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
-        <Link className="text-sm text-muted-foreground underline underline-offset-4" href="/seminars">← Back to Seminars</Link>
+        <BackLink href="/seminars">Back to Seminars</BackLink>
         {checkout === 'success' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Payment completed. Your seminar registration will be confirmed by email.</p> : null}
         {checkout === 'canceled' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Online payment was canceled. No payment was taken.</p> : null}
 
         {/* Details + Register come first in the markup -- and so first on mobile and on the left on
           * desktop -- since that's what a visitor actually came here to do. The long description
           * reads second, as supporting material rather than a wall of text blocking the CTA. */}
-        <div className="mt-8 grid gap-6 lg:grid-cols-[2fr_3fr]">
+        <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
           <div className="space-y-6">
             <Card className="py-0">
               <CardContent className="space-y-0 p-0">

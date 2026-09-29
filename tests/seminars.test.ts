@@ -64,7 +64,9 @@ test('member-facing registration functions derive the actor\'s own profile serve
 
 test('a guest can register without an account using structured contact details and a normalized email', () => {
   assert.match(registrationsSource, /export async function registerAsGuestForSeminar/);
-  assert.match(registrationsSource, /guestEmailSchema = z\.string\(\)\.trim\(\)\.email\(\)/);
+  const guestValidationSource = readFileSync('lib/seminars/guest-registration-validation.ts', 'utf8');
+  assert.match(registrationsSource, /guestEmailSchema/);
+  assert.match(guestValidationSource, /guestEmailSchema = z\.string\(\)\.trim\(\)\.email\(/);
   assert.match(registrationsSource, /guest_first_name/);
   assert.match(registrationsSource, /guest_last_name/);
   assert.match(registrationsSource, /guest_phone/);

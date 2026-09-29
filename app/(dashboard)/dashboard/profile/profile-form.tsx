@@ -6,6 +6,7 @@ import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InternationalPhoneInput } from '@/components/ui/international-phone-input';
 import { Label } from '@/components/ui/label';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
@@ -44,6 +45,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
   const initialClassification: Classification = judge && steward ? 'judge_steward' : ((judge?.roleType ?? steward?.roleType) as Classification | undefined) ?? 'veterinarian';
   const [classification, setClassification] = useState<Classification>(initialClassification);
 
+  const [phone, setPhone] = useState(str(member?.profile.phone));
   const [countryCode, setCountryCode] = useState(str(member?.profile.countryCode));
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState(official?.nationalFederationCountryCode ?? '');
   // An existing, already-saved value represents a deliberate choice -- editing the street address's
@@ -182,6 +184,14 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
                 <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="lastName">Last Name</Label>
                 <Input defaultValue={str(member.profile.lastName)} id="lastName" maxLength={FIELD_MAX_LENGTH.lastName} name="lastName" required />
               </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
+            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Contact</legend>
+            <div className="max-w-sm">
+              <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="phone">Phone</Label>
+              <InternationalPhoneInput id="phone" name="phone" onChange={setPhone} value={phone} />
             </div>
           </fieldset>
 

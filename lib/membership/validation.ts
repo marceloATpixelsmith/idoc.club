@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidInternationalPhone } from '../phone.ts';
 
 export const ISO_COUNTRY_CODES = `AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW`.split(' ');
 const ISO_COUNTRY_CODE_SET = new Set(ISO_COUNTRY_CODES);
@@ -28,6 +29,10 @@ export const STEWARD_STATUSES = [
 const countryCode = z.string().trim().toUpperCase().refine(
   (value) => ISO_COUNTRY_CODE_SET.has(value), 'Select a valid country',
 );
+export const memberPhoneSchema = z.string().trim().refine(isValidInternationalPhone, 'Enter a valid international phone number.');
+
+const optionalMemberPhoneSchema = z.union([memberPhoneSchema, z.literal(''), z.null(), z.undefined()])
+  .transform((value) => value || null);
 const requiredText = (label: string, max: number) => z.string().trim().min(1, `${label} is required`).max(max);
 const officialBase = z.object({
   feiId: z.string().trim().max(40).optional().transform((value) => value || null),
@@ -57,6 +62,7 @@ export const memberProfileSchema = z.object({
   countryCode,
   firstName: requiredText('First name', 100),
   lastName: requiredText('Last name', 100),
+  phone: optionalMemberPhoneSchema,
   postalCode: requiredText('ZIP/postal code', 30),
   roles: z.array(z.discriminatedUnion('roleType', [judgeRole, stewardRole, veterinarianRole])).min(1).max(2),
   stateProvince: requiredText('State/province', 100),
@@ -80,7 +86,7 @@ export function parseMemberProfileFormData(formData: FormData): unknown {
     ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatuses: formData.getAll('judgeStatus'), roleType: 'judge' }] : []),
     ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatuses: formData.getAll('stewardStatus'), roleType: 'steward' }] : []),
   ];
-  return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
+  return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: formData.get('phone'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
 }
 
 // AUTH-IDENTITY-003: NFC normalization first makes the subsequent case-fold deterministic across
