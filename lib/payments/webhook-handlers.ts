@@ -216,7 +216,8 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   const email = session.customer_details?.email?.trim().toLowerCase() ?? '';
   const phone = session.customer_details?.phone?.trim() ?? '';
   const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-  if (!Number.isInteger(seminarId) || !paymentIntentId || session.payment_status !== 'paid' || !firstName || !lastName || !email || !phone) {
+  const contactFieldsFitStorage = firstName.length <= 100 && lastName.length <= 100 && `${firstName} ${lastName}`.length <= 200 && email.length <= 255 && phone.length <= 40;
+  if (!Number.isInteger(seminarId) || !paymentIntentId || session.payment_status !== 'paid' || !firstName || !lastName || !email || !phone || !contactFieldsFitStorage) {
     await refundGuestCheckoutWithoutRegistration(tx, session, stripe, 'Stripe Checkout was missing required verified registration data.');
     return;
   }
