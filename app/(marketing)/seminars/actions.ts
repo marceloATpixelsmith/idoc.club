@@ -8,7 +8,7 @@ import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { getSeminarPaymentMethodInstructions, registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
-import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
+import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
 export type GuestSeminarState = {
   email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
@@ -76,4 +76,21 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
     return { ...echo, error: error instanceof Error ? error.message : 'Payment could not be started.' };
   }
   redirect(checkoutUrl);
+}
+
+
+/** Anonymous online payment is Stripe-first: IDOC asks for no contact information before redirect.
+ * Turnstile/CSRF and an origin-scoped rate limit still protect creation of provider sessions. */
+export async function startGuestSeminarStripeCheckoutAction(formData: FormData): Promise<void> {
+  await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+  const seminarId = formData.get('seminarId');
+  const turnstileToken = String(formData.get('turnstileToken') ?? '');
+  const origin = await requestOrigin();
+  if (!(await verifyTurnstile(turnstileToken, origin, 'seminar_guest_registration'))) {
+    throw new SeminarRegistrationError('Verification challenge failed. Please try again.');
+  }
+  if (!(await checkRateLimit('seminar_guest_registration', 'stripe_checkout', origin))) {
+    throw new SeminarRegistrationError('Too many attempts. Please try again in a few minutes.');
+  }
+  redirect(await createGuestSeminarCheckoutSession(seminarId));
 }
