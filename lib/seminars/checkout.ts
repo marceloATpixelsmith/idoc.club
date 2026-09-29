@@ -16,13 +16,9 @@ export type SeminarCheckoutStripeClient = {
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
 };
 
-/** Creates one server-priced EUR payment session, for a member's own registration or an anonymous
- * guest's -- there is no session to verify a guest's ownership against, so a guest registration id
- * is usable by anyone who has it, the same way a public "pay for your registration" link from any
- * external registration system works; it never exposes anything beyond the seminar name and price.
- * A member registration keeps its existing ownership check (the caller's session must actually be
- * the member who registered). The row lock, stable Stripe idempotency key and persisted open-session
- * identity prevent parallel clicks from producing multiple active sessions either way. */
+/** Creates one server-priced EUR payment session for an existing profile-backed registration.
+ * Anonymous online guests use createGuestSeminarCheckoutSession instead: Stripe collects their
+ * contact details first and the verified webhook creates the registration only after payment. */
 export async function createSeminarCheckoutSession(registrationIdValue: unknown, testStripeClient?: SeminarCheckoutStripeClient): Promise<string> {
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const registrationId = Number(registrationIdValue);
@@ -75,4 +71,41 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
       where id=${registrationId}`;
     return session.url;
   });
+}
+
+
+/** Starts anonymous online registration without collecting identity in IDOC first. Stripe Checkout
+ * is the only contact-data form for this path: email + phone are native Checkout fields and first/
+ * last name are required Stripe custom fields. The webhook revalidates price, seminar state and
+ * capacity before creating the paid guest registration. */
+export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown, testStripeClient?: SeminarCheckoutStripeClient): Promise<string> {
+  if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
+  const seminarId = Number(seminarIdValue);
+  if (!Number.isInteger(seminarId) || seminarId <= 0) throw new SeminarRegistrationError('Seminar not found.');
+  const [seminar] = await client<Array<{ capacity: number; non_member_price_cents: number; registration_deadline: Date | string; status: string; title: string; active_count: number }>>`
+    select s.capacity,s.non_member_price_cents,s.registration_deadline,s.status,s.title,
+      (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') active_count
+    from idoc.seminars s where s.id=${seminarId} limit 1`;
+  if (!seminar || seminar.status !== 'published' || new Date(seminar.registration_deadline).getTime() <= Date.now()) {
+    throw new SeminarRegistrationError('Registration is not currently open for this seminar.');
+  }
+  if (seminar.active_count >= seminar.capacity) throw new SeminarRegistrationError('This seminar is full.');
+  if (seminar.non_member_price_cents <= 0) throw new SeminarRegistrationError('This seminar has no fee to collect.');
+  const stripe = (testStripeClient ?? getStripeServerClient()) as SeminarCheckoutStripeClient;
+  const baseUrl = baseUrlForServer();
+  const session = await stripe.checkout.sessions.create({
+    cancel_url: `${baseUrl}/seminars/${seminarId}?checkout=canceled`,
+    custom_fields: [
+      { key: 'first_name', label: { custom: 'First name', type: 'custom' }, optional: false, type: 'text' },
+      { key: 'last_name', label: { custom: 'Last name', type: 'custom' }, optional: false, type: 'text' },
+    ],
+    line_items: [{ price_data: { currency: 'eur', product_data: { name: seminar.title }, unit_amount: seminar.non_member_price_cents }, quantity: 1 }],
+    metadata: { amountCents: String(seminar.non_member_price_cents), currency: 'EUR', kind: 'seminar_guest_registration', seminarId: String(seminarId) },
+    mode: 'payment',
+    payment_intent_data: { metadata: { kind: 'seminar_guest_registration', seminarId: String(seminarId) } },
+    phone_number_collection: { enabled: true },
+    success_url: `${baseUrl}/seminars/${seminarId}?checkout=success`,
+  });
+  if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
+  return session.url;
 }
