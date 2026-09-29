@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { guestContactSchema } from '@/lib/seminars/guest-registration-validation';
 import { registerAsGuestForSeminarAction, type GuestSeminarState } from '@/app/(marketing)/seminars/actions';
 
+/** Anonymous-only contact form for guest bank-transfer/cash registrations. */
 export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
   paymentMethod: string;
   seminarId: number;
