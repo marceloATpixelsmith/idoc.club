@@ -33,7 +33,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const capacitySchema = z.coerce.number().int().min(1).max(100_000);
 const priceSchema = z.coerce.number().min(0).max(SEMINAR_MAX_PRICE_CENTS / 100);
 const statusSchema = z.enum(SEMINAR_STATUSES);
-const isoDateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date');
+
 const idSchema = z.coerce.number().int().positive();
 
 function parse<T>(schema: z.ZodType<T>, value: unknown, message = 'Review the seminar fields.'): T {
@@ -42,11 +42,6 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, message = 'Review the se
   return result.data;
 }
 
-/** Mirrors lib/news/articles.ts's parseAsUtc: the admin registration-deadline field is a bare
- * `datetime-local` input (labeled UTC) with no timezone designator of its own. */
-function parseDeadlineAsUtc(value: string): Date {
-  return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
-}
 
 function iso(value: Date | string | null): string | null {
   return value ? new Date(value).toISOString() : null;
@@ -89,8 +84,8 @@ function validateFields(input: SeminarInput) {
   const memberPriceCents = Math.round(parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.') * 100);
   const nonMemberPriceCents = Math.round(parse(priceSchema, input.nonMemberPrice, 'Non-member price must be zero or a positive amount.') * 100);
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
-  const deadlineIso = parse(isoDateTimeSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
-  const registrationDeadline = parseDeadlineAsUtc(deadlineIso);
+  const deadlineDate = parse(dateSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
+  const registrationDeadline = new Date(`${deadlineDate}T00:00:00Z`);
   if (registrationDeadline.getTime() >= new Date(`${startDate}T00:00:00Z`).getTime()) throw new SeminarValidationError('The registration deadline must be before the seminar start date.');
   const language = typeof input.language === 'string' ? canonicalLanguageTag(input.language) : null;
   if (!language) throw new SeminarValidationError('Choose a valid BCP 47 language.');

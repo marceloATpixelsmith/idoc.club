@@ -47,7 +47,7 @@ function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
     accommodationInformation: '<p>Hotel details</p>', application: '<p>Apply online</p>', capacity: 2, courseDirectors: '<p>Director</p>', courseVenueInformation: '<p>Arena details</p>', endDate: startDate, isFei: false, language: 'en', levels: [], location: 'Arena 3, IDOC Headquarters', organizingNationalFederation: 'IE', participantProfile: '<p>Officials</p>',
-    memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48),
+    memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48).slice(0, 10),
     startDate, status: 'published', title: 'Judging Clinic', ...overrides,
   };
 }
@@ -119,7 +119,7 @@ test('bank transfer and cash registrations start in their own pending payment st
 test('registration is rejected once the deadline has passed or the seminar is not published', async () => {
   const admin = await adminUser();
   const { user: lateUser } = await paidMember();
-  const closedSeminarId = await publishedSeminar(admin.id, { registrationDeadline: past(1) });
+  const closedSeminarId = await publishedSeminar(admin.id, { registrationDeadline: past(24).slice(0, 10) });
   await assert.rejects(asMember(lateUser.id, () => registerForSeminar(closedSeminarId, 'online_stripe')), /closed/);
 
   const { user: draftUser } = await paidMember();
@@ -600,7 +600,7 @@ test('past seminars only ever show this member\'s own registration history, and 
   const { profile, user } = await paidMember();
   const registeredPastId = await asAdmin(admin.id, () => createSeminar(seminarInput({
     endDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
-    registrationDeadline: past(96), startDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
+    registrationDeadline: past(96).slice(0, 10), startDate: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
   })));
   await sql`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id) values (${registeredPastId},${profile.id},'paid','online_stripe')`;
   await asAdmin(admin.id, () => createSeminar(seminarInput({ status: 'canceled', title: 'Never Touched' })));

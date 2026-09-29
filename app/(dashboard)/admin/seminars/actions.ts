@@ -9,6 +9,7 @@ import { recordManualSeminarPayment, setAdminRegistrationStatus, updateSeminarRe
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import * as Sentry from '@sentry/nextjs';
 
 export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; success?: string };
 
@@ -31,6 +32,8 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
     return { success };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarRegistrationError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
+    Sentry.captureException(error, { tags: { area: 'admin-seminars', operation: 'save' } });
+    console.error('Unexpected admin seminar save failure; details captured by Sentry.');
     return { error: 'The seminar could not be saved.' };
   }
 }
