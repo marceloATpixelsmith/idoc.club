@@ -2,7 +2,6 @@ import { RichTextEditor } from '@/components/rich-text-editor';
 import { FormGrid, FormSection } from '@/components/forms/form-section';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { LANGUAGE_OPTIONS } from '@/lib/seminars/language';
@@ -26,7 +25,7 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
       <div className="space-y-1.5"><Label htmlFor="organizingNationalFederation">Organizing National Federation</Label><select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" defaultValue={seminar?.organizing_national_federation ?? ''} id="organizingNationalFederation" name="organizingNationalFederation" required><option disabled value="">Select federation</option>{COUNTRY_OPTIONS.map(({ code, name }) => <option key={code} value={code}>{name}</option>)}</select></div>
       <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="location">Location or online meeting link</Label><Textarea defaultValue={seminar?.location} id="location" maxLength={2000} name="location" required /></div>
       <div className="max-w-32 space-y-1.5"><Label htmlFor="capacity">Number of participants</Label><Input defaultValue={seminar?.capacity} id="capacity" min={1} name="capacity" required type="number" /></div>
-      <div><div className="mb-6 flex items-center gap-3"><Switch defaultChecked={seminar?.is_fei ?? false} id="isFei" name="isFei" /><Label className="font-normal" htmlFor="isFei">FEI seminar</Label></div><fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-sm font-medium">Levels</legend>{LEVEL_OPTIONS.map(({ label, value }) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar?.levels?.includes(value) ?? false} name="levels" type="checkbox" value={value} />{label}</Label>)}</fieldset></div>
+      <div><div className="mb-6 flex items-center gap-3"><label className="relative inline-flex h-6 w-11 cursor-pointer items-center"><input className="peer sr-only" defaultChecked={seminar?.is_fei ?? false} id="isFei" name="isFei" type="checkbox" /><span className="absolute inset-0 rounded-full bg-muted transition peer-checked:bg-primary" /><span className="relative ml-1 h-4 w-4 rounded-full bg-background transition-transform peer-checked:translate-x-5" /></label><Label className="font-normal" htmlFor="isFei">FEI seminar</Label></div><fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-sm font-medium">Levels</legend>{LEVEL_OPTIONS.map(({ label, value }) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar?.levels?.includes(value) ?? false} name="levels" type="checkbox" value={value} />{label}</Label>)}</fieldset></div>
     </FormGrid></FormSection>
 
     <FormSection title="Status"><fieldset className="flex flex-wrap gap-4">{statuses.map((value) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar ? seminar.status === value : value === 'draft'} name="status" type="radio" value={value} />{STATUS_LABELS[value]}</Label>)}</fieldset></FormSection>
