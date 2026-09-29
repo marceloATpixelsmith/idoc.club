@@ -213,6 +213,7 @@ export const profiles = idocSchema.table('profiles', {
   userId: integer('user_id').notNull().unique().references(() => users.id),
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
+  phone: varchar('phone', { length: 20 }),
   address1: varchar('address_1', { length: 200 }).notNull(),
   address2: varchar('address_2', { length: 200 }),
   city: varchar('city', { length: 100 }).notNull(),
