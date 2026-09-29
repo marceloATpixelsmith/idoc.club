@@ -1,5 +1,12 @@
-/** The FEI logo, shown wherever a seminar is flagged `is_fei` -- small and non-interactive, so it
- * never intercepts a click meant for the card or overlay link it sits on top of. */
 export function FeiBadge({ className }: { className?: string }) {
-  return <img alt="FEI" className={`pointer-events-none w-auto ${className ?? ''}`} src="/fei-logo-white.svg" />;
+  return (
+    <a
+      aria-label="Visit FEI Dressage"
+      href="https://www.fei.org/dressage"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      <img alt="FEI" className={`w-auto ${className ?? ''}`} src="/fei-logo-white.svg" />
+    </a>
+  );
 }
