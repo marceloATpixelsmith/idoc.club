@@ -8,7 +8,7 @@ import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { checkOriginRateLimit, checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
-import { getSeminarPaymentMethodInstructions, registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
+import { registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
 import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 
 export type GuestSeminarState = {
@@ -63,7 +63,6 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
   revalidatePath(`/seminars/${seminarId}`);
   if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
   if (outcome.paymentMethod === 'bank_transfer') {
-    await getSeminarPaymentMethodInstructions('bank_transfer');
     return { success: 'Your confirmation will have the information to make the bank transfer.' };
   }
   let checkoutUrl: string;
