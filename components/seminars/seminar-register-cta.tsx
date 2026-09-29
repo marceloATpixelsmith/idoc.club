@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { startGuestSeminarStripeCheckoutAction } from '@/app/(marketing)/seminars/actions';
+import { useActionState, useEffect, useState } from 'react';
+import { startGuestSeminarStripeCheckoutAction, type GuestStripeCheckoutState } from '@/app/(marketing)/seminars/actions';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,6 +26,8 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [guestTurnstileToken, setGuestTurnstileToken] = useState('');
+  const [guestCheckoutState, guestCheckoutAction, guestCheckoutPending] = useActionState<GuestStripeCheckoutState, FormData>(startGuestSeminarStripeCheckoutAction, {});
+  useEffect(() => { if (guestCheckoutState.error) setGuestTurnstileToken(''); }, [guestCheckoutState]);
   const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
   const knownVisitor = hasProfile || isSignedIn;
 
@@ -72,13 +74,14 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
               const methodId = String(method.canonical_id);
               if (!hasProfile && methodId === 'online_stripe') {
                 return (
-                  <form action={startGuestSeminarStripeCheckoutAction} className="w-full" key={methodId}>
+                  <form action={guestCheckoutAction} className="w-full" key={`${methodId}-${guestCheckoutState.attempt ?? 0}`}>
                     <CsrfField />
                     <input name="seminarId" type="hidden" value={seminarId} />
                     <input name="turnstileToken" type="hidden" value={guestTurnstileToken} />
-                    <Button className="w-full" disabled={!guestTurnstileToken} type="submit" variant="outline">
+                    <Button className="w-full" disabled={!guestTurnstileToken || guestCheckoutPending} type="submit" variant="outline">
                       {String(method.display_label)}
                     </Button>
+                  {guestCheckoutState.error ? <p className="mt-2 text-sm text-destructive" role="alert">{guestCheckoutState.error}</p> : null}
                   </form>
                 );
               }
@@ -88,7 +91,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                 </Button>
               );
             })}
-            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" onVerify={setGuestTurnstileToken} theme="dark" /> : null}
+            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
           </div>
         </DialogContent>
       </Dialog>
