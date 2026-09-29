@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { ClipboardList, Eye, Pencil, X } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleDashed, ClipboardList, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -31,6 +31,9 @@ export type ResourceRow = {
   publication?: string;
   updated?: string;
   date?: string;
+  start?: string;
+  end?: string;
+  deadline?: string;
   prices?: string;
   registrations?: string;
   audience?: string;
@@ -56,7 +59,7 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Scheduled', value: 'scheduled' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
   },
   seminars: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'date', label: 'Date' }, { id: 'status', label: 'Status' }, { id: 'prices', label: 'Prices' }, { id: 'registrations', label: 'Registered / Capacity' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Prices' }, { id: 'registrations', label: 'Registered / Capacity' }],
     dateFilter: true,
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
@@ -129,7 +132,7 @@ export function ResourceDataTable({
         id,
         accessorFn: (row) => row[id] ?? '',
         enableHiding: id !== 'title',
-        enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'registrations'].includes(id),
+        enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'start', 'registrations'].includes(id),
         enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
         header: header(label),
         meta: id === 'status'
@@ -139,7 +142,9 @@ export function ResourceDataTable({
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? <Link className="font-medium underline" href={`${config.path}/${row.original.id}`}>{row.original.title}</Link>
-          : <span>{row.original[id] ?? '—'}</span>,
+          : id === 'status' && tableType === 'seminars'
+            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4 text-gold" />{row.original.status.toUpperCase()}</span>; })()
+            : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 90,
@@ -162,7 +167,7 @@ export function ResourceDataTable({
       },
     ];
   }, [config, tableType]);
-  const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'date' : 'updated';
+  const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'start' : 'updated';
   const initialSorting = useMemo(() => {
     try {
       const parsed: unknown = JSON.parse(initialSort || '[]');

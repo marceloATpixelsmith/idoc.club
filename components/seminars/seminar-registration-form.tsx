@@ -48,7 +48,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
       </div>
 
       {guestState.success ? (
-        <p className="text-xl font-semibold leading-relaxed text-white" role="status">{guestState.success}</p>
+        <p className="mt-2 text-sm font-medium leading-relaxed text-foreground" role="status">{guestState.success}</p>
       ) : (
         <form action={guestFormAction} className="space-y-4">
           <CsrfField />

@@ -22,7 +22,7 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
   const { active: registeredCount, total: registeredTotal } = await getSeminarRegistrationCounts(id);
   const availability = computeSeminarAvailability({
     activeRegistrationCount: registeredCount, capacity: Number(seminar.capacity),
-    endsAtUtc: seminarEndsAtUtc({ endDate: String(seminar.end_date), endTime: String(seminar.end_time), timezone: String(seminar.timezone) }),
+    endsAtUtc: seminarEndsAtUtc({ endDate: String(seminar.end_date) }),
     registrationDeadline: seminar.registration_deadline as string, status: seminar.status as never,
   });
   const status = String(seminar.status);
@@ -50,10 +50,11 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           allowCanceled
           lockPrices={registeredTotal > 0}
           seminar={{
-            capacity: Number(seminar.capacity), description: String(seminar.description), end_date: seminar.end_date, end_time: seminar.end_time,
-            is_fei: Boolean(seminar.is_fei), levels: seminar.levels ?? [], location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
-            non_member_price_cents: Number(seminar.non_member_price_cents), registration_deadline: seminar.registration_deadline as string,
-            start_date: seminar.start_date, start_time: seminar.start_time, status, title: String(seminar.title),
+            accommodation_information: seminar.accommodation_information, application: seminar.application, capacity: Number(seminar.capacity),
+            course_directors: seminar.course_directors, course_venue_information: seminar.course_venue_information, end_date: seminar.end_date, is_fei: Boolean(seminar.is_fei), language: seminar.language, levels: seminar.levels ?? [], location: String(seminar.location), member_price_cents: Number(seminar.member_price_cents),
+            non_member_price_cents: Number(seminar.non_member_price_cents), organizing_national_federation: seminar.organizing_national_federation,
+            participant_profile: seminar.participant_profile, registration_deadline: seminar.registration_deadline as string,
+            start_date: seminar.start_date, status, title: String(seminar.title),
           }}
         />
       </SeminarForm>

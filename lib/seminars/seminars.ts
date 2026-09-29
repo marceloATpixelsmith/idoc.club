@@ -6,6 +6,8 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { sanitizeArticleContent, hasVisibleContent } from '@/lib/news/sanitize';
+import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
+import { canonicalLanguageTag } from '@/lib/seminars/language';
 import { seminarEndsAtUtc, SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
 
 export { SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
@@ -25,13 +27,9 @@ export class SeminarValidationError extends Error {
 export const SEMINAR_LEVELS = ['level_1', 'level_2', 'level_3', 'all_levels'] as const;
 export type SeminarLevel = (typeof SEMINAR_LEVELS)[number];
 
-const TIMEZONE_COMPATIBILITY_VALUE = 'UTC';
-
 const titleSchema = z.string().trim().min(1).max(SEMINAR_TITLE_MAX_LENGTH);
-const descriptionSchema = z.string().trim().min(1).max(SEMINAR_DESCRIPTION_MAX_LENGTH);
 const locationSchema = z.string().trim().min(1).max(SEMINAR_LOCATION_MAX_LENGTH);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const timeSchema = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
 const capacitySchema = z.coerce.number().int().min(1).max(100_000);
 const priceSchema = z.coerce.number().min(0).max(SEMINAR_MAX_PRICE_CENTS / 100);
 const statusSchema = z.enum(SEMINAR_STATUSES);
@@ -61,10 +59,10 @@ async function requireSeminarAdministrator() {
 }
 
 type SeminarInput = {
-  capacity: unknown; description: unknown; endDate: unknown; isFei: unknown; levels: unknown; location: unknown;
-  memberPrice: unknown; nonMemberPrice: unknown; registrationDeadline: unknown; startDate: unknown;
-  startTime: unknown; status: unknown; title: unknown;
-  endTime: unknown;
+  accommodationInformation: unknown; application: unknown; capacity: unknown; courseDirectors: unknown;
+  courseVenueInformation: unknown; endDate: unknown; isFei: unknown; language: unknown; levels: unknown; location: unknown;
+  memberPrice: unknown; nonMemberPrice: unknown; organizingNationalFederation: unknown; participantProfile: unknown;
+  registrationDeadline: unknown; startDate: unknown; status: unknown; title: unknown;
 };
 
 function parseLevels(value: unknown): SeminarLevel[] {
@@ -75,34 +73,37 @@ function parseLevels(value: unknown): SeminarLevel[] {
   return selected.includes('all_levels') ? ['all_levels'] : [...new Set(selected)];
 }
 
+function richText(value: unknown, label: string): string {
+  const sanitized = sanitizeArticleContent(typeof value === 'string' ? value : '');
+  if (sanitized.length > SEMINAR_DESCRIPTION_MAX_LENGTH) throw new SeminarValidationError(`${label} must be 10,000 characters or fewer.`);
+  return hasVisibleContent(sanitized) ? sanitized : '';
+}
+
 function validateFields(input: SeminarInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
-  const description = sanitizeArticleContent(typeof input.description === 'string' ? input.description : '');
-  if (!hasVisibleContent(description)) throw new SeminarValidationError('Directors and application details are required.');
-  parse(descriptionSchema, description, 'Directors and application details must be 10,000 characters or fewer.');
   const location = parse(locationSchema, input.location, 'Location or meeting link is required and must be 2,000 characters or fewer.');
   const startDate = parse(dateSchema, input.startDate, 'Enter a valid start date.');
   const endDate = parse(dateSchema, input.endDate, 'Enter a valid end date.');
-  const startTime = parse(timeSchema, input.startTime, 'Enter a valid start time.').slice(0, 5);
-  const endTime = parse(timeSchema, input.endTime, 'Enter a valid end time.').slice(0, 5);
-  if (`${endDate}T${endTime}` <= `${startDate}T${startTime}`) throw new SeminarValidationError('The seminar must end after it starts.');
+  if (endDate < startDate) throw new SeminarValidationError('The end date must be on or after the start date.');
   const capacity = parse(capacitySchema, input.capacity, 'Capacity must be a whole number of at least 1.');
-  const memberPrice = parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.');
-  const memberPriceCents = Math.round(memberPrice * 100);
-  const nonMemberPrice = parse(priceSchema, input.nonMemberPrice, 'Non-member price must be zero or a positive amount.');
-  const nonMemberPriceCents = Math.round(nonMemberPrice * 100);
+  const memberPriceCents = Math.round(parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.') * 100);
+  const nonMemberPriceCents = Math.round(parse(priceSchema, input.nonMemberPrice, 'Non-member price must be zero or a positive amount.') * 100);
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const deadlineIso = parse(isoDateTimeSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
   const registrationDeadline = parseDeadlineAsUtc(deadlineIso);
-  const startsAtUtc = new Date(`${startDate}T${startTime}:00Z`);
-  if (registrationDeadline.getTime() > startsAtUtc.getTime()) {
-    throw new SeminarValidationError('The registration deadline must be at or before the seminar start date.');
-  }
-  const isFei = input.isFei === 'on' || input.isFei === true;
-  const levels = parseLevels(input.levels);
+  if (registrationDeadline.getTime() >= new Date(`${startDate}T00:00:00Z`).getTime()) throw new SeminarValidationError('The registration deadline must be before the seminar start date.');
+  const language = typeof input.language === 'string' ? canonicalLanguageTag(input.language) : null;
+  if (!language) throw new SeminarValidationError('Choose a valid BCP 47 language.');
+  const organizingNationalFederation = typeof input.organizingNationalFederation === 'string' ? input.organizingNationalFederation.toUpperCase() : '';
+  if (!(ISO_COUNTRY_CODES as readonly string[]).includes(organizingNationalFederation)) throw new SeminarValidationError('Choose a valid National Federation.');
   return {
-    capacity, description, endDate, endTime, isFei, levels, location, memberPriceCents, nonMemberPriceCents,
-    registrationDeadline, startDate, startTime, status, timezone: TIMEZONE_COMPATIBILITY_VALUE, title,
+    accommodationInformation: richText(input.accommodationInformation, 'Accommodation Information'),
+    application: richText(input.application, 'Application'), capacity,
+    courseDirectors: richText(input.courseDirectors, 'Course Directors'),
+    courseVenueInformation: richText(input.courseVenueInformation, 'Course Venue Information'), endDate,
+    isFei: input.isFei === 'on' || input.isFei === true, language, levels: parseLevels(input.levels), location,
+    memberPriceCents, nonMemberPriceCents, organizingNationalFederation,
+    participantProfile: richText(input.participantProfile, 'Participant Profile'), registrationDeadline, startDate, status, title,
   };
 }
 
@@ -118,13 +119,13 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   const from = listDate(fromValue);
   const to = listDate(toValue);
   const order = listOrder(input, {
-    date: 's.start_date', title: 's.title', status: 's.status',
+    date: 's.start_date', start: 's.start_date', end: 's.end_date', deadline: 's.registration_deadline', title: 's.title', status: 's.status',
     registrations: '(select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
   }, 'date', 's.id');
   const advancedWhere = advancedListWhere(input, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select s.id,s.title,s.status,s.start_date,s.end_date,s.capacity,
+  const rows = await client`select s.id,s.title,s.status,s.start_date,s.end_date,s.registration_deadline,s.capacity,
     s.member_price_cents,s.non_member_price_cents,count(*) over()::int total_count,
     (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
     from idoc.seminars s
@@ -135,9 +136,11 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
 }
 
 export type AdminSeminarRow = {
-  capacity: number; created_at: Date; created_by_user_id: number; description: string; end_date: string; end_time: string; id: number; is_fei: boolean;
-  levels: string[]; location: string; member_price_cents: number; non_member_price_cents: number; registration_deadline: Date | string;
-  start_date: string; start_time: string; status: SeminarStatus; timezone: string; title: string; updated_at: Date; updated_by_user_id: number;
+  accommodation_information: string; application: string; capacity: number; course_directors: string; course_venue_information: string;
+  created_at: Date; created_by_user_id: number; end_date: string; id: number; is_fei: boolean; language: string; levels: string[];
+  location: string; member_price_cents: number; non_member_price_cents: number; organizing_national_federation: string;
+  participant_profile: string; registration_deadline: Date | string; start_date: string; status: SeminarStatus; title: string;
+  updated_at: Date; updated_by_user_id: number;
 };
 export async function getAdminSeminar(value: unknown): Promise<AdminSeminarRow | null> {
   await requireSeminarAdministrator();
@@ -145,7 +148,7 @@ export async function getAdminSeminar(value: unknown): Promise<AdminSeminarRow |
   if (!parsedId.success) return null;
   const [row] = await client<AdminSeminarRow[]>`select * from idoc.seminars where id=${parsedId.data} limit 1`;
   if (!row) return null;
-  return { ...row, end_date: dateOnly(row.end_date), end_time: String(row.end_time), start_date: dateOnly(row.start_date), start_time: String(row.start_time) };
+  return { ...row, end_date: dateOnly(row.end_date), start_date: dateOnly(row.start_date) };
 }
 
 function dateOnly(value: string | Date): string {
@@ -157,8 +160,8 @@ export async function createSeminar(input: SeminarInput) {
   const fields = validateFields(input);
   return client.begin(async (sql) => {
     const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
-      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
-      values (${fields.title},${fields.description},${fields.startDate},${fields.startTime},${fields.endDate},${fields.endTime},${fields.timezone},${fields.location},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
+      (title,description,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
+      values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.organizingNationalFederation},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
@@ -183,8 +186,9 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     if (fields.capacity < activeCount) {
       throw new SeminarValidationError(`Capacity cannot be reduced below the ${activeCount} current active registration(s).`);
     }
-    await sql`update idoc.seminars set title=${fields.title},description=${fields.description},start_date=${fields.startDate},
-      start_time=${fields.startTime},end_date=${fields.endDate},end_time=${fields.endTime},timezone=${fields.timezone},location=${fields.location},
+    await sql`update idoc.seminars set title=${fields.title},description='',start_date=${fields.startDate},end_date=${fields.endDate},location=${fields.location},
+      language=${fields.language},organizing_national_federation=${fields.organizingNationalFederation},course_directors=${fields.courseDirectors},
+      participant_profile=${fields.participantProfile},course_venue_information=${fields.courseVenueInformation},application=${fields.application},accommodation_information=${fields.accommodationInformation},
       capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
       registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},is_fei=${fields.isFei},levels=${sql.array(fields.levels)},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;

@@ -1,4 +1,4 @@
-import { zonedDateTimeToUtc } from './timezone.ts';
+
 
 export const SEMINAR_STATUSES = ['draft', 'published', 'canceled'] as const;
 export type SeminarStatus = (typeof SEMINAR_STATUSES)[number];
@@ -24,9 +24,11 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   bank_transfer_pending: 'Bank transfer pending', cash_pending: 'Cash pending', chargeback: 'Chargeback', disputed: 'Disputed', paid: 'Paid', partially_refunded: 'Partially refunded', pending: 'Payment pending', refund_failed: 'Refund failed', refunded: 'Refunded', unpaid: 'Unpaid',
 };
 
-/** Combines the seminar's own end-date/end-time/timezone into the UTC instant the seminar ends. */
-export function seminarEndsAtUtc(input: { endDate: string; endTime: string; timezone: string }): Date {
-  return zonedDateTimeToUtc(input.endDate, input.endTime, input.timezone);
+/** Returns the exclusive UTC boundary after a date-only seminar's final calendar day. */
+export function seminarEndsAtUtc(input: { endDate: string }): Date {
+  const end = new Date(`${input.endDate}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return end;
 }
 
 export function computeSeminarAvailability(

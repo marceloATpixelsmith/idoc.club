@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, registrationDisplayLabel } from '../lib/seminars/status.ts';
-import { isValidIanaTimeZone, zonedDateTimeToUtc } from '../lib/seminars/timezone.ts';
 
 const seminarsSource = readFileSync('lib/seminars/seminars.ts', 'utf8');
 const registrationsSource = readFileSync('lib/seminars/registrations.ts', 'utf8');
@@ -13,6 +12,7 @@ const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8')
 const originalMigration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
 const paymentMethodMigration = readFileSync('lib/db/migrations/0055_seminar_registration_payment_method.sql', 'utf8');
 const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday_dual_price_guest.sql', 'utf8');
+const dateOnlyMigration = readFileSync('lib/db/migrations/0061_seminar_date_only_rich_information.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
@@ -27,7 +27,10 @@ test('seminar and registration states, and their documented length limits, are c
 });
 
 test('a seminar\'s start/end date and both its member and non-member prices are constrained non-negative and ordered in the migration', () => {
-  assert.match(multiDayMigration, /"end_date" > "start_date" OR \("end_date" = "start_date" AND "end_time" > "start_time"\)/);
+  assert.match(dateOnlyMigration, /CHECK \("end_date" >= "start_date"\)/);
+  assert.match(dateOnlyMigration, /DROP COLUMN "start_time"/);
+  assert.match(dateOnlyMigration, /DROP COLUMN "end_time"/);
+  assert.match(dateOnlyMigration, /DROP COLUMN "timezone"/);
   assert.match(multiDayMigration, /"member_price_cents" >= 0/);
   assert.match(multiDayMigration, /"non_member_price_cents" >= 0/);
 });
@@ -206,12 +209,7 @@ test('bank transfer instructions are rendered only from the pre-sanitized organi
   assert.match(memberPage, /dangerouslySetInnerHTML/);
 });
 
-test('zonedDateTimeToUtc correctly accounts for daylight saving time using only built-in Intl (no date-library dependency)', () => {
-  assert.equal(zonedDateTimeToUtc('2026-01-15', '10:00:00', 'Europe/Berlin').toISOString(), '2026-01-15T09:00:00.000Z');
-  assert.equal(zonedDateTimeToUtc('2026-07-15', '10:00:00', 'Europe/Berlin').toISOString(), '2026-07-15T08:00:00.000Z');
-  assert.equal(isValidIanaTimeZone('Europe/Berlin'), true);
-  assert.equal(isValidIanaTimeZone('Not/AZone'), false);
-});
+
 
 test('computeSeminarAvailability derives draft, canceled, past, closed, full, and open from status/deadline/capacity/end time', () => {
   const base = { activeRegistrationCount: 0, capacity: 10, endsAtUtc: new Date('2030-01-01T00:00:00Z'), registrationDeadline: '2029-12-31T00:00:00Z', status: 'published' as const };
@@ -233,19 +231,20 @@ test('registrationDisplayLabel prioritizes Canceled over any stale payment statu
   assert.equal(registrationDisplayLabel('registered', 'unpaid'), 'Unpaid');
 });
 
-test('the seminar fieldset asks for "Directors and Application Details", multi-day start/end dates, dual member/non-member prices, and no payment method field', () => {
-  assert.match(seminarFieldset, /Directors and Application Details/);
+test('the seminar fieldset uses date-only scheduling and the five structured rich-text fields', () => {
+  for (const label of ['Course Directors', 'Participant Profile', 'Course Venue Information', 'Application', 'Accommodation Information']) assert.match(seminarFieldset, new RegExp(label));
+  assert.doesNotMatch(seminarFieldset, /name="startTime"|name="endTime"|name="timezone"/);
   assert.match(seminarFieldset, /name="startDate"/);
   assert.match(seminarFieldset, /name="endDate"/);
-  assert.match(seminarFieldset, /name="memberPrice"/);
-  assert.match(seminarFieldset, /name="nonMemberPrice"/);
+  assert.match(seminarFieldset, /'memberPrice', 'Member price/);
+  assert.match(seminarFieldset, /'nonMemberPrice', 'Non-member price/);
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
 });
 
 test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted through create and update, and shown on the public listing cards and detail page', () => {
   assert.match(seminarFieldset, /name="isFei"/);
   assert.match(seminarFieldset, /type="checkbox"/);
-  assert.match(seminarsSource, /const isFei = input\.isFei === 'on' \|\| input\.isFei === true/);
+  assert.match(seminarsSource, /isFei: input\.isFei === 'on' \|\| input\.isFei === true/);
   assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
   assert.match(memberPage, /import \{ FeiBadge \} from '@\/components\/seminars\/fei-badge'/);
@@ -273,11 +272,9 @@ test('a seminar can be assigned one or more officiating levels via a multi-check
   assert.ok(levelsIndex > -1 && feiIndex > -1 && levelsIndex < feiIndex, 'the Levels row must appear directly above the FEI badge');
 });
 
-test('a locked (disabled) price input still submits its value via a hidden mirror field, so editing a seminar with registrations never fails price validation', () => {
-  const memberPriceBlock = seminarFieldset.match(/id="memberPrice"[\s\S]*?<\/div>/)?.[0];
-  const nonMemberPriceBlock = seminarFieldset.match(/id="nonMemberPrice"[\s\S]*?<\/div>/)?.[0];
-  assert.ok(memberPriceBlock && /type="hidden" value=\{\(seminar\.member_price_cents/.test(memberPriceBlock), 'memberPrice needs a hidden fallback for when the visible input is disabled');
-  assert.ok(nonMemberPriceBlock && /type="hidden" value=\{\(seminar\.non_member_price_cents/.test(nonMemberPriceBlock), 'nonMemberPrice needs a hidden fallback for when the visible input is disabled');
+test('a locked price input still submits its value through a hidden mirror', () => {
+  assert.match(seminarFieldset, /lockPrices && cents !== undefined/);
+  assert.match(seminarFieldset, /<input name=\{name\} type="hidden"/);
 });
 
 test('the member Seminars page renders registration and payment status labels', () => {
@@ -316,7 +313,7 @@ test('both the member catalog and the signed-out public catalog show an already-
     assert.match(block as string, /<h3 className="text-lg font-semibold text-foreground">Past seminars<\/h3>/);
   }
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
-  assert.match(registrationsSource, /s\.status='published' and \(s\.end_date \+ s\.end_time\) at time zone s\.timezone <= now\(\)/);
+  assert.match(registrationsSource, /s\.status='published' and s\.end_date < current_date/);
 });
 
 test('the public seminar catalog shows both the member and non-member price, with each seminar linking to its own detail page for registration', () => {
@@ -354,7 +351,7 @@ test('a signed-in profile without current entitlement (a lapsed membership) sees
 test('the seminar detail page presents full details and offers the Register CTA, or the visitor\'s existing registration status', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /getSeminarForRegistrant/);
-  assert.match(detailPage, /Directors and Application Details/);
+  for (const label of ['Course Directors', 'Participant Profile', 'Course Venue Information', 'Application', 'Accommodation Information']) assert.match(detailPage, new RegExp(label));
   assert.match(detailPage, /SeminarRegisterCta/);
   assert.match(detailPage, /isEntitled\(member\.entitlement/);
   // The whole page uses the site's full fixed-width container, left-aligned like every other page.

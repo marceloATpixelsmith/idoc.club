@@ -428,6 +428,13 @@
       "when": 1790712000000,
       "tag": "0060_member_profile_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790713000000,
+      "tag": "0061_seminar_date_only_rich_information",
+      "breakpoints": true
     }
   ]
 }

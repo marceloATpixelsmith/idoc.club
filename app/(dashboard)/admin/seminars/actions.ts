@@ -14,10 +14,12 @@ export type AdminSeminarState = { error?: string; stepUpRequired?: boolean; succ
 
 function seminarFields(formData: FormData) {
   return {
-    capacity: formData.get('capacity'), description: formData.get('description'), endDate: formData.get('endDate'), endTime: formData.get('endTime'),
-    isFei: formData.get('isFei'), levels: formData.getAll('levels'), location: formData.get('location'), memberPrice: formData.get('memberPrice'),
-    nonMemberPrice: formData.get('nonMemberPrice'), registrationDeadline: formData.get('registrationDeadline'),
-    startDate: formData.get('startDate'), startTime: formData.get('startTime'), status: formData.get('status'), title: formData.get('title'),
+    accommodationInformation: formData.get('accommodationInformation'), application: formData.get('application'), capacity: formData.get('capacity'),
+    courseDirectors: formData.get('courseDirectors'), courseVenueInformation: formData.get('courseVenueInformation'), endDate: formData.get('endDate'),
+    isFei: formData.get('isFei'), language: formData.get('language'), levels: formData.getAll('levels'), location: formData.get('location'),
+    memberPrice: formData.get('memberPrice'), nonMemberPrice: formData.get('nonMemberPrice'), organizingNationalFederation: formData.get('organizingNationalFederation'),
+    participantProfile: formData.get('participantProfile'), registrationDeadline: formData.get('registrationDeadline'), startDate: formData.get('startDate'),
+    status: formData.get('status'), title: formData.get('title'),
   };
 }
 

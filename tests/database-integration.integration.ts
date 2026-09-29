@@ -125,45 +125,35 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
   }
 });
 
-test('migration 0058 backfills every pre-existing seminar\'s start_time/end_time to 00:00/23:59, so date-based availability keeps working for a seminar created before time-of-day was removed', async () => {
-  // A Codex review finding on this migration: a same-day seminar created (or legacy-imported) before
-  // 0058, with a real end_time earlier than 23:59, would otherwise keep transitioning to Past at that
-  // old, no-longer-displayed clock time instead of end of day -- silently rejecting registration hours
-  // before a visitor looking at the now date-only UI would expect.
+test('migration 0061 preserves existing seminar content while removing obsolete time columns', async () => {
   await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
-  const through0057 = await mkdtemp(join(tmpdir(), 'idoc-through-0057-'));
+  const through0060 = await mkdtemp(join(tmpdir(), 'idoc-through-0060-'));
   try {
-    await mkdir(join(through0057, 'meta'));
-    const migrationNames = (await readdir(migrationsFolder))
-      .filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= 57);
-    for (const name of migrationNames) await cp(join(migrationsFolder, name), join(through0057, name));
+    await mkdir(join(through0060, 'meta'));
+    const migrationNames = (await readdir(migrationsFolder)).filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= 60);
+    for (const name of migrationNames) await cp(join(migrationsFolder, name), join(through0060, name));
     const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
-    journal.entries = journal.entries.filter(({ idx }: { idx: number }) => idx <= 57);
-    await writeFile(join(through0057, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
-
-    await migrate(database, { migrationsFolder: through0057, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
-
+    journal.entries = journal.entries.filter(({ idx }: { idx: number }) => idx <= 60);
+    await writeFile(join(through0060, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+    await migrate(database, { migrationsFolder: through0060, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [user] = await sql`insert into idoc.users (email,password_hash) values ('legacy-seminar-admin@idoc.club','hash') returning id`;
-    const [legacySeminar] = await sql`insert into idoc.seminars
+    const [legacy] = await sql`insert into idoc.seminars
       (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
-      values ('Legacy Seminar','Imported before time-of-day was removed.','2026-01-01','09:00','2026-01-01','17:00','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${user.id},${user.id})
-      returning id`;
-
+      values ('Legacy Seminar','Preserve this content','2026-01-01','09:00','2026-01-01','17:00','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${user.id},${user.id}) returning id`;
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
-
-    const [row] = await sql`select start_time,end_time from idoc.seminars where id=${legacySeminar.id}`;
-    assert.equal(String(row.start_time).slice(0, 5), '00:00', 'a pre-0058 seminar\'s start_time must be backfilled to 00:00');
-    assert.equal(String(row.end_time).slice(0, 5), '23:59', 'a pre-0058 seminar\'s end_time must be backfilled to 23:59, not left at its old real clock time');
-  } finally {
-    await rm(through0057, { force: true, recursive: true });
-  }
+    const [row] = await sql`select course_directors,application from idoc.seminars where id=${legacy.id}`;
+    assert.equal(row.course_directors, 'Preserve this content');
+    assert.equal(row.application, 'Preserve this content');
+    const obsolete = await sql`select column_name from information_schema.columns where table_schema='idoc' and table_name='seminars' and column_name in ('start_time','end_time','timezone')`;
+    assert.equal(obsolete.length, 0);
+  } finally { await rm(through0060, { force: true, recursive: true }); }
 });
 
 test('the seminars_levels_valid_check constraint rejects all_levels alongside any other level, even bypassing application-layer parseLevels', async () => {
   const [user] = await sql`insert into idoc.users (email,password_hash) values ('levels-check-admin@idoc.club','hash') returning id`;
   await assert.rejects(sql`insert into idoc.seminars
-    (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
-    values ('Bad Levels','desc','2026-01-01','00:00','2026-01-01','23:59','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
+    (title,description,start_date,end_date,location,language,organizing_national_federation,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
+    values ('Bad Levels','desc','2026-01-01','2026-01-01','Somewhere','en','IE',10,1000,2000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
     /seminars_levels_valid_check/, 'the database must reject all_levels combined with any other level, not just the application layer');
 });
 
