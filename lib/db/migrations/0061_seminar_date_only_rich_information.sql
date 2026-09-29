@@ -12,6 +12,9 @@ WHERE btrim("description") <> '';
 ALTER TABLE "idoc"."seminars" DROP CONSTRAINT "seminars_date_order_check";
 ALTER TABLE "idoc"."seminars" DROP CONSTRAINT "seminars_description_length_check";
 -- Keep legacy time/timezone columns during the additive staging rollout so the currently deployed main revision remains compatible.
--- Remove them in a later contract migration after the date-only code has been promoted to main.
+-- The date-only staging code no longer writes them, so relax NOT NULL and provide compatibility defaults for old main writes/new staging writes.
+ALTER TABLE "idoc"."seminars" ALTER COLUMN "start_time" DROP NOT NULL;
+ALTER TABLE "idoc"."seminars" ALTER COLUMN "end_time" DROP NOT NULL;
+ALTER TABLE "idoc"."seminars" ALTER COLUMN "timezone" DROP NOT NULL;
 ALTER TABLE "idoc"."seminars" ADD CONSTRAINT "seminars_date_order_check" CHECK ("end_date" >= "start_date");
 ALTER TABLE "idoc"."seminars" ADD CONSTRAINT "seminars_language_length_check" CHECK (char_length("language") between 2 and 35);
