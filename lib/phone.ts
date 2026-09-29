@@ -1,4 +1,4 @@
-import { KNOWN_CALLING_CODES } from '@/lib/phone-country-codes';
+import { KNOWN_CALLING_CODES } from './phone-country-codes.ts';
 
 const E164 = /^\+[1-9]\d{7,14}$/;
 
