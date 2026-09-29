@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from 'next/link';\nimport { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { notFound } from 'next/navigation';
 import { ClipboardList, Download } from 'lucide-react';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -58,6 +58,5 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           }}
         />
       </SeminarForm>
-    </main>
-  );
+    </main>\n    </AdminFormDrawer>\n  );
 }
