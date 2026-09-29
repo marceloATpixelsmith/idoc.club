@@ -4933,19 +4933,19 @@
           "name": "start_time",
           "type": "time",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "end_time": {
           "name": "end_time",
           "type": "time",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "timezone": {
           "name": "timezone",
           "type": "varchar(60)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         }
       },
       "indexes": {
