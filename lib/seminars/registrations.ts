@@ -9,14 +9,12 @@ import { requireAdministrator } from '@/lib/membership/authorization';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
+import { guestEmailSchema, guestFirstNameSchema, guestLastNameSchema, guestPhoneSchema } from '@/lib/seminars/guest-registration-validation';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
 
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
-const guestNameSchema = z.string().trim().min(1).max(100);
-const guestEmailSchema = z.string().trim().email().max(255);
-const guestPhoneSchema = z.string().trim().min(5).max(40).regex(/^[+()\d\s.-]+$/);
 
 export class SeminarRegistrationError extends Error {
   constructor(message: string) {
@@ -276,9 +274,9 @@ export async function registerForSeminarAtNonMemberPrice(seminarIdValue: unknown
 export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNameValue: unknown, lastNameValue: unknown, emailValue: unknown, phoneValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
-  const firstNameResult = guestNameSchema.safeParse(firstNameValue);
+  const firstNameResult = guestFirstNameSchema.safeParse(firstNameValue);
   if (!firstNameResult.success) throw new SeminarRegistrationError('Enter your first name.');
-  const lastNameResult = guestNameSchema.safeParse(lastNameValue);
+  const lastNameResult = guestLastNameSchema.safeParse(lastNameValue);
   if (!lastNameResult.success) throw new SeminarRegistrationError('Enter your last name.');
   const emailResult = guestEmailSchema.safeParse(emailValue);
   if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid email address.');
@@ -323,13 +321,33 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
-        bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded. If a fee is due, payment is confirmed separately.</p>`,
+        bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminarTitle }),
         heading: 'Seminar registration received',
       }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
   } catch { /* best-effort -- the registration itself already committed above */ }
   return { paymentMethod, registrationId };
+}
+
+async function guestRegistrationConfirmationBodyHtml({
+  firstName,
+  paymentMethod,
+  seminarTitle,
+}: {
+  firstName: string;
+  paymentMethod: string;
+  seminarTitle: string;
+}) {
+  const intro = `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded.</p>`;
+  if (paymentMethod === 'bank_transfer') {
+    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
+    return `${intro}<p>To complete your payment by bank transfer, use the information below:</p>${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}`;
+  }
+  if (paymentMethod === 'cash_event') {
+    return `${intro}<p>Payment will be collected at the event.</p>`;
+  }
+  return `${intro}<p>If a fee is due, payment is confirmed separately.</p>`;
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
