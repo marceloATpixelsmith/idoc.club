@@ -96,8 +96,8 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
   const session = await stripe.checkout.sessions.create({
     cancel_url: `${baseUrl}/seminars/${seminarId}?checkout=canceled`,
     custom_fields: [
-      { key: 'first_name', label: { custom: 'First name', type: 'custom' }, optional: false, type: 'text' },
-      { key: 'last_name', label: { custom: 'Last name', type: 'custom' }, optional: false, type: 'text' },
+      { key: 'first_name', label: { custom: 'First name', type: 'custom' }, optional: false, text: { maximum_length: 99, minimum_length: 1 }, type: 'text' },
+      { key: 'last_name', label: { custom: 'Last name', type: 'custom' }, optional: false, text: { maximum_length: 99, minimum_length: 1 }, type: 'text' },
     ],
     line_items: [{ price_data: { currency: 'eur', product_data: { name: seminar.title }, unit_amount: seminar.non_member_price_cents }, quantity: 1 }],
     metadata: { amountCents: String(seminar.non_member_price_cents), currency: 'EUR', kind: 'seminar_guest_registration', seminarId: String(seminarId) },
