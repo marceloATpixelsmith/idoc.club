@@ -372,7 +372,8 @@ test('a signed-in visitor without member pricing registers under their own profi
   const ctaSource = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
   // A signed-in visitor (with or without a profile) opens the shared payment dialog directly --
   // the join-or-guest dialog is reachable only when isSignedIn is false too.
-  assert.match(ctaSource, /const knownVisitor = Boolean\(memberDetails\) \|\| Boolean\(ownProfileDetails\) \|\| isSignedIn/);
+  assert.match(ctaSource, /const hasProfile = Boolean\(memberDetails\) \|\| Boolean\(ownProfileDetails\)/);
+  assert.match(ctaSource, /const knownVisitor = hasProfile \|\| isSignedIn/);
   assert.match(ctaSource, /knownVisitor \? setPaymentDialogOpen\(true\) : setJoinDialogOpen\(true\)/);
   assert.match(ctaSource, /Choose a payment method/);
 });
