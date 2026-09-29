@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { SeminarFieldset } from '@/components/seminars/seminar-fieldset';
 import { SeminarForm } from '@/components/seminars/seminar-form';
 import { createSeminarAction } from '../actions';
@@ -15,6 +15,5 @@ export default async function NewSeminarPage() {
       <SeminarForm action={createSeminarAction} submitLabel="Create seminar">
         <SeminarFieldset />
       </SeminarForm>
-    </main>
-  );
+    </main>\n    </AdminFormDrawer>\n  );
 }
