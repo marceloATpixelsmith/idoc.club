@@ -57,7 +57,7 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           }}
         />
       </SeminarForm>
-    
+
       </main>
     </AdminFormDrawer>
   );
