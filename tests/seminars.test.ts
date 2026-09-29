@@ -383,15 +383,20 @@ test('a signed-in visitor without member pricing registers under their own profi
   assert.match(ctaSource, /Choose a payment method/);
 });
 
-test('a signed-in visitor with their own profile registers at the non-member price under their real profileId (registerForSeminarAtNonMemberPrice), not the anonymous guest mechanism, and canceling a registration never requires current entitlement', () => {
+test('authenticated seminar registration never renders the contact form and always uses the signed-in profile for every payment method', () => {
   assert.match(registrationsSource, /export async function registerForSeminarAtNonMemberPrice/);
-  assert.match(registrationsSource, /async function requireOwnProfileIdRegardlessOfEntitlement\(\): Promise<\{ actorId: number; profileId: number \}> \{\s*\n\s*const actor = await requireAccountAccess\('account'\)/);
-  assert.match(registrationsSource, /export async function cancelOwnRegistration\([\s\S]*?requireOwnProfileIdRegardlessOfEntitlement\(\)/);
+  assert.match(registrationsSource, /async function requireOwnProfileIdRegardlessOfEntitlement/);
+  assert.match(memberActions, /export async function registerForSeminarAction/);
   assert.match(memberActions, /export async function registerAtNonMemberPriceAction/);
-  assert.match(memberActions, /registerForSeminarAtNonMemberPrice/);
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /if \(hasProfile\)/);
+  assert.match(cta, /action=\{authenticatedAction\}/);
+  assert.match(cta, /name="paymentMethod"/);
+  assert.match(cta, /!hasProfile \? <TurnstileWidget/);
+  assert.doesNotMatch(cta, /<SeminarRegistrationForm memberDetails=/);
   const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.match(form, /ownProfileDetails/);
-  assert.match(form, /registerAtNonMemberPriceAction/);
+  assert.doesNotMatch(form, /registerForSeminarAction|registerAtNonMemberPriceAction|memberDetails|ownProfileDetails|readOnly/);
+  assert.match(form, /anonymous-only/);
 });
 
 test('the Register CTA is a single full-width button; a signed-out visitor sees a branded join-or-guest dialog instead of a separate boxed panel', () => {
@@ -409,14 +414,12 @@ test('the Register CTA is a single full-width button; a signed-out visitor sees 
   assert.match(cta, /disabled=\{!guestTurnstileToken \|\| guestCheckoutPending\}/);
 });
 
-test('the shared seminar registration form pre-fills and locks the name/email fields for a member or a signed-in profile owner, and shows them as editable inputs only for a true anonymous guest', () => {
+test('the IDOC contact registration form is only for anonymous bank-transfer/cash registration and is visually identified as registration', () => {
   const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.match(form, /registerForSeminarAction/);
-  assert.match(form, /registerAtNonMemberPriceAction/);
   assert.match(form, /registerAsGuestForSeminarAction/);
-  assert.match(form, /const isLocked = isMember \|\| isOwnProfileNonMember/);
-  assert.match(form, /readOnly=\{isLocked\}/);
-  assert.match(form, /required=\{!isLocked\}/);
+  assert.doesNotMatch(form, /registerForSeminarAction|registerAtNonMemberPriceAction/);
+  assert.match(form, /rounded-xl border bg-card/);
+  assert.match(form, />Register<\/h2>/);
 });
 
 test('the admin seminar edit page has no Quick Actions box and offers a "View registrations" and an icon-only "Download registrations" action instead', () => {
