@@ -866,3 +866,7 @@ and named operator approval. Missing evidence is a release blocker, not permissi
 Migration `0059_seminar_guest_contact_fields.sql` is an expand-only migration adding structured guest first name, last name, and phone while retaining `guest_name` for production compatibility. Apply it before deploying this revision. Migration `0061` converts seminars to date-only events and adds language, canonical organizing National Federation, and structured rich-text information. Rehearse its content backfill and contract changes before applying it to the shared staging/production database.
 
 Seminar cancellation is a financial orchestration, not merely a status edit. It cancels active seats, expires open Stripe Checkout Sessions after releasing database locks, automatically fully refunds confirmed Stripe payments through the durable refund ledger, and leaves failed refunds canceled plus `refund_failed` for administrator retry. Pending and manually paid offline records retain their truthful history and require the applicable operational follow-up rather than fabricated Stripe evidence. Operators must inspect reconciliation findings after provider/network failures and may use the existing registration refund retry control.
+
+
+### Server Action observability
+Unexpected exceptions caught by admin Server Actions that are converted into safe user-facing messages must be explicitly captured in Sentry. Runtime logs must not serialize raw database exceptions or other objects that can contain member, guest, payment, or other sensitive data.
