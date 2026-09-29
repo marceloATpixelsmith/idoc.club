@@ -73,7 +73,7 @@ export default async function SeminarDetailPage({ params, searchParams }: { para
     <>
       <PageHeader eyebrow="Seminar" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
       <div className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
-        <Link className="text-sm text-muted-foreground underline underline-offset-4" href="/seminars">← Back to Seminars</Link>
+        <Link className="mt-6 inline-block text-sm text-muted-foreground underline underline-offset-4" href="/seminars">← Back to Seminars</Link>
         {checkout === 'success' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Payment completed. Your seminar registration will be confirmed by email.</p> : null}
         {checkout === 'canceled' ? <p className="mt-4 border border-border p-4 text-sm" role="status">Online payment was canceled. No payment was taken.</p> : null}
 
