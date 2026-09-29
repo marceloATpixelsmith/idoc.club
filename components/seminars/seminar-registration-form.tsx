@@ -96,7 +96,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
           <input name="turnstileToken" type="hidden" value={turnstileToken} />
           <TurnstileWidget action="seminar_guest_registration" key={attempt} onVerify={setTurnstileToken} theme="dark" />
           {guestState.error && !hasFieldErrors ? <p className="text-sm text-destructive" role="alert">{guestState.error}</p> : null}
-          <Button className="w-full sm:w-auto" disabled={guestPending || !formIsValid || !turnstileToken} type="submit">
+          <Button className="mt-6 w-full sm:w-auto" disabled={guestPending || !formIsValid || !turnstileToken} type="submit">
             {guestPending ? <AuthPendingLabel text="Registering" /> : 'Register'}
           </Button>
         </form>

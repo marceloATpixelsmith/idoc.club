@@ -65,12 +65,12 @@ export function InternationalPhoneInput({
           aria-expanded={countryPickerOpen}
           aria-haspopup="listbox"
           aria-label="Choose phone country"
-          className="flex h-11 min-w-[7.5rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 text-sm text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-11 min-w-[5.25rem] items-center gap-2 rounded-l-md border border-r-0 border-input bg-surface px-3 text-sm text-foreground transition-colors hover:bg-muted/50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setCountryPickerOpen((open) => !open)}
           type="button"
         >
           <span aria-hidden className="text-base">{countryCode ? flagEmoji(countryCode) : '🌐'}</span>
-          <span>{callingCode || 'Country'}</span>
+          <span>{callingCode || ''}</span>
           <ChevronsUpDown aria-hidden className="ml-auto h-4 w-4 text-muted-foreground" />
         </button>
         {countryPickerOpen ? (
