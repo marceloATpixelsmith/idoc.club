@@ -91,7 +91,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                   </form>
                 );
               }
-              if (isSignedIn) {
+              if (hasProfile) {
                 return (
                   <form action={authenticatedAction} className="w-full" key={methodId}>
                     <CsrfField />
@@ -110,7 +110,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
               );
             })}
             {authenticatedState.error ? <p className="text-sm text-destructive" role="alert">{authenticatedState.error}</p> : null}
-            {!isSignedIn ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
+            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
           </div>
         </DialogContent>
       </Dialog>
