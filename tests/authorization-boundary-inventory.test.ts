@@ -84,7 +84,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   // Anonymous guest seminar registration: no session on either side, the same shape as the
   // pre-authentication login/signup actions and the public contact form -- it just happens to live
   // in (marketing) rather than (login).
-  'app/(marketing)/seminars/actions.ts': { registerAsGuestForSeminarAction: 'pre-authentication' },
+  'app/(marketing)/seminars/actions.ts': { registerAsGuestForSeminarAction: 'pre-authentication', startGuestSeminarStripeCheckoutAction: 'pre-authentication' },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
