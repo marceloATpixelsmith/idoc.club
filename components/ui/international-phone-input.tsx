@@ -106,10 +106,10 @@ export function InternationalPhoneInput({
           </div>
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-1 items-center rounded-r-md border border-input bg-surface focus-within:z-10 focus-within:ring-2 focus-within:ring-ring">
+      <div className="flex h-11 min-w-0 flex-1 items-center rounded-r-md border border-input bg-surface focus-within:z-10 focus-within:ring-2 focus-within:ring-ring">
         <input
           autoComplete="tel-national"
-          className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
           id={id}
           inputMode="tel"
           onChange={(event) => {
