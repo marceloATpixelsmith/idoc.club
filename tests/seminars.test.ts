@@ -149,6 +149,7 @@ test('anonymous online registration is Stripe-first: Checkout collects contact d
   assert.match(checkoutSource, /phone_number_collection: \{ enabled: true \}/);
   assert.match(checkoutSource, /key: 'first_name'/);
   assert.match(checkoutSource, /key: 'last_name'/);
+  assert.match(checkoutSource, /maximum_length: 99/g);
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   assert.match(webhookSource, /handleGuestSeminarCheckoutSessionCompleted/);
   assert.match(webhookSource, /session\.customer_details\?\.email/);
@@ -398,7 +399,8 @@ test('the Register CTA is a single full-width button; a signed-out visitor sees 
   assert.match(cta, /SeminarRegistrationForm/);
   assert.match(cta, /startGuestSeminarStripeCheckoutAction/);
   assert.match(cta, /methodId === 'online_stripe'/);
-  assert.match(cta, /disabled=\{!guestTurnstileToken\}/);
+  assert.match(cta, /useActionState<GuestStripeCheckoutState, FormData>/);
+  assert.match(cta, /disabled=\{!guestTurnstileToken \|\| guestCheckoutPending\}/);
 });
 
 test('the shared seminar registration form pre-fills and locks the name/email fields for a member or a signed-in profile owner, and shows them as editable inputs only for a true anonymous guest', () => {
