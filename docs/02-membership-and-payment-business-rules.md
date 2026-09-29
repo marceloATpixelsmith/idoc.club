@@ -311,3 +311,7 @@ ID, status, expiration, URL, attempt, and idempotency key. A transaction-scoped 
 concurrent retries converge. If Stripe reports expired, completed, canceled, or otherwise unpayable,
 the old row is marked terminal and retained, and a new attempt/key is created. A browser retry never
 returns an expired payment URL.
+
+## Member phone requirement
+
+New member onboarding requires an international phone number selected with its country calling code. The application stores the normalized international value on the member profile. Existing profiles created before migration `0060` may remain without a phone value; this forward requirement must not invalidate or block unrelated edits to legacy profiles.
