@@ -10,6 +10,7 @@ UPDATE "idoc"."seminars"
 SET "course_directors" = "description", "application" = "description"
 WHERE btrim("description") <> '';
 ALTER TABLE "idoc"."seminars" DROP CONSTRAINT "seminars_date_order_check";
+ALTER TABLE "idoc"."seminars" DROP CONSTRAINT "seminars_description_length_check";
 ALTER TABLE "idoc"."seminars" DROP COLUMN "start_time";
 ALTER TABLE "idoc"."seminars" DROP COLUMN "end_time";
 ALTER TABLE "idoc"."seminars" DROP COLUMN "timezone";
