@@ -1,5 +1,4 @@
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClipboardList, Download } from 'lucide-react';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -28,11 +27,10 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
   });
   const status = String(seminar.status);
   return (
-    <main className="space-y-8 py-8 px-5 lg:px-8">
-      <Link className="underline" href="/admin/seminars">← Seminars</Link>
+    <AdminFormDrawer closeHref="/admin/seminars" title={String(seminar.title)}>
+      <main className="space-y-8 px-5 py-8 lg:px-8">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-gold">{String(seminar.title)}</h1>
           <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} registered ({registeredTotal} total)</p>
         </div>
         <div className="flex items-center gap-1">
@@ -59,7 +57,8 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
           }}
         />
       </SeminarForm>
-    </main>
+    
+      </main>
     </AdminFormDrawer>
   );
 }
