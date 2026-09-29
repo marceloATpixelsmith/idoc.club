@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { startGuestSeminarStripeCheckoutAction, type GuestStripeCheckoutState } from '@/app/(marketing)/seminars/actions';
+import { registerAtNonMemberPriceAction, registerForSeminarAction, type MemberSeminarState } from '@/app/(dashboard)/dashboard/seminars/actions';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,10 +11,9 @@ import { CsrfField } from '@/components/security/csrf-field';
 import { TurnstileWidget } from '@/components/turnstile-widget';
 
 /** The single full-width "Register" call to action on a seminar's detail page. A signed-in visitor
- * (member or not) always goes straight to the registration form, pre-filled from whatever member
- * data is actually available. A signed-out visitor instead sees a branded choice first -- join to
- * unlock the member price, or continue straight to the same form as an anonymous guest -- rather
- * than a second, separately-styled panel. */
+ * never re-enters identity data: their authenticated profile is the registration identity for every
+ * payment method. Anonymous Stripe registration is Stripe-first; the IDOC guest form exists only
+ * for anonymous bank-transfer/cash registrations. */
 export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel, ownProfileDetails, paymentMethods, seminarId }: {
   isSignedIn: boolean;
   memberDetails?: { email: string; name: string };
@@ -23,17 +23,23 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   seminarId: number;
 }) {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [guestPaymentMethod, setGuestPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [guestTurnstileToken, setGuestTurnstileToken] = useState('');
   const [guestCheckoutState, guestCheckoutAction, guestCheckoutPending] = useActionState<GuestStripeCheckoutState, FormData>(startGuestSeminarStripeCheckoutAction, {});
+  const [memberState, memberAction, memberPending] = useActionState<MemberSeminarState, FormData>(registerForSeminarAction, {});
+  const [nonMemberState, nonMemberAction, nonMemberPending] = useActionState<MemberSeminarState, FormData>(registerAtNonMemberPriceAction, {});
   useEffect(() => { if (guestCheckoutState.error) setGuestTurnstileToken(''); }, [guestCheckoutState]);
   const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
   const knownVisitor = hasProfile || isSignedIn;
 
-  if (selectedPaymentMethod) {
-    return <SeminarRegistrationForm memberDetails={memberDetails} ownProfileDetails={ownProfileDetails} paymentMethod={selectedPaymentMethod} seminarId={seminarId} />;
+  if (guestPaymentMethod) {
+    return <SeminarRegistrationForm paymentMethod={guestPaymentMethod} seminarId={seminarId} />;
   }
+
+  const authenticatedAction = memberDetails ? memberAction : nonMemberAction;
+  const authenticatedPending = memberDetails ? memberPending : nonMemberPending;
+  const authenticatedState = memberDetails ? memberState : nonMemberState;
 
   return (
     <>
@@ -85,13 +91,26 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                   </form>
                 );
               }
+              if (isSignedIn) {
+                return (
+                  <form action={authenticatedAction} className="w-full" key={methodId}>
+                    <CsrfField />
+                    <input name="seminarId" type="hidden" value={seminarId} />
+                    <input name="paymentMethod" type="hidden" value={methodId} />
+                    <Button className="w-full" disabled={authenticatedPending} type="submit" variant="outline">
+                      {String(method.display_label)}
+                    </Button>
+                  </form>
+                );
+              }
               return (
-                <Button key={methodId} onClick={() => { setSelectedPaymentMethod(methodId); setPaymentDialogOpen(false); }} type="button" variant="outline">
+                <Button key={methodId} onClick={() => { setGuestPaymentMethod(methodId); setPaymentDialogOpen(false); }} type="button" variant="outline">
                   {String(method.display_label)}
                 </Button>
               );
             })}
-            {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
+            {authenticatedState.error ? <p className="text-sm text-destructive" role="alert">{authenticatedState.error}</p> : null}
+            {!isSignedIn ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
           </div>
         </DialogContent>
       </Dialog>
