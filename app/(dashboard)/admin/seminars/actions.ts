@@ -33,7 +33,7 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarRegistrationError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
     Sentry.captureException(error, { tags: { area: 'admin-seminars', operation: 'save' } });
-    console.error('Unexpected admin seminar save failure', error);
+    console.error('Unexpected admin seminar save failure; details captured by Sentry.');
     return { error: 'The seminar could not be saved.' };
   }
 }
