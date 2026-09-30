@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox, profiles, users } from '@/lib/db/schema';
+import { getSeminarEmailDetails, guestRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './brevo-transactional';
@@ -31,6 +32,8 @@ type NoticePayload = {
   graceEndDate?: string;
   renewalDate?: string;
   amountCents?: number;
+  paymentMethod?: string;
+  seminarId?: number;
   to?: string | null;
 };
 
@@ -167,7 +170,14 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
   return { expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
-function renderNotice(kind: string, payload: NoticePayload): { html: string; subject: string } {
+async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
+  if (kind === 'seminar.registration_created' && payload.seminarId) {
+    const seminar = await getSeminarEmailDetails(payload.seminarId);
+    if (seminar) return {
+      html: renderTransactionalEmail({ bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName: payload.firstName ?? '', paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${seminar.title}` }),
+      subject: 'Your IDOC seminar registration',
+    };
+  }
   // firstName is member-supplied free text (lib/membership/validation.ts's memberProfileSchema
   // allows any character up to 100 chars, not an HTML-safe allowlist), so it must be escaped before
   // interpolation into this HTML email body -- matching every other template call site that
@@ -235,7 +245,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
   try {
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
-    const { html, subject } = renderNotice(record.kind, record.payload);
+    const { html, subject } = await renderNotice(record.kind, record.payload);
     await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
