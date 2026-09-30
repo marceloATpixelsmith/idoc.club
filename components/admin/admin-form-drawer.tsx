@@ -3,11 +3,18 @@
 import { Dialog } from 'radix-ui';
 import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type ReactNode } from 'react';
+import { createContext, type ReactNode, useCallback, useContext } from 'react';
 import { Button } from '@/components/ui/button';
+
+const AdminFormDrawerContext = createContext<(() => void) | null>(null);
+
+export function useAdminFormDrawer() {
+  return useContext(AdminFormDrawerContext);
+}
 
 export function AdminFormDrawer({ children, closeHref, title }: { children: ReactNode; closeHref: string; title: string }) {
   const router = useRouter();
+  const closeAndRefresh = useCallback(() => { router.push(closeHref); router.refresh(); }, [closeHref, router]);
   return (
     <Dialog.Root defaultOpen onOpenChange={(open) => { if (!open) router.push(closeHref); }}>
       <Dialog.Portal>
@@ -17,7 +24,9 @@ export function AdminFormDrawer({ children, closeHref, title }: { children: Reac
             <Dialog.Title className="text-2xl font-semibold text-gold">{title}</Dialog.Title>
             <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button></Dialog.Close>
           </div>
-          {children}
+          <AdminFormDrawerContext.Provider value={closeAndRefresh}>
+            {children}
+          </AdminFormDrawerContext.Provider>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
