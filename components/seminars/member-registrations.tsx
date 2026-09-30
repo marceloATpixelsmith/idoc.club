@@ -26,7 +26,7 @@ export function SeminarListingCard({ children, href, seminar }: {
   seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string };
 }) {
   return (
-    <article className="relative grid gap-5 py-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <article className="relative inline-grid max-w-full gap-5 py-6 sm:grid-cols-[minmax(0,max-content)_auto] sm:items-center sm:gap-10">
       <Link aria-label={`View ${seminar.title}`} className="absolute inset-0 z-10" href={href} />
       <div className="min-w-0">
         <h3 className="text-xl">{seminar.title}</h3>
@@ -36,7 +36,7 @@ export function SeminarListingCard({ children, href, seminar }: {
         </div>
         {children ? <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">{children}</div> : null}
       </div>
-      {seminar.is_fei ? <div className="relative z-20 w-fit shrink-0 sm:ml-4"><FeiBadge className="h-4" /></div> : null}
+      {seminar.is_fei ? <div className="relative z-20 w-fit shrink-0"><FeiBadge className="h-4" /></div> : null}
     </article>
   );
 }
@@ -67,11 +67,11 @@ async function AvailableSeminars({ profileId, showBothPrices }: { profileId: num
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
-    {upcoming.length ? <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars available to you.</p>}
+    {upcoming.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars available to you.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
         <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
-        <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
+        <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}
   </section>;
@@ -103,7 +103,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     <h2 className="text-2xl" id="my-registrations-heading">My seminar registrations</h2>
     <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars?view=my">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?view=my&tab=past">Past</Link></nav>
     <div className="mt-6">
-      {registered.length ? <ul className="w-full max-w-3xl divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar registrations.' : 'You have no upcoming seminar registrations.'}</p>}
+      {registered.length ? <ul className="w-fit max-w-full divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar registrations.' : 'You have no upcoming seminar registrations.'}</p>}
     </div>
   </section>;
 }
@@ -126,11 +126,11 @@ export async function PublicSeminarsCatalog() {
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
-    {seminars.length ? <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
+    {seminars.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
         <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
-        <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
+        <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}
   </section>;
