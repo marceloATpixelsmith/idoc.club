@@ -332,7 +332,7 @@ test('all seminar listing surfaces reuse a compact, uniformly constrained card w
   assert.ok(cardStart > -1 && cardEnd > cardStart);
   assert.match(cardBlock as string, /sm:grid-cols-\[minmax\(0,max-content\)_auto\]/);
   assert.match(cardBlock as string, /<Link aria-label=\{`View \${seminar\.title}`\} className="absolute inset-0 z-10"/);
-  assert.match(cardBlock as string, /relative z-20[^"]*sm:ml-4/);
+  assert.match(cardBlock as string, /relative z-20[^"]*w-fit shrink-0/);
   const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
   assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
   assert.match(memberPage, /w-fit max-w-full divide-y/);
