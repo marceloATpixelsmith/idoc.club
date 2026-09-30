@@ -287,7 +287,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   const email = emailResult.data.toLowerCase();
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
-  let seminarTitle = '';
+  let seminarDetails: SeminarEmailDetails | null = null;
   const { registrationId } = await client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
@@ -296,8 +296,8 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
-    const [{ title }] = await sql<{ title: string }[]>`select title from idoc.seminars where id=${seminarId.data} limit 1`;
-    seminarTitle = title;
+    const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
+    seminarDetails = details;
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
     if (existing) {
@@ -320,8 +320,8 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
-        bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminarTitle }),
-        heading: 'Seminar registration received',
+        bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar: seminarDetails! }),
+        heading: `Thank you for registering for ${escapeHtml(seminarDetails!.title)}`,
       }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
@@ -329,24 +329,50 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   return { paymentMethod, registrationId };
 }
 
-async function guestRegistrationConfirmationBodyHtml({
-  firstName,
-  paymentMethod,
-  seminarTitle,
-}: {
-  firstName: string;
-  paymentMethod: string;
-  seminarTitle: string;
-}) {
-  const intro = `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration for <strong>${escapeHtml(seminarTitle)}</strong> was recorded.</p>`;
+type SeminarEmailDetails = {
+  accommodation_information: string; application: string; course_directors: string; course_venue_information: string;
+  end_date: string; is_fei: boolean; language: string; levels: string[]; location: string; member_price_cents: number;
+  non_member_price_cents: number; organizing_national_federation: string; participant_profile: string; registration_deadline: string | Date;
+  start_date: string; title: string;
+};
+
+function seminarEmailRow(label: string, value: string) {
+  return `<tr><td style="padding:8px 12px 8px 0;color:#d9ad26;font-size:12px;font-weight:700;text-transform:uppercase;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:8px 0;color:#f7f8fb;font-size:14px;line-height:1.5;">${value}</td></tr>`;
+}
+
+function richSeminarEmailSection(label: string, html: string) {
+  if (!html.trim()) return '';
+  return `<div style="margin-top:22px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:14px;line-height:1.6;">${html}</div></div>`;
+}
+
+async function guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar }: { firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
+  const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
+  const payment = paymentMethod === 'bank_transfer' ? 'Bank transfer' : paymentMethod === 'cash_event' ? 'Cash at event' : 'Online payment';
+  let paymentInstructions = '';
   if (paymentMethod === 'bank_transfer') {
     const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    return `${intro}<p>To complete your payment by bank transfer, use the information below:</p>${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}`;
+    paymentInstructions = `<div style="margin:22px 0 0;border:1px solid #d9ad26;border-radius:8px;padding:16px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div>${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div>`;
+  } else if (paymentMethod === 'cash_event') {
+    paymentInstructions = '<p style="margin:18px 0 0;">Payment will be collected at the event.</p>';
   }
-  if (paymentMethod === 'cash_event') {
-    return `${intro}<p>Payment will be collected at the event.</p>`;
-  }
-  return `${intro}<p>If a fee is due, payment is confirmed separately.</p>`;
+  return `<p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>
+    <table role="presentation" width="100%" style="margin-top:20px;border-collapse:collapse;">
+      ${seminarEmailRow('Date', escapeHtml(dateRange))}
+      ${seminarEmailRow('Location', escapeHtml(seminar.location))}
+      ${seminarEmailRow('Language', escapeHtml(seminar.language))}
+      ${seminarEmailRow('Organizing Federation', escapeHtml(seminar.organizing_national_federation))}
+      ${seminarEmailRow('Levels', escapeHtml(seminar.levels?.length ? seminar.levels.join(', ').replace(/_/g, ' ') : 'Not specified'))}
+      ${seminarEmailRow('Deadline', escapeHtml(dateOnly(seminar.registration_deadline)))}
+      ${seminarEmailRow('Non-member price', escapeHtml(`€${(seminar.non_member_price_cents / 100).toFixed(2)}`))}
+      ${seminarEmailRow('Payment method', escapeHtml(payment))}
+      ${seminar.is_fei ? seminarEmailRow('FEI seminar', 'Yes') : ''}
+    </table>
+    ${paymentInstructions}
+    ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
+    ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
+    ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
+    ${richSeminarEmailSection('Application', seminar.application)}
+    ${richSeminarEmailSection('Accommodation Information', seminar.accommodation_information)}`;
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
