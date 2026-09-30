@@ -121,7 +121,7 @@ export default async function SeminarDetailPage({ params, searchParams }: { para
           </div>
 
           <Card>
-            <CardContent className="space-y-8 pt-6">
+            <CardContent className="space-y-8 pt-0">
               {([
                 ['Course Directors', seminar.course_directors],
                 ['Participant Profile', seminar.participant_profile],
