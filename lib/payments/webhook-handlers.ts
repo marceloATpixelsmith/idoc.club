@@ -257,12 +257,10 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   }).returning({ id: seminarRegistrations.id });
   await tx.insert(auditLog).values({ action: 'guest.seminar_registration.registered_and_paid',
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
-  await tx.insert(notificationOutbox).values({
-    dedupeKey: `seminar.registration_created:guest:${created.id}:stripe-paid`,
-    kind: 'seminar.registration_created',
-    payload: { amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
-      registrationId: created.id, seminarId, to: email },
-  }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+  await tx.execute(sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+    (null,'seminar.registration_created',${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
+      registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
+    on conflict (dedupe_key) do nothing`);
 }
 
 // Seminar payments are classified separately from membership billing and never touch membership
