@@ -379,7 +379,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
   } else if (paymentMethod === 'cash_event') {
     paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
   } else if (paymentMethod === 'online_stripe') {
-    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Thank you for your Stripe payment.</strong> Your payment has been received.</p>';
+    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Online payment selected.</strong> Your payment is confirmed only after Stripe completes checkout.</p>';
   }
   return `<div style="margin-bottom:28px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>
     <table role="presentation" width="100%" style="margin:0;border-collapse:separate;border-spacing:0;background:#1c243a;border:1px solid #343d55;border-radius:8px;">
