@@ -488,3 +488,19 @@ test('seminar registration delivery cannot fall back to the legacy generic email
   assert.match(source, /seminar_registration_confirmation_missing_seminar_id/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });
+
+
+test('every seminar registration path uses the one detailed confirmation contract', async () => {
+  const registrations = await readFile('lib/seminars/registrations.ts', 'utf8');
+  const webhooks = await readFile('lib/payments/webhook-handlers.ts', 'utf8');
+  const notices = await readFile('lib/notifications/renewal-notices.ts', 'utf8');
+
+  assert.match(registrations, /paymentMethod !== 'online_stripe'/);
+  assert.match(registrations, /seminar\.registration_created/);
+  assert.match(registrations, /seminar\.registration_created:guest:/);
+  assert.match(webhooks, /seminar\.registration_created:guest:\$\{created\.id\}:stripe-paid/);
+  assert.match(webhooks, /seminar\.registration_created:\$\{registrationId\}:stripe-paid/);
+  assert.doesNotMatch(webhooks, /best-effort; payment and registration are already durable/);
+  assert.doesNotMatch(notices, /Your seminar registration was recorded/);
+  assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
+});
