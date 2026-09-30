@@ -339,13 +339,28 @@ export type SeminarEmailDetails = {
   start_date: string; title: string;
 };
 
+function seminarEmailIcon(path: string) {
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d3af37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;">${path}</svg>`;
+}
+
+const SEMINAR_EMAIL_ICONS = {
+  banknote: seminarEmailIcon('<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>'),
+  calendar: seminarEmailIcon('<path d="M8 2v4M16 2v4M3 10h18"/><rect width="18" height="18" x="3" y="4" rx="2"/>'),
+  deadline: seminarEmailIcon('<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6.5M16 2v4M8 2v4M3 10h8"/><circle cx="18" cy="18" r="4"/><path d="M18 16v2l1 1"/>'),
+  flag: seminarEmailIcon('<path d="M5 22V4M5 4h11l-1 4 1 4H5"/>'),
+  language: seminarEmailIcon('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'),
+  layers: seminarEmailIcon('<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>'),
+  location: seminarEmailIcon('<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>'),
+  users: seminarEmailIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
+};
+
 function seminarEmailInfoRow(icon: string, value: string) {
-  return `<tr><td style="width:32px;padding:15px 12px 15px 0;border-bottom:1px solid #263652;color:#d9ad26;font-size:20px;vertical-align:middle;">${icon}</td><td style="padding:15px 0;border-bottom:1px solid #263652;color:#f7f8fb;font-size:15px;line-height:1.5;vertical-align:middle;">${value}</td></tr>`;
+  return `<tr><td style="width:36px;padding:18px 12px 18px 18px;border-bottom:1px solid #343d55;vertical-align:middle;">${icon}</td><td style="padding:18px 18px 18px 0;border-bottom:1px solid #343d55;color:#f7f8fb;font-size:15px;line-height:1.5;vertical-align:middle;">${value}</td></tr>`;
 }
 
 function richSeminarEmailSection(label: string, html: string) {
   if (!html.trim()) return '';
-  return `<div style="margin-top:28px;"><div style="margin-bottom:10px;color:#d9ad26;font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:15px;line-height:1.7;">${html}</div></div>`;
+  return `<div style="margin-top:30px;"><div style="margin-bottom:10px;color:#d3af37;font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:15px;line-height:1.7;">${html}</div></div>`;
 }
 
 export async function getSeminarEmailDetails(seminarId: number): Promise<SeminarEmailDetails | null> {
@@ -353,9 +368,6 @@ export async function getSeminarEmailDetails(seminarId: number): Promise<Seminar
   return details ?? null;
 }
 
-/** One confirmation body for every successful seminar registration. The structure intentionally
- * mirrors the public seminar detail page: same information, same order, and an icon-led details
- * block. Only the payment-specific message changes by payment method. */
 export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
   const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
   const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
@@ -363,25 +375,24 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
   let paymentMessage = '';
   if (paymentMethod === 'bank_transfer') {
     const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    paymentMessage = `<div style="margin:0 0 26px;border:1px solid #d9ad26;border-radius:8px;padding:18px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div><div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
+    paymentMessage = `<div style="margin:18px 0 0;border-left:3px solid #d3af37;padding:2px 0 2px 16px;"><div style="margin-bottom:6px;color:#d3af37;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div><div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
   } else if (paymentMethod === 'cash_event') {
-    paymentMessage = '<p style="margin:0 0 26px;">Please remember to bring your cash payment to the event.</p>';
+    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
   } else if (paymentMethod === 'online_stripe') {
-    paymentMessage = '<p style="margin:0 0 26px;">Your registration is confirmed. Online payment will be confirmed once Stripe reports a successful payment.</p>';
+    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Online payment selected.</strong> Your payment is confirmed only after Stripe completes checkout.</p>';
   }
-  return `<p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>
-    ${paymentMessage}
-    <table role="presentation" width="100%" style="margin-top:20px;border-collapse:collapse;border-top:1px solid #263652;">
-      ${seminarEmailInfoRow('&#128197;', escapeHtml(dateRange))}
-      ${seminarEmailInfoRow('&#128205;', escapeHtml(seminar.location))}
-      ${seminarEmailInfoRow('&#127760;', `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
-      ${seminarEmailInfoRow('&#9873;', `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
-      ${seminarEmailInfoRow('&#128101;', `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
-      ${seminarEmailInfoRow('&#128181;', `Price: ${escapeHtml(price)}`)}
-      ${levels ? seminarEmailInfoRow('&#9776;', escapeHtml(levels)) : ''}
-      ${seminarEmailInfoRow('&#128197;', `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
+  return `<div style="margin-bottom:28px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>
+    <table role="presentation" width="100%" style="margin:0;border-collapse:separate;border-spacing:0;background:#1c243a;border:1px solid #343d55;border-radius:8px;">
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.flag, `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
+      ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
+      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
     </table>
-    ${seminar.is_fei ? '<div style="border-top:1px solid #263652;padding:18px 0;color:#f7f8fb;font-size:14px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</div>' : ''}
+    ${seminar.is_fei ? '<div style="border:1px solid #343d55;border-top:0;padding:18px;color:#f7f8fb;font-size:13px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</div>' : ''}
     ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
     ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
     ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
