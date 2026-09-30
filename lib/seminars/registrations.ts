@@ -400,7 +400,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Members: ${escapeHtml(memberPrice)} · Non-members: ${escapeHtml(nonMemberPrice)}`)}
     ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
-    ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><img alt="FEI" src="https://redesign.idoc.club/fei-logo-white.svg" height="24" style="display:block;height:24px;width:auto;border:0;" /></td></tr>' : ''}
+    ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
   </table>`;
 
   const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;padding:24px 22px;">
