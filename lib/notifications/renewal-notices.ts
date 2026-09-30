@@ -33,6 +33,7 @@ type NoticePayload = {
   renewalDate?: string;
   amountCents?: number;
   paymentMethod?: string;
+  paymentConfirmed?: boolean;
   seminarId?: number;
   to?: string | null;
 };
@@ -174,7 +175,7 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
   if (kind === 'seminar.registration_created' && payload.seminarId) {
     const seminar = await getSeminarEmailDetails(payload.seminarId);
     if (seminar) return {
-      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
+      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentConfirmed: payload.paymentConfirmed ?? false, paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration',
     };
   }
