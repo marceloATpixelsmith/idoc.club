@@ -299,7 +299,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
-    const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
+    const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
     seminarDetails = details;
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
@@ -367,7 +367,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
   } else if (paymentMethod === 'cash_event') {
     paymentMessage = '<p style="margin:0 0 26px;">Please remember to bring your cash payment to the event.</p>';
   } else if (paymentMethod === 'online_stripe') {
-    paymentMessage = '<p style="margin:0 0 26px;">Thank you for your Stripe payment. Your payment has been received.</p>';
+    paymentMessage = '<p style="margin:0 0 26px;">Your registration is confirmed. Online payment will be confirmed once Stripe reports a successful payment.</p>';
   }
   return `<p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>
     ${paymentMessage}
