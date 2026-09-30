@@ -359,10 +359,10 @@ const SEMINAR_EMAIL_ICONS = {
 
 function seminarEmailInfoRow(iconUrl: string, value: string) {
   return `<tr>
-    <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid rgba(255,255,255,.12);vertical-align:middle;">
+    <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid #343d55;vertical-align:middle;">
       <img alt="" src="${iconUrl}" width="20" height="20" style="display:block;width:20px;height:20px;border:0;" />
     </td>
-    <td class="idoc-email-text" style="padding:20px 20px 20px 4px;border-bottom:1px solid rgba(255,255,255,.12);color:#eff2f7 !important;font-size:16px;line-height:1.5;vertical-align:middle;">${value}</td>
+    <td class="idoc-email-text" style="padding:20px 20px 20px 4px;border-bottom:1px solid #343d55;color:#eff2f7 !important;font-size:16px;line-height:1.5;vertical-align:middle;">${value}</td>
   </tr>`;
 }
 
@@ -390,7 +390,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Thank you for your Stripe payment.</strong> Your payment has been received.</p>';
   }
 
-  const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;">
+  const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;overflow:hidden;">
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
@@ -402,7 +402,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     ${seminar.is_fei ? '<tr><td colspan="2" class="idoc-email-text" style="padding:20px;color:#eff2f7 !important;font-size:13px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</td></tr>' : ''}
   </table>`;
 
-  const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:24px 22px;">
+  const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;padding:24px 22px;">
     ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
     ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
     ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
