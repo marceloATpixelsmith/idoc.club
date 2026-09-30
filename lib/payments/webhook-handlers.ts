@@ -7,7 +7,8 @@ import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, not
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { getSeminarEmailDetails, guestRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -258,8 +259,8 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
   try {
     await sendTransactionalEmail({
-      html: renderTransactionalEmail({ bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your registration and payment for <strong>${escapeHtml(seminar.title)}</strong> are confirmed.</p>`,
-        heading: 'Seminar registration confirmed' }),
+      html: renderTransactionalEmail({ bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
+        heading: `Thank you for registering for ${seminar.title}` }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
   } catch { /* best-effort; payment and registration are already durable */ }
