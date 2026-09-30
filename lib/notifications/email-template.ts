@@ -9,14 +9,24 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
   return `<!doctype html>
 <html>
 <head>
-  <meta name="color-scheme" content="dark only">
-  <meta name="supported-color-schemes" content="dark">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
   <style>
-    :root { color-scheme: dark only; supported-color-schemes: dark; }
-    body, .idoc-email-bg { background-color:#050c20 !important; }
-    .idoc-email-card { background-color:#0b152c !important; }
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body, .idoc-email-bg { background:#050c20 !important; background-color:#050c20 !important; }
+    .idoc-email-card { background:#0b152c !important; background-color:#0b152c !important; }
     .idoc-email-text { color:#eff2f7 !important; }
     .idoc-email-gold { color:#d3af37 !important; }
+    @media (prefers-color-scheme: dark) {
+      body, .idoc-email-bg { background:#050c20 !important; background-color:#050c20 !important; }
+      .idoc-email-card { background:#0b152c !important; background-color:#0b152c !important; }
+      .idoc-email-text { color:#eff2f7 !important; }
+      .idoc-email-gold { color:#d3af37 !important; }
+    }
+    [data-ogsc] .idoc-email-bg { background:#050c20 !important; background-color:#050c20 !important; }
+    [data-ogsc] .idoc-email-card { background:#0b152c !important; background-color:#0b152c !important; }
+    [data-ogsc] .idoc-email-text { color:#eff2f7 !important; }
+    [data-ogsc] .idoc-email-gold { color:#d3af37 !important; }
   </style>
 </head>
 <body bgcolor="#050c20" style="margin:0;padding:0;background:#050c20 !important;color:#eff2f7;font-family:Arial,Helvetica,sans-serif;">
