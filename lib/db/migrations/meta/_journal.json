@@ -435,6 +435,13 @@
       "when": 1790713000000,
       "tag": "0061_seminar_date_only_rich_information",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790750000000,
+      "tag": "0062_repair_seminar_description_constraint",
+      "breakpoints": true
     }
   ]
 }
