@@ -870,3 +870,7 @@ Seminar cancellation is a financial orchestration, not merely a status edit. It 
 
 ### Server Action observability
 Unexpected exceptions caught by admin Server Actions that are converted into safe user-facing messages must be explicitly captured in Sentry. Runtime logs must not serialize raw database exceptions or other objects that can contain member, guest, payment, or other sensitive data.
+
+
+### Seminar administration form behavior
+Seminar create and edit actions open in the shared admin modal drawer rather than replacing the administration list page visually. The drawer is full width on small screens and approximately 85% of the viewport on desktop, traps keyboard focus while open, closes with Escape, overlay click, or the close control, and returns to `/admin/seminars` when dismissed.
