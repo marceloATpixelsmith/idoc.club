@@ -30,22 +30,15 @@ export default async function EditSeminarPage({ params }: { params: Promise<{ id
   return (
     <AdminFormDrawer closeHref="/admin/seminars" title={String(seminar.title)}>
       <main className="space-y-8 px-5 py-8 lg:px-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} registered ({registeredTotal} total)</p>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button asChild aria-label="View registrations" size="icon-sm" title="View this seminar's registrations" variant="ghost">
-            <Link href={`/admin/seminars/registrations?seminarId=${id}`}><ClipboardList aria-hidden="true" /></Link>
-          </Button>
-          <Button asChild aria-label="Download registrations" size="icon-sm" title="Download this seminar's registrations" variant="ghost">
-            <a download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}><Download aria-hidden="true" /></a>
-          </Button>
-        </div>
-      </header>
-
       <SeminarForm action={updateSeminarAction} submitLabel="Save changes">
         <input name="id" type="hidden" value={id} />
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
+          <p className="text-sm text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} registered ({registeredTotal} total)</p>
+          <div className="flex items-center gap-1">
+            <Button asChild aria-label="Jump to registrations" size="icon-sm" title="Jump to registrations" variant="ghost"><Link href={`/admin/seminars/registrations?seminarId=${id}`}><ClipboardList aria-hidden="true" /></Link></Button>
+            <Button asChild aria-label="Download registrations" size="icon-sm" title="Download this seminar's registrations" variant="ghost"><a download href={`/api/admin/export/seminar-registrations?seminarId=${id}`}><Download aria-hidden="true" /></a></Button>
+          </div>
+        </div>
         <SeminarFieldset
           allowCanceled
           lockPrices={registeredTotal > 0}

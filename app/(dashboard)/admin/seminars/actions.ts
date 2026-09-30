@@ -32,9 +32,20 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
     return { success };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarRegistrationError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
-    Sentry.captureException(error, { tags: { area: 'admin-seminars', operation: 'save' } });
-    console.error('Unexpected admin seminar save failure; details captured by Sentry.');
-    return { error: 'The seminar could not be saved.' };
+    const eventId = Sentry.captureException(error, { tags: { area: 'admin-seminars', operation: 'save' } });
+    const databaseError = error && typeof error === 'object' ? error as {
+      code?: unknown; column_name?: unknown; constraint_name?: unknown; name?: unknown; schema_name?: unknown; table_name?: unknown;
+    } : {};
+    console.error('Unexpected admin seminar save failure', {
+      code: typeof databaseError.code === 'string' ? databaseError.code : undefined,
+      column: typeof databaseError.column_name === 'string' ? databaseError.column_name : undefined,
+      constraint: typeof databaseError.constraint_name === 'string' ? databaseError.constraint_name : undefined,
+      errorName: typeof databaseError.name === 'string' ? databaseError.name : undefined,
+      eventId,
+      schema: typeof databaseError.schema_name === 'string' ? databaseError.schema_name : undefined,
+      table: typeof databaseError.table_name === 'string' ? databaseError.table_name : undefined,
+    });
+    return { error: `The seminar could not be saved. Error reference: ${eventId}` };
   }
 }
 

@@ -12,7 +12,7 @@ export function AdminFormDrawer({ children, closeHref, title }: { children: Reac
     <Dialog.Root defaultOpen onOpenChange={(open) => { if (!open) router.push(closeHref); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none md:w-[85vw]">
+        <Dialog.Content className="fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none md:w-[50vw]">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-5 py-4 backdrop-blur lg:px-8">
             <Dialog.Title className="text-2xl font-semibold text-gold">{title}</Dialog.Title>
             <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button></Dialog.Close>
