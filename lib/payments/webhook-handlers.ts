@@ -260,7 +260,7 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({ bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
-        heading: `Thank you for registering for ${seminar.title}` }),
+        heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
   } catch { /* best-effort; payment and registration are already durable */ }
