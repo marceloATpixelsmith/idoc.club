@@ -262,7 +262,6 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
     kind: 'seminar.registration_created',
     payload: { amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
       registrationId: created.id, seminarId, to: email },
-    profileId: null,
   }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
 }
 
