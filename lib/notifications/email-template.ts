@@ -16,7 +16,7 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#151b2d;font-family:Arial,Helvetica,sans-serif;">
 <table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#1c243a;border:1px solid #343d55;border-radius:12px;padding:36px;">
   <tr><td>
-    <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC" src="https://redesign.idoc.club/idoc-logo.svg" style="display:inline-block;max-width:180px;height:auto;" /></div>
+    <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC" src="https://res.cloudinary.com/z6xv27qx/image/upload/v1790786199/idoc-logo-email.png" style="display:inline-block;max-width:180px;height:auto;" /></div>
     ${options.heading ? `<h2 style="margin:0 0 16px;font-size:17px;color:#d9ad26;">${options.heading}</h2>` : ''}
     <div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
     ${options.footerNote ? `<p style="margin:24px 0 0;color:#aeb8ca;font-size:13px;">${options.footerNote}</p>` : ''}
