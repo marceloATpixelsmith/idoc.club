@@ -24,7 +24,7 @@ export function RichTextEditor({ initialHtml = '', label, name }: { initialHtml?
   );
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
+      <p className="text-sm font-medium uppercase tracking-wide">{label}</p>
       <div aria-label={`${label} formatting controls`} className="flex flex-wrap gap-2" role="toolbar">
         {action('Paragraph', () => editor.chain().focus().setParagraph().run())}
         {action('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run())}

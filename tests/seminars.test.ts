@@ -171,7 +171,7 @@ test('anonymous online registration is Stripe-first: Checkout collects contact d
 
 test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
   assert.match(registrationsSource, /escapeHtml\(firstName\)/);
-  assert.match(registrationsSource, /escapeHtml\(seminarTitle\)/);
+  assert.match(registrationsSource, /escapeHtml\(seminar\.title\)/);
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
   assert.match(webhookSource, /escapeHtml\(registration\.guestName \?\? ''\)/g);
@@ -330,12 +330,12 @@ test('all seminar listing surfaces reuse a compact, uniformly constrained card w
   const cardEnd = memberPage.indexOf('/** \"Available seminars\"', cardStart);
   const cardBlock = memberPage.slice(cardStart, cardEnd);
   assert.ok(cardStart > -1 && cardEnd > cardStart);
-  assert.match(cardBlock as string, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(cardBlock as string, /sm:grid-cols-\[minmax\(0,max-content\)_auto\]/);
   assert.match(cardBlock as string, /<Link aria-label=\{`View \${seminar\.title}`\} className="absolute inset-0 z-10"/);
-  assert.match(cardBlock as string, /relative z-20[^"]*sm:ml-4/);
+  assert.match(cardBlock as string, /relative z-20[^"]*w-fit shrink-0/);
   const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
   assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
-  assert.match(memberPage, /w-full max-w-3xl divide-y/);
+  assert.match(memberPage, /w-fit max-w-full divide-y/);
   const homePage = readFileSync('app/(marketing)/page.tsx', 'utf8');
   assert.match(homePage, /SeminarListingCard/);
   assert.match(homePage, /w-full max-w-3xl divide-y/);
