@@ -339,28 +339,31 @@ export type SeminarEmailDetails = {
   start_date: string; title: string;
 };
 
-function seminarEmailIcon(path: string) {
-  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d3af37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;">${path}</svg>`;
-}
+const EMAIL_ICON_BASE = 'https://res.cloudinary.com/z6xv27qx/image/upload/e_colorize,co_rgb:d3af37/idoc-email-icons';
 
 const SEMINAR_EMAIL_ICONS = {
-  banknote: seminarEmailIcon('<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>'),
-  calendar: seminarEmailIcon('<path d="M8 2v4M16 2v4M3 10h18"/><rect width="18" height="18" x="3" y="4" rx="2"/>'),
-  deadline: seminarEmailIcon('<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6.5M16 2v4M8 2v4M3 10h8"/><circle cx="18" cy="18" r="4"/><path d="M18 16v2l1 1"/>'),
-  flag: seminarEmailIcon('<path d="M5 22V4M5 4h11l-1 4 1 4H5"/>'),
-  language: seminarEmailIcon('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'),
-  layers: seminarEmailIcon('<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>'),
-  location: seminarEmailIcon('<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>'),
-  users: seminarEmailIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
+  banknote: `${EMAIL_ICON_BASE}/banknote.png`,
+  calendar: `${EMAIL_ICON_BASE}/calendar.png`,
+  deadline: `${EMAIL_ICON_BASE}/calendar-clock.png`,
+  flag: `${EMAIL_ICON_BASE}/flag.png`,
+  language: `${EMAIL_ICON_BASE}/languages.png`,
+  layers: `${EMAIL_ICON_BASE}/layers.png`,
+  location: `${EMAIL_ICON_BASE}/map-pin.png`,
+  users: `${EMAIL_ICON_BASE}/users.png`,
 };
 
-function seminarEmailInfoRow(icon: string, value: string) {
-  return `<tr><td style="width:36px;padding:18px 12px 18px 18px;border-bottom:1px solid #343d55;vertical-align:middle;">${icon}</td><td style="padding:18px 18px 18px 0;border-bottom:1px solid #343d55;color:#f7f8fb;font-size:15px;line-height:1.5;vertical-align:middle;">${value}</td></tr>`;
+function seminarEmailInfoRow(iconUrl: string, value: string) {
+  return `<tr>
+    <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid rgba(255,255,255,.12);vertical-align:middle;">
+      <img alt="" src="${iconUrl}" width="20" height="20" style="display:block;width:20px;height:20px;border:0;" />
+    </td>
+    <td class="idoc-email-text" style="padding:20px 20px 20px 4px;border-bottom:1px solid rgba(255,255,255,.12);color:#eff2f7 !important;font-size:16px;line-height:1.5;vertical-align:middle;">${value}</td>
+  </tr>`;
 }
 
 function richSeminarEmailSection(label: string, html: string) {
   if (!html.trim()) return '';
-  return `<div style="margin-top:30px;"><div style="margin-bottom:10px;color:#d3af37;font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:15px;line-height:1.7;">${html}</div></div>`;
+  return `<div style="margin:0 0 28px;"><div class="idoc-email-gold" style="margin-bottom:10px;color:#d3af37 !important;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(label)}</div><div class="idoc-email-text" style="color:#eff2f7 !important;font-size:15px;line-height:1.7;">${html}</div></div>`;
 }
 
 export async function getSeminarEmailDetails(seminarId: number): Promise<SeminarEmailDetails | null> {
@@ -375,29 +378,34 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
   let paymentMessage = '';
   if (paymentMethod === 'bank_transfer') {
     const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    paymentMessage = `<div style="margin:18px 0 0;border-left:3px solid #d3af37;padding:2px 0 2px 16px;"><div style="margin-bottom:6px;color:#d3af37;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div><div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
+    paymentMessage = `<div style="margin:14px 0 0;"><strong class="idoc-email-gold" style="color:#d3af37 !important;">Bank transfer information:</strong><div class="idoc-email-text" style="margin-top:6px;color:#eff2f7 !important;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
   } else if (paymentMethod === 'cash_event') {
-    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
+    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
   } else if (paymentMethod === 'online_stripe') {
-    paymentMessage = '<p style="margin:12px 0 0;color:#f7f8fb;"><strong>Online payment selected.</strong> Your payment is confirmed only after Stripe completes checkout.</p>';
+    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Online payment selected.</strong> Your payment is confirmed only after Stripe completes checkout.</p>';
   }
-  return `<div style="margin-bottom:28px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>
-    <table role="presentation" width="100%" style="margin:0;border-collapse:separate;border-spacing:0;background:#1c243a;border:1px solid #343d55;border-radius:8px;">
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.flag, `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
-      ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-      ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
-    </table>
-    ${seminar.is_fei ? '<div style="border:1px solid #343d55;border-top:0;padding:18px;color:#f7f8fb;font-size:13px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</div>' : ''}
+
+  const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;">
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.flag, `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
+    ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
+    ${seminar.is_fei ? '<tr><td colspan="2" class="idoc-email-text" style="padding:20px;color:#eff2f7 !important;font-size:13px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</td></tr>' : ''}
+  </table>`;
+
+  const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:24px 22px;">
     ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
     ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
     ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
     ${richSeminarEmailSection('Application', seminar.application)}
-    ${richSeminarEmailSection('Accommodation Information', seminar.accommodation_information)}`;
+    ${richSeminarEmailSection('Accommodation Information', seminar.accommodation_information)}
+  </div>`;
+
+  return `<div style="margin-bottom:30px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>${detailsCard}${informationCard}`;
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
