@@ -877,3 +877,5 @@ Seminar create and edit actions open in the shared admin modal drawer rather tha
 
 ### Seminar administration form layout
 The seminar create/edit drawer uses a two-column desktop layout: Core Information occupies the left column, while Status, Schedule, and Pricing are stacked vertically in the right column so Schedule and Pricing fill the space immediately beneath Status. On smaller screens the sections stack responsively.
+
+**Seminar registration confirmation email contract (September 2026):** every registrant receives one seminar registration confirmation using the shared IDOC midnight-navy/gold transactional shell and email-safe PNG logo. Its detail block follows the public seminar detail page order and icon concepts. Payment-specific copy belongs in the opening confirmation area before seminar details: bank transfer includes the current Organization Settings instructions, cash reminds the registrant to bring cash, and Stripe wording must never claim payment was received before the successful Checkout webhook. A separate registrant-facing payment-confirmed email is not sent.
