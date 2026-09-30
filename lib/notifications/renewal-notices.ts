@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox, profiles, users } from '@/lib/db/schema';
-import { getSeminarEmailDetails, guestRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
+import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './brevo-transactional';
@@ -174,7 +174,7 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
   if (kind === 'seminar.registration_created' && payload.seminarId) {
     const seminar = await getSeminarEmailDetails(payload.seminarId);
     if (seminar) return {
-      html: renderTransactionalEmail({ bodyHtml: await guestRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
+      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration',
     };
   }
