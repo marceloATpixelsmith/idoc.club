@@ -257,13 +257,13 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   }).returning({ id: seminarRegistrations.id });
   await tx.insert(auditLog).values({ action: 'guest.seminar_registration.registered_and_paid',
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
-  try {
-    await sendTransactionalEmail({
-      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentConfirmed: true, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
-        heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
-      subject: 'Your IDOC seminar registration', to: email,
-    }, { signal: AbortSignal.timeout(10_000) });
-  } catch { /* best-effort; payment and registration are already durable */ }
+  await tx.insert(notificationOutbox).values({
+    dedupeKey: `seminar.registration_created:guest:${created.id}:stripe-paid`,
+    kind: 'seminar.registration_created',
+    payload: { amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
+      registrationId: created.id, seminarId, to: email },
+    profileId: null,
+  }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
 }
 
 // Seminar payments are classified separately from membership billing and never touch membership
