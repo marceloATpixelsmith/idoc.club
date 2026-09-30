@@ -325,15 +325,12 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
       (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
     return { registrationId };
   });
-  try {
-    await sendTransactionalEmail({
-      html: renderTransactionalEmail({
-        bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar: seminarDetails! }),
-        heading: `Thank you for registering for ${escapeHtml(seminarDetails!.title)}`,
-      }),
-      subject: 'Your IDOC seminar registration', to: email,
-    }, { signal: AbortSignal.timeout(10_000) });
-  } catch { /* best-effort -- the registration itself already committed above */ }
+  // Guest confirmations must be durable just like profile confirmations. Direct best-effort
+  // delivery used to swallow Brevo/time-out failures after the registration committed, leaving a
+  // successfully registered guest with no confirmation and no retry path.
+  await client`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+    (null,'seminar.registration_created',${JSON.stringify({ amountCents: seminarDetails!.non_member_price_cents, firstName, paymentMethod, registrationId, seminarId: seminarId.data, to: email })}::jsonb,${`seminar.registration_created:guest:${registrationId}`})
+    on conflict (dedupe_key) do nothing`;
   return { paymentMethod, registrationId };
 }
 
