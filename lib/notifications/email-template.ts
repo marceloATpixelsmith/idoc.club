@@ -13,13 +13,13 @@ export function escapeHtml(value: string): string {
 }
 
 export function renderTransactionalEmail(options: { bodyHtml: string; footerNote?: string; heading?: string }): string {
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f9fafb;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" width="100%" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#071329;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#0b1830;border:1px solid #263652;border-radius:12px;padding:36px;">
   <tr><td>
-    <h1 style="margin:0 0 24px;text-align:center;font-size:20px;color:#111827;">IDOC</h1>
-    ${options.heading ? `<h2 style="margin:0 0 16px;font-size:17px;color:#111827;">${options.heading}</h2>` : ''}
-    <div style="color:#374151;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
-    ${options.footerNote ? `<p style="margin:24px 0 0;color:#6b7280;font-size:13px;">${options.footerNote}</p>` : ''}
+    <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC" src="https://idoc.club/idoc-logo.svg" style="display:inline-block;max-width:180px;height:auto;" /></div>
+    ${options.heading ? `<h2 style="margin:0 0 16px;font-size:17px;color:#d9ad26;">${options.heading}</h2>` : ''}
+    <div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
+    ${options.footerNote ? `<p style="margin:24px 0 0;color:#aeb8ca;font-size:13px;">${options.footerNote}</p>` : ''}
   </td></tr>
 </table>
 </body></html>`;
@@ -28,10 +28,10 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
 /** A modern email CTA button, for the link-based flows (email-change verification, password reset,
  * migration activation) that need a clickable action rather than a code to copy. */
 export function emailButton(href: string, label: string): string {
-  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#111827;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">${label}</a></p>`;
+  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#d9ad26;padding:12px 28px;font-size:14px;font-weight:600;color:#071329;text-decoration:none;">${label}</a></p>`;
 }
 
 /** The large, letter-spaced, easily copyable code block used by every OTP email. */
 export function emailCode(code: string): string {
-  return `<div style="margin:0 0 24px;border-radius:8px;background:#f3f4f6;padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#111827;">${code}</div>`;
+  return `<div style="margin:0 0 24px;border-radius:8px;background:#071329;border:1px solid #263652;padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#d9ad26;">${code}</div>`;
 }
