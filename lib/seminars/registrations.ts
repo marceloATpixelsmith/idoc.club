@@ -244,7 +244,7 @@ async function registerOwnProfileForSeminar(
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'member.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ profileId, seminarId: seminarId.data })}::jsonb)`;
     await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'to',u.email::text,'firstName',p.first_name::text)
+      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
         from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     return { paymentMethod, registrationId };
   });
@@ -354,7 +354,7 @@ export async function getSeminarEmailDetails(seminarId: number): Promise<Seminar
   return details ?? null;
 }
 
-export async function guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar }: { firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
+export async function guestRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
   const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
   const payment = paymentMethod === 'bank_transfer' ? 'Bank transfer' : paymentMethod === 'cash_event' ? 'Cash at event' : 'Online payment';
   let paymentInstructions = '';
@@ -372,7 +372,7 @@ export async function guestRegistrationConfirmationBodyHtml({ firstName, payment
       ${seminarEmailRow('Organizing Federation', escapeHtml(countryNameForCode(seminar.organizing_national_federation)))}
       ${seminarEmailRow('Levels', escapeHtml(seminar.levels?.length ? formatLevels(seminar.levels) : 'Not specified'))}
       ${seminarEmailRow('Deadline', escapeHtml(dateOnly(seminar.registration_deadline)))}
-      ${seminarEmailRow('Non-member price', escapeHtml(`€${(seminar.non_member_price_cents / 100).toFixed(2)}`))}
+      ${seminarEmailRow('Price', escapeHtml(`€${((amountCents ?? seminar.non_member_price_cents) / 100).toFixed(2)}`))}
       ${seminarEmailRow('Payment method', escapeHtml(payment))}
       ${seminar.is_fei ? seminarEmailRow('FEI seminar', 'Yes') : ''}
     </table>
