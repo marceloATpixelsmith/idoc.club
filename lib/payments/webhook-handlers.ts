@@ -8,7 +8,7 @@ import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration'
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { getSeminarEmailDetails, guestRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
+import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -259,7 +259,7 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
   try {
     await sendTransactionalEmail({
-      html: renderTransactionalEmail({ bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
+      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
         heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
@@ -359,26 +359,10 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     action: 'seminar.payment_confirmed', afterJson: { amountCents: priceCents, paymentIntentId, sessionId: session.id },
     entityId: String(registrationId), entityType: 'seminar_registration',
   });
-  if (registration.profileId !== null) {
-    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
-      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
-    await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.payment_confirmed:${registrationId}:${paymentIntentId}`,
-      kind: 'seminar.payment_confirmed', payload: { amountCents: priceCents, firstName: contact?.firstName,
-        registrationId, to: contact?.email }, profileId: registration.profileId })
-      .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
-  } else if (registration.guestEmail) {
-    // Guests have no profile row, so notification_outbox (profile_id NOT NULL) can't queue this --
-    // send directly and best-effort, the same way registerAsGuestForSeminar's own confirmation does.
-    try {
-      await sendTransactionalEmail({
-        html: renderTransactionalEmail({
-          bodyHtml: `<p>Hello ${escapeHtml(registration.guestName ?? '')},</p><p>Your payment for this seminar was received. Thank you.</p>`,
-          heading: 'Seminar payment confirmed',
-        }),
-        subject: 'Your IDOC seminar payment', to: registration.guestEmail,
-      }, { signal: AbortSignal.timeout(10_000) });
-    } catch { /* best-effort -- the payment itself already committed above */ }
-  }
+  // Registration creation already queues the one registrant-facing confirmation for profile
+  // registrations. Stripe completion updates payment state only; it must never create a second
+  // generic "payment confirmed" email. Guest Stripe-first checkout is handled separately above,
+  // where the registration is created only after payment and receives the same single confirmation.
 }
 
 async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, stripe: WebhookStripeClient) {
