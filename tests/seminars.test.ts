@@ -175,7 +175,7 @@ test('a guest\'s attacker-controlled name is HTML-escaped before interpolation i
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
   assert.match(webhookSource, /escapeHtml\(registration\.guestName \?\? ''\)/g);
-  assert.equal(webhookSource.match(/escapeHtml\(registration\.guestName \?\? ''\)/g)?.length, 2, 'both the payment-confirmed and refund-confirmed guest emails must escape the guest name');
+  assert.equal(webhookSource.match(/escapeHtml\(registration\.guestName \?\? ''\)/g)?.length, 1, 'the remaining guest refund email must escape the guest name; seminar payment confirmation is intentionally part of the single registration email');
   assert.match(refundsSource, /escapeHtml\(row\.first_name \?\? ''\)/);
 });
 

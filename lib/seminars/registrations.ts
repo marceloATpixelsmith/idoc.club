@@ -299,7 +299,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
-    const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
+    const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
     seminarDetails = details;
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
@@ -323,7 +323,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
-        bodyHtml: await guestRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar: seminarDetails! }),
+        bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar: seminarDetails! }),
         heading: `Thank you for registering for ${escapeHtml(seminarDetails!.title)}`,
       }),
       subject: 'Your IDOC seminar registration', to: email,
@@ -333,50 +333,55 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
 }
 
 export type SeminarEmailDetails = {
-  accommodation_information: string; application: string; course_directors: string; course_venue_information: string;
+  accommodation_information: string; application: string; capacity: number; course_directors: string; course_venue_information: string;
   end_date: string; is_fei: boolean; language: string; levels: string[]; location: string; member_price_cents: number;
   non_member_price_cents: number; organizing_national_federation: string; participant_profile: string; registration_deadline: string | Date;
   start_date: string; title: string;
 };
 
-function seminarEmailRow(label: string, value: string) {
-  return `<tr><td style="padding:8px 12px 8px 0;color:#d9ad26;font-size:12px;font-weight:700;text-transform:uppercase;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:8px 0;color:#f7f8fb;font-size:14px;line-height:1.5;">${value}</td></tr>`;
+function seminarEmailInfoRow(icon: string, value: string) {
+  return `<tr><td style="width:32px;padding:15px 12px 15px 0;border-bottom:1px solid #263652;color:#d9ad26;font-size:20px;vertical-align:middle;">${icon}</td><td style="padding:15px 0;border-bottom:1px solid #263652;color:#f7f8fb;font-size:15px;line-height:1.5;vertical-align:middle;">${value}</td></tr>`;
 }
 
 function richSeminarEmailSection(label: string, html: string) {
   if (!html.trim()) return '';
-  return `<div style="margin-top:22px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:14px;line-height:1.6;">${html}</div></div>`;
+  return `<div style="margin-top:28px;"><div style="margin-bottom:10px;color:#d9ad26;font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div><div style="color:#f7f8fb;font-size:15px;line-height:1.7;">${html}</div></div>`;
 }
 
-
 export async function getSeminarEmailDetails(seminarId: number): Promise<SeminarEmailDetails | null> {
-  const [details] = await client<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId} limit 1`;
+  const [details] = await client<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId} limit 1`;
   return details ?? null;
 }
 
-export async function guestRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
+/** One confirmation body for every successful seminar registration. The structure intentionally
+ * mirrors the public seminar detail page: same information, same order, and an icon-led details
+ * block. Only the payment-specific message changes by payment method. */
+export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
   const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
-  const payment = paymentMethod === 'bank_transfer' ? 'Bank transfer' : paymentMethod === 'cash_event' ? 'Cash at event' : 'Online payment';
-  let paymentInstructions = '';
+  const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
+  const price = `€${((amountCents ?? seminar.non_member_price_cents) / 100).toFixed(2)}`;
+  let paymentMessage = '';
   if (paymentMethod === 'bank_transfer') {
     const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    paymentInstructions = `<div style="margin:22px 0 0;border:1px solid #d9ad26;border-radius:8px;padding:16px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div>${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div>`;
+    paymentMessage = `<div style="margin:0 0 26px;border:1px solid #d9ad26;border-radius:8px;padding:18px;"><div style="margin-bottom:8px;color:#d9ad26;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Bank transfer information</div><div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
   } else if (paymentMethod === 'cash_event') {
-    paymentInstructions = '<p style="margin:18px 0 0;">Payment will be collected at the event.</p>';
+    paymentMessage = '<p style="margin:0 0 26px;">Please remember to bring your cash payment to the event.</p>';
+  } else if (paymentMethod === 'online_stripe') {
+    paymentMessage = '<p style="margin:0 0 26px;">Your registration is confirmed. Online payment will be confirmed once Stripe reports a successful payment.</p>';
   }
   return `<p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>
-    <table role="presentation" width="100%" style="margin-top:20px;border-collapse:collapse;">
-      ${seminarEmailRow('Date', escapeHtml(dateRange))}
-      ${seminarEmailRow('Location', escapeHtml(seminar.location))}
-      ${seminarEmailRow('Language', escapeHtml(languageNameForTag(seminar.language)))}
-      ${seminarEmailRow('Organizing Federation', escapeHtml(countryNameForCode(seminar.organizing_national_federation)))}
-      ${seminarEmailRow('Levels', escapeHtml(seminar.levels?.length ? formatLevels(seminar.levels) : 'Not specified'))}
-      ${seminarEmailRow('Deadline', escapeHtml(dateOnly(seminar.registration_deadline)))}
-      ${seminarEmailRow('Price', escapeHtml(`€${((amountCents ?? seminar.non_member_price_cents) / 100).toFixed(2)}`))}
-      ${seminarEmailRow('Payment method', escapeHtml(payment))}
-      ${seminar.is_fei ? seminarEmailRow('FEI seminar', 'Yes') : ''}
+    ${paymentMessage}
+    <table role="presentation" width="100%" style="margin-top:20px;border-collapse:collapse;border-top:1px solid #263652;">
+      ${seminarEmailInfoRow('&#128197;', escapeHtml(dateRange))}
+      ${seminarEmailInfoRow('&#128205;', escapeHtml(seminar.location))}
+      ${seminarEmailInfoRow('&#127760;', `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
+      ${seminarEmailInfoRow('&#9873;', `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
+      ${seminarEmailInfoRow('&#128101;', `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
+      ${seminarEmailInfoRow('&#128181;', `Price: ${escapeHtml(price)}`)}
+      ${levels ? seminarEmailInfoRow('&#9776;', escapeHtml(levels)) : ''}
+      ${seminarEmailInfoRow('&#128197;', `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
     </table>
-    ${paymentInstructions}
+    ${seminar.is_fei ? '<div style="border-top:1px solid #263652;padding:18px 0;color:#f7f8fb;font-size:14px;font-weight:700;letter-spacing:.08em;">FEI SEMINAR</div>' : ''}
     ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
     ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
     ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
