@@ -7,7 +7,7 @@ import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, not
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { getSeminarEmailDetails, guestRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
