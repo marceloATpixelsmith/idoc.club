@@ -243,9 +243,14 @@ async function registerOwnProfileForSeminar(
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'member.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ profileId, seminarId: seminarId.data })}::jsonb)`;
-    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
-        from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
+    // Offline methods are confirmed at registration time. Online registrations wait until the
+    // verified Stripe webhook marks the payment paid so the one confirmation email can truthfully
+    // thank the registrant for the completed Stripe payment.
+    if (paymentMethod !== 'online_stripe') {
+      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+        (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
+          from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
+    }
     return { paymentMethod, registrationId };
   });
 }
@@ -371,7 +376,7 @@ export async function getSeminarEmailDetails(seminarId: number): Promise<Seminar
   return details ?? null;
 }
 
-export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentMethod: string; seminar: SeminarEmailDetails }) {
+export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentConfirmed = false, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentConfirmed?: boolean; paymentMethod: string; seminar: SeminarEmailDetails }) {
   const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
   const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
   const price = `€${((amountCents ?? seminar.non_member_price_cents) / 100).toFixed(2)}`;
@@ -381,8 +386,8 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     paymentMessage = `<div style="margin:14px 0 0;"><strong class="idoc-email-gold" style="color:#d3af37 !important;">Bank transfer information:</strong><div class="idoc-email-text" style="margin-top:6px;color:#eff2f7 !important;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
   } else if (paymentMethod === 'cash_event') {
     paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
-  } else if (paymentMethod === 'online_stripe') {
-    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Online payment selected.</strong> Your payment is confirmed only after Stripe completes checkout.</p>';
+  } else if (paymentMethod === 'online_stripe' && paymentConfirmed) {
+    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Thank you for your Stripe payment.</strong> Your payment has been received.</p>';
   }
 
   const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;">
