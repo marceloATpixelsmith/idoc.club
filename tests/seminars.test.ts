@@ -480,3 +480,11 @@ test('initialPaymentStatusForMethod maps each canonical payment method to its ow
   assert.equal(initialPaymentStatusForMethod('bank_transfer'), 'bank_transfer_pending');
   assert.equal(initialPaymentStatusForMethod('cash_event'), 'cash_pending');
 });
+
+
+test('seminar registration delivery cannot fall back to the legacy generic email', async () => {
+  const source = await readFile('lib/notifications/renewal-notices.ts', 'utf8');
+  assert.doesNotMatch(source, /Your seminar registration was recorded/);
+  assert.match(source, /seminar_registration_confirmation_missing_seminar_id/);
+  assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
+});
