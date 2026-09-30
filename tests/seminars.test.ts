@@ -483,7 +483,7 @@ test('initialPaymentStatusForMethod maps each canonical payment method to its ow
 
 
 test('seminar registration delivery cannot fall back to the legacy generic email', async () => {
-  const source = await readFile('lib/notifications/renewal-notices.ts', 'utf8');
+  const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
   assert.doesNotMatch(source, /Your seminar registration was recorded/);
   assert.match(source, /seminar_registration_confirmation_missing_seminar_id/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
@@ -491,9 +491,9 @@ test('seminar registration delivery cannot fall back to the legacy generic email
 
 
 test('every seminar registration path uses the one detailed confirmation contract', async () => {
-  const registrations = await readFile('lib/seminars/registrations.ts', 'utf8');
-  const webhooks = await readFile('lib/payments/webhook-handlers.ts', 'utf8');
-  const notices = await readFile('lib/notifications/renewal-notices.ts', 'utf8');
+  const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
 
   assert.match(registrations, /paymentMethod !== 'online_stripe'/);
   assert.match(registrations, /seminar\.registration_created/);
