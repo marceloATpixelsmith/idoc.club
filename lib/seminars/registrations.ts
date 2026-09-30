@@ -350,7 +350,7 @@ function richSeminarEmailSection(label: string, html: string) {
 
 
 export async function getSeminarEmailDetails(seminarId: number): Promise<SeminarEmailDetails | null> {
-  const [details] = await client<SeminarEmailDetails[]>\`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=\${seminarId} limit 1\`;
+  const [details] = await client<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId} limit 1`;
   return details ?? null;
 }
 
