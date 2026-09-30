@@ -28,10 +28,10 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
 /** A modern email CTA button, for the link-based flows (email-change verification, password reset,
  * migration activation) that need a clickable action rather than a code to copy. */
 export function emailButton(href: string, label: string): string {
-  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#111827;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">${label}</a></p>`;
+  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#d9ad26;padding:12px 28px;font-size:14px;font-weight:600;color:#071329;text-decoration:none;">${label}</a></p>`;
 }
 
 /** The large, letter-spaced, easily copyable code block used by every OTP email. */
 export function emailCode(code: string): string {
-  return `<div style="margin:0 0 24px;border-radius:8px;background:#f3f4f6;padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#d9ad26;">${code}</div>`;
+  return `<div style="margin:0 0 24px;border-radius:8px;background:#071329;border:1px solid #263652;padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#d9ad26;">${code}</div>`;
 }
