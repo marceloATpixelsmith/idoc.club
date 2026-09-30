@@ -1,37 +1,45 @@
-// Single shared visual shell for every IDOC transactional email — member-facing (verification
-// codes, account links, renewal notices) and admin/super-admin system notices alike — so branding
-// stays consistent in one place and a future move to admin-editable templates only needs to swap
-// what's rendered inside this shell, not rewrite every call site. Deliberately dependency-free (no
-// `server-only`): it is pure string rendering, safe to unit test without a database or provider.
+// Single shared visual shell for every IDOC transactional email — member-facing and system notices.
+// Keep the API stable because auth, membership and seminar delivery all use this renderer.
 
-/** Every existing template call site only ever interpolates static copy, dates, or already-validated
- * URLs into `bodyHtml` -- never raw user input. This helper exists for the one call site that does
- * (the breached-password webmaster alert, which includes the attempted account's email address), so
- * that call site cannot introduce HTML injection into an email client via a crafted email string. */
 export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 export function renderTransactionalEmail(options: { bodyHtml: string; footerNote?: string; heading?: string }): string {
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#151b2d;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#1c243a;border:1px solid #343d55;border-radius:12px;padding:36px;">
-  <tr><td>
-    <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC" src="https://res.cloudinary.com/z6xv27qx/image/upload/v1790786199/idoc-logo-email.png" style="display:inline-block;max-width:180px;height:auto;" /></div>
-    ${options.heading ? `<h2 style="margin:0 0 16px;font-size:17px;color:#d9ad26;">${options.heading}</h2>` : ''}
-    <div style="color:#f7f8fb;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
-    ${options.footerNote ? `<p style="margin:24px 0 0;color:#aeb8ca;font-size:13px;">${options.footerNote}</p>` : ''}
-  </td></tr>
-</table>
-</body></html>`;
+  return `<!doctype html>
+<html>
+<head>
+  <meta name="color-scheme" content="dark only">
+  <meta name="supported-color-schemes" content="dark">
+  <style>
+    :root { color-scheme: dark only; supported-color-schemes: dark; }
+    body, .idoc-email-bg { background-color:#050c20 !important; }
+    .idoc-email-card { background-color:#0b152c !important; }
+    .idoc-email-text { color:#eff2f7 !important; }
+    .idoc-email-gold { color:#d3af37 !important; }
+  </style>
+</head>
+<body bgcolor="#050c20" style="margin:0;padding:0;background:#050c20 !important;color:#eff2f7;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#050c20" class="idoc-email-bg" style="width:100%;background:#050c20 !important;">
+    <tr><td align="center" bgcolor="#050c20" style="padding:28px 14px;background:#050c20 !important;">
+      <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;max-width:640px;background:#0b152c !important;border:1px solid rgba(255,255,255,.12);border-radius:8px;">
+        <tr><td class="idoc-email-text" style="padding:36px;color:#eff2f7 !important;">
+          <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC — International Dressage Officials Club" src="https://res.cloudinary.com/z6xv27qx/image/upload/v1790786199/idoc-logo-email.png" width="180" style="display:inline-block;width:180px;max-width:100%;height:auto;border:0;" /></div>
+          ${options.heading ? `<h2 class="idoc-email-gold" style="margin:0 0 24px;color:#d3af37 !important;font-size:24px;line-height:1.25;">${escapeHtml(options.heading)}</h2>` : ''}
+          <div class="idoc-email-text" style="color:#eff2f7 !important;font-size:16px;line-height:1.6;">${options.bodyHtml}</div>
+          ${options.footerNote ? `<p style="margin:24px 0 0;color:#aeb8ca;font-size:13px;">${options.footerNote}</p>` : ''}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 }
 
-/** A modern email CTA button, for the link-based flows (email-change verification, password reset,
- * migration activation) that need a clickable action rather than a code to copy. */
 export function emailButton(href: string, label: string): string {
-  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#d9ad26;padding:12px 28px;font-size:14px;font-weight:600;color:#071329;text-decoration:none;">${label}</a></p>`;
+  return `<p style="margin:24px 0;text-align:center;"><a href="${href}" style="display:inline-block;border-radius:6px;background:#d3af37;padding:12px 28px;font-size:14px;font-weight:600;color:#050c20;text-decoration:none;">${label}</a></p>`;
 }
 
-/** The large, letter-spaced, easily copyable code block used by every OTP email. */
 export function emailCode(code: string): string {
-  return `<div style="margin:0 0 24px;border-radius:8px;background:#071329;border:1px solid #263652;padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#d9ad26;">${code}</div>`;
+  return `<div style="margin:0 0 24px;border-radius:8px;background:#050c20;border:1px solid rgba(255,255,255,.12);padding:16px 0;text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#d3af37;">${code}</div>`;
 }
