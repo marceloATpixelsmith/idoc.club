@@ -76,6 +76,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational', sentry: true },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational', sentry: true },
   stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['invalid_signature'] }, resource: 'stripe-webhook', retentionClass: 'security' },
+  stripe_webhook_processing_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['processing_failed'] }, resource: 'stripe-webhook', retentionClass: 'operational' },
 } as const satisfies Record<string, SecurityEventDefinition>;
 
 export type SecurityEventName = keyof typeof SECURITY_EVENT_TAXONOMY;
