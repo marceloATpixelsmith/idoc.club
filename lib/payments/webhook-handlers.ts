@@ -259,7 +259,7 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
   try {
     await sendTransactionalEmail({
-      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
+      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentConfirmed: true, paymentMethod: 'online_stripe', seminar: (await getSeminarEmailDetails(seminarId))! }),
         heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration', to: email,
     }, { signal: AbortSignal.timeout(10_000) });
@@ -359,10 +359,21 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     action: 'seminar.payment_confirmed', afterJson: { amountCents: priceCents, paymentIntentId, sessionId: session.id },
     entityId: String(registrationId), entityType: 'seminar_registration',
   });
-  // Registration creation already queues the one registrant-facing confirmation for profile
-  // registrations. Stripe completion updates payment state only; it must never create a second
-  // generic "payment confirmed" email. Guest Stripe-first checkout is handled separately above,
-  // where the registration is created only after payment and receives the same single confirmation.
+  // Online profile registrations deliberately do not queue their confirmation at registration
+  // creation. Queue the one detailed confirmation only after this verified paid webhook.
+  if (registration.profileId !== null) {
+    const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+      .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
+    if (contact?.email) {
+      await tx.insert(notificationOutbox).values({
+        dedupeKey: `seminar.registration_created:${registrationId}:stripe-paid`,
+        kind: 'seminar.registration_created',
+        payload: { amountCents: priceCents, firstName: contact.firstName, paymentConfirmed: true,
+          paymentMethod: 'online_stripe', registrationId, seminarId: registration.seminarId, to: contact.email },
+        profileId: registration.profileId,
+      }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+    }
+  }
 }
 
 async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, stripe: WebhookStripeClient) {
