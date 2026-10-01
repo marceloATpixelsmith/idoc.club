@@ -128,6 +128,11 @@ const routeHandlers: Record<string, string> = {
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
+  'app/api/ui/flash/consume/route.ts': 'http-only-cookie-delete-no-data-access',
+  'app/api/ui/flash/membership-checkout/[checkoutId]/route.ts': 'authenticated-owner-bound-checkout-evidence',
+  'app/api/ui/flash/membership-renew/route.ts': 'authenticated-navigation-flash',
+  'app/api/ui/flash/renewal-setup-complete/route.ts': 'authenticated-owner-bound-renewal-evidence',
+  'app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts': 'public-opaque-return-flash-no-data-access',
   'app/api/user/route.ts': 'requireAccountAccess',
 };
 
