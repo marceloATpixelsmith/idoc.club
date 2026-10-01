@@ -540,8 +540,9 @@ test('seminar confirmation preserves the enqueued member-or-guest registration-c
 });
 
 
-test('staging seminar confirmations use a durable staging-owned queue and retry path', () => {
+test('staging seminar confirmations use a durable staging-owned queue and checkout-origin ownership', () => {
   const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
   const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
   const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
   const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
@@ -552,9 +553,15 @@ test('staging seminar confirmations use a durable staging-owned queue and retry 
   assert.match(registrations, /confirmationKind = directDelivery \? 'seminar\.staging_registration_created' : 'seminar\.registration_created'/);
   assert.match(memberActions, /processStagingSeminarConfirmationBatch/);
   assert.match(guestActions, /processStagingSeminarConfirmationBatch/);
-  assert.match(webhooks, /seminar\.staging_registration_created/);
+  assert.match(checkout, /deliveryOwner/);
+  assert.match(checkout, /seminar_registration_staging/);
+  assert.match(checkout, /seminar_guest_registration_staging/);
+  assert.match(webhooks, /staging:\$\{event\.id\}/);
+  assert.match(webhooks, /session\.metadata\?\.deliveryOwner === 'staging'/);
+  assert.match(stripeRoute, /stagingOwnedEvent/);
   assert.match(stripeRoute, /delivery\.retryable > 0 \|\| delivery\.deadLettered > 0/);
   assert.match(stripeRoute, /status: 503/);
+  assert.match(notices, /availableAt: sql`now\(\)`/);
   assert.match(notices, /STAGING_SEMINAR_CONFIRMATION_KIND/);
   assert.match(notices, /kind === 'seminar\.registration_created' \|\| kind === STAGING_SEMINAR_CONFIRMATION_KIND/);
 });
