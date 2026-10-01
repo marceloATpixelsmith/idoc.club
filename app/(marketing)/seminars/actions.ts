@@ -10,6 +10,8 @@ import { verifyTurnstile } from '@/lib/auth/turnstile';
 import { checkOriginRateLimit, checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/seminars/registrations';
 import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
+import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
+import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 
 export type GuestSeminarState = {
   email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
@@ -55,6 +57,7 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
   let outcome: { paymentMethod: string; registrationId: number };
   try {
     outcome = await registerAsGuestForSeminar(seminarId, firstName, lastName, email, phone, paymentMethod);
+    if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
   } catch (error) {
     if (error instanceof SeminarRegistrationError) return { ...echo, error: error.message };
     return { ...echo, error: 'Registration could not be completed.' };
