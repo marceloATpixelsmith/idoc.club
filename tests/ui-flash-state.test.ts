@@ -13,10 +13,10 @@ test('seminar and membership return-trip feedback uses cookie flash state instea
   assert.doesNotMatch(seminarPage, /searchParams: Promise<\{ checkout\?: string \}>/);
   assert.match(seminarPage, /readUiFlash\(\`\/seminars\/\$\{id\}\`\)/);
   assert.match(seminarPage, /FlashBanner/);
-  assert.match(membershipCheckout, /success_url: \`\$\{baseUrl\}\/api\/stripe\/checkout\`/);
+  assert.match(membershipCheckout, /success_url: \`\$\{baseUrl\}\/api\/ui\/flash\/membership-checkout\/\$\{evidence\.id\}\`/);
   assert.doesNotMatch(membershipCheckout, /session_id=\{CHECKOUT_SESSION_ID\}/);
   assert.doesNotMatch(membershipReturn, /searchParams\.get\('session_id'\)/);
-  assert.match(membershipReturn, /membership-checkout-success/);
+  assert.doesNotMatch(membershipReturn, /membership-checkout-success/);
   assert.doesNotMatch(membershipPage, /searchParams: Promise<\{ renew\?: string \}>/);
 });
 
