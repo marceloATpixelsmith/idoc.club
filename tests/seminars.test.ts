@@ -486,6 +486,7 @@ test('seminar registration delivery cannot fall back to the legacy generic email
   const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
   assert.doesNotMatch(source, /Your seminar registration was recorded/);
   assert.match(source, /seminar_registration_confirmation_missing_seminar_id/);
+  assert.match(source, /seminar_registration_confirmation_missing_payment_method/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });
 
@@ -518,4 +519,22 @@ test('seminar registration confirmation has no generic fallback path anywhere in
   assert.match(notices, /registrationId/);
   assert.match(notices, /seminarRegistrations\.seminarId/);
   assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
+});
+
+
+test('all Brevo transactional email uses Accounts as the sender name', () => {
+  const source = readFileSync('lib/notifications/brevo-transactional.ts', 'utf8');
+  assert.match(source, /sender: \{ email: fromEmail, name: 'Accounts' \}/);
+});
+
+test('seminar confirmation preserves the enqueued member-or-guest registration-cycle snapshot', () => {
+  const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+  assert.match(source, /amountCents: payload\.amountCents/);
+  assert.match(source, /firstName: payload\.firstName/);
+  assert.match(source, /paymentConfirmed: payload\.paymentConfirmed/);
+  assert.match(source, /paymentMethod: payload\.paymentMethod/);
+  assert.doesNotMatch(source, /r\.expected_amount_cents/);
+  assert.doesNotMatch(source, /r\.payment_method_canonical_id/);
+  assert.match(source, /seminarRegistrations\.seminarId/);
+  assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });

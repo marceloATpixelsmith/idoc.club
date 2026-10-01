@@ -174,9 +174,11 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created') {
-    // Resolve seminar identity from the durable registration record whenever possible. This repairs
-    // legacy queued member notifications whose payload predates seminarId and prevents the old generic
-    // confirmation from ever being the observable result for a real registration.
+    // The outbox payload is the immutable snapshot of the registration cycle being confirmed.
+    // Member and guest producers both enqueue the same fields, so delayed/retried delivery must not
+    // reread mutable payment/name fields from a registration row that may since have been canceled
+    // and re-used for a later cycle. Only seminar identity may be recovered from the durable row for
+    // older queued records that predate seminarId in the payload.
     let seminarId = payload.seminarId;
     if (!seminarId && payload.registrationId) {
       const [registration] = await db.select({ seminarId: seminarRegistrations.seminarId })
@@ -184,10 +186,20 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
       seminarId = registration?.seminarId;
     }
     if (!seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
+    if (!payload.paymentMethod) throw new Error('seminar_registration_confirmation_missing_payment_method');
     const seminar = await getSeminarEmailDetails(seminarId);
     if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
     return {
-      html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentConfirmed: payload.paymentConfirmed ?? false, paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
+      html: renderTransactionalEmail({
+        bodyHtml: await seminarRegistrationConfirmationBodyHtml({
+          amountCents: payload.amountCents,
+          firstName: payload.firstName ?? '',
+          paymentConfirmed: payload.paymentConfirmed ?? false,
+          paymentMethod: payload.paymentMethod,
+          seminar,
+        }),
+        heading: `Thank you for registering for ${escapeHtml(seminar.title)}`,
+      }),
       subject: 'Your IDOC seminar registration',
     };
   }
