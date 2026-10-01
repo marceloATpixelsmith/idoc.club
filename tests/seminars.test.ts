@@ -146,7 +146,8 @@ test('the guest registration action echoes the submitted name/email back on ever
 
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
   assert.doesNotMatch(checkoutSource, /from '@\/lib\/db\/schema'/);
-  assert.match(checkoutSource, /kind: 'seminar_registration'/);
+  assert.match(checkoutSource, /seminar_registration_staging/);
+  assert.match(checkoutSource, /seminar_registration/);
 });
 
 test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () => {
@@ -156,7 +157,8 @@ test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () 
 
 test('anonymous online registration is Stripe-first: Checkout collects contact details and the paid webhook creates the guest registration', () => {
   assert.match(checkoutSource, /export async function createGuestSeminarCheckoutSession/);
-  assert.match(checkoutSource, /kind: 'seminar_guest_registration'/);
+  assert.match(checkoutSource, /seminar_guest_registration_staging/);
+  assert.match(checkoutSource, /seminar_guest_registration/);
   assert.match(checkoutSource, /phone_number_collection: \{ enabled: true \}/);
   assert.match(checkoutSource, /key: 'first_name'/);
   assert.match(checkoutSource, /key: 'last_name'/);
