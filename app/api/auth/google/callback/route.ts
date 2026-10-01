@@ -97,7 +97,13 @@ export async function GET(request: NextRequest) {
       if (!evidence) throw new Error('Fresh verification is required for Google linking.');
       const result = await linkGoogleIdentity({ userId: String(user.id), identity, freshEvidence: evidence });
       await clearGoogleLinkFreshEvidence();
-      const code: UiFlashCode = result.status === 'linked' || result.status === 'already-linked' ? 'google-linked' : 'google-auth-failed';
+      const code: UiFlashCode = result.status === 'linked' || result.status === 'already-linked'
+        ? 'google-linked'
+        : result.status === 'collision'
+          ? 'google-link-collision'
+          : result.status === 'different-google-identity-already-linked'
+            ? 'google-different-identity-linked'
+            : 'google-auth-failed';
       return clearBinding(flashRedirect(applicationOrigin, '/dashboard/security', code));
     }
 
