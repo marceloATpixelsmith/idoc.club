@@ -1,9 +1,10 @@
-// This is a return-trip landing page only. Per docs/04 §3, "a completed browser redirect is not
-// sufficient" — membership entitlement is granted exclusively by a verified webhook event
-// (processStripeEvent), which may not have arrived yet when the browser lands here. This route
-// never reads Stripe or mutates the database; it just sends the member somewhere sensible.
-export async function GET(request: Request) {
-  const sessionId = new URL(request.url).searchParams.get('session_id');
-  const destination = sessionId ? '/dashboard?checkout=success' : '/dashboard/membership';
-  return Response.redirect(new URL(destination, request.url));
+import { NextRequest, NextResponse } from 'next/server';
+import { setUiFlashOnResponse } from '@/lib/ui/flash-state';
+
+// Browser-return landing only. Stripe webhook processing remains authoritative for entitlement;
+// this route simply creates one-time UI feedback and immediately redirects to a clean URL.
+export async function GET(request: NextRequest) {
+  const targetPath = '/dashboard/membership';
+  const response = NextResponse.redirect(new URL(targetPath, request.url), 302);
+  return setUiFlashOnResponse(response, 'membership-checkout-success', targetPath);
 }
