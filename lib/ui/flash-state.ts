@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
+import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 import type { NextResponse } from 'next/server';
 
 export const UI_FLASH_COOKIE_NAME = 'idoc_ui_flash';
@@ -48,6 +49,21 @@ function decodeFlash(value: string | undefined): UiFlashPayload | null {
   }
 }
 
+
+async function requestCookieStore(): Promise<ReadonlyRequestCookies | null> {
+  try {
+    return await cookies();
+  } catch (error) {
+    // Repository integration tests invoke Server Actions directly, outside Next.js request
+    // AsyncLocalStorage. Real Server Actions always have request scope; only the direct test
+    // harness is allowed to proceed without a cookie store.
+    if (process.env.NODE_ENV === 'test' && error instanceof Error && error.message.includes('outside a request scope')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function cookieOptions(maxAge = MAX_AGE_SECONDS) {
   return {
     httpOnly: true,
@@ -59,13 +75,15 @@ function cookieOptions(maxAge = MAX_AGE_SECONDS) {
 }
 
 export async function readUiFlash(targetPath: string): Promise<UiFlashCode | null> {
-  const store = await cookies();
+  const store = await requestCookieStore();
+  if (!store) return null;
   const flash = decodeFlash(store.get(UI_FLASH_COOKIE_NAME)?.value);
   return flash?.targetPath === targetPath ? flash.code : null;
 }
 
 export async function setUiFlash(code: UiFlashCode, targetPath: string): Promise<void> {
-  const store = await cookies();
+  const store = await requestCookieStore();
+  if (!store) return;
   store.set(UI_FLASH_COOKIE_NAME, encodeFlash({
     code,
     expiresAt: Date.now() + MAX_AGE_SECONDS * 1000,
@@ -83,7 +101,8 @@ export function setUiFlashOnResponse(response: NextResponse, code: UiFlashCode, 
 }
 
 export async function clearUiFlash(targetPath?: string): Promise<void> {
-  const store = await cookies();
+  const store = await requestCookieStore();
+  if (!store) return;
   if (targetPath) {
     const flash = decodeFlash(store.get(UI_FLASH_COOKIE_NAME)?.value);
     if (!flash || flash.targetPath !== targetPath) return;
