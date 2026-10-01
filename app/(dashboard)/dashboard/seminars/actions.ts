@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
-import { cancelOwnRegistration, getSeminarPaymentMethodInstructions, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
+import { cancelOwnRegistration, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
 import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
@@ -28,10 +28,8 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
   revalidatePath('/dashboard/seminars');
   revalidatePath('/seminars');
   revalidatePath(`/seminars/${String(seminarId)}`);
-  if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
-  if (outcome.paymentMethod === 'bank_transfer') {
-    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    return { success: `You are registered. ${instructions?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || 'Follow the bank transfer instructions provided by IDOC.'}` };
+  if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
+    redirect('/seminars?view=my');
   }
   let checkoutUrl: string;
   try {
