@@ -7,8 +7,8 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { countryNameForCode } from '@/lib/membership/countries';
-import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { escapeHtml } from '@/lib/notifications/email-template';
+import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { formatLevels } from '@/lib/seminars/format';
 import { languageNameForTag } from '@/lib/seminars/language';
@@ -18,6 +18,14 @@ import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STAT
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
+
+export function isStagingSeminarDirectDelivery(): boolean {
+  try {
+    return new URL(baseUrlForServer()).hostname === 'staging.idoc.club';
+  } catch {
+    return false;
+  }
+}
 
 export class SeminarRegistrationError extends Error {
   constructor(message: string) {
@@ -218,7 +226,8 @@ async function registerOwnProfileForSeminar(
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
-  return client.begin(async (sql) => {
+  const directDelivery = isStagingSeminarDirectDelivery();
+  const outcome = await client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const priceCents = priceFor(seminar);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
@@ -247,12 +256,14 @@ async function registerOwnProfileForSeminar(
     // verified Stripe webhook marks the payment paid so the one confirmation email can truthfully
     // thank the registrant for the completed Stripe payment.
     if (paymentMethod !== 'online_stripe') {
+      const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
       await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-        (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
+        (${profileId},${confirmationKind},(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
           from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     }
     return { paymentMethod, registrationId };
   });
+  return outcome;
 }
 
 export async function registerForSeminar(seminarIdValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
@@ -295,7 +306,7 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   const email = emailResult.data.toLowerCase();
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
-  let seminarDetails: SeminarEmailDetails | null = null;
+  const directDelivery = isStagingSeminarDirectDelivery();
   const { registrationId } = await client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
@@ -305,7 +316,6 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
     const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
-    seminarDetails = details;
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
     if (existing) {
@@ -323,8 +333,9 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
+    const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
     await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (null,'seminar.registration_created',${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
+      (null,${confirmationKind},${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
       on conflict (dedupe_key) do nothing`;
     return { registrationId };
   });

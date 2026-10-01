@@ -146,7 +146,8 @@ test('the guest registration action echoes the submitted name/email back on ever
 
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
   assert.doesNotMatch(checkoutSource, /from '@\/lib\/db\/schema'/);
-  assert.match(checkoutSource, /kind: 'seminar_registration'/);
+  assert.match(checkoutSource, /seminar_registration_staging/);
+  assert.match(checkoutSource, /seminar_registration/);
 });
 
 test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () => {
@@ -156,7 +157,8 @@ test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () 
 
 test('anonymous online registration is Stripe-first: Checkout collects contact details and the paid webhook creates the guest registration', () => {
   assert.match(checkoutSource, /export async function createGuestSeminarCheckoutSession/);
-  assert.match(checkoutSource, /kind: 'seminar_guest_registration'/);
+  assert.match(checkoutSource, /seminar_guest_registration_staging/);
+  assert.match(checkoutSource, /seminar_guest_registration/);
   assert.match(checkoutSource, /phone_number_collection: \{ enabled: true \}/);
   assert.match(checkoutSource, /key: 'first_name'/);
   assert.match(checkoutSource, /key: 'last_name'/);
@@ -537,4 +539,31 @@ test('seminar confirmation preserves the enqueued member-or-guest registration-c
   assert.doesNotMatch(source, /r\.payment_method_canonical_id/);
   assert.match(source, /seminarRegistrations\.seminarId/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
+});
+
+
+test('staging seminar confirmations use a durable staging-owned queue and checkout-origin ownership', () => {
+  const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
+  const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
+  const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
+  const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  const stripeRoute = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
+  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+
+  assert.match(registrations, /hostname === 'staging\.idoc\.club'/);
+  assert.match(registrations, /confirmationKind = directDelivery \? 'seminar\.staging_registration_created' : 'seminar\.registration_created'/);
+  assert.match(memberActions, /processStagingSeminarConfirmationBatch/);
+  assert.match(guestActions, /processStagingSeminarConfirmationBatch/);
+  assert.match(checkout, /deliveryOwner/);
+  assert.match(checkout, /seminar_registration_staging/);
+  assert.match(checkout, /seminar_guest_registration_staging/);
+  assert.match(webhooks, /staging:\$\{event\.id\}/);
+  assert.match(webhooks, /session\.metadata\?\.deliveryOwner === 'staging'/);
+  assert.match(stripeRoute, /stagingOwnedEvent/);
+  assert.match(stripeRoute, /delivery\.retryable > 0 \|\| delivery\.deadLettered > 0/);
+  assert.match(stripeRoute, /status: 503/);
+  assert.match(notices, /availableAt: sql`now\(\)`/);
+  assert.match(notices, /STAGING_SEMINAR_CONFIRMATION_KIND/);
+  assert.match(notices, /kind === 'seminar\.registration_created' \|\| kind === STAGING_SEMINAR_CONFIRMATION_KIND/);
 });

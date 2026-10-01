@@ -6,6 +6,8 @@ import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { cancelOwnRegistration, getSeminarPaymentMethodInstructions, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
+import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
+import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 
 export type MemberSeminarState = { error?: string; success?: string };
 const KNOWN_ERROR_NAMES = ['AuthorizationError', 'CsrfError', 'SeminarRegistrationError'];
@@ -16,6 +18,9 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
   try {
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
     outcome = await register(seminarId, formData.get('paymentMethod'));
+    if (outcome.paymentMethod !== 'online_stripe' && isStagingSeminarDirectDelivery()) {
+      await processStagingSeminarConfirmationBatch();
+    }
   } catch (error) {
     if (error instanceof Error && KNOWN_ERROR_NAMES.includes(error.name)) return { error: error.message };
     return { error: 'Registration could not be completed.' };

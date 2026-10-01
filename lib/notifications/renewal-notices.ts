@@ -14,6 +14,8 @@ import { processDeliveryBatch } from './account-delivery-worker-core';
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
 const GRACE_EXPIRY_BATCH_LIMIT = 500;
 const MAX_ATTEMPTS = 6;
+export const STAGING_SEMINAR_CONFIRMATION_KIND = 'seminar.staging_registration_created';
+
 const RENEWAL_NOTICE_KINDS = [
   'membership.renewal_reminder',
   'membership.expiration_reminder',
@@ -173,7 +175,7 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 }
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
-  if (kind === 'seminar.registration_created') {
+  if (kind === 'seminar.registration_created' || kind === STAGING_SEMINAR_CONFIRMATION_KIND) {
     // The outbox payload is the immutable snapshot of the registration cycle being confirmed.
     // Member and guest producers both enqueue the same fields, so delayed/retried delivery must not
     // reread mutable payment/name fields from a registration row that may since have been canceled
@@ -286,6 +288,51 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
     }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner)));
     return { status: attempt >= MAX_ATTEMPTS ? 'dead_lettered' as const : 'retryable' as const };
   }
+}
+
+export async function deliverNextStagingSeminarConfirmation(owner: string = randomUUID()) {
+  const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
+    with candidate as (
+      select id from idoc.notification_outbox
+      where kind = ${STAGING_SEMINAR_CONFIRMATION_KIND}
+        and sent_at is null and dead_lettered_at is null and available_at <= now()
+        and (lease_expires_at is null or lease_expires_at < now())
+      order by available_at, id for update skip locked limit 1
+    )
+    update idoc.notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
+    from candidate where o.id = candidate.id
+    returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload
+  `);
+  const record = rows[0];
+  if (!record) return { status: 'empty' as const };
+  try {
+    const to = record.payload.to;
+    if (!to) throw new Error('not_configured');
+    const { html, subject } = await renderNotice(record.kind, record.payload);
+    await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
+    const finalized = await db.update(notificationOutbox).set({
+      attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
+      lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date(),
+    }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner), isNull(notificationOutbox.sentAt)))
+      .returning({ id: notificationOutbox.id });
+    return finalized.length ? { status: 'delivered' as const } : { status: 'lease_lost' as const };
+  } catch {
+    const attempt = record.attemptCount + 1;
+    await db.update(notificationOutbox).set({
+      attemptCount: attempt,
+      // Staging has no independent Vercel Cron deployment. Keep the row immediately eligible so
+      // processDeliveryBatch retries it again in this same invocation instead of stranding it until
+      // unrelated traffic arrives.
+      availableAt: sql`now()`,
+      deadLetteredAt: attempt >= MAX_ATTEMPTS ? new Date() : null,
+      lastAttemptAt: new Date(), lastErrorCode: 'temporary_delivery_failure', leaseExpiresAt: null, leaseOwner: null,
+    }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner)));
+    return { status: attempt >= MAX_ATTEMPTS ? 'dead_lettered' as const : 'retryable' as const };
+  }
+}
+
+export async function processStagingSeminarConfirmationBatch(limit = RENEWAL_NOTICE_BATCH_LIMIT) {
+  return processDeliveryBatch(() => deliverNextStagingSeminarConfirmation(), limit);
 }
 
 export async function processRenewalNoticeBatch(limit = RENEWAL_NOTICE_BATCH_LIMIT) {

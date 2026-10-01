@@ -8,7 +8,7 @@ import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration'
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
+
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -257,8 +257,11 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   }).returning({ id: seminarRegistrations.id });
   await tx.insert(auditLog).values({ action: 'guest.seminar_registration.registered_and_paid',
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
+  const guestConfirmationKind = session.metadata?.deliveryOwner === 'staging'
+    ? 'seminar.staging_registration_created'
+    : 'seminar.registration_created';
   await tx.execute(sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-    (null,'seminar.registration_created',${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
+    (null,${guestConfirmationKind},${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
       registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
     on conflict (dedupe_key) do nothing`);
 }
@@ -277,7 +280,9 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
   // A guest checkout's metadata carries no profileId at all (see createSeminarCheckoutSession);
   // treat that absence as `null` rather than `Number(undefined)` (NaN) or `Number('')` (0), so it
   // compares equal to the guest registration's own real `null` profileId below.
-  const metadataProfileIdRaw = session.metadata?.profileId;
+  const metadataProfileIdRaw = session.metadata?.deliveryOwner === 'staging'
+    ? session.metadata?.seminarProfileId
+    : session.metadata?.profileId;
   const metadataProfileId = metadataProfileIdRaw ? Number(metadataProfileIdRaw) : null;
   const metadataSeminarId = Number(session.metadata?.seminarId);
   if (!Number.isInteger(registrationId) || (metadataProfileId !== null && !Number.isInteger(metadataProfileId)) || !Number.isInteger(metadataSeminarId)) return;
@@ -364,7 +369,7 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     if (contact?.email) {
       await tx.insert(notificationOutbox).values({
         dedupeKey: `seminar.registration_created:${registrationId}:stripe-paid`,
-        kind: 'seminar.registration_created',
+        kind: session.metadata?.deliveryOwner === 'staging' ? 'seminar.staging_registration_created' : 'seminar.registration_created',
         payload: { amountCents: priceCents, firstName: contact.firstName, paymentConfirmed: true,
           paymentMethod: 'online_stripe', registrationId, seminarId: registration.seminarId, to: contact.email },
         profileId: registration.profileId,
@@ -532,8 +537,8 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     return;
   }
   if (session.mode !== 'payment' || session.payment_status !== 'paid') return;
-  if (session.metadata?.kind === 'seminar_guest_registration') return handleGuestSeminarCheckoutSessionCompleted(tx, session, stripe);
-  if (session.metadata?.kind === 'seminar_registration') return handleSeminarCheckoutSessionCompleted(tx, session, stripe);
+  if (session.metadata?.kind === 'seminar_guest_registration' || session.metadata?.kind === 'seminar_guest_registration_staging') return handleGuestSeminarCheckoutSessionCompleted(tx, session, stripe);
+  if (session.metadata?.kind === 'seminar_registration' || session.metadata?.kind === 'seminar_registration_staging') return handleSeminarCheckoutSessionCompleted(tx, session, stripe);
   const profileId = Number(session.metadata?.profileId);
   if (!Number.isInteger(profileId)) return;
   const ownedProfileId = await resolveProfileId(tx, resolvedCustomerId(session.customer));
@@ -604,8 +609,11 @@ const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event, st
 };
 
 export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'duplicate' | 'ignored' | 'processed'> {
+  const checkoutSession = event.type === 'checkout.session.completed' ? event.data.object as Stripe.Checkout.Session : null;
+  const stagingOwnedCheckout = checkoutSession?.metadata?.deliveryOwner === 'staging';
+  const externalEventId = stagingOwnedCheckout ? `staging:${event.id}` : event.id;
   return db.transaction(async (tx) => {
-    const [inserted] = await tx.insert(stripeEvents).values({ eventType: event.type, externalEventId: event.id })
+    const [inserted] = await tx.insert(stripeEvents).values({ eventType: event.type, externalEventId })
       .onConflictDoNothing({ target: stripeEvents.externalEventId }).returning({ id: stripeEvents.id });
     if (!inserted) return 'duplicate';
     const handler = handlers[event.type];
