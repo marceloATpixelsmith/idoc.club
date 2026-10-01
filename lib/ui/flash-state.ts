@@ -18,6 +18,7 @@ export type UiFlashCode =
   | 'password-reset-success'
   | 'membership-canceled'
   | 'membership-checkout-success'
+  | 'membership-renew-panel'
   | 'profile-confirm-details';
 
 type UiFlashPayload = {
