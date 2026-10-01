@@ -61,7 +61,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
     const checkoutKind = deliveryOwner === 'staging' ? 'seminar_registration_staging' : 'seminar_registration';
     const cycle = new Date(row.registered_at).getTime();
     const session = await stripe.checkout.sessions.create({
-      cancel_url: `${baseUrl}/seminars/${row.seminar_id}?checkout=canceled`,
+      cancel_url: `${baseUrl}/api/ui/flash/seminar-checkout/canceled/${row.seminar_id}`,
       ...(customerId ? { customer: customerId } : email ? { customer_email: email } : {}),
       line_items: [{ price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents }, quantity: 1 }],
       metadata: { amountCents: String(row.price_cents), currency: 'EUR', deliveryOwner, kind: checkoutKind,
@@ -70,7 +70,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) },
       mode: 'payment', payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, registrationId: String(registrationId),
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) } },
-      success_url: `${baseUrl}/seminars/${row.seminar_id}?checkout=success`,
+      success_url: `${baseUrl}/api/ui/flash/seminar-checkout/success/${row.seminar_id}`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
     await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${session.id},checkout_status='open',
@@ -103,7 +103,7 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
   const deliveryOwner = seminarCheckoutDeliveryOwner(baseUrl);
   const checkoutKind = deliveryOwner === 'staging' ? 'seminar_guest_registration_staging' : 'seminar_guest_registration';
   const session = await stripe.checkout.sessions.create({
-    cancel_url: `${baseUrl}/seminars/${seminarId}?checkout=canceled`,
+    cancel_url: `${baseUrl}/api/ui/flash/seminar-checkout/canceled/${seminarId}`,
     custom_fields: [
       { key: 'first_name', label: { custom: 'First name', type: 'custom' }, optional: false, text: { maximum_length: 99, minimum_length: 1 }, type: 'text' },
       { key: 'last_name', label: { custom: 'Last name', type: 'custom' }, optional: false, text: { maximum_length: 99, minimum_length: 1 }, type: 'text' },
@@ -113,7 +113,7 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
     mode: 'payment',
     payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, seminarId: String(seminarId) } },
     phone_number_collection: { enabled: true },
-    success_url: `${baseUrl}/seminars/${seminarId}?checkout=success`,
+    success_url: `${baseUrl}/api/ui/flash/seminar-checkout/success/${seminarId}`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
   return session.url;
