@@ -3,10 +3,9 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { notificationOutbox, profiles, seminarRegistrations, users } from '@/lib/db/schema';
+import { notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
-import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
 import { sendTransactionalEmail } from './brevo-transactional';
 import { escapeHtml, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
@@ -32,10 +31,6 @@ type NoticePayload = {
   graceEndDate?: string;
   renewalDate?: string;
   amountCents?: number;
-  paymentConfirmed?: boolean;
-  paymentMethod?: string;
-  registrationId?: number;
-  seminarId?: number;
   to?: string | null;
 };
 
@@ -172,39 +167,11 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
   return { expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
-async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
-  // Staging and production share idoc.notification_outbox, while only the production deployment
-  // runs the scheduled delivery cron. Newer staging seminar producers include the canonical
-  // paymentMethod/seminarId payload snapshot. When those fields are present, render the same rich
-  // seminar confirmation staging expects instead of falling through to main's legacy generic body.
-  if (kind === 'seminar.registration_created' && payload.paymentMethod) {
-    let seminarId = payload.seminarId;
-    if (!seminarId && payload.registrationId) {
-      const [registration] = await db.select({ seminarId: seminarRegistrations.seminarId })
-        .from(seminarRegistrations).where(eq(seminarRegistrations.id, payload.registrationId)).limit(1);
-      seminarId = registration?.seminarId;
-    }
-    if (!seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
-    const seminar = await getSeminarEmailDetails(seminarId);
-    if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
-    return {
-      html: renderTransactionalEmail({
-        bodyHtml: await seminarRegistrationConfirmationBodyHtml({
-          amountCents: payload.amountCents,
-          firstName: payload.firstName ?? '',
-          paymentConfirmed: payload.paymentConfirmed ?? false,
-          paymentMethod: payload.paymentMethod,
-          seminar,
-        }),
-        heading: `Thank you for registering for ${escapeHtml(seminar.title)}`,
-      }),
-      subject: 'Your IDOC seminar registration',
-    };
-  }
-
-  // Legacy main-origin notifications intentionally retain their existing rendering until the full
-  // staging seminar implementation is promoted. This compatibility hotfix changes only richer
-  // staging-origin registration payloads that the shared production worker would otherwise flatten.
+function renderNotice(kind: string, payload: NoticePayload): { html: string; subject: string } {
+  // firstName is member-supplied free text (lib/membership/validation.ts's memberProfileSchema
+  // allows any character up to 100 chars, not an HTML-safe allowlist), so it must be escaped before
+  // interpolation into this HTML email body -- matching every other template call site that
+  // interpolates a user-supplied value (breached-password-alert.ts, bounce-complaint-alert.ts).
   const greeting = payload.firstName ? `Hello ${escapeHtml(payload.firstName)},` : 'Hello,';
   const { bodyHtml, heading, subject } = (() => {
     switch (kind) {
@@ -268,7 +235,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
   try {
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
-    const { html, subject } = await renderNotice(record.kind, record.payload);
+    const { html, subject } = renderNotice(record.kind, record.payload);
     await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
