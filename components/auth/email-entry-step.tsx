@@ -21,6 +21,7 @@ export function EmailEntryStep({
   googleHref,
   hiddenFields,
   initialError = '',
+  initialSuccess = '',
   showGoogle = false,
   submitLabel,
   title,
@@ -33,6 +34,7 @@ export function EmailEntryStep({
   googleHref?: string;
   hiddenFields?: Record<string, string>;
   initialError?: string;
+  initialSuccess?: string;
   showGoogle?: boolean;
   submitLabel: string;
   title: string;
@@ -71,6 +73,7 @@ export function EmailEntryStep({
         </div>
 
         {state.error ? <p className="idoc-auth-error" role="alert">{state.error}</p> : null}
+        {initialSuccess ? <p className="idoc-auth-success" role="status">{initialSuccess}</p> : null}
 
         <TurnstileWidget action={turnstileAction} onVerify={setTurnstileToken} />
 
