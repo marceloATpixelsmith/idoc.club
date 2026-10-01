@@ -592,7 +592,7 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
 export const notificationOutbox = idocSchema.table('notification_outbox', {
   id: serial('id').primaryKey(),
   kind: varchar('kind', { length: 50 }).notNull(),
-  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  profileId: integer('profile_id').references(() => profiles.id),
   payload: jsonb('payload').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp('sent_at', { withTimezone: true }),

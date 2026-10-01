@@ -172,9 +172,13 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 }
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
-  if (kind === 'seminar.registration_created' && payload.seminarId) {
+  if (kind === 'seminar.registration_created') {
+    // Never fall back to the legacy generic seminar email. A registration confirmation is required
+    // to carry a seminarId so every registrant receives the same detailed branded confirmation.
+    if (!payload.seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
     const seminar = await getSeminarEmailDetails(payload.seminarId);
-    if (seminar) return {
+    if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
+    return {
       html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentConfirmed: payload.paymentConfirmed ?? false, paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
       subject: 'Your IDOC seminar registration',
     };
@@ -210,8 +214,6 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
           heading: 'Action needed: update your payment method',
           subject: 'Action needed: update your IDOC payment method',
         };
-      case 'seminar.registration_created':
-        return { bodyHtml: 'Your seminar registration was recorded. If a fee is due, payment is confirmed separately.', heading: 'Seminar registration received', subject: 'Your IDOC seminar registration' };
       case 'seminar.registration_canceled':
         return { bodyHtml: 'Your seminar registration was canceled. Cancellation does not automatically refund a payment.', heading: 'Seminar registration canceled', subject: 'Your IDOC seminar cancellation' };
       case 'seminar.payment_confirmed':

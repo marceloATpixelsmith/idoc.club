@@ -323,17 +323,11 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
+    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+      (null,'seminar.registration_created',${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
+      on conflict (dedupe_key) do nothing`;
     return { registrationId };
   });
-  try {
-    await sendTransactionalEmail({
-      html: renderTransactionalEmail({
-        bodyHtml: await seminarRegistrationConfirmationBodyHtml({ firstName, paymentMethod, seminar: seminarDetails! }),
-        heading: `Thank you for registering for ${escapeHtml(seminarDetails!.title)}`,
-      }),
-      subject: 'Your IDOC seminar registration', to: email,
-    }, { signal: AbortSignal.timeout(10_000) });
-  } catch { /* best-effort -- the registration itself already committed above */ }
   return { paymentMethod, registrationId };
 }
 
