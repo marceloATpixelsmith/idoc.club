@@ -12,7 +12,7 @@ import { getAccountStateUser } from '@/lib/db/queries';
 import { MembershipPerksList } from '@/components/membership/membership-perks-list';
 import { getMembershipPerks } from '@/lib/organization/membership-perks';
 import { CheckoutForm } from './checkout-form';
-import { FlashBanner } from '@/components/ui/flash-banner';
+import { FlashBanner, FlashConsumer } from '@/components/ui/flash-banner';
 import { readUiFlash } from '@/lib/ui/flash-state';
 
 const RENEW_WINDOW_DAYS = 15;
@@ -57,11 +57,7 @@ function MembershipCheckoutPanel({ perks }: { perks: Awaited<ReturnType<typeof g
   );
 }
 
-export default async function DashboardMembershipPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ renew?: string }>;
-}) {
+export default async function DashboardMembershipPage() {
   const flash = await readUiFlash('/dashboard/membership');
   const user = await getAccountStateUser();
   if (!user || user.accountState === 'onboarding') redirect('/dashboard');
@@ -108,8 +104,7 @@ export default async function DashboardMembershipPage({
 
   const mode = renewalMode(subscription, entitlement);
   const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
-  const { renew } = await searchParams;
-  const renewalPerks = showRenew && renew === '1' ? await getMembershipPerks() : null;
+  const renewalPerks = showRenew && flash === 'membership-renew-panel' ? await getMembershipPerks() : null;
   const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
     listOwnPaymentHistory(),
     getOwnRenewalPreference(),
@@ -124,6 +119,7 @@ export default async function DashboardMembershipPage({
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">My Membership</h1>
       {flash === 'membership-checkout-success' ? <FlashBanner targetPath="/dashboard/membership">Payment completed. Your membership will update as soon as Stripe confirms the payment.</FlashBanner> : null}
+      {flash === 'membership-renew-panel' ? <FlashConsumer targetPath="/dashboard/membership" /> : null}
       <p className="mt-3">Welcome, {member.profile.firstName} {member.profile.lastName}.</p>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
