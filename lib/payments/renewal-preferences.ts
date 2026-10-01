@@ -46,7 +46,7 @@ export async function beginAutomaticRenewalSetup(testStripeClient?: RenewalStrip
     metadata: { effectiveOn: validUntil, kind: 'membership_renewal_setup', profileId: String(profileId) },
     mode: 'setup', payment_method_types: ['card'],
     setup_intent_data: { metadata: { effectiveOn: validUntil, kind: 'membership_renewal_setup', profileId: String(profileId) } },
-    success_url: `${baseUrlForServer()}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${baseUrlForServer()}/api/ui/flash/renewal-setup-complete`,
   }, { idempotencyKey: `idoc-renewal-setup-${profileId}-${validUntil}` });
   const sessionId = 'id' in session && typeof session.id === 'string' ? session.id : null;
   if (!session.url || !sessionId) throw new Error('Stripe did not return a complete Checkout Session.');
