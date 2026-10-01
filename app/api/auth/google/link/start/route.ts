@@ -15,6 +15,7 @@ import {
 } from '@/lib/auth/google-oauth-browser-binding';
 import { readGoogleLinkFreshEvidence } from '@/lib/auth/google-identity-link-evidence';
 import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { setUiFlashOnResponse } from '@/lib/ui/flash-state';
 
 const APPLICATION_ID = 'idoc.club';
 export const runtime = 'nodejs';
@@ -24,11 +25,11 @@ export async function GET(request: NextRequest) {
     const user = await getUser();
     if (!user) return NextResponse.redirect(new URL('/sign-in', request.url), 302);
     const evidence = await readGoogleLinkFreshEvidence(user.id);
-    if (!evidence) return NextResponse.redirect(new URL('/dashboard/security?google=verification-required', request.url), 302);
+    if (!evidence) return setUiFlashOnResponse(NextResponse.redirect(new URL('/dashboard/security', request.url), 302), 'google-verification-required', '/dashboard/security');
 
     const origin = await requestOrigin();
     if (!(await checkOriginRateLimit('google_oauth_start', origin))) {
-      return NextResponse.redirect(new URL('/dashboard/security?google=failed', request.url), 302);
+      return setUiFlashOnResponse(NextResponse.redirect(new URL('/dashboard/security', request.url), 302), 'google-auth-failed', '/dashboard/security');
     }
 
     await purgeExpiredGoogleOauthTransactions();
@@ -54,6 +55,6 @@ export async function GET(request: NextRequest) {
     );
     return response;
   } catch {
-    return NextResponse.redirect(new URL('/dashboard/security?google=failed', request.url), 302);
+    return setUiFlashOnResponse(NextResponse.redirect(new URL('/dashboard/security', request.url), 302), 'google-auth-failed', '/dashboard/security');
   }
 }
