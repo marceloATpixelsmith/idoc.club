@@ -3,6 +3,7 @@ import { EmailStep } from './email-step';
 import { OtpStep } from './otp-step';
 import { PasswordStep } from './password-step';
 import { readUiFlash } from '@/lib/ui/flash-state';
+import { FlashConsumer } from '@/components/ui/flash-banner';
 
 function signInFlashMessage(code: Awaited<ReturnType<typeof readUiFlash>>) {
   if (code === 'google-link-required') return { error: 'That Google identity is not linked to this existing IDOC account. Sign in with your password first.' };
@@ -17,7 +18,7 @@ export default async function SignInPage() {
   const pending = await getPendingLogin();
   if (!pending) {
     const flash = signInFlashMessage(await readUiFlash('/sign-in'));
-    return <EmailStep initialError={flash.error} initialSuccess={flash.success} />;
+    return <><FlashConsumer targetPath="/sign-in" /><EmailStep initialError={flash.error} initialSuccess={flash.success} /></>;
   }
   if (pending.stage === 'login-otp') return <OtpStep allowRemember={pending.allowRemember} email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
   return <PasswordStep email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
