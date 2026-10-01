@@ -15,6 +15,9 @@ export type UiFlashCode =
   | 'google-unlink-failed'
   | 'password-created'
   | 'password-changed'
+  | 'password-reset-success'
+  | 'membership-canceled'
+  | 'membership-checkout-success'
   | 'profile-confirm-details';
 
 type UiFlashPayload = {
