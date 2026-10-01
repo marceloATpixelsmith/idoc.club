@@ -504,3 +504,19 @@ test('every seminar registration path uses the one detailed confirmation contrac
   assert.doesNotMatch(notices, /Your seminar registration was recorded/);
   assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
 });
+
+
+test('seminar registration confirmation has no generic fallback path anywhere in delivery code', () => {
+  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+  const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  const combined = [notices, registrations, webhooks].join('\n');
+
+  assert.doesNotMatch(combined, /Seminar registration received/i);
+  assert.doesNotMatch(combined, /Your seminar registration was recorded/i);
+  assert.doesNotMatch(combined, /payment is confirmed separately/i);
+  assert.doesNotMatch(combined, /best-effort[^\n]*registration/i);
+  assert.match(notices, /registrationId/);
+  assert.match(notices, /seminarRegistrations\.seminarId/);
+  assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
+});
