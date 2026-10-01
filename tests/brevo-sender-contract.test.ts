@@ -29,6 +29,7 @@ test('every Brevo transactional send uses the single Accounts sender transport',
 
 test('auth and account email producers use the centralized transactional transport', () => {
   for (const relative of [
+    'app/(marketing)/contact/actions.ts',
     'lib/auth/email-otp.ts',
     'lib/membership/email-verification.ts',
     'lib/notifications/account-delivery.ts',
