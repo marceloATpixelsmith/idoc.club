@@ -264,9 +264,9 @@ async function registerOwnProfileForSeminar(
     return { paymentMethod, registrationId };
   });
   if (directDelivery && paymentMethod !== 'online_stripe') {
-    const [contact] = await client<{ amount_cents: number; email: string; first_name: string | null }[]>\`select r.expected_amount_cents amount_cents,u.email,p.first_name
+    const [contact] = await client<{ amount_cents: number; email: string; first_name: string | null }[]>`select r.expected_amount_cents amount_cents,u.email,p.first_name
       from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
-      where r.id=\${outcome.registrationId} and r.profile_id=\${profileId} limit 1\`;
+      where r.id=${outcome.registrationId} and r.profile_id=${profileId} limit 1`;
     if (contact?.email) {
       await sendDetailedSeminarRegistrationConfirmation({ amountCents: contact.amount_cents, firstName: contact.first_name ?? '', paymentConfirmed: false,
         paymentMethod, seminarId: seminarId.data, to: contact.email });
