@@ -6,7 +6,7 @@ import type { NextResponse } from 'next/server';
 export const UI_FLASH_COOKIE_NAME = 'idoc_ui_flash';
 
 export type UiFlashCode =
-  | 'seminar-checkout-success'
+  | 'seminar-registration-success'
   | 'seminar-checkout-canceled'
   | 'google-auth-failed'
   | 'google-link-required'
