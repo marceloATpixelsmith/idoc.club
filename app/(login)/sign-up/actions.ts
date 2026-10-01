@@ -48,7 +48,7 @@ export const startSignup = validatedAction(startSignupSchema, async ({ email: ra
   await startPendingSignup(email, emailDisplay, membership);
   // The signup steps intentionally share one pathname, but a distinct query target forces the
   // browser/RSC tree to navigate after the HttpOnly pending-signup cookie changes.
-  redirect('/sign-up?stage=verify');
+  redirect('/sign-up');
 });
 
 const verifyOtpSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.') });
@@ -61,7 +61,7 @@ export const verifySignupOtp = validatedAction(verifyOtpSchema, async ({ code },
   const result = await verifyEmailOtp(pending.email, 'signup_verification', code, origin);
   if (result === 'verified') {
     await markPendingSignupVerified(pending);
-    redirect('/sign-up?stage=password');
+    redirect('/sign-up');
   }
   if (result === 'expired') return { error: 'This code expired. Request a new one.' };
   if (result === 'locked') return { error: 'Too many incorrect attempts. Request a new code.' };
