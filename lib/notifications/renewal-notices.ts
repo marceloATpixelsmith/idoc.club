@@ -174,40 +174,28 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created') {
-    // Registration confirmation is one canonical contract for members and guests. Resolve the
-    // registrant, seminar, payment method, amount, and payment state from the durable registration
-    // row instead of trusting whichever producer happened to enqueue the notification. This makes
-    // member, lapsed-member, guest, offline-payment, and Stripe-paid registrations render through
-    // exactly the same detailed seminar template and prevents stale/legacy payload shapes from
-    // changing the observable email.
-    if (!payload.registrationId) throw new Error('seminar_registration_confirmation_missing_registration_id');
-    const [registration] = await db.execute<{
-      amountCents: number | null;
-      firstName: string | null;
-      paymentMethod: string | null;
-      paymentStatus: string;
-      seminarId: number;
-    }>(sql`
-      select r.seminar_id as "seminarId",
-        r.expected_amount_cents as "amountCents",
-        r.payment_method_canonical_id as "paymentMethod",
-        r.payment_status as "paymentStatus",
-        coalesce(p.first_name, r.guest_first_name, split_part(coalesce(r.guest_name,''),' ',1)) as "firstName"
-      from idoc.seminar_registrations r
-      left join idoc.profiles p on p.id = r.profile_id
-      where r.id = ${payload.registrationId}
-      limit 1
-    `);
-    if (!registration) throw new Error('seminar_registration_confirmation_missing_registration');
-    const seminar = await getSeminarEmailDetails(registration.seminarId);
+    // The outbox payload is the immutable snapshot of the registration cycle being confirmed.
+    // Member and guest producers both enqueue the same fields, so delayed/retried delivery must not
+    // reread mutable payment/name fields from a registration row that may since have been canceled
+    // and re-used for a later cycle. Only seminar identity may be recovered from the durable row for
+    // older queued records that predate seminarId in the payload.
+    let seminarId = payload.seminarId;
+    if (!seminarId && payload.registrationId) {
+      const [registration] = await db.select({ seminarId: seminarRegistrations.seminarId })
+        .from(seminarRegistrations).where(eq(seminarRegistrations.id, payload.registrationId)).limit(1);
+      seminarId = registration?.seminarId;
+    }
+    if (!seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
+    if (!payload.paymentMethod) throw new Error('seminar_registration_confirmation_missing_payment_method');
+    const seminar = await getSeminarEmailDetails(seminarId);
     if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
     return {
       html: renderTransactionalEmail({
         bodyHtml: await seminarRegistrationConfirmationBodyHtml({
-          amountCents: registration.amountCents ?? undefined,
-          firstName: registration.firstName ?? '',
-          paymentConfirmed: registration.paymentMethod === 'online_stripe' && registration.paymentStatus === 'paid',
-          paymentMethod: registration.paymentMethod ?? '',
+          amountCents: payload.amountCents,
+          firstName: payload.firstName ?? '',
+          paymentConfirmed: payload.paymentConfirmed ?? false,
+          paymentMethod: payload.paymentMethod,
           seminar,
         }),
         heading: `Thank you for registering for ${escapeHtml(seminar.title)}`,
