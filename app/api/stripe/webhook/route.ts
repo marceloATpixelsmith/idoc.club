@@ -37,7 +37,12 @@ export async function POST(request: Request) {
   // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after
   // the Stripe transaction has committed. Production cannot claim these rows because its worker does
   // not know this staging-only kind.
-  if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
+  if (isStagingSeminarDirectDelivery()) {
+    const delivery = await processStagingSeminarConfirmationBatch();
+    if (delivery.retryable > 0 || delivery.deadLettered > 0) {
+      return Response.json({ error: 'Staging seminar confirmation delivery pending retry.' }, { status: 503 });
+    }
+  }
 
   return Response.json({ received: true });
 }
