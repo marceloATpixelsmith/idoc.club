@@ -567,3 +567,27 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
   assert.match(notices, /STAGING_SEMINAR_CONFIRMATION_KIND/);
   assert.match(notices, /kind === 'seminar\.registration_created' \|\| kind === STAGING_SEMINAR_CONFIRMATION_KIND/);
 });
+
+
+test('guest registration completion always returns to seminar detail with one-time success flash', () => {
+  const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
+  const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
+  const flashRoute = readFileSync('app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts', 'utf8');
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+
+  assert.match(guestActions, /outcome\.paymentMethod === 'cash_event' \|\| outcome\.paymentMethod === 'bank_transfer'/);
+  assert.match(guestActions, /setUiFlash\('seminar-registration-success', targetPath\)/);
+  assert.match(guestActions, /redirect\(targetPath\)/);
+  assert.match(checkout, /createGuestSeminarCheckoutSession[\s\S]*seminar-checkout\/success/);
+  assert.match(flashRoute, /status === 'success' \? 'seminar-registration-success'/);
+  assert.match(detailPage, /flash === 'seminar-registration-success'/);
+  assert.match(detailPage, /Registration completed successfully/);
+});
+
+test('every completed profile-backed seminar registration lands on My Seminars', () => {
+  const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
+  const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
+
+  assert.match(memberActions, /outcome\.paymentMethod === 'cash_event' \|\| outcome\.paymentMethod === 'bank_transfer'[\s\S]*redirect\('\/seminars\?view=my'\)/);
+  assert.match(checkout, /success_url: row\.profile_id !== null[\s\S]*seminars\?view=my/);
+});
