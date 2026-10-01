@@ -442,6 +442,13 @@
       "when": 1790750000000,
       "tag": "0062_repair_seminar_description_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0063_guest_notification_outbox",
+      "breakpoints": true
     }
   ]
 }
