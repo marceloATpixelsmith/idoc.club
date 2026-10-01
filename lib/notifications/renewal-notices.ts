@@ -2,6 +2,7 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { seminarRegistrations } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
@@ -35,6 +36,7 @@ type NoticePayload = {
   paymentMethod?: string;
   paymentConfirmed?: boolean;
   seminarId?: number;
+  registrationId?: number;
   to?: string | null;
 };
 
@@ -173,10 +175,17 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created') {
-    // Never fall back to the legacy generic seminar email. A registration confirmation is required
-    // to carry a seminarId so every registrant receives the same detailed branded confirmation.
-    if (!payload.seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
-    const seminar = await getSeminarEmailDetails(payload.seminarId);
+    // Resolve seminar identity from the durable registration record whenever possible. This repairs
+    // legacy queued member notifications whose payload predates seminarId and prevents the old generic
+    // confirmation from ever being the observable result for a real registration.
+    let seminarId = payload.seminarId;
+    if (!seminarId && payload.registrationId) {
+      const [registration] = await db.select({ seminarId: seminarRegistrations.seminarId })
+        .from(seminarRegistrations).where(eq(seminarRegistrations.id, payload.registrationId)).limit(1);
+      seminarId = registration?.seminarId;
+    }
+    if (!seminarId) throw new Error('seminar_registration_confirmation_missing_seminar_id');
+    const seminar = await getSeminarEmailDetails(seminarId);
     if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
     return {
       html: renderTransactionalEmail({ bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents: payload.amountCents, firstName: payload.firstName ?? '', paymentConfirmed: payload.paymentConfirmed ?? false, paymentMethod: payload.paymentMethod ?? '', seminar }), heading: `Thank you for registering for ${escapeHtml(seminar.title)}` }),
