@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
+import { setUiFlash } from '@/lib/ui/flash-state';
 import { db } from '@/lib/db/drizzle';
 import { authSessions, users } from '@/lib/db/schema';
 import { hashPassword, rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
@@ -188,5 +189,6 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   });
   await clearPendingPasswordReset();
-  redirect('/sign-in?reset=success');
+  await setUiFlash('password-reset-success', '/sign-in');
+  redirect('/sign-in');
 }, { skipCsrf: true });

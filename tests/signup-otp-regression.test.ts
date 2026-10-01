@@ -42,7 +42,8 @@ test('every OTP verify purpose gets the same 5-attempt allowance as the code loc
   }
 });
 
-test('signup cookie state changes navigate to distinct same-route targets', () => {
-  assert.match(signupActions, /startPendingSignup\(email, emailDisplay, membership\)[\s\S]*redirect\('\/sign-up\?stage=verify'\)/);
-  assert.match(signupActions, /markPendingSignupVerified\(pending\)[\s\S]*redirect\('\/sign-up\?stage=password'\)/);
+test('signup cookie state changes navigate through distinct clean stage routes', () => {
+  assert.match(signupActions, /startPendingSignup\(email, emailDisplay, membership\)[\s\S]*redirect\('\/sign-up\/verify'\)/);
+  assert.match(signupActions, /markPendingSignupVerified\(pending\)[\s\S]*redirect\('\/sign-up\/password'\)/);
+  assert.doesNotMatch(signupActions, /\?stage=/);
 });

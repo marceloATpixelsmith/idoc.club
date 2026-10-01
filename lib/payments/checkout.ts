@@ -103,7 +103,7 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     metadata: { mode, profileId: String(profile.id) },
     mode,
     subscription_data: mode === 'subscription' ? { metadata: { kind: 'idoc_membership', profileId: String(profile.id) } } : undefined,
-    success_url: `${baseUrl}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${baseUrl}/api/ui/flash/membership-checkout/${evidence.id}`,
   }, {
     // A browser double-click, retry, refresh, or concurrent request for the same paid-through
     // cycle must resolve to one provider object. Once a verified payment advances valid_until the

@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { setUiFlash } from '@/lib/ui/flash-state';
 import { getUser } from '@/lib/db/queries';
 import { clearSession, rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -29,5 +30,6 @@ export async function cancelMembershipAction(_state: CancelMembershipState, form
   } catch {
     return { error: 'Your membership could not be canceled. Please retry, or contact support.' };
   }
-  redirect('/sign-in?membership=canceled');
+  await setUiFlash('membership-canceled', '/sign-in');
+  redirect('/sign-in');
 }

@@ -57,7 +57,7 @@ test('password change and deletion deliberately invalidate authentication state'
   const passwordChange = loginActions.slice(loginActions.indexOf('export const updatePassword'), loginActions.indexOf('const deleteAccountSchema'));
   assert.match(passwordChange, /comparePasswords\(currentPassword, user\.passwordHash\)/);
   assert.match(passwordChange, /sessionVersion: sql`\$\{users\.sessionVersion\} \+ 1`/);
-  assert.match(passwordChange, /await clearSession\(\);\s*redirect\('\/sign-in\?password=changed'\)/);
+  assert.match(passwordChange, /await clearSession\(\);\s*await setUiFlash\('password-changed', '\/sign-in'\);\s*redirect\('\/sign-in'\)/);
   const deletion = loginActions.slice(loginActions.indexOf('export const deleteAccount'), loginActions.indexOf('const updateAccountSchema'));
   assert.ok(deletion.indexOf('await deleteOwnAccount()') < deletion.indexOf("await revokeAllUserSessions(user.id, 'account-deleted')"));
   assert.match(deletion, /forgetAllLoginDevices\(user\.id, 'account-deleted'\)/);
@@ -116,12 +116,12 @@ test('creating a password to disconnect Google requires fresh step-up, a verifie
   // current session regardless of whether the Google unlink that follows succeeds. An inline error
   // here would let the member retry from a session this request has already invalidated.
   assert.match(create, /await consumeFreshStepUp\(\);\s*await clearSession\(\);/);
-  assert.match(create, /redirect\('\/sign-in\?password=created'\)/);
-  assert.match(create, /redirect\('\/sign-in\?password=created&google=unlink-failed'\)/);
+  assert.match(create, /setUiFlash\('password-created', '\/sign-in'\)/);
+  assert.match(create, /setUiFlash\('google-unlink-failed', '\/sign-in'\)/);
   // The sign-in page must actually explain this redirect, not silently show nothing -- a member
   // sent here after a successful password save but a failed unlink should not be left thinking the
   // whole thing failed.
-  assert.match(signInPage, /value === 'unlink-failed'/);
+  assert.match(signInPage, /code === 'google-unlink-failed'/);
   assert.doesNotMatch(create.slice(unlinkIndex), /return \{ error:/, 'no inline error may be returned after the password is already saved -- the session is already invalidated by then');
 });
 

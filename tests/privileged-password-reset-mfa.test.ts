@@ -51,7 +51,8 @@ test('a compromised TOTP key returns the same neutral error as every other unres
 test('completion revokes persisted sessions and requires fresh sign-in', () => {
   assert.match(actions, /tx\.update\(authSessions\)/);
   assert.match(actions, /sessionVersion: sql/);
-  assert.match(actions, /redirect\('\/sign-in\?reset=success'\)/);
+  assert.match(actions, /setUiFlash\('password-reset-success', '\/sign-in'\)/);
+  assert.match(actions, /redirect\('\/sign-in'\)/);
   assert.doesNotMatch(actions, /setSession/);
 });
 

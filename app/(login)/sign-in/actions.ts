@@ -18,6 +18,7 @@ import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { issueLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { enqueueAuthSecurityNotification } from '@/lib/notifications/auth-security-events';
 import { supportEmailForServer } from '@/lib/runtime/configuration';
+import { setUiFlash } from '@/lib/ui/flash-state';
 
 const startLoginSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
@@ -100,8 +101,9 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
   const destination = migrated
-    ? '/dashboard/profile?confirmDetails=1'
+    ? '/dashboard/profile'
     : verifiedUser.accountState === 'onboarding' ? '/dashboard' : '/';
+  if (migrated) await setUiFlash('profile-confirm-details', '/dashboard/profile');
   const role = await authoritativeMfaRole(verifiedUser.id);
   if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');

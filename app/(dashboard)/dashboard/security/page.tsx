@@ -8,9 +8,11 @@ import { getActivityLogs, getSecurityPageUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { SecurityClient } from './security-client';
+import { FlashBanner } from '@/components/ui/flash-banner';
+import { readUiFlash } from '@/lib/ui/flash-state';
 
 export default async function SecurityPage() {
-  const [user, session] = await Promise.all([getSecurityPageUser(), getSession()]);
+  const [user, session, flash] = await Promise.all([getSecurityPageUser(), getSession(), readUiFlash('/dashboard/security')]);
   if (!user || !session || session.sessionId.startsWith('legacy-')) redirect('/sign-in');
   if (user.accountState === 'onboarding') redirect('/dashboard');
   const role = await authoritativeMfaRole(user.id);
@@ -29,9 +31,18 @@ export default async function SecurityPage() {
     privileged ? mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID) : Promise.resolve(null),
     getActivityLogs(),
   ]);
-  return <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
-    hasPassword={user.hasPassword}
-    logs={logs.map(({ action, id, timestamp }) => ({ action, id, timestamp: timestamp.toISOString() }))}
-    privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }) =>
-      ({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />;
+  const flashMessage = flash === 'google-linked' ? 'Google account connected successfully.'
+    : flash === 'google-link-collision' ? 'That Google account is already linked to a different IDOC account.'
+      : flash === 'google-different-identity-linked' ? 'This IDOC account already has a different Google account connected.'
+        : flash === 'google-verification-required' ? 'Fresh verification is required before connecting Google.'
+          : flash === 'google-auth-failed' ? 'Google account connection could not be completed. Please try again.'
+            : null;
+  return <>
+    {flashMessage ? <div className="px-5 lg:px-8"><FlashBanner targetPath="/dashboard/security">{flashMessage}</FlashBanner></div> : null}
+    <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
+      hasPassword={user.hasPassword}
+      logs={logs.map(({ action, id, timestamp }) => ({ action, id, timestamp: timestamp.toISOString() }))}
+      privileged={privileged} sessions={sessions.map(({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }) =>
+        ({ absoluteExpiresAt, authenticatedAt, deviceLabel, lastActivityAt, sessionId }))} totpConfigured={Boolean(factor)} />
+  </>;
 }
