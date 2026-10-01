@@ -538,3 +538,19 @@ test('seminar confirmation preserves the enqueued member-or-guest registration-c
   assert.match(source, /seminarRegistrations\.seminarId/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });
+
+
+test('staging seminar confirmations do not enter the production-shared registration queue', () => {
+  const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  const stripeRoute = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
+  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+
+  assert.match(registrations, /hostname === 'staging\.idoc\.club'/);
+  assert.match(registrations, /paymentMethod !== 'online_stripe' && !directDelivery/);
+  assert.match(registrations, /sendDetailedSeminarRegistrationConfirmation/);
+  assert.match(webhooks, /seminar\.staging_registration_created/);
+  assert.match(stripeRoute, /processStagingSeminarConfirmationBatch/);
+  assert.match(notices, /STAGING_SEMINAR_CONFIRMATION_KIND/);
+  assert.match(notices, /kind === 'seminar\.registration_created' \|\| kind === STAGING_SEMINAR_CONFIRMATION_KIND/);
+});
