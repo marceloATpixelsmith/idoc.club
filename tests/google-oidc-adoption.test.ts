@@ -136,9 +136,10 @@ test('the Google OAuth intent cookie only ever steers a redirect -- signup is th
   assert.match(intentModule, /intent === 'signup' \? '\/sign-up' : '\/sign-in'/);
 });
 
-test('the sign-up page surfaces a Google failure inline instead of silently dropping it', () => {
-  assert.match(signupPage, /searchParams/);
-  assert.match(signupPage, /initialError=\{googleErrorMessage\(params\.google\)\}/);
+test('the sign-up page surfaces a Google failure from one-time flash state', () => {
+  assert.match(signupPage, /readUiFlash\('\/sign-up'\)/);
+  assert.match(signupPage, /initialError=\{googleErrorMessage\(flash\)\}/);
+  assert.match(signupPage, /FlashConsumer/);
 });
 
 test('deployment environment contract uses the canonical variable names', () => {
