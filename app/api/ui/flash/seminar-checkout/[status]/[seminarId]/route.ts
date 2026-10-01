@@ -12,7 +12,7 @@ export async function GET(
   }
 
   const targetPath = `/seminars/${id}`;
-  const code: UiFlashCode = status === 'success' ? 'seminar-checkout-success' : 'seminar-checkout-canceled';
+  const code: UiFlashCode = status === 'success' ? 'seminar-registration-success' : 'seminar-checkout-canceled';
   const response = NextResponse.redirect(new URL(targetPath, request.url), 302);
   return setUiFlashOnResponse(response, code, targetPath);
 }
