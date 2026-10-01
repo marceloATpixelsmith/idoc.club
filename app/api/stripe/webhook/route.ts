@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { processStripeEvent } from '@/lib/payments/webhook-handlers';
+import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
+import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 import { logError } from '@/lib/observability/logger';
 import { stripeWebhookSecretForServer } from '@/lib/runtime/configuration';
 
@@ -30,6 +32,12 @@ export async function POST(request: Request) {
   }
 
   await processStripeEvent(event, stripe);
+
+  // Staging and production share Postgres, but only production runs the scheduled notification cron.
+  // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after
+  // the Stripe transaction has committed. Production cannot claim these rows because its worker does
+  // not know this staging-only kind.
+  if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
 
   return Response.json({ received: true });
 }
