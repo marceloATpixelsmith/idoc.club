@@ -12,6 +12,7 @@ import { registerAsGuestForSeminar, SeminarRegistrationError } from '@/lib/semin
 import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
 import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
+import { setUiFlash } from '@/lib/ui/flash-state';
 
 export type GuestSeminarState = {
   email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
@@ -64,9 +65,10 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
   }
   revalidatePath('/seminars');
   revalidatePath(`/seminars/${seminarId}`);
-  if (outcome.paymentMethod === 'cash_event') return { success: 'You are registered. Payment will be collected at the event.' };
-  if (outcome.paymentMethod === 'bank_transfer') {
-    return { success: 'Your confirmation will have the information to make the bank transfer.' };
+  if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
+    const targetPath = `/seminars/${seminarId}`;
+    await setUiFlash('seminar-registration-success', targetPath);
+    redirect(targetPath);
   }
   let checkoutUrl: string;
   try {

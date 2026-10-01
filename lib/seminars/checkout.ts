@@ -70,7 +70,9 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) },
       mode: 'payment', payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, registrationId: String(registrationId),
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) } },
-      success_url: `${baseUrl}/api/ui/flash/seminar-checkout/success/${row.seminar_id}`,
+      success_url: row.profile_id !== null
+        ? `${baseUrl}/seminars?view=my`
+        : `${baseUrl}/api/ui/flash/seminar-checkout/success/${row.seminar_id}`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
     await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${session.id},checkout_status='open',

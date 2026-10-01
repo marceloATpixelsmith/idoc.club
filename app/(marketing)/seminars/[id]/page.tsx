@@ -79,8 +79,8 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
       <PageHeader eyebrow="Seminar" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
       <div className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
         <BackLink href="/seminars">Back to Seminars</BackLink>
-        {flash === 'seminar-checkout-success' ? (
-          <FlashBanner targetPath={`/seminars/${id}`}>Payment completed. Your seminar registration will be confirmed by email.</FlashBanner>
+        {flash === 'seminar-registration-success' ? (
+          <FlashBanner targetPath={`/seminars/${id}`}>Registration completed successfully. Your seminar registration confirmation will be sent by email.</FlashBanner>
         ) : null}
         {flash === 'seminar-checkout-canceled' ? (
           <FlashBanner targetPath={`/seminars/${id}`}>Online payment was canceled. No payment was taken.</FlashBanner>
