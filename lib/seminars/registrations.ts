@@ -4,10 +4,6 @@ import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
-import { countryNameForCode } from '@/lib/membership/countries';
-import { escapeHtml } from '@/lib/notifications/email-template';
-import { formatLevels } from '@/lib/seminars/format';
-import { languageNameForTag } from '@/lib/seminars/language';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
 
 const idSchema = z.coerce.number().int().positive();
@@ -227,88 +223,4 @@ export async function exportSeminarRegistrationsCsvRows(seminarIdValue: unknown)
   await client`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
     (${actor.id},'admin.seminar_registrations.exported','seminar',${String(seminarId.data)},${JSON.stringify({ resultCount: rows.length })}::jsonb)`;
   return rows;
-}
-
-
-export type SeminarEmailDetails = {
-  accommodation_information: string; application: string; capacity: number; course_directors: string; course_venue_information: string;
-  end_date: string; is_fei: boolean; language: string; levels: string[]; location: string; member_price_cents: number;
-  non_member_price_cents: number; organizing_national_federation: string; participant_profile: string; registration_deadline: string | Date;
-  start_date: string; title: string;
-};
-
-const EMAIL_ICON_BASE = 'https://res.cloudinary.com/z6xv27qx/image/upload/e_colorize,co_rgb:d3af37,w_20,h_20,c_fit/idoc-email-icons';
-
-const SEMINAR_EMAIL_ICONS = {
-  banknote: `${EMAIL_ICON_BASE}/banknote.png`,
-  calendar: `${EMAIL_ICON_BASE}/calendar.png`,
-  deadline: `${EMAIL_ICON_BASE}/calendar-clock.png`,
-  flag: `${EMAIL_ICON_BASE}/flag.png`,
-  language: `${EMAIL_ICON_BASE}/languages.png`,
-  layers: `${EMAIL_ICON_BASE}/layers.png`,
-  location: `${EMAIL_ICON_BASE}/map-pin.png`,
-  users: `${EMAIL_ICON_BASE}/users.png`,
-};
-
-function seminarEmailDateOnly(value: string | Date): string {
-  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
-}
-
-function seminarEmailInfoRow(iconUrl: string, value: string) {
-  return `<tr>
-    <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid #343d55;vertical-align:middle;">
-      <img alt="" src="${iconUrl}" width="20" height="20" style="display:block;width:20px;height:20px;border:0;" />
-    </td>
-    <td class="idoc-email-text" style="padding:20px 20px 20px 4px;border-bottom:1px solid #343d55;color:#eff2f7 !important;font-size:16px;line-height:1.5;vertical-align:middle;">${value}</td>
-  </tr>`;
-}
-
-function richSeminarEmailSection(label: string, html: string) {
-  if (!html.trim()) return '';
-  return `<div style="margin:0 0 28px;"><div class="idoc-email-gold" style="margin-bottom:10px;color:#d3af37 !important;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(label)}</div><div class="idoc-email-text" style="color:#eff2f7 !important;font-size:15px;line-height:1.7;">${html}</div></div>`;
-}
-
-export async function getSeminarEmailDetails(seminarId: number): Promise<SeminarEmailDetails | null> {
-  const [details] = await client<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId} limit 1`;
-  return details ?? null;
-}
-
-export async function seminarRegistrationConfirmationBodyHtml({ firstName, paymentConfirmed = false, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentConfirmed?: boolean; paymentMethod: string; seminar: SeminarEmailDetails }) {
-  const dateRange = seminarEmailDateOnly(seminar.start_date) === seminarEmailDateOnly(seminar.end_date)
-    ? seminarEmailDateOnly(seminar.start_date)
-    : `${seminarEmailDateOnly(seminar.start_date)} – ${seminarEmailDateOnly(seminar.end_date)}`;
-  const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
-  const memberPrice = `€${(seminar.member_price_cents / 100).toFixed(2)}`;
-  const nonMemberPrice = `€${(seminar.non_member_price_cents / 100).toFixed(2)}`;
-  let paymentMessage = '';
-  if (paymentMethod === 'bank_transfer') {
-    const instructions = await getSeminarPaymentMethodInstructions('bank_transfer');
-    paymentMessage = `<div style="margin:14px 0 0;"><strong class="idoc-email-gold" style="color:#d3af37 !important;">Bank transfer information:</strong><div class="idoc-email-text" style="margin-top:6px;color:#eff2f7 !important;">${instructions || '<p>Please contact IDOC for bank transfer instructions.</p>'}</div></div>`;
-  } else if (paymentMethod === 'cash_event') {
-    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Please remember to bring your cash payment to the event.</strong></p>';
-  } else if (paymentMethod === 'online_stripe' && paymentConfirmed) {
-    paymentMessage = '<p class="idoc-email-text" style="margin:12px 0 0;color:#eff2f7 !important;"><strong>Thank you for your Stripe payment.</strong> Your payment has been received.</p>';
-  }
-
-  const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;overflow:hidden;">
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.flag, `Organizing National Federation: ${escapeHtml(countryNameForCode(seminar.organizing_national_federation))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Members: ${escapeHtml(memberPrice)} · Non-members: ${escapeHtml(nonMemberPrice)}`)}
-    ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(seminarEmailDateOnly(seminar.registration_deadline))}`)}
-    ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
-  </table>`;
-
-  const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;padding:24px 22px;">
-    ${richSeminarEmailSection('Course Directors', seminar.course_directors)}
-    ${richSeminarEmailSection('Participant Profile', seminar.participant_profile)}
-    ${richSeminarEmailSection('Course Venue Information', seminar.course_venue_information)}
-    ${richSeminarEmailSection('Application', seminar.application)}
-    ${richSeminarEmailSection('Accommodation Information', seminar.accommodation_information)}
-  </div>`;
-
-  return `<div style="margin-bottom:30px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>${detailsCard}${informationCard}`;
 }
