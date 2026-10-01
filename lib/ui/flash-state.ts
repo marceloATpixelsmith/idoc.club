@@ -10,6 +10,8 @@ export type UiFlashCode =
   | 'seminar-checkout-canceled'
   | 'google-auth-failed'
   | 'google-link-required'
+  | 'google-linked'
+  | 'google-verification-required'
   | 'google-unlink-failed'
   | 'password-created'
   | 'password-changed'
