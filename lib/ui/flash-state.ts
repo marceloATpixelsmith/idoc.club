@@ -11,6 +11,8 @@ export type UiFlashCode =
   | 'google-auth-failed'
   | 'google-link-required'
   | 'google-linked'
+  | 'google-link-collision'
+  | 'google-different-identity-linked'
   | 'google-verification-required'
   | 'google-unlink-failed'
   | 'password-created'
@@ -19,6 +21,7 @@ export type UiFlashCode =
   | 'membership-canceled'
   | 'membership-checkout-success'
   | 'membership-renew-panel'
+  | 'membership-renewal-setup-success'
   | 'profile-confirm-details';
 
 type UiFlashPayload = {
