@@ -8,7 +8,7 @@ import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration'
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { isStagingSeminarDirectDelivery, sendDetailedSeminarRegistrationConfirmation } from '@/lib/seminars/registrations';
+import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
 
@@ -257,21 +257,13 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   }).returning({ id: seminarRegistrations.id });
   await tx.insert(auditLog).values({ action: 'guest.seminar_registration.registered_and_paid',
     afterJson: { amountCents: expectedAmount, sessionId: session.id }, entityId: String(created.id), entityType: 'seminar_registration' });
-  if (isStagingSeminarDirectDelivery()) {
-    await sendDetailedSeminarRegistrationConfirmation({
-      amountCents: expectedAmount,
-      firstName,
-      paymentConfirmed: true,
-      paymentMethod: 'online_stripe',
-      seminarId,
-      to: email,
-    });
-  } else {
-    await tx.execute(sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (null,'seminar.registration_created',${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
-        registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
-      on conflict (dedupe_key) do nothing`);
-  }
+  const guestConfirmationKind = isStagingSeminarDirectDelivery()
+    ? 'seminar.staging_registration_created'
+    : 'seminar.registration_created';
+  await tx.execute(sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+    (null,${guestConfirmationKind},${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
+      registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
+    on conflict (dedupe_key) do nothing`);
 }
 
 // Seminar payments are classified separately from membership billing and never touch membership
@@ -373,24 +365,13 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
       .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
     if (contact?.email) {
-      if (isStagingSeminarDirectDelivery()) {
-        await sendDetailedSeminarRegistrationConfirmation({
-          amountCents: priceCents,
-          firstName: contact.firstName ?? '',
-          paymentConfirmed: true,
-          paymentMethod: 'online_stripe',
-          seminarId: registration.seminarId,
-          to: contact.email,
-        });
-      } else {
-        await tx.insert(notificationOutbox).values({
-          dedupeKey: `seminar.registration_created:${registrationId}:stripe-paid`,
-          kind: 'seminar.registration_created',
-          payload: { amountCents: priceCents, firstName: contact.firstName, paymentConfirmed: true,
-            paymentMethod: 'online_stripe', registrationId, seminarId: registration.seminarId, to: contact.email },
-          profileId: registration.profileId,
-        }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
-      }
+      await tx.insert(notificationOutbox).values({
+        dedupeKey: `seminar.registration_created:${registrationId}:stripe-paid`,
+        kind: isStagingSeminarDirectDelivery() ? 'seminar.staging_registration_created' : 'seminar.registration_created',
+        payload: { amountCents: priceCents, firstName: contact.firstName, paymentConfirmed: true,
+          paymentMethod: 'online_stripe', registrationId, seminarId: registration.seminarId, to: contact.email },
+        profileId: registration.profileId,
+      }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
     }
   }
 }
