@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
 import { redirect } from 'next/navigation';
+import { setUiFlash } from '@/lib/ui/flash-state';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
@@ -236,9 +237,13 @@ export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
     // validatedActionWithUser on the retry rather than failing gracefully.
     await consumeFreshStepUp();
     await clearSession();
-    if (result.status === 'unlinked' || result.status === 'not-linked') redirect('/sign-in?password=created');
+    if (result.status === 'unlinked' || result.status === 'not-linked') {
+      await setUiFlash('password-created', '/sign-in');
+      redirect('/sign-in');
+    }
     // Google stays connected; the member signs back in with the new password they just saved and
     // retries disconnecting from a fresh session.
-    redirect('/sign-in?password=created&google=unlink-failed');
+    await setUiFlash('google-unlink-failed', '/sign-in');
+    redirect('/sign-in');
   },
 );
