@@ -8,6 +8,10 @@ import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { SeminarRegistrationError } from '@/lib/seminars/registrations';
 
+function seminarCheckoutDeliveryOwner(baseUrl: string): 'production' | 'staging' {
+  return new URL(baseUrl).hostname === 'staging.idoc.club' ? 'staging' : 'production';
+}
+
 export type SeminarCheckoutStripeClient = {
   checkout: { sessions: {
     create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string; status?: string | null; url: string | null }>;
@@ -53,15 +57,18 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
       await sql`update idoc.seminar_registrations set checkout_status=${existing.status === 'expired' ? 'expired' : 'superseded'},updated_at=now() where id=${registrationId}`;
     }
     const baseUrl = baseUrlForServer();
+    const deliveryOwner = seminarCheckoutDeliveryOwner(baseUrl);
+    const checkoutKind = deliveryOwner === 'staging' ? 'seminar_registration_staging' : 'seminar_registration';
     const cycle = new Date(row.registered_at).getTime();
     const session = await stripe.checkout.sessions.create({
       cancel_url: `${baseUrl}/seminars/${row.seminar_id}?checkout=canceled`,
       ...(customerId ? { customer: customerId } : email ? { customer_email: email } : {}),
       line_items: [{ price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents }, quantity: 1 }],
-      metadata: { amountCents: String(row.price_cents), currency: 'EUR', kind: 'seminar_registration',
-        profileId: row.profile_id !== null ? String(row.profile_id) : '', registrationId: String(registrationId), seminarId: String(row.seminar_id),
+      metadata: { amountCents: String(row.price_cents), currency: 'EUR', deliveryOwner, kind: checkoutKind,
+        ...(deliveryOwner === 'staging' ? { seminarProfileId: row.profile_id !== null ? String(row.profile_id) : '' } : { profileId: row.profile_id !== null ? String(row.profile_id) : '' }),
+        registrationId: String(registrationId), seminarId: String(row.seminar_id),
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) },
-      mode: 'payment', payment_intent_data: { metadata: { kind: 'seminar_registration', registrationId: String(registrationId),
+      mode: 'payment', payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, registrationId: String(registrationId),
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) } },
       success_url: `${baseUrl}/seminars/${row.seminar_id}?checkout=success`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
@@ -93,6 +100,8 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
   if (seminar.non_member_price_cents <= 0) throw new SeminarRegistrationError('This seminar has no fee to collect.');
   const stripe = (testStripeClient ?? getStripeServerClient()) as SeminarCheckoutStripeClient;
   const baseUrl = baseUrlForServer();
+  const deliveryOwner = seminarCheckoutDeliveryOwner(baseUrl);
+  const checkoutKind = deliveryOwner === 'staging' ? 'seminar_guest_registration_staging' : 'seminar_guest_registration';
   const session = await stripe.checkout.sessions.create({
     cancel_url: `${baseUrl}/seminars/${seminarId}?checkout=canceled`,
     custom_fields: [
@@ -100,9 +109,9 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
       { key: 'last_name', label: { custom: 'Last name', type: 'custom' }, optional: false, text: { maximum_length: 99, minimum_length: 1 }, type: 'text' },
     ],
     line_items: [{ price_data: { currency: 'eur', product_data: { name: seminar.title }, unit_amount: seminar.non_member_price_cents }, quantity: 1 }],
-    metadata: { amountCents: String(seminar.non_member_price_cents), currency: 'EUR', kind: 'seminar_guest_registration', seminarId: String(seminarId) },
+    metadata: { amountCents: String(seminar.non_member_price_cents), currency: 'EUR', deliveryOwner, kind: checkoutKind, seminarId: String(seminarId) },
     mode: 'payment',
-    payment_intent_data: { metadata: { kind: 'seminar_guest_registration', seminarId: String(seminarId) } },
+    payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, seminarId: String(seminarId) } },
     phone_number_collection: { enabled: true },
     success_url: `${baseUrl}/seminars/${seminarId}?checkout=success`,
   });
