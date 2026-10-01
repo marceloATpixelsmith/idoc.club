@@ -128,7 +128,7 @@ test('a Google failure sends the user back to the page they started from, not al
   // The one deliberate exception: an existing password account that needs linking always sends
   // the user to sign-in (with the "sign in with your password first" message), regardless of
   // which page they started from -- that is the actually-correct next step for that case.
-  assert.match(catchBody, /GoogleAccountLinkRequiredError\) \{[\s\S]*?'\/sign-in\?google=link-required'/);
+  assert.match(catchBody, /GoogleAccountLinkRequiredError\) \{[\s\S]*?flashRedirect\(request\.url, '\/sign-in', 'google-link-required'\)/);
 });
 
 test('the Google OAuth intent cookie only ever steers a redirect -- signup is the only non-default value, everything else falls back to login', () => {
