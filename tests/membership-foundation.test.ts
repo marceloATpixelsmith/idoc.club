@@ -72,7 +72,7 @@ test('verification uses digests, one-time claims, and the approved sender bounda
   assert.doesNotMatch(verification, /return token/);
   // The sender address is a fixed, operator-controlled, fail-closed configuration value
   // (brevoFromEmailForServer) -- never a caller-supplied or message-derived address.
-  assert.match(mail, /sender: \{ email: fromEmail, name: 'Accounts' \}/);
+  assert.match(mail, /sender: \{ email: fromEmail \}/);
   assert.match(mail, /brevoFromEmailForServer\(\)/);
 });
 
