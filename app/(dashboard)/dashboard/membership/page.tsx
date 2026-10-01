@@ -120,6 +120,7 @@ export default async function DashboardMembershipPage() {
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">My Membership</h1>
       {flash === 'membership-checkout-success' ? <FlashBanner targetPath="/dashboard/membership">Payment completed. Your membership will update as soon as Stripe confirms the payment.</FlashBanner> : null}
+      {flash === 'membership-renewal-setup-success' ? <FlashBanner targetPath="/dashboard/membership">Automatic renewal setup completed. Your saved payment method will be used when the renewal becomes due.</FlashBanner> : null}
       {flash === 'membership-renew-panel' ? <FlashConsumer targetPath="/dashboard/membership" /> : null}
       <p className="mt-3">Welcome, {member.profile.firstName} {member.profile.lastName}.</p>
 
