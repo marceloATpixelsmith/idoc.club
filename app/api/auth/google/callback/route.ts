@@ -31,9 +31,14 @@ import { beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { setSession } from '@/lib/auth/session';
 import { logError } from '@/lib/observability/logger';
 import { notifyWebmasterOfGoogleOauthFailure } from '@/lib/notifications/google-oauth-failure-alert';
+import { setUiFlashOnResponse, type UiFlashCode } from '@/lib/ui/flash-state';
 
 const APPLICATION_ID = 'idoc.club';
 export const runtime = 'nodejs';
+
+function flashRedirect(requestUrl: string, path: string, code: UiFlashCode) {
+  return setUiFlashOnResponse(NextResponse.redirect(new URL(path, requestUrl), 302), code, path);
+}
 
 function clearBinding(response: NextResponse) {
   response.cookies.set(googleOauthBindingCookieName(), '', expiredGoogleOauthBindingCookieOptions());
@@ -69,7 +74,7 @@ export async function GET(request: NextRequest) {
       await logError('google_oauth_callback_failed', { reason: 'binding_cookie_invalid' });
       await notifyWebmasterOfGoogleOauthFailure({ reason: 'binding_cookie_invalid', step: 'callback' });
       return clearBinding(
-        NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
+        flashRedirect(request.url, googleOauthFailureRedirectPath(intent), 'google-auth-failed'),
       );
     }
 
@@ -92,8 +97,8 @@ export async function GET(request: NextRequest) {
       if (!evidence) throw new Error('Fresh verification is required for Google linking.');
       const result = await linkGoogleIdentity({ userId: String(user.id), identity, freshEvidence: evidence });
       await clearGoogleLinkFreshEvidence();
-      const value = result.status === 'linked' || result.status === 'already-linked' ? 'linked' : result.status;
-      return clearBinding(NextResponse.redirect(new URL(`/dashboard/security?google=${value}`, applicationOrigin), 302));
+      const code: UiFlashCode = result.status === 'linked' || result.status === 'already-linked' ? 'google-linked' : 'google-auth-failed';
+      return clearBinding(flashRedirect(applicationOrigin, '/dashboard/security', code));
     }
 
     const authenticated = await authenticateGoogleIdentity(identity);
@@ -108,15 +113,15 @@ export async function GET(request: NextRequest) {
     await logError('google_oauth_callback_failed', { reason });
     if (alert) await notifyWebmasterOfGoogleOauthFailure({ reason, step: 'callback' });
     const user = await getUser().catch(() => null);
-    if (user) return clearBinding(NextResponse.redirect(new URL('/dashboard/security?google=failed', request.url), 302));
+    if (user) return clearBinding(flashRedirect(request.url, '/dashboard/security', 'google-auth-failed'));
     if (error instanceof GoogleAccountLinkRequiredError) {
       // The Google identity belongs to an existing password account, so the correct next step is
       // always to sign in with that password -- regardless of whether the user started from
       // sign-up or sign-in.
-      return clearBinding(NextResponse.redirect(new URL('/sign-in?google=link-required', request.url), 302));
+      return clearBinding(flashRedirect(request.url, '/sign-in', 'google-link-required'));
     }
     return clearBinding(
-      NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302),
+      flashRedirect(request.url, googleOauthFailureRedirectPath(intent), 'google-auth-failed'),
     );
   }
 }
