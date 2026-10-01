@@ -485,7 +485,7 @@ test('initialPaymentStatusForMethod maps each canonical payment method to its ow
 test('seminar registration delivery cannot fall back to the legacy generic email', async () => {
   const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
   assert.doesNotMatch(source, /Your seminar registration was recorded/);
-  assert.match(source, /seminar_registration_confirmation_missing_seminar_id/);
+  assert.match(source, /seminar_registration_confirmation_missing_registration_id/);
   assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });
 
@@ -516,6 +516,25 @@ test('seminar registration confirmation has no generic fallback path anywhere in
   assert.doesNotMatch(combined, /Your seminar registration was recorded/i);
   assert.doesNotMatch(combined, /payment is confirmed separately/i);
   assert.match(notices, /registrationId/);
-  assert.match(notices, /seminarRegistrations\.seminarId/);
+  assert.match(notices, /from idoc\.seminar_registrations r/);
+  assert.match(notices, /r\.payment_method_canonical_id/);
+  assert.match(notices, /coalesce\(p\.first_name, r\.guest_first_name/);
   assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
+});
+
+
+test('all Brevo transactional email uses Accounts as the sender name', () => {
+  const source = readFileSync('lib/notifications/brevo-transactional.ts', 'utf8');
+  assert.match(source, /sender: \{ email: fromEmail, name: 'Accounts' \}/);
+});
+
+test('seminar confirmation resolves member and guest details from the same durable registration row', () => {
+  const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+  assert.match(source, /if \(!payload\.registrationId\)/);
+  assert.match(source, /from idoc\.seminar_registrations r/);
+  assert.match(source, /left join idoc\.profiles p on p\.id = r\.profile_id/);
+  assert.match(source, /r\.expected_amount_cents as "amountCents"/);
+  assert.match(source, /r\.payment_method_canonical_id as "paymentMethod"/);
+  assert.match(source, /coalesce\(p\.first_name, r\.guest_first_name/);
+  assert.match(source, /seminarRegistrationConfirmationBodyHtml/);
 });
