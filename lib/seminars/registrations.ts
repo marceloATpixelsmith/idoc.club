@@ -275,9 +275,9 @@ export async function registerForSeminarAtNonMemberPrice(seminarIdValue: unknown
  * required. Mirrors registerForSeminar's capacity/deadline/duplicate guards exactly, scoped to a
  * guest identity (name + email) instead of a profileId; the partial unique index on
  * (seminar_id, lower(guest_email)) is the guest equivalent of the member unique-registration guard.
- * There is no notification_outbox path for a guest (it requires a real profileId), so confirmation
- * is a best-effort direct send -- a delivery failure here must never fail the registration itself,
- * since the registration is already durably committed by the time it's attempted. */
+ * Guest confirmations use the same durable notification_outbox as profile registrations; guest rows
+ * deliberately allow a null profileId and carry the recipient in the payload. The enqueue is part of
+ * the registration transaction, so a successful registration always has its confirmation queued. */
 export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNameValue: unknown, lastNameValue: unknown, emailValue: unknown, phoneValue: unknown, paymentMethodValue: unknown): Promise<{ paymentMethod: string; registrationId: number }> {
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
