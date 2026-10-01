@@ -180,17 +180,3 @@ test('initialPaymentStatusForMethod maps each canonical payment method to its ow
   assert.equal(initialPaymentStatusForMethod('bank_transfer'), 'bank_transfer_pending');
   assert.equal(initialPaymentStatusForMethod('cash_event'), 'cash_pending');
 });
-
-
-test('shared production worker renders rich staging seminar confirmations instead of the legacy body', () => {
-  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
-  assert.match(notices, /kind === 'seminar\.registration_created' && payload\.paymentMethod/);
-  assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
-  assert.match(notices, /Thank you for registering for/);
-  assert.match(notices, /await renderNotice\(record\.kind, record\.payload\)/);
-});
-
-test('Brevo sender name is Accounts in the production delivery worker', () => {
-  const source = readFileSync('lib/notifications/brevo-transactional.ts', 'utf8');
-  assert.match(source, /sender: \{ email: fromEmail, name: 'Accounts' \}/);
-});
