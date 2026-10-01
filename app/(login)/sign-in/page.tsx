@@ -11,6 +11,8 @@ function signInFlashMessage(code: Awaited<ReturnType<typeof readUiFlash>>) {
   if (code === 'google-unlink-failed') return { error: 'Your new password was saved, but Google could not be disconnected. Sign in with your new password and try disconnecting Google again.' };
   if (code === 'password-created') return { success: 'Your new password is ready. Sign in with it below.' };
   if (code === 'password-changed') return { success: 'Your password was changed. Sign in again on every device.' };
+  if (code === 'password-reset-success') return { success: 'Your password was reset. Sign in with your new password.' };
+  if (code === 'membership-canceled') return { success: 'Your membership was canceled and you have been signed out.' };
   return {};
 }
 
