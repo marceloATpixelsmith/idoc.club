@@ -19,7 +19,7 @@ export async function sendTransactionalEmail(message: TransactionalEmail, option
     body: JSON.stringify({
       headers: message.messageId ? { 'X-Idoc-Message-Id': message.messageId } : undefined,
       htmlContent: message.html,
-      sender: { email: fromEmail },
+      sender: { email: fromEmail, name: 'Accounts' },
       subject: message.subject,
       to: [{ email: message.to }],
     }),
