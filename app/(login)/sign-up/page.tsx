@@ -22,10 +22,11 @@ export default async function SignUpPage({
     return (
       <>
       {flash ? <FlashConsumer targetPath="/sign-up" /> : null}
-      <EmailStep
-        initialError={googleErrorMessage(flash)}
-        membership={parseMemberClassification(params.membership)}
-      />
+        <EmailStep
+          initialError={googleErrorMessage(flash)}
+          membership={parseMemberClassification(params.membership)}
+        />
+      </>
     );
   }
   if (!pending.verified) return <OtpStep email={pending.email} pendingCsrfNonce={pending.csrfNonce} />;
