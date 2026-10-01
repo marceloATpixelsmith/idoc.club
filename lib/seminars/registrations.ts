@@ -7,8 +7,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { countryNameForCode } from '@/lib/membership/countries';
-import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
-import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { escapeHtml } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { formatLevels } from '@/lib/seminars/format';
@@ -256,22 +255,14 @@ async function registerOwnProfileForSeminar(
     // Offline methods are confirmed at registration time. Online registrations wait until the
     // verified Stripe webhook marks the payment paid so the one confirmation email can truthfully
     // thank the registrant for the completed Stripe payment.
-    if (paymentMethod !== 'online_stripe' && !directDelivery) {
+    if (paymentMethod !== 'online_stripe') {
+      const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
       await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-        (${profileId},'seminar.registration_created',(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
+        (${profileId},${confirmationKind},(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
           from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     }
     return { paymentMethod, registrationId };
   });
-  if (directDelivery && paymentMethod !== 'online_stripe') {
-    const [contact] = await client<{ amount_cents: number; email: string; first_name: string | null }[]>`select r.expected_amount_cents amount_cents,u.email,p.first_name
-      from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
-      where r.id=${outcome.registrationId} and r.profile_id=${profileId} limit 1`;
-    if (contact?.email) {
-      await sendDetailedSeminarRegistrationConfirmation({ amountCents: contact.amount_cents, firstName: contact.first_name ?? '', paymentConfirmed: false,
-        paymentMethod, seminarId: seminarId.data, to: contact.email });
-    }
-  }
   return outcome;
 }
 
@@ -316,7 +307,6 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
   const enabledMethods = await listEnabledSeminarPaymentMethods();
   const paymentMethod = validatePaymentMethod(enabledMethods, paymentMethodValue);
   const directDelivery = isStagingSeminarDirectDelivery();
-  let seminarDetails: SeminarEmailDetails | null = null;
   const { registrationId } = await client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status from idoc.seminar_registrations
@@ -326,7 +316,6 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
       throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated. Contact an administrator.');
     }
     const [details] = await sql<SeminarEmailDetails[]>`select title,start_date,end_date,location,language,organizing_national_federation,capacity,course_directors,participant_profile,course_venue_information,application,accommodation_information,registration_deadline,is_fei,levels,member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId.data} limit 1`;
-    seminarDetails = details;
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod);
     let registrationId: number;
     if (existing) {
@@ -344,15 +333,12 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     }
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
-    if (!directDelivery) await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (null,'seminar.registration_created',${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
+    const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
+    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+      (null,${confirmationKind},${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
       on conflict (dedupe_key) do nothing`;
     return { registrationId };
   });
-  if (directDelivery && seminarDetails) {
-    await sendDetailedSeminarRegistrationConfirmation({ amountCents: seminarDetails.non_member_price_cents, firstName, paymentConfirmed: false,
-      paymentMethod, seminarId: seminarId.data, to: email });
-  }
   return { paymentMethod, registrationId };
 }
 
@@ -431,21 +417,6 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
   </div>`;
 
   return `<div style="margin-bottom:30px;"><p style="margin-top:0;">Hello ${escapeHtml(firstName)},</p><p>Thank you for registering for <strong>${escapeHtml(seminar.title)}</strong>.</p>${paymentMessage}</div>${detailsCard}${informationCard}`;
-}
-
-export async function sendDetailedSeminarRegistrationConfirmation({ amountCents, firstName, paymentConfirmed, paymentMethod, seminarId, to }: {
-  amountCents?: number; firstName: string; paymentConfirmed: boolean; paymentMethod: string; seminarId: number; to: string;
-}): Promise<void> {
-  const seminar = await getSeminarEmailDetails(seminarId);
-  if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
-  await sendTransactionalEmail({
-    html: renderTransactionalEmail({
-      bodyHtml: await seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentConfirmed, paymentMethod, seminar }),
-      heading: `Thank you for registering for ${escapeHtml(seminar.title)}`,
-    }),
-    subject: 'Your IDOC seminar registration',
-    to,
-  });
 }
 
 export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<void> {
