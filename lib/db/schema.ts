@@ -279,7 +279,7 @@ export const onboardingConsents = idocSchema.table('onboarding_consents', {
 
 export const professionalRoles = idocSchema.table('professional_roles', {
   id: serial('id').primaryKey(),
-  profileId: integer('profile_id').references(() => profiles.id),
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
   roleType: varchar('role_type', { length: 20 }).notNull(),
   nationalFederationCountryCode: varchar('national_federation_country_code', { length: 2 }),
   idocRegion: varchar('idoc_region', { length: 40 }),
