@@ -320,7 +320,10 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
     const attempt = record.attemptCount + 1;
     await db.update(notificationOutbox).set({
       attemptCount: attempt,
-      availableAt: sql`now() + (${Math.min(3600, 30 * 2 ** Math.max(0, attempt - 1))} * interval '1 second')`,
+      // Staging has no independent Vercel Cron deployment. Keep the row immediately eligible so
+      // processDeliveryBatch retries it again in this same invocation instead of stranding it until
+      // unrelated traffic arrives.
+      availableAt: sql`now()`,
       deadLetteredAt: attempt >= MAX_ATTEMPTS ? new Date() : null,
       lastAttemptAt: new Date(), lastErrorCode: 'temporary_delivery_failure', leaseExpiresAt: null, leaseOwner: null,
     }).where(and(eq(notificationOutbox.id, record.id), eq(notificationOutbox.leaseOwner, owner)));
