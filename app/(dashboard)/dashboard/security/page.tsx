@@ -32,9 +32,11 @@ export default async function SecurityPage() {
     getActivityLogs(),
   ]);
   const flashMessage = flash === 'google-linked' ? 'Google account connected successfully.'
-    : flash === 'google-verification-required' ? 'Fresh verification is required before connecting Google.'
-      : flash === 'google-auth-failed' ? 'Google account connection could not be completed. Please try again.'
-        : null;
+    : flash === 'google-link-collision' ? 'That Google account is already linked to a different IDOC account.'
+      : flash === 'google-different-identity-linked' ? 'This IDOC account already has a different Google account connected.'
+        : flash === 'google-verification-required' ? 'Fresh verification is required before connecting Google.'
+          : flash === 'google-auth-failed' ? 'Google account connection could not be completed. Please try again.'
+            : null;
   return <>
     {flashMessage ? <div className="px-5 lg:px-8"><FlashBanner targetPath="/dashboard/security">{flashMessage}</FlashBanner></div> : null}
     <SecurityClient currentDeviceRemembered={currentDeviceRemembered} currentSessionId={session.sessionId}
