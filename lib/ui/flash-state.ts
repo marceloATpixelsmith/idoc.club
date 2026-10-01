@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
-import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 import type { NextResponse } from 'next/server';
 
 export const UI_FLASH_COOKIE_NAME = 'idoc_ui_flash';
@@ -50,7 +49,7 @@ function decodeFlash(value: string | undefined): UiFlashPayload | null {
 }
 
 
-async function requestCookieStore(): Promise<ReadonlyRequestCookies | null> {
+async function requestCookieStore(): Promise<Awaited<ReturnType<typeof cookies>> | null> {
   try {
     return await cookies();
   } catch (error) {
