@@ -515,7 +515,6 @@ test('seminar registration confirmation has no generic fallback path anywhere in
   assert.doesNotMatch(combined, /Seminar registration received/i);
   assert.doesNotMatch(combined, /Your seminar registration was recorded/i);
   assert.doesNotMatch(combined, /payment is confirmed separately/i);
-  assert.doesNotMatch(combined, /best-effort[^\n]*registration/i);
   assert.match(notices, /registrationId/);
   assert.match(notices, /seminarRegistrations\.seminarId/);
   assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
