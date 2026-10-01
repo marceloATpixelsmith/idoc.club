@@ -25,6 +25,7 @@ import { revokeAllUserSessions, revokeSessionWithSignOutAudit } from '@/lib/auth
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
+import { setUiFlash } from '@/lib/ui/flash-state';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -236,7 +237,8 @@ export const updatePassword = validatedActionWithUser(
     });
     await consumeFreshStepUp();
     await clearSession();
-    redirect('/sign-in?password=changed');
+    await setUiFlash('password-changed', '/sign-in');
+    redirect('/sign-in');
   }
 );
 
