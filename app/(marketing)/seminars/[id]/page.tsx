@@ -57,6 +57,7 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
 
   const paymentMethods = await listEnabledSeminarPaymentMethods();
   const alreadyRegistered = seminar.registration_status !== null;
+  const guestRegistrationJustCompleted = flash === 'seminar-registration-success';
   // Only a currently entitled member gets the pre-filled, member-price form directly. A signed-in
   // visitor who has their own profile but cannot use the member price (a lapsed membership) still
   // goes straight to the same form -- pre-filled and locked from their real profile, tied to their
@@ -106,7 +107,7 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
               </CardContent>
             </Card>
 
-            {alreadyRegistered ? null : seminar.availability !== 'open' ? (
+            {alreadyRegistered || guestRegistrationJustCompleted ? null : seminar.availability !== 'open' ? (
               <p className="border border-border p-5 text-sm text-muted-foreground">{AVAILABILITY_LABELS[seminar.availability]} — registration is not currently open for this seminar.</p>
             ) : (
               <SeminarRegisterCta
