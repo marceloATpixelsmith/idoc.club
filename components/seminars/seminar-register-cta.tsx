@@ -76,7 +76,13 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
       <Dialog onOpenChange={(open) => { setPaymentDialogOpen(open); if (!open) setGuestPaymentMethod(null); }} open={paymentDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           {guestPaymentMethod ? (
-            <SeminarRegistrationForm embedded paymentMethod={guestPaymentMethod} seminarId={seminarId} />
+            <>
+              <DialogHeader className="sr-only">
+                <DialogTitle>Register for this seminar</DialogTitle>
+                <DialogDescription>Enter your contact details to complete your seminar registration.</DialogDescription>
+              </DialogHeader>
+              <SeminarRegistrationForm embedded paymentMethod={guestPaymentMethod} seminarId={seminarId} />
+            </>
           ) : (
             <>
               <DialogHeader><DialogTitle>Choose a payment method</DialogTitle><DialogDescription>Your choice applies only to this registration.</DialogDescription></DialogHeader>
