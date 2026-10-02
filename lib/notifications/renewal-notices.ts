@@ -214,25 +214,25 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
     switch (kind) {
       case 'membership.renewal_reminder':
         return {
-          bodyHtml: `Your IDOC membership will renew automatically on ${payload.renewalDate}. No action is needed — you can manage your payment method or turn off automatic renewal any time from your account.`,
+          bodyHtml: `Your IDOC membership will renew automatically on ${formatDate(payload.renewalDate)}. No action is needed — you can manage your payment method or turn off automatic renewal any time from your account.`,
           heading: 'Your membership renews automatically soon',
           subject: 'Your IDOC membership renews automatically soon',
         };
       case 'membership.expiration_reminder':
         return {
-          bodyHtml: `Your IDOC membership expires on ${payload.expirationDate}. Renew before then to keep your access.`,
+          bodyHtml: `Your IDOC membership expires on ${formatDate(payload.expirationDate)}. Renew before then to keep your access.`,
           heading: 'Your membership is expiring soon',
           subject: 'Your IDOC membership is expiring soon',
         };
       case 'membership.payment_failed':
         return {
-          bodyHtml: `We were unable to process your automatic IDOC membership renewal. You remain active through ${payload.graceEndDate} while payment is retried — please update your payment method to avoid an interruption.`,
+          bodyHtml: `We were unable to process your automatic IDOC membership renewal. You remain active through ${formatDate(payload.graceEndDate)} while payment is retried — please update your payment method to avoid an interruption.`,
           heading: 'We could not process your renewal',
           subject: "We couldn't process your IDOC membership renewal",
         };
       case 'membership.grace_reminder':
         return {
-          bodyHtml: `Your IDOC membership will expire on ${payload.graceEndDate} unless your payment method is updated before then.`,
+          bodyHtml: `Your IDOC membership will expire on ${formatDate(payload.graceEndDate)} unless your payment method is updated before then.`,
           heading: 'Action needed: update your payment method',
           subject: 'Action needed: update your IDOC payment method',
         };
