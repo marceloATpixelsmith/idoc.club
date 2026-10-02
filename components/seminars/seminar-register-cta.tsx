@@ -74,7 +74,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
         </DialogContent>
       </Dialog>
       <Dialog onOpenChange={(open) => { setPaymentDialogOpen(open); if (!open) setGuestPaymentMethod(null); }} open={paymentDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           {guestPaymentMethod ? (
             <SeminarRegistrationForm embedded paymentMethod={guestPaymentMethod} seminarId={seminarId} />
           ) : (
