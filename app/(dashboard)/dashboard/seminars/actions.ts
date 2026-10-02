@@ -25,11 +25,14 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
     if (error instanceof Error && KNOWN_ERROR_NAMES.includes(error.name)) return { error: error.message };
     return { error: 'Registration could not be completed.' };
   }
-  revalidatePath('/dashboard/seminars');
-  revalidatePath('/seminars');
   if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
+    // The destination is a full page navigation. Returning before any seminar revalidation is
+    // critical: revalidating /seminars can refresh the current detail route, remove the CTA because
+    // the new registration is now visible, and unmount the component that performs the redirect.
     return { redirectTo: '/seminars?view=my' };
   }
+  revalidatePath('/dashboard/seminars');
+  revalidatePath('/seminars');
   let checkoutUrl: string;
   try {
     checkoutUrl = await createSeminarCheckoutSession(outcome.registrationId);
