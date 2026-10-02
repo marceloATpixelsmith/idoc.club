@@ -700,3 +700,15 @@ test('seminar detail rich-information section headings use the defined gold acce
   assert.match(detail, /text-gold/);
   assert.doesNotMatch(detail, /text-orange/);
 });
+
+
+test('guest registration choice dialog buttons use the same table-control treatment as cancel registration', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  const joinDialogStart = cta.indexOf('<Dialog onOpenChange={setJoinDialogOpen}');
+  const paymentDialogStart = cta.indexOf('<Dialog onOpenChange={(open)', joinDialogStart);
+  const joinDialog = cta.slice(joinDialogStart, paymentDialogStart);
+  assert.equal((joinDialog.match(/data-idoc-table-control=""/g) ?? []).length, 2);
+  assert.equal((joinDialog.match(/variant="outline"/g) ?? []).length, 2);
+  assert.equal((joinDialog.match(/border-dashed/g) ?? []).length, 2);
+  assert.doesNotMatch(joinDialog, /variant="ghost"/);
+});
