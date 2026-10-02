@@ -10,6 +10,7 @@ import { InternationalPhoneInput } from '@/components/ui/international-phone-inp
 import { Label } from '@/components/ui/label';
 import { guestContactSchema } from '@/lib/seminars/guest-registration-validation';
 import { registerAsGuestForSeminarAction, type GuestSeminarState } from '@/app/(marketing)/seminars/actions';
+import { ArrowUpRight } from 'lucide-react';
 
 /** anonymous-only contact form for guest bank-transfer/cash registrations. */
 export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
@@ -98,7 +99,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
           <TurnstileWidget action="seminar_guest_registration" key={attempt} onVerify={setTurnstileToken} theme="dark" />
           {guestState.error && !hasFieldErrors ? <p className="text-sm text-destructive" role="alert">{guestState.error}</p> : null}
           <Button className="mt-6 w-full sm:w-auto" disabled={guestPending || !formIsValid || !turnstileToken} type="submit">
-            {guestPending ? <AuthPendingLabel text="Registering" /> : 'Register'}
+            {guestPending ? <AuthPendingLabel text="Registering" /> : <>Register <ArrowUpRight aria-hidden className="ml-1 size-4" /></>}
           </Button>
         </form>
       )}
