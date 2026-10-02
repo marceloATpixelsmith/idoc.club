@@ -6,7 +6,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { renderGuestSeminarRefundEmail } from '@/lib/notifications/email-template';
 import { getStripeServerClient } from './stripe-client';
 
 export class RefundError extends Error { constructor(message: string) { super(message); this.name = 'RefundError'; } }
@@ -69,12 +69,11 @@ export async function refundSeminarRegistrationCore(registrationIdValue: unknown
     // queue this -- send directly and best-effort, matching the webhook-driven refund path.
     if (status === 'succeeded' && row.profile_id === null && row.email) {
       try {
+        const message = renderGuestSeminarRefundEmail(row.first_name ?? '');
         await sendTransactionalEmail({
-          html: renderTransactionalEmail({
-            bodyHtml: `<p>Hello ${escapeHtml(row.first_name ?? '')},</p><p>Your seminar refund has been processed.</p>`,
-            heading: 'Seminar refund confirmed',
-          }),
-          subject: 'Your IDOC seminar refund', to: row.email,
+          html: message.html,
+          subject: message.subject,
+          to: row.email,
         }, { signal: AbortSignal.timeout(10_000) });
       } catch { /* best-effort -- the refund itself already committed above */ }
     }
