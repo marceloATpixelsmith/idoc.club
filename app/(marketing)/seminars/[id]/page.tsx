@@ -1,6 +1,5 @@
 import { Banknote, Calendar, CalendarClock, Languages, Layers, MapPin, Users, Flag } from 'lucide-react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FeiBadge } from '@/components/seminars/fei-badge';
 import { SeminarRegisterCta } from '@/components/seminars/seminar-register-cta';
@@ -15,7 +14,7 @@ import { countryNameForCode } from '@/lib/membership/countries';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { formatDate, formatLevels, formatSchedule, money } from '@/lib/seminars/format';
 import { getSeminarForRegistrant, listEnabledSeminarPaymentMethods } from '@/lib/seminars/registrations';
-import { AVAILABILITY_LABELS, registrationDisplayLabel, type PaymentStatus, type RegistrationStatus } from '@/lib/seminars/status';
+import { AVAILABILITY_LABELS } from '@/lib/seminars/status';
 import { sanitizeArticleContent } from '@/lib/news/sanitize';
 import { readUiFlash } from '@/lib/ui/flash-state';
 
@@ -107,12 +106,7 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
               </CardContent>
             </Card>
 
-            {alreadyRegistered ? (
-              <div className="space-y-2 border border-border p-5 text-sm">
-                <p>Your registration: <strong>{registrationDisplayLabel(seminar.registration_status as RegistrationStatus, (seminar.payment_status ?? 'unpaid') as PaymentStatus)}</strong></p>
-                <Link className="underline underline-offset-4" href="/seminars?view=my">Manage in My Seminars</Link>
-              </div>
-            ) : seminar.availability !== 'open' ? (
+            {alreadyRegistered ? null : seminar.availability !== 'open' ? (
               <p className="border border-border p-5 text-sm text-muted-foreground">{AVAILABILITY_LABELS[seminar.availability]} — registration is not currently open for this seminar.</p>
             ) : (
               <SeminarRegisterCta
