@@ -663,3 +663,40 @@ test('member manual registration returns My Seminars before any seminar revalida
   assert.ok(seminarRevalidation >= 0, 'seminar revalidation should still exist for non-manual paths');
   assert.ok(manualReturn < seminarRevalidation, 'manual registration redirect must be returned before revalidation can unmount the CTA');
 });
+
+
+test('guest manual registration stays in a dialog instead of replacing the seminar detail CTA', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.doesNotMatch(cta, /if \(guestPaymentMethod\) \{[\s\S]*return <SeminarRegistrationForm/);
+  assert.match(cta, /guestPaymentMethod \? \([\s\S]*<SeminarRegistrationForm embedded/);
+  assert.match(form, /embedded \? '' : 'rounded-xl border bg-card p-6 shadow-sm'/);
+});
+
+test('seminar payment-method choices use the same subtle table-control treatment as cancel registration', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /data-idoc-table-control=""/);
+  assert.match(cta, /border-dashed/);
+  assert.match(cta, /rounded-md/);
+  assert.match(cta, /font-normal/);
+});
+
+
+test('guest registration dialog retains an accessible title and description during the contact-form step', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /guestPaymentMethod \? \([\s\S]*DialogTitle>Register for this seminar/);
+  assert.match(cta, /DialogDescription>Enter your contact details to complete your seminar registration/);
+});
+
+test('signed-in visitors without a profile use the same dialog-based manual guest flow', () => {
+  const rules = readFileSync('docs/02-membership-and-payment-business-rules.md', 'utf8');
+  assert.match(rules, /signed-in visitor with no member profile/i);
+  assert.match(rules, /manual-payment selection opens the guest contact form inside that dialog/i);
+});
+
+
+test('seminar detail rich-information section headings use the defined gold accent token', () => {
+  const detail = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detail, /text-gold/);
+  assert.doesNotMatch(detail, /text-orange/);
+});

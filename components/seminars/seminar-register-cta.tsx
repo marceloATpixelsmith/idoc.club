@@ -38,10 +38,6 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
   const knownVisitor = hasProfile || isSignedIn;
 
-  if (guestPaymentMethod) {
-    return <SeminarRegistrationForm paymentMethod={guestPaymentMethod} seminarId={seminarId} />;
-  }
-
   const authenticatedAction = memberDetails ? memberAction : nonMemberAction;
   const authenticatedPending = memberDetails ? memberPending : nonMemberPending;
   const authenticatedState = memberDetails ? memberState : nonMemberState;
@@ -77,10 +73,20 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog onOpenChange={setPaymentDialogOpen} open={paymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Choose a payment method</DialogTitle><DialogDescription>Your choice applies only to this registration.</DialogDescription></DialogHeader>
-          <div className="flex flex-col gap-3">
+      <Dialog onOpenChange={(open) => { setPaymentDialogOpen(open); if (!open) setGuestPaymentMethod(null); }} open={paymentDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          {guestPaymentMethod ? (
+            <>
+              <DialogHeader className="sr-only">
+                <DialogTitle>Register for this seminar</DialogTitle>
+                <DialogDescription>Enter your contact details to complete your seminar registration.</DialogDescription>
+              </DialogHeader>
+              <SeminarRegistrationForm embedded paymentMethod={guestPaymentMethod} seminarId={seminarId} />
+            </>
+          ) : (
+            <>
+              <DialogHeader><DialogTitle>Choose a payment method</DialogTitle><DialogDescription>Your choice applies only to this registration.</DialogDescription></DialogHeader>
+              <div className="flex flex-col gap-3">
             {paymentMethods.map((method) => {
               const methodId = String(method.canonical_id);
               if (!hasProfile && methodId === 'online_stripe') {
@@ -89,7 +95,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                     <CsrfField />
                     <input name="seminarId" type="hidden" value={seminarId} />
                     <input name="turnstileToken" type="hidden" value={guestTurnstileToken} />
-                    <Button className="w-full" disabled={!guestTurnstileToken || guestCheckoutPending} type="submit" variant="outline">
+                    <Button className="h-8 w-full rounded-md border-dashed px-3 font-normal" data-idoc-table-control="" disabled={!guestTurnstileToken || guestCheckoutPending} type="submit" variant="outline">
                       {String(method.display_label)}
                     </Button>
                   {guestCheckoutState.error ? <p className="mt-2 text-sm text-destructive" role="alert">{guestCheckoutState.error}</p> : null}
@@ -102,21 +108,23 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
                     <CsrfField />
                     <input name="seminarId" type="hidden" value={seminarId} />
                     <input name="paymentMethod" type="hidden" value={methodId} />
-                    <Button className="w-full" disabled={authenticatedPending} type="submit" variant="outline">
+                    <Button className="h-8 w-full rounded-md border-dashed px-3 font-normal" data-idoc-table-control="" disabled={authenticatedPending} type="submit" variant="outline">
                       {String(method.display_label)}
                     </Button>
                   </form>
                 );
               }
               return (
-                <Button key={methodId} onClick={() => { setGuestPaymentMethod(methodId); setPaymentDialogOpen(false); }} type="button" variant="outline">
+                <Button className="h-8 rounded-md border-dashed px-3 font-normal" data-idoc-table-control="" key={methodId} onClick={() => setGuestPaymentMethod(methodId)} type="button" variant="outline">
                   {String(method.display_label)}
                 </Button>
               );
             })}
             {authenticatedState.error ? <p className="text-sm text-destructive" role="alert">{authenticatedState.error}</p> : null}
             {!hasProfile ? <TurnstileWidget action="seminar_guest_registration" key={guestCheckoutState.attempt ?? 0} onVerify={setGuestTurnstileToken} theme="dark" /> : null}
-          </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>
