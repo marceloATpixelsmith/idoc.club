@@ -7,7 +7,7 @@ import { auditLog, billingAccounts, membershipCheckoutSessions, memberships, not
 import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { renderGuestSeminarRefundEmail } from '@/lib/notifications/email-template';
 
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { gracePeriodEnd, nextValidUntil } from './renewal';
@@ -438,12 +438,11 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
         .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
     } else if (registration.guestEmail) {
       try {
+        const message = renderGuestSeminarRefundEmail(registration.guestName ?? '');
         await sendTransactionalEmail({
-          html: renderTransactionalEmail({
-            bodyHtml: `<p>Hello ${escapeHtml(registration.guestName ?? '')},</p><p>Your seminar refund has been processed.</p>`,
-            heading: 'Seminar refund confirmed',
-          }),
-          subject: 'Your IDOC seminar refund', to: registration.guestEmail,
+          html: message.html,
+          subject: message.subject,
+          to: registration.guestEmail,
         }, { signal: AbortSignal.timeout(10_000) });
       } catch { /* best-effort -- the refund record itself already committed above */ }
     }

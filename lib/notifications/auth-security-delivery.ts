@@ -14,7 +14,7 @@ const MAX_ATTEMPTS = 6;
 // the exact class of bug a Codex review caught in this pull request: a kind with no content-map
 // entry throws 'Unsupported security notification kind' below, retries MAX_ATTEMPTS times, and is
 // dead-lettered without ever reaching the account owner.
-const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject: string }> = {
+export const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject: string }> = {
   account_reinstated: { heading: 'Account access restored', subject: 'Your IDOC account access was restored' },
   account_suspended: { heading: 'Account suspended', subject: 'Your IDOC account was suspended' },
   authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },

@@ -35,14 +35,14 @@ function deliveryFailureCategory(error: unknown) {
   return 'operational';
 }
 
-const SUBJECTS: Record<EmailOtpPurpose, string> = {
+export const EMAIL_OTP_SUBJECTS: Record<EmailOtpPurpose, string> = {
   google_disconnect_verification: 'Your IDOC verification code',
   login_verification: 'Your IDOC sign-in code',
   password_reset: 'Your IDOC password reset code',
   signup_verification: 'Your IDOC verification code',
 };
 
-function emailHtml(code: string, purpose: EmailOtpPurpose) {
+export function renderEmailOtpHtml(code: string, purpose: EmailOtpPurpose) {
   const intro = purpose === 'password_reset'
     ? 'Use this code to reset your IDOC password.'
     : purpose === 'login_verification'
@@ -81,7 +81,7 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
     purpose, userId: options.userId ?? null,
   });
   try {
-    await sendTransactionalEmail({ html: emailHtml(code, purpose), subject: SUBJECTS[purpose], to: email });
+    await sendTransactionalEmail({ html: renderEmailOtpHtml(code, purpose), subject: EMAIL_OTP_SUBJECTS[purpose], to: email });
   } catch (error) {
     const reason = deliveryFailureCategory(error);
     if (options.userId) await logError('email_otp_delivery_failed', { purpose, reason, subjectId: options.userId });

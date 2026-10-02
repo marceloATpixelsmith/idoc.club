@@ -98,3 +98,14 @@ export function emailNoticeCard(title: string, bodyHtml: string): string {
     <div class="idoc-email-text" style="color:${IDOC_EMAIL_COLORS.text} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;">${bodyHtml}</div>
   </div>`;
 }
+
+
+export function renderGuestSeminarRefundEmail(firstName: string) {
+  return {
+    html: renderTransactionalEmail({
+      bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your seminar refund has been processed.</p>`,
+      heading: 'Seminar refund confirmed',
+    }),
+    subject: 'Your IDOC seminar refund',
+  };
+}

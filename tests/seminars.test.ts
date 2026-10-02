@@ -176,9 +176,11 @@ test('a guest\'s attacker-controlled name is HTML-escaped before interpolation i
   assert.match(registrationsSource, /escapeHtml\(seminar\.title\)/);
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
-  assert.match(webhookSource, /escapeHtml\(registration\.guestName \?\? ''\)/g);
-  assert.equal(webhookSource.match(/escapeHtml\(registration\.guestName \?\? ''\)/g)?.length, 1, 'the remaining guest refund email must escape the guest name; seminar payment confirmation is intentionally part of the single registration email');
-  assert.match(refundsSource, /escapeHtml\(row\.first_name \?\? ''\)/);
+  const templateSource = readFileSync('lib/notifications/email-template.ts', 'utf8');
+  assert.match(templateSource, /renderGuestSeminarRefundEmail/);
+  assert.match(templateSource, /escapeHtml\(firstName\)/);
+  assert.match(webhookSource, /renderGuestSeminarRefundEmail\(registration\.guestName \?\? ''\)/);
+  assert.match(refundsSource, /renderGuestSeminarRefundEmail\(row\.first_name \?\? ''\)/);
 });
 
 test('recording a manual payment is refused while a registration has an open Stripe checkout session, to prevent a double charge', () => {
