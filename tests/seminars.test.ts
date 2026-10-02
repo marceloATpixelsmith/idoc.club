@@ -693,3 +693,10 @@ test('signed-in visitors without a profile use the same dialog-based manual gues
   assert.match(rules, /signed-in visitor with no member profile/i);
   assert.match(rules, /manual-payment selection opens the guest contact form inside that dialog/i);
 });
+
+
+test('seminar detail rich-information section headings use the defined gold accent token', () => {
+  const detail = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detail, /text-gold/);
+  assert.doesNotMatch(detail, /text-orange/);
+});
