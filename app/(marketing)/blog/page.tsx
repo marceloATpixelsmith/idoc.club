@@ -24,7 +24,7 @@ export default function BlogPage() {
         <ul className="divide-y divide-border border-t border-border">
           {blogPosts.map((post) => (
             <li key={post.slug} className="py-10">
-              <p className="text-[0.68rem] uppercase tracking-[0.18em] text-gold">
+              <p className="text-base uppercase tracking-[0.18em] text-gold">
                 {post.date} · by {post.author}
               </p>
               <h2 className="mt-4 text-3xl leading-snug">{post.title}</h2>

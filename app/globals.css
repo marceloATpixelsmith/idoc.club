@@ -120,6 +120,36 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * Type scale: 1rem (16px) is the minimum text size sitewide. The sub-16px
+ * steps (xs, sm) collapse to the body size and every larger step moves up
+ * so headings keep a clear hierarchy above body copy.
+ */
+@theme {
+  --text-xs: 1rem;
+  --text-xs--line-height: calc(1.5 / 1);
+  --text-sm: 1rem;
+  --text-sm--line-height: calc(1.5 / 1);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.25rem;
+  --text-lg--line-height: calc(1.75 / 1.25);
+  --text-xl: 1.5rem;
+  --text-xl--line-height: calc(2 / 1.5);
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: calc(2.25 / 1.75);
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: calc(2.5 / 2.25);
+  --text-4xl: 2.75rem;
+  --text-4xl--line-height: calc(1.2 / 1);
+  --text-5xl: 3.5rem;
+  --text-5xl--line-height: 1.1;
+  --text-6xl: 4.25rem;
+  --text-6xl--line-height: 1.1;
+  --text-7xl: 5rem;
+  --text-7xl--line-height: 1.05;
+}
+
 @layer base {
   *,
   ::after,
@@ -311,9 +341,9 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 
 @utility eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: 1rem;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--gold);
 }

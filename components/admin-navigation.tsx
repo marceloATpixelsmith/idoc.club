@@ -69,14 +69,14 @@ export function AdminNavigation({ isSuperAdmin, unreadCount }: { isSuperAdmin: b
         </button>
       </div>
       <nav aria-label="Admin Dashboard" className={`${open ? 'block' : 'hidden'} px-3 pb-5 lg:block`}>
-        <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Administration</p>
+        <p className="px-3 pb-2 text-base font-semibold uppercase tracking-[0.16em] text-muted-foreground">Administration</p>
         <ul className="space-y-1">
           {items.map((item, index) => {
             const beginsSuperAdminSection = isSuperAdmin && index === SHARED_ITEMS.length;
             const active = activeHref === item.href;
             return (
               <li className={beginsSuperAdminSection ? 'mt-6 border-t border-border pt-6' : ''} key={item.href}>
-                {beginsSuperAdminSection && <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gold">Super Admin</p>}
+                {beginsSuperAdminSection && <p className="px-3 pb-2 text-base font-semibold uppercase tracking-[0.16em] text-gold">Super Admin</p>}
                 <Link
                   aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm transition-colors ${active ? 'border-gold bg-background text-foreground shadow-sm' : 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}`}
