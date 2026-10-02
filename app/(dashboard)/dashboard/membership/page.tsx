@@ -14,6 +14,7 @@ import { getMembershipPerks } from '@/lib/organization/membership-perks';
 import { CheckoutForm } from './checkout-form';
 import { FlashBanner, FlashConsumer } from '@/components/ui/flash-banner';
 import { readUiFlash } from '@/lib/ui/flash-state';
+import { formatDate } from '@/lib/format';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -160,7 +161,7 @@ export default async function DashboardMembershipPage() {
               )}
               {history.map((payment) => (
                 <tr key={payment.id} className="border-b">
-                  <td className="p-2">{payment.paidAt.toISOString().slice(0, 10)}</td>
+                  <td className="p-2">{formatDate(payment.paidAt)}</td>
                   <td className="p-2">{(payment.amountCents / 100).toFixed(2)} {payment.currency}</td>
                   <td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td>
                 </tr>
