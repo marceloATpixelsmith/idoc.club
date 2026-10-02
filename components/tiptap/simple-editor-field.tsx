@@ -1,6 +1,5 @@
 'use client';
 
-import Link from '@tiptap/extension-link';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -17,6 +16,7 @@ import {
   Redo2,
   Strikethrough,
   Undo2,
+  Underline,
   Unlink,
 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
@@ -109,13 +109,13 @@ export function SimpleEditorField({
         heading: {
           levels: [1, 2, 3, 4],
         },
-      }),
-      Link.configure({
-        autolink: true,
-        defaultProtocol: 'https',
-        enableClickSelection: true,
-        openOnClick: false,
-        protocols: ['http', 'https', 'mailto'],
+        link: {
+          autolink: true,
+          defaultProtocol: 'https',
+          enableClickSelection: true,
+          openOnClick: false,
+          protocols: ['http', 'https', 'mailto'],
+        },
       }),
     ],
     onUpdate: ({ editor: activeEditor }) => {
@@ -288,6 +288,13 @@ export function SimpleEditorField({
             onClick={() => editor.chain().focus().toggleStrike().run()}
           >
             <Strikethrough />
+          </ToolbarButton>
+          <ToolbarButton
+            active={editor.isActive('underline')}
+            label="Underline"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+          >
+            <Underline />
           </ToolbarButton>
           <ToolbarButton
             active={editor.isActive('code')}
