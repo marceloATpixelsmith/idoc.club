@@ -131,7 +131,7 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
                 ['Accommodation Information', seminar.accommodation_information],
               ] as const).filter(([, html]) => html).map(([heading, html]) => (
                 <section key={heading}>
-                  <h2 className="mb-3 text-lg font-bold uppercase tracking-wider text-orange">{heading}</h2>
+                  <h2 className="mb-3 text-lg font-bold uppercase tracking-wider text-gold">{heading}</h2>
                   <div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(html) }} />
                 </section>
               ))}
