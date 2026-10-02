@@ -10,6 +10,7 @@ import {
   Headphones,
   LayoutDashboard,
   LineChart,
+  Mail,
   Menu,
   Settings,
   ShieldCheck,
@@ -38,6 +39,7 @@ const SUPER_ADMIN_ITEMS = [
   { href: '/admin/organization', icon: Building2, label: 'Organization settings' },
   { href: '/admin/support/defaults', icon: Settings, label: 'Support defaults' },
   { href: '/admin/security', icon: ShieldCheck, label: 'Security operations' },
+  { href: '/admin/email-previews', icon: Mail, label: 'Email previews' },
 ] as const;
 
 function isActive(pathname: string, href: string) {
