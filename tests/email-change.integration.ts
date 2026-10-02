@@ -18,7 +18,7 @@ after(closeHarness);
 // atomic and graph-preserving; these tests prove the issuance side those tests never exercise.
 
 function capturedToken(html: string): string {
-  const href = html.match(/href="([^"]+)"/)![1]
+  const href = html.match(/href="([^"]*token=[^"]+)"/)![1]
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
