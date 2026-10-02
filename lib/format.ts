@@ -15,3 +15,19 @@ export function formatDate(
     return "";
   }
 }
+
+
+export function formatDateTime(date: Date | string | number | undefined) {
+  if (!date) return "";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(date));
+  } catch (_err) {
+    return "";
+  }
+}
