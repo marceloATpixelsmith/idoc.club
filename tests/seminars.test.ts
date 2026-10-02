@@ -591,3 +591,20 @@ test('every completed profile-backed seminar registration lands on My Seminars',
   assert.match(memberActions, /outcome\.paymentMethod === 'cash_event' \|\| outcome\.paymentMethod === 'bank_transfer'[\s\S]*redirect\('\/seminars\?view=my'\)/);
   assert.match(checkout, /success_url: row\.profile_id !== null[\s\S]*seminars\?view=my/);
 });
+
+
+test('offline profile registrations expose a reliable My Seminars client navigation target', () => {
+  const actions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+
+  assert.match(actions, /return \{ redirectTo: '\/seminars\?view=my' \}/);
+  assert.match(cta, /useRouter/);
+  assert.match(cta, /router\.replace\(redirectTo\)/);
+});
+
+test('registered profiles do not get a redundant management box on seminar detail pages', () => {
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.doesNotMatch(detailPage, /Manage in My Seminars/);
+  assert.doesNotMatch(detailPage, /Your registration:/);
+  assert.match(detailPage, /alreadyRegistered \? null/);
+});
