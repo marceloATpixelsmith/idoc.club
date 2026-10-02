@@ -9,7 +9,7 @@ import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
 import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 
-export type MemberSeminarState = { error?: string; success?: string };
+export type MemberSeminarState = { error?: string; success?: string; redirectTo?: string };
 const KNOWN_ERROR_NAMES = ['AuthorizationError', 'CsrfError', 'SeminarRegistrationError'];
 
 async function runOwnProfileRegistration(formData: FormData, register: (seminarId: unknown, paymentMethod: unknown) => Promise<{ paymentMethod: string; registrationId: number }>): Promise<MemberSeminarState> {
@@ -27,9 +27,8 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
   }
   revalidatePath('/dashboard/seminars');
   revalidatePath('/seminars');
-  revalidatePath(`/seminars/${String(seminarId)}`);
   if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
-    redirect('/seminars?view=my');
+    return { redirectTo: '/seminars?view=my' };
   }
   let checkoutUrl: string;
   try {

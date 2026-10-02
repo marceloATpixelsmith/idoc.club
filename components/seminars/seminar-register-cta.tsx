@@ -30,6 +30,10 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   const [memberState, memberAction, memberPending] = useActionState<MemberSeminarState, FormData>(registerForSeminarAction, {});
   const [nonMemberState, nonMemberAction, nonMemberPending] = useActionState<MemberSeminarState, FormData>(registerAtNonMemberPriceAction, {});
   useEffect(() => { if (guestCheckoutState.error) setGuestTurnstileToken(''); }, [guestCheckoutState]);
+  useEffect(() => {
+    const redirectTo = memberState.redirectTo ?? nonMemberState.redirectTo;
+    if (redirectTo) window.location.replace(redirectTo);
+  }, [memberState.redirectTo, nonMemberState.redirectTo]);
   const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
   const knownVisitor = hasProfile || isSignedIn;
 
