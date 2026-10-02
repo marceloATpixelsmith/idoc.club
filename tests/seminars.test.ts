@@ -614,3 +614,39 @@ test('guest success flash suppresses the Register box completely', () => {
   assert.match(detailPage, /guestRegistrationJustCompleted = flash === 'seminar-registration-success'/);
   assert.match(detailPage, /alreadyRegistered \|\| guestRegistrationJustCompleted \? null/);
 });
+
+
+test('My Seminars keeps payment status compact and never renders bank instructions', () => {
+  const source = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  assert.doesNotMatch(source, /sanitizeBankInstructions/);
+  assert.doesNotMatch(source, /getSeminarPaymentMethodInstructions/);
+  assert.doesNotMatch(source, /Your registration:/);
+  assert.match(source, /Payment Method:/);
+  assert.match(source, /Bank Transfer/);
+  assert.match(source, /Cash/);
+  assert.match(source, /\(paid\)/);
+  assert.match(source, /expected_amount_cents/);
+});
+
+test('My Seminars cancel action uses the same subtle table-control styling as admin filters', () => {
+  const source = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  const form = readFileSync('components/seminars/seminar-form.tsx', 'utf8');
+  assert.match(source, /buttonTableControl/);
+  assert.match(source, /border-dashed/);
+  assert.match(form, /data-idoc-table-control/);
+});
+
+test('all seminar Register CTAs carry the outgoing arrow icon', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  const guestForm = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.match(cta, /ArrowUpRight/);
+  assert.match(cta, /Register <ArrowUpRight/);
+  assert.match(cta, /Register as a guest <ArrowUpRight/);
+  assert.match(guestForm, /Register <ArrowUpRight/);
+});
+
+test('seminar confirmation email renders full spelled-out calendar dates', () => {
+  const source = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  assert.match(source, /formatDate\(dateOnly\(seminar\.start_date\)\)/);
+  assert.match(source, /Registration deadline: \$\{escapeHtml\(formatDate\(dateOnly\(seminar\.registration_deadline\)\)\)\}/);
+});
