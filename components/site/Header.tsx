@@ -37,7 +37,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function navClassName(active: boolean) {
-  return `text-base font-medium uppercase tracking-[0.08em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
+  return `text-[0.8rem] font-medium uppercase tracking-[0.14em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
 }
 
 /** Shared hover/click dropdown shell for a top-level nav item with subpages -- used for both "About
@@ -76,7 +76,7 @@ function NavDropdown({
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`block px-5 py-3 text-base font-medium uppercase tracking-[0.08em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+                  className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
                 >
                   {item.label}
                 </Link>
@@ -178,7 +178,7 @@ export function Header({
             <Suspense fallback={<div className="h-9" />}>
               <AuthenticatedUserMenu
                 showAdminDashboard={showAdminDashboard}
-                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-base font-semibold uppercase tracking-[0.08em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
               />
             </Suspense>
           </div>
@@ -201,13 +201,13 @@ export function Header({
                 <Link
                   href="/"
                   onClick={() => setOpen(false)}
-                  className="block py-2 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                 >
                   Home
                 </Link>
               </li>
               <li className="pt-2">
-                <p className="px-1 py-1 text-base font-semibold uppercase tracking-[0.08em] text-gold">
+                <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                   About IDOC
                 </p>
                 <ul className="flex flex-col">
@@ -216,7 +216,7 @@ export function Header({
                       <Link
                         href={item.href}
                         onClick={() => setOpen(false)}
-                        className="block py-2 pl-3 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                        className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                       >
                         {item.label}
                       </Link>
@@ -229,7 +229,7 @@ export function Header({
                   <Link
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                   >
                     {item.label}
                   </Link>
@@ -238,7 +238,7 @@ export function Header({
               {signedIn && (
                 entitled ? (
                   <li className="pt-2">
-                    <p className="px-1 py-1 text-base font-semibold uppercase tracking-[0.08em] text-gold">
+                    <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                       My IDOC
                     </p>
                     <ul className="flex flex-col">
@@ -247,7 +247,7 @@ export function Header({
                           <Link
                             href={item.href}
                             onClick={() => setOpen(false)}
-                            className="block py-2 pl-3 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                            className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                           >
                             {item.label}
                           </Link>
@@ -260,7 +260,7 @@ export function Header({
                     <Link
                       href="/dashboard/membership"
                       onClick={() => setOpen(false)}
-                      className="block py-2 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                      className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                     >
                       My IDOC
                     </Link>
@@ -272,7 +272,7 @@ export function Header({
                   <Link
                     href={contactLink.href}
                     onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                   >
                     {contactLink.label}
                   </Link>
@@ -284,7 +284,7 @@ export function Header({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 py-2 text-sm uppercase tracking-[0.08em] text-muted-foreground"
+                  className="flex items-center gap-2 py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                 >
                   <Facebook className="size-4" />
                   Facebook
@@ -296,7 +296,7 @@ export function Header({
                     <AuthenticatedUserMenu
                       showAdminDashboard={showAdminDashboard}
                       onNavigate={() => setOpen(false)}
-                      loggedOut={loggedOut ?? <MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.08em] text-gold" />}
+                      loggedOut={loggedOut ?? <MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />}
                     />
                   </Suspense>
                 </div>

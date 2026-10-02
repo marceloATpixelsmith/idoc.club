@@ -26,7 +26,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
           <ul className="divide-y divide-border border-t border-border">
             {rows.map((item) => (
               <li className="py-10" key={String(item.slug)}>
-                <p className="text-base uppercase tracking-[0.18em] text-gold">
+                <p className="text-xs uppercase tracking-[0.18em] text-gold">
                   {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
                 <h2 className="mt-4 text-3xl leading-snug">

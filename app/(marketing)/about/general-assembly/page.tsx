@@ -27,7 +27,7 @@ export default function GeneralAssemblyPage() {
         <ul className="space-y-6">
           {generalAssemblyEditions.map((e) => (
             <li key={`${e.place}-${e.dates}`} className="card-midnight p-8">
-              <p className="text-base uppercase tracking-[0.18em] text-gold">
+              <p className="text-xs uppercase tracking-[0.18em] text-gold">
                 {e.place}
               </p>
               <h2 className="mt-3 font-display text-2xl">{e.dates}</h2>

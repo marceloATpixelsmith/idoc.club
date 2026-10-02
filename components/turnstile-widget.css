@@ -20,7 +20,7 @@
   padding: 8px 12px;
   border-radius: 6px;
   background: oklch(0.6 0.21 25 / 16%);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   /* --auth-error-color (brighter, tuned for the dark auth-shell background) is only defined
    * within .idoc-auth-shell; a caller outside that scope (e.g. the contact page) falls back to

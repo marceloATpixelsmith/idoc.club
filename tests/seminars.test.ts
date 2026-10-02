@@ -308,13 +308,13 @@ test('Available Seminars is one flat list (open, full, or closed together, not s
   assert.match(availableBlock as string, /AvailabilityTag/);
 });
 
-test('both the member catalog and the signed-out public catalog show an already-ended, published seminar under a white "Past seminars" heading', () => {
+test('both the member catalog and the signed-out public catalog show an already-ended, published seminar under a "Past seminars" section-label heading', () => {
   assert.match(memberPage, /listPastPublishedSeminars/);
   const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
   const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
   for (const block of [availableBlock, publicBlock]) {
     assert.ok(block, 'catalog block not found');
-    assert.match(block as string, /<h3 className="text-lg font-semibold text-foreground">Past seminars<\/h3>/);
+    assert.match(block as string, /<h3 className="section-label">Past seminars<\/h3>/);
   }
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
   assert.match(registrationsSource, /s\.status='published' and s\.end_date < current_date/);
