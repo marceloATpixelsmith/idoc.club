@@ -207,9 +207,10 @@ test('the CSV export route exposes only the documented columns, including guest 
   assert.doesNotMatch(exportRoute, /stripe_payment_intent_id|stripe_checkout_session_id|password|marked_paid_by_user_id/);
 });
 
-test('bank transfer instructions are rendered only from the pre-sanitized organization-wide field, re-sanitized again before render', () => {
-  assert.match(memberPage, /sanitizeBankInstructions/);
-  assert.match(memberPage, /dangerouslySetInnerHTML/);
+test('My Seminars never renders bank-transfer instructions in the registration listing', () => {
+  assert.doesNotMatch(memberPage, /sanitizeBankInstructions/);
+  assert.doesNotMatch(memberPage, /dangerouslySetInnerHTML/);
+  assert.match(memberPage, /Payment Method:/);
 });
 
 
