@@ -11,7 +11,6 @@ import { sendTransactionalEmail } from './brevo-transactional';
 import { emailButton, emailInfoCard, emailInfoRow, emailNoticeCard, escapeHtml, IDOC_EMAIL_ICONS, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
 import { formatDate } from '@/lib/format';
-import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
 const GRACE_EXPIRY_BATCH_LIMIT = 500;
@@ -206,7 +205,12 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
   }
 
   const greeting = payload.firstName ? `Hello ${escapeHtml(payload.firstName)},` : 'Hello,';
-  const membershipUrl = new URL('/dashboard/membership', baseUrlForServer()).toString();
+  // Notification delivery must not depend on privileged runtime configuration just to render an
+  // email. Production/staging use BASE_URL when present; isolated workers/tests retain a safe,
+  // absolute public fallback rather than failing the delivery before the provider call.
+  const membershipUrl = process.env.BASE_URL?.trim()
+    ? new URL('/dashboard/membership', process.env.BASE_URL).toString()
+    : 'https://idoc.club/dashboard/membership';
   const amount = `€${((payload.amountCents ?? 0) / 100).toFixed(2)}`;
 
   const membershipIntro = (message: string) =>
