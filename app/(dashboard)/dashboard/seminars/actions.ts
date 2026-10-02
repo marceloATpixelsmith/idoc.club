@@ -27,7 +27,6 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
   }
   revalidatePath('/dashboard/seminars');
   revalidatePath('/seminars');
-  revalidatePath(`/seminars/${String(seminarId)}`);
   if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
     return { redirectTo: '/seminars?view=my' };
   }
