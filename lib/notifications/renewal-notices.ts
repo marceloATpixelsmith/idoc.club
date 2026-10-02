@@ -10,6 +10,7 @@ import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_E
 import { sendTransactionalEmail } from './brevo-transactional';
 import { escapeHtml, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
+import { formatDate } from '@/lib/format';
 
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
 const GRACE_EXPIRY_BATCH_LIMIT = 500;
