@@ -311,9 +311,23 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 
 @utility eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/*
+ * List-section label ("Available seminars", "Past seminars"): a small, wide-tracked
+ * uppercase gold heading that sits clearly above the card titles and the muted
+ * uppercase meta lines beneath them, without competing with them in size.
+ */
+@utility section-label {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--gold);
 }

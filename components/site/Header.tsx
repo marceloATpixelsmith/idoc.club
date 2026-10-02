@@ -76,7 +76,7 @@ function NavDropdown({
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+                  className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
                 >
                   {item.label}
                 </Link>
@@ -178,7 +178,7 @@ export function Header({
             <Suspense fallback={<div className="h-9" />}>
               <AuthenticatedUserMenu
                 showAdminDashboard={showAdminDashboard}
-                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
               />
             </Suspense>
           </div>
@@ -207,7 +207,7 @@ export function Header({
                 </Link>
               </li>
               <li className="pt-2">
-                <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                   About IDOC
                 </p>
                 <ul className="flex flex-col">
@@ -238,7 +238,7 @@ export function Header({
               {signedIn && (
                 entitled ? (
                   <li className="pt-2">
-                    <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                    <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                       My IDOC
                     </p>
                     <ul className="flex flex-col">

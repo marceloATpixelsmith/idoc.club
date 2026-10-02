@@ -76,7 +76,7 @@ export default function AboutPage() {
         <ul className="mt-10 divide-y divide-border border-y border-border">
           {aboutMilestones.map((m) => (
             <li key={m.date} className="grid gap-3 py-6 sm:grid-cols-[14rem_1fr]">
-              <p className="text-[0.72rem] uppercase tracking-[0.16em] text-gold">
+              <p className="text-xs uppercase tracking-[0.16em] text-gold">
                 {m.date}
               </p>
               <p className="text-sm leading-relaxed text-muted-foreground">{m.text}</p>

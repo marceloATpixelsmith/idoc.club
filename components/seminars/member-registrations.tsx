@@ -65,11 +65,11 @@ async function AvailableSeminars({ profileId, showBothPrices }: { profileId: num
   );
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
-    <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
+    <h2 className="section-label" id="available-seminars-heading">Available seminars</h2>
     {upcoming.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars available to you.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
-        <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
+        <h3 className="section-label">Past seminars</h3>
         <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}
@@ -135,11 +135,11 @@ export async function PublicSeminarsCatalog() {
   );
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
-    <h2 className="text-2xl" id="available-seminars-heading">Available seminars</h2>
+    <h2 className="section-label" id="available-seminars-heading">Available seminars</h2>
     {seminars.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars scheduled at this time.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
-        <h3 className="text-lg font-semibold text-foreground">Past seminars</h3>
+        <h3 className="section-label">Past seminars</h3>
         <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
       </div>
     ) : null}

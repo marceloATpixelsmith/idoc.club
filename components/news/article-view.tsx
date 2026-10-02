@@ -9,7 +9,7 @@ export function ArticleView({ contentHtml, publicationDate, subtitle, title }: {
 }) {
   return (
     <article className="mx-auto max-w-3xl px-5 py-12 lg:px-8">
-      <p className="text-[0.68rem] uppercase tracking-[0.18em] text-gold">
+      <p className="text-xs uppercase tracking-[0.18em] text-gold">
         {new Date(publicationDate).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
       </p>
       <h1 className="mt-4 text-4xl leading-tight lg:text-5xl">{title}</h1>
