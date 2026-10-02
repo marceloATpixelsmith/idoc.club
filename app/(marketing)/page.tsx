@@ -53,7 +53,7 @@ export default async function Home() {
               ) : recentNews.map((item) => (
                 <Link key={String(item.slug)} href={`/news/${item.slug}`}>
                   <article className="card-midnight p-7">
-                    <p className="text-base uppercase tracking-[0.18em] text-muted-foreground">
+                    <p className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
                       {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                     <h3 className="mt-4 text-2xl leading-snug">{String(item.title)}</h3>
@@ -112,7 +112,7 @@ export default async function Home() {
         <div className="mt-10 grid gap-6 lg:grid-cols-3">
           {blogPosts.map((post) => (
             <article key={post.slug} className="card-midnight flex flex-col p-7">
-              <p className="text-base uppercase tracking-[0.18em] text-gold">
+              <p className="text-[0.68rem] uppercase tracking-[0.18em] text-gold">
                 {post.date}
               </p>
               <h3 className="mt-4 text-2xl leading-snug">{post.title}</h3>

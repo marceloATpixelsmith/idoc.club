@@ -286,7 +286,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
                 <p className="text-xs text-muted-foreground">
                   {autocompleteAvailable ? 'Choose a suggestion to fill Address 2, city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
                 </p>
-                <p className="mt-0.5 text-right text-base text-gray-400">
+                <p className="mt-0.5 text-right text-[10px] text-gray-400">
                   <a className="underline decoration-gray-300 underline-offset-2" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
                 </p>
               </div>

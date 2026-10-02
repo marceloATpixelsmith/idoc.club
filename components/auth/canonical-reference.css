@@ -135,7 +135,7 @@
 
 .idoc-auth-label {
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 1rem;
+  font-size: 0.68rem;
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.18em;
@@ -193,7 +193,7 @@
   align-items: center;
   gap: 4px;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--auth-instruction-color);
   text-align: center;
 }
@@ -205,7 +205,7 @@
   border-radius: 6px;
   background: var(--surface);
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
   color: var(--auth-input-color);
@@ -260,7 +260,7 @@
 .idoc-auth-recovery-codes__copy-status {
   margin: 0;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
   color: var(--auth-primary-color);
@@ -286,7 +286,7 @@
 
 .idoc-auth-recovery-codes__item code {
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
   color: var(--auth-input-color);
@@ -326,7 +326,7 @@
   padding: 8px 12px;
   border-radius: 6px;
   background: oklch(0.6 0.21 25 / 16%);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--auth-error-color);
 }
@@ -340,7 +340,7 @@
   justify-content: center;
   border-radius: 10px;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 1rem;
+  font-size: 0.75rem;
   line-height: 1.5;
   font-weight: 700;
   text-transform: uppercase;
@@ -414,7 +414,7 @@
 
 .idoc-auth-link {
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
   color: var(--auth-link-color);
@@ -441,7 +441,7 @@
 
 .idoc-auth-divider__label {
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
   color: var(--auth-instruction-color);
@@ -563,7 +563,7 @@
   border: 1px solid var(--input);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   list-style: none;
 }
@@ -618,7 +618,7 @@
 
 .idoc-auth-resend {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--auth-instruction-color);
   text-align: center;
@@ -647,7 +647,7 @@
 .idoc-auth-shell__legal {
   margin: 0;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.6;
   color: var(--auth-terms-color);
