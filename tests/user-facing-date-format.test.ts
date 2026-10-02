@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatDate, formatDateTime } from '../lib/format.ts';
 
 test('formatDate spells out end-user calendar dates without timezone drift', () => {
   assert.equal(formatDate('2026-10-20'), 'October 20, 2026');
