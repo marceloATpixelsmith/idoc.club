@@ -18,7 +18,11 @@ after(closeHarness);
 // atomic and graph-preserving; these tests prove the issuance side those tests never exercise.
 
 function capturedToken(html: string): string {
-  return new URL(html.match(/href="([^"]+)"/)![1]).searchParams.get('token')!;
+  const href = html.match(/href="([^"]*token=[^"]+)"/)![1]
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  return new URL(href).searchParams.get('token')!;
 }
 
 test('issuing an email change for an active member does not mutate the email until the token is consumed, and the full round trip commits only the email', async () => {
