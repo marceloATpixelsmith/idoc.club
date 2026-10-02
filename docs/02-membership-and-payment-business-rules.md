@@ -279,7 +279,7 @@ Existing migrated users should encounter an account-access/activation flow, not 
 
 ## 11.1 Transactional email presentation
 
-All user-facing transactional emails sent through Brevo use the shared IDOC email presentation layer unless a message has a deliberately richer, purpose-specific body. The shared presentation uses the white IDOC logo, the site's dark-blue email background/card palette, IDOC gold headings and accents, white body text, and Barlow as the preferred typeface with email-safe fallbacks.
+All user-facing transactional emails sent through Brevo use the shared IDOC email presentation layer unless a message has a deliberately richer, purpose-specific body. The shared presentation uses the white IDOC logo, the site's dark-blue email background/card palette, IDOC gold headings and accents, white body text, and Barlow as the preferred typeface with email-safe fallbacks. Shared gold CTA buttons use one canonical pill-shaped rounded treatment with Barlow typography and uppercase labels. Decorative icons or arrows are not part of the default shared button and are added only when a specific email design calls for them.
 
 Authentication, account-access, and account-security notices use the shared branded shell with concise purpose-specific content.
 
