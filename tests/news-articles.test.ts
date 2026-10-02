@@ -101,6 +101,7 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.doesNotMatch(clean, /javascript:/);
   assert.doesNotMatch(clean, /<img/);
   assert.match(clean, /<strong>world<\/strong>/);
+  assert.equal(sanitizeArticleContent('<h1>Heading</h1><p><u>under</u> <s>strike</s></p>'), '<h1>Heading</h1><p><u>under</u> <s>strike</s></p>');
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
 });
 
