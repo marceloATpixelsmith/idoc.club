@@ -4,7 +4,7 @@ import { EMAIL_OTP_SUBJECTS, renderEmailOtpHtml, type EmailOtpPurpose } from '@/
 import { AUTH_SECURITY_CONTENT } from '@/lib/notifications/auth-security-delivery';
 import { AUTH_SECURITY_KINDS } from '@/lib/notifications/auth-security-events';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { emailButton, escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { emailButton, escapeHtml, renderGuestSeminarRefundEmail, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { renderNotice } from '@/lib/notifications/renewal-notices';
 import { seminarRegistrationConfirmationBodyHtml, type SeminarEmailDetails } from '@/lib/seminars/registrations';
 import { formatDateTime } from '@/lib/format';
@@ -36,7 +36,8 @@ const SEMINAR_PREVIEWS = [
   ['seminar.registration_created', 'Seminar registration confirmation'],
   ['seminar.registration_canceled', 'Seminar registration canceled'],
   ['seminar.payment_confirmed', 'Seminar payment confirmed'],
-  ['seminar.refund_confirmed', 'Seminar refund confirmed'],
+  ['seminar.refund_confirmed', 'Member seminar refund confirmed'],
+  ['seminar.guest_refund_confirmed', 'Guest seminar refund confirmed'],
 ] as const;
 
 export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
@@ -144,6 +145,7 @@ async function renderPreview(id: string): Promise<{ html: string; subject: strin
     return securityPreview(kind);
   }
   if (id === 'seminar.registration_created') return seminarRegistrationPreview();
+  if (id === 'seminar.guest_refund_confirmed') return renderGuestSeminarRefundEmail('Ameyalli');
   if (MEMBERSHIP_PREVIEWS.some(([kind]) => kind === id) || SEMINAR_PREVIEWS.some(([kind]) => kind === id)) {
     return renderNotice(id, {
       amountCents: 18000,
@@ -166,7 +168,21 @@ export async function sendEmailPreview(id: string) {
   });
 }
 
-export async function sendAllEmailPreviews() {
-  for (const preview of EMAIL_PREVIEW_DEFINITIONS) await sendEmailPreview(preview.id);
-  return EMAIL_PREVIEW_DEFINITIONS.length;
+export type EmailPreviewSendResult = {
+  id: string;
+  label: string;
+  status: 'failed' | 'sent';
+};
+
+export async function sendAllEmailPreviews(): Promise<EmailPreviewSendResult[]> {
+  const results: EmailPreviewSendResult[] = [];
+  for (const preview of EMAIL_PREVIEW_DEFINITIONS) {
+    try {
+      await sendEmailPreview(preview.id);
+      results.push({ id: preview.id, label: preview.label, status: 'sent' });
+    } catch {
+      results.push({ id: preview.id, label: preview.label, status: 'failed' });
+    }
+  }
+  return results;
 }
