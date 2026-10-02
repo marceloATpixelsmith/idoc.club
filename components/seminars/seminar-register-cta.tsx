@@ -1,7 +1,6 @@
 'use client';
 
 import { useActionState, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { startGuestSeminarStripeCheckoutAction, type GuestStripeCheckoutState } from '@/app/(marketing)/seminars/actions';
 import { registerAtNonMemberPriceAction, registerForSeminarAction, type MemberSeminarState } from '@/app/(dashboard)/dashboard/seminars/actions';
 import Link from 'next/link';
@@ -23,7 +22,6 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>;
   seminarId: number;
 }) {
-  const router = useRouter();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [guestPaymentMethod, setGuestPaymentMethod] = useState<string | null>(null);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
@@ -34,8 +32,8 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
   useEffect(() => { if (guestCheckoutState.error) setGuestTurnstileToken(''); }, [guestCheckoutState]);
   useEffect(() => {
     const redirectTo = memberState.redirectTo ?? nonMemberState.redirectTo;
-    if (redirectTo) router.replace(redirectTo);
-  }, [memberState.redirectTo, nonMemberState.redirectTo, router]);
+    if (redirectTo) window.location.replace(redirectTo);
+  }, [memberState.redirectTo, nonMemberState.redirectTo]);
   const hasProfile = Boolean(memberDetails) || Boolean(ownProfileDetails);
   const knownVisitor = hasProfile || isSignedIn;
 
