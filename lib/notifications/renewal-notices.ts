@@ -8,7 +8,7 @@ import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from 
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './brevo-transactional';
-import { escapeHtml, renderTransactionalEmail } from './email-template';
+import { emailButton, emailInfoCard, emailInfoRow, emailNoticeCard, escapeHtml, IDOC_EMAIL_ICONS, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
 import { formatDate } from '@/lib/format';
 
@@ -177,11 +177,8 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
 
 async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created' || kind === STAGING_SEMINAR_CONFIRMATION_KIND) {
-    // The outbox payload is the immutable snapshot of the registration cycle being confirmed.
-    // Member and guest producers both enqueue the same fields, so delayed/retried delivery must not
-    // reread mutable payment/name fields from a registration row that may since have been canceled
-    // and re-used for a later cycle. Only seminar identity may be recovered from the durable row for
-    // older queued records that predate seminarId in the payload.
+    // Registration confirmations retain their detailed seminar-specific design while sharing the
+    // same outer IDOC brand shell used by every transactional email.
     let seminarId = payload.seminarId;
     if (!seminarId && payload.registrationId) {
       const [registration] = await db.select({ seminarId: seminarRegistrations.seminarId })
@@ -206,53 +203,158 @@ async function renderNotice(kind: string, payload: NoticePayload): Promise<{ htm
       subject: 'Your IDOC seminar registration',
     };
   }
-  // firstName is member-supplied free text (lib/membership/validation.ts's memberProfileSchema
-  // allows any character up to 100 chars, not an HTML-safe allowlist), so it must be escaped before
-  // interpolation into this HTML email body -- matching every other template call site that
-  // interpolates a user-supplied value (breached-password-alert.ts, bounce-complaint-alert.ts).
+
   const greeting = payload.firstName ? `Hello ${escapeHtml(payload.firstName)},` : 'Hello,';
-  const { bodyHtml, heading, subject } = (() => {
+  // Notification delivery must not depend on privileged runtime configuration just to render an
+  // email. Production/staging use BASE_URL when present; isolated workers/tests retain a safe,
+  // absolute public fallback rather than failing the delivery before the provider call.
+  const membershipUrl = process.env.BASE_URL?.trim()
+    ? new URL('/dashboard/membership', process.env.BASE_URL).toString()
+    : 'https://idoc.club/dashboard/membership';
+  const amount = `€${((payload.amountCents ?? 0) / 100).toFixed(2)}`;
+
+  const membershipIntro = (message: string) =>
+    `<p style="margin:0 0 18px;">${greeting}</p><p style="margin:0 0 18px;">${message}</p>`;
+
+  const { bodyHtml, footerNote, heading, subject } = (() => {
     switch (kind) {
-      case 'membership.renewal_reminder':
+      case 'membership.renewal_reminder': {
+        const renewalDate = formatDate(payload.renewalDate);
         return {
-          bodyHtml: `Your IDOC membership will renew automatically on ${formatDate(payload.renewalDate)}. No action is needed — you can manage your payment method or turn off automatic renewal any time from your account.`,
+          bodyHtml:
+            membershipIntro('This is a reminder that your IDOC membership is set to renew automatically. No action is required if you would like your membership to continue.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.calendar, 'Renewal date', renewalDate) +
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Renewal', 'Automatic renewal is enabled'),
+            ) +
+            emailNoticeCard('What happens next', '<p style="margin:0;">Your saved payment method will be charged on the renewal date. You can review your membership, update your payment method, or turn off automatic renewal from your account before then.</p>') +
+            emailButton(membershipUrl, 'Manage membership'),
+          footerNote: 'This is a transactional notice about your IDOC membership.',
           heading: 'Your membership renews automatically soon',
           subject: 'Your IDOC membership renews automatically soon',
         };
-      case 'membership.expiration_reminder':
+      }
+
+      case 'membership.expiration_reminder': {
+        const expirationDate = formatDate(payload.expirationDate);
         return {
-          bodyHtml: `Your IDOC membership expires on ${formatDate(payload.expirationDate)}. Renew before then to keep your access.`,
+          bodyHtml:
+            membershipIntro('Your current IDOC membership term is approaching its end and is not scheduled to renew automatically.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.deadline, 'Membership expires', expirationDate) +
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Renewal status', 'Automatic renewal is not active'),
+            ) +
+            emailNoticeCard('Keep your access', '<p style="margin:0;">Renew before the expiration date to keep uninterrupted access to member features and resources.</p>') +
+            emailButton(membershipUrl, 'Renew membership'),
+          footerNote: 'This is a transactional notice about your IDOC membership.',
           heading: 'Your membership is expiring soon',
           subject: 'Your IDOC membership is expiring soon',
         };
-      case 'membership.payment_failed':
+      }
+
+      case 'membership.payment_failed': {
+        const graceEndDate = formatDate(payload.graceEndDate);
         return {
-          bodyHtml: `We were unable to process your automatic IDOC membership renewal. You remain active through ${formatDate(payload.graceEndDate)} while payment is retried — please update your payment method to avoid an interruption.`,
+          bodyHtml:
+            membershipIntro('We were unable to process the automatic renewal payment for your IDOC membership. Your membership remains active temporarily while the payment is retried.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Payment status', 'Renewal payment unsuccessful') +
+              emailInfoRow(IDOC_EMAIL_ICONS.deadline, 'Access protected through', graceEndDate),
+            ) +
+            emailNoticeCard('Action recommended', '<p style="margin:0;">Please review or update your payment method as soon as possible. If payment cannot be completed before the grace period ends, your membership access will expire.</p>') +
+            emailButton(membershipUrl, 'Update payment method'),
+          footerNote: 'If you recently updated your payment method, no further action may be necessary while the renewal is retried.',
           heading: 'We could not process your renewal',
           subject: "We couldn't process your IDOC membership renewal",
         };
-      case 'membership.grace_reminder':
+      }
+
+      case 'membership.grace_reminder': {
+        const graceEndDate = formatDate(payload.graceEndDate);
         return {
-          bodyHtml: `Your IDOC membership will expire on ${formatDate(payload.graceEndDate)} unless your payment method is updated before then.`,
+          bodyHtml:
+            membershipIntro('Your IDOC membership is currently in its payment grace period because the renewal payment has not been completed.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.deadline, 'Grace period ends', graceEndDate) +
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Payment status', 'Action required'),
+            ) +
+            emailNoticeCard('Avoid an interruption', '<p style="margin:0;">Update your payment method before the grace period ends so your membership can renew and your member access can continue without interruption.</p>') +
+            emailButton(membershipUrl, 'Update payment method'),
+          footerNote: 'This is a transactional notice about your IDOC membership.',
           heading: 'Action needed: update your payment method',
           subject: 'Action needed: update your IDOC payment method',
         };
-      case 'seminar.registration_canceled':
-        return { bodyHtml: 'Your seminar registration was canceled. Cancellation does not automatically refund a payment.', heading: 'Seminar registration canceled', subject: 'Your IDOC seminar cancellation' };
-      case 'seminar.payment_confirmed':
-        return { bodyHtml: `Your seminar payment of €${((payload.amountCents ?? 0) / 100).toFixed(2)} was confirmed.`, heading: 'Seminar payment confirmed', subject: 'Your IDOC seminar payment' };
-      case 'seminar.refund_confirmed':
-        return { bodyHtml: `Your approved full seminar refund of €${((payload.amountCents ?? 0) / 100).toFixed(2)} was confirmed.`, heading: 'Seminar refund confirmed', subject: 'Your IDOC seminar refund' };
+      }
+
       case 'membership.grace_expired':
-      default:
         return {
-          bodyHtml: 'Your IDOC membership has expired because payment could not be completed. You can renew any time to restore your access.',
+          bodyHtml:
+            membershipIntro('Your IDOC membership has expired because the renewal payment could not be completed before the grace period ended.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.deadline, 'Membership status', 'Expired') +
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Next step', 'Renew to restore access'),
+            ) +
+            emailNoticeCard('You can return at any time', '<p style="margin:0;">Your account has not been deleted. Renew your membership whenever you are ready to restore member access.</p>') +
+            emailButton(membershipUrl, 'Renew membership'),
+          footerNote: 'This is a transactional notice about your IDOC membership.',
           heading: 'Your membership has expired',
           subject: 'Your IDOC membership has expired',
         };
+
+      case 'seminar.registration_canceled':
+        return {
+          bodyHtml:
+            `<p style="margin:0 0 18px;">${greeting}</p><p style="margin:0 0 18px;">Your IDOC seminar registration has been canceled.</p>` +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.calendar, 'Registration status', 'Canceled'),
+            ) +
+            emailNoticeCard('Payment note', '<p style="margin:0;">Canceling a registration does not automatically mean a payment has been refunded. If a refund is due, you will receive a separate confirmation when it has been processed.</p>'),
+          footerNote: 'Keep this email for your records.',
+          heading: 'Seminar registration canceled',
+          subject: 'Your IDOC seminar cancellation',
+        };
+
+      case 'seminar.payment_confirmed':
+        return {
+          bodyHtml:
+            `<p style="margin:0 0 18px;">${greeting}</p><p style="margin:0 0 18px;">We have recorded your seminar payment successfully.</p>` +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Payment received', amount) +
+              emailInfoRow(IDOC_EMAIL_ICONS.calendar, 'Registration status', 'Payment confirmed'),
+            ) +
+            emailNoticeCard('No further payment action needed', '<p style="margin:0;">Your payment is recorded against your seminar registration. Keep this confirmation for your records.</p>'),
+          footerNote: 'This email confirms a payment recorded for an IDOC seminar registration.',
+          heading: 'Seminar payment confirmed',
+          subject: 'Your IDOC seminar payment',
+        };
+
+      case 'seminar.refund_confirmed':
+        return {
+          bodyHtml:
+            `<p style="margin:0 0 18px;">${greeting}</p><p style="margin:0 0 18px;">Your approved seminar refund has been processed.</p>` +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Refund amount', amount) +
+              emailInfoRow(IDOC_EMAIL_ICONS.calendar, 'Refund status', 'Confirmed'),
+            ) +
+            emailNoticeCard('When you will see the funds', '<p style="margin:0;">The time it takes for a refund to appear depends on the original payment method and financial institution. Please keep this confirmation for your records.</p>'),
+          footerNote: 'This email confirms an approved refund for an IDOC seminar registration.',
+          heading: 'Seminar refund confirmed',
+          subject: 'Your IDOC seminar refund',
+        };
+
+      default:
+        throw new Error(`Unsupported notification kind: ${kind}`);
     }
   })();
-  return { html: renderTransactionalEmail({ bodyHtml: `<p>${greeting}</p><p>${bodyHtml}</p>`, heading }), subject };
+
+  return {
+    html: renderTransactionalEmail({
+      bodyHtml,
+      footerNote,
+      heading,
+    }),
+    subject,
+  };
 }
 
 export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
