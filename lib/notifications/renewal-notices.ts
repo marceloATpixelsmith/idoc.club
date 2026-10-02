@@ -29,7 +29,7 @@ const RENEWAL_NOTICE_KINDS = [
   'seminar.refund_confirmed',
 ] as const;
 
-type NoticePayload = {
+export type NoticePayload = {
   expirationDate?: string;
   firstName?: string | null;
   graceEndDate?: string;
@@ -175,7 +175,7 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
   return { expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
-async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
+export async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created' || kind === STAGING_SEMINAR_CONFIRMATION_KIND) {
     // Registration confirmations retain their detailed seminar-specific design while sharing the
     // same outer IDOC brand shell used by every transactional email.
