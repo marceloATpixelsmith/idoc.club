@@ -87,6 +87,14 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 Public-facing signup, login-email entry, activation, and password-recovery boundaries must not disclose whether an email belongs to a member or reveal account state before successful credential verification. Rate-limit these requests and keep outward behavior account-existence neutral.
 
+## 5.1 Sitewide privacy and cookie notice
+
+The site currently uses only cookies and similar browser-storage mechanisms that are necessary for authentication, secure sessions, CSRF protection, trusted-device state, fraud/abuse prevention, and requested application features. IDOC does not currently deploy optional analytics, advertising, profiling, or marketing cookies.
+
+A compact sitewide **Privacy & Cookies** notice provides this information without blocking navigation or presenting a consent wall for processing that is strictly necessary to deliver or secure the requested service. The notice links to the public Privacy Policy and may be dismissed. Dismissal is stored only in the visitor's browser using local storage under the key `idoc-privacy-notice-v1`; that acknowledgement is UI state only and is not treated as consent to any optional tracking.
+
+If IDOC later introduces non-essential analytics, advertising, profiling, or similar technologies for which consent is required, those technologies must remain disabled until valid consent is obtained. The consent interface must provide an equally accessible refusal path, avoid pre-selected optional categories, record the consent state sufficiently for compliance evidence, and provide a straightforward mechanism to withdraw or change the choice later.
+
 # 6. Data minimization
 
 - Store only the personal data required for IDOC membership operations.
