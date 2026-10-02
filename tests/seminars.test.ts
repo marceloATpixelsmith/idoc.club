@@ -691,5 +691,5 @@ test('guest registration dialog retains an accessible title and description duri
 test('signed-in visitors without a profile use the same dialog-based manual guest flow', () => {
   const rules = readFileSync('docs/02-membership-and-payment-business-rules.md', 'utf8');
   assert.match(rules, /signed-in visitor with no member profile/i);
-  assert.match(rules, /contact form opens inside the existing registration dialog/i);
+  assert.match(rules, /manual-payment selection opens the guest contact form inside that dialog/i);
 });
