@@ -141,7 +141,7 @@ export function ResourceDataTable({
             ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
-          ? <Link className="font-medium underline" href={`${config.path}/${row.original.id}`}>{row.original.title}</Link>
+          ? <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
             ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4 text-gold" />{row.original.status.toUpperCase()}</span>; })()
             : <span>{row.original[id] ?? '—'}</span>,
@@ -167,6 +167,9 @@ export function ResourceDataTable({
       },
     ];
   }, [config, tableType]);
+  const defaultColumnOrder = tableType === 'seminars'
+    ? ['select', 'title', 'status', 'prices', 'start', 'end', 'deadline', 'registrations', 'actions']
+    : ['select', ...config.columns.map(({ id }) => id), 'actions'];
   const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'start' : 'updated';
   const initialSorting = useMemo(() => {
     try {
@@ -216,7 +219,7 @@ export function ResourceDataTable({
     // filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => String(row.id),
-    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(',') ?? defaultColumnOrder, columnVisibility: initialVisibility, pagination: { pageIndex: page - 1, pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
     startTransition,
