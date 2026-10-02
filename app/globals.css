@@ -81,6 +81,14 @@
   --font-display: var(--font-archivo), "Archivo", system-ui, sans-serif;
   --font-sans: var(--font-barlow), "Barlow", system-ui, sans-serif;
 
+  /* Raise the two smallest shared type steps sitewide so admin metadata, table controls,
+   * captions, and public secondary text remain comfortably readable without inflating
+   * normal body copy or headings. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -311,9 +319,9 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
 
 @utility eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--gold);
 }
