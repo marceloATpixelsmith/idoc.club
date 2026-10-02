@@ -10,7 +10,7 @@ import { countryNameForCode } from '@/lib/membership/countries';
 import { escapeHtml } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
-import { formatLevels } from '@/lib/seminars/format';
+import { formatDate, formatLevels } from '@/lib/seminars/format';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { guestEmailSchema, guestFirstNameSchema, guestLastNameSchema, guestPhoneSchema } from '@/lib/seminars/guest-registration-validation';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
@@ -382,7 +382,7 @@ export async function getSeminarEmailDetails(seminarId: number): Promise<Seminar
 }
 
 export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentConfirmed = false, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentConfirmed?: boolean; paymentMethod: string; seminar: SeminarEmailDetails }) {
-  const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
+  const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? formatDate(dateOnly(seminar.start_date)) : `${formatDate(dateOnly(seminar.start_date))} – ${formatDate(dateOnly(seminar.end_date))}`;
   const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
   const memberPrice = `€${(seminar.member_price_cents / 100).toFixed(2)}`;
   const nonMemberPrice = `€${(seminar.non_member_price_cents / 100).toFixed(2)}`;
@@ -404,7 +404,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Members: ${escapeHtml(memberPrice)} · Non-members: ${escapeHtml(nonMemberPrice)}`)}
     ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
     ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
   </table>`;
 
