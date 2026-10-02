@@ -13,7 +13,8 @@ import { registerAsGuestForSeminarAction, type GuestSeminarState } from '@/app/(
 import { ArrowUpRight } from 'lucide-react';
 
 /** anonymous-only contact form for guest bank-transfer/cash registrations. */
-export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
+export function SeminarRegistrationForm({ embedded = false, paymentMethod, seminarId }: {
+  embedded?: boolean;
   paymentMethod: string;
   seminarId: number;
 }) {
@@ -41,7 +42,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
   const showEmailError = emailTouched && !emailIsValid;
 
   return (
-    <div className="rounded-xl border bg-card p-6 shadow-sm">
+    <div className={embedded ? '' : 'rounded-xl border bg-card p-6 shadow-sm'}>
       <div className="mb-6">
         <h2 className="text-xl font-semibold tracking-tight">Register</h2>
         {!guestState.success ? (
