@@ -43,7 +43,7 @@ export default function BoardMembersPage() {
                 className="aspect-[4/5] w-full object-cover object-top"
               />
               <div className="p-6">
-                <p className="text-[0.68rem] uppercase tracking-[0.18em] text-gold">
+                <p className="text-base uppercase tracking-[0.18em] text-gold">
                   {m.role}
                 </p>
                 <h2 className="mt-3 font-display text-2xl leading-snug">
