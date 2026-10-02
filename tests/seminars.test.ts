@@ -626,6 +626,8 @@ test('My Seminars keeps payment status compact and never renders bank instructio
   assert.match(source, /Cash/);
   assert.match(source, /\(paid\)/);
   assert.match(source, /expected_amount_cents/);
+  assert.match(source, /exceptionalPaymentStatuses/);
+  assert.match(source, /registrationDisplayLabel/);
 });
 
 test('My Seminars cancel action uses the same subtle table-control styling as admin filters', () => {
