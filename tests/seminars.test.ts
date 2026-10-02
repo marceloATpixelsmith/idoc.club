@@ -680,3 +680,16 @@ test('seminar payment-method choices use the same subtle table-control treatment
   assert.match(cta, /rounded-md/);
   assert.match(cta, /font-normal/);
 });
+
+
+test('guest registration dialog retains an accessible title and description during the contact-form step', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /guestPaymentMethod \? \([\s\S]*DialogTitle>Register for this seminar/);
+  assert.match(cta, /DialogDescription>Enter your contact details to complete your seminar registration/);
+});
+
+test('signed-in visitors without a profile use the same dialog-based manual guest flow', () => {
+  const rules = readFileSync('docs/02-membership-and-payment-business-rules.md', 'utf8');
+  assert.match(rules, /signed-in visitors without a member profile/i);
+  assert.match(rules, /contact form opens inside the existing registration dialog/i);
+});
