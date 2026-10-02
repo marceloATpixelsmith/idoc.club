@@ -1,10 +1,10 @@
 /** Server-side allowlist sanitizer for News/Blog rich-text article bodies, following the same
  * regex-strip approach as lib/organization/format.ts's sanitizeBankInstructions but with the wider
- * tag set an article body needs (headings, blockquote, code, links, lists). Active content (script,
+ * tag set shared rich-text fields need (headings, emphasis, blockquote, code, links, lists). Active content (script,
  * style, iframe, object, embed, svg, math), event-handler attributes, and unsafe link schemes are
  * removed unconditionally; every other attribute is dropped except a safe href on <a>. */
 const ALLOWED_TAGS = new Set([
-  'a', 'blockquote', 'br', 'code', 'em', 'h2', 'h3', 'h4', 'hr', 'li', 'ol', 'p', 'pre', 'strong', 'ul',
+  'a', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4', 'hr', 'li', 'ol', 'p', 'pre', 's', 'strong', 'u', 'ul',
 ]);
 
 // A bare `&` is escaped, but one that already starts a real HTML entity (as in a previously-
