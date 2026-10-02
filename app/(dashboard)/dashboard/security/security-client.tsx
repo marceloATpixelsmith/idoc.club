@@ -11,13 +11,13 @@ import { GoogleIdentityCard } from './google-identity-card';
 import { PasswordField } from './password-field';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { SECURITY_ACTIVITY_LABELS } from '@/lib/auth/security-activity';
+import { formatDateTime } from '@/lib/format';
 
 type PasswordState = { error?: string; success?: string };
 type RecoveryState = PasswordState & { recoveryCodes?: string[] };
 type DeleteState = { error?: string; success?: string };
 type ActivityLogEntry = { action: string; id: number; timestamp: string };
 type SecurityClientProps = { currentDeviceRemembered: boolean; currentSessionId: string; hasPassword: boolean; logs: ActivityLogEntry[]; privileged: boolean; sessions: Array<{ absoluteExpiresAt: string; authenticatedAt: string; deviceLabel: string | null; lastActivityAt: string; sessionId: string }>; totpConfigured: boolean };
-const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 export function SecurityClient({ currentDeviceRemembered, currentSessionId, hasPassword, logs, privileged, sessions, totpConfigured }: SecurityClientProps) {
   const [passwordState, passwordAction, isPasswordPending, passwordDialog] = useFreshStepUpAction(updatePassword, {} as PasswordState);
@@ -78,7 +78,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, hasP
         {(logoutOneState.success || logoutOthersState.success) ? <p className="text-sm text-green-400">{logoutOneState.success || logoutOthersState.success}</p> : null}
         {sessions.map((session) => <div className="rounded-md border p-4" key={session.sessionId}>
           <p className="font-medium">{session.sessionId === currentSessionId ? 'Current session' : 'Another session'}{session.deviceLabel ? ` — ${session.deviceLabel}` : ''}</p>
-          <dl className="mt-2 grid gap-1 text-sm text-muted-foreground"><div>Authenticated: {formatDate(session.authenticatedAt)}</div><div>Last activity: {formatDate(session.lastActivityAt)}</div><div>Expires: {formatDate(session.absoluteExpiresAt)}</div></dl>
+          <dl className="mt-2 grid gap-1 text-sm text-muted-foreground"><div>Authenticated: {formatDateTime(session.authenticatedAt)}</div><div>Last activity: {formatDateTime(session.lastActivityAt)}</div><div>Expires: {formatDateTime(session.absoluteExpiresAt)}</div></dl>
           {session.sessionId !== currentSessionId ? <form action={logoutOneAction} className="mt-3"><CsrfField /><input name="sessionId" type="hidden" value={session.sessionId} /><Button disabled={isLogoutOnePending} type="submit" variant="outline">{isLogoutOnePending ? 'Logging out…' : 'Log out this session'}</Button></form> : null}
         </div>)}
         <form action={logoutOthersAction}><CsrfField /><Button disabled={isLogoutOthersPending} type="submit" variant="outline">{isLogoutOthersPending ? 'Logging out…' : 'Log out other sessions'}</Button></form>
@@ -99,7 +99,7 @@ export function SecurityClient({ currentDeviceRemembered, currentSessionId, hasP
                 <tbody>
                   {logs.map((log) => (
                     <tr key={log.id} className="border-b">
-                      <td className="p-2">{formatDate(log.timestamp)}</td>
+                      <td className="p-2">{formatDateTime(log.timestamp)}</td>
                       <td className="p-2">{SECURITY_ACTIVITY_LABELS[log.action] ?? log.action}</td>
                     </tr>
                   ))}

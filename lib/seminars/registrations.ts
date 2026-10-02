@@ -10,7 +10,7 @@ import { countryNameForCode } from '@/lib/membership/countries';
 import { escapeHtml } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
-import { formatLevels } from '@/lib/seminars/format';
+import { formatDate, formatLevels } from '@/lib/seminars/format';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { guestEmailSchema, guestFirstNameSchema, guestLastNameSchema, guestPhoneSchema } from '@/lib/seminars/guest-registration-validation';
 import { computeSeminarAvailability, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type PaymentStatus } from '@/lib/seminars/status';
@@ -93,7 +93,7 @@ async function requireOwnProfileIdRegardlessOfEntitlement(): Promise<{ actorId: 
 
 type SeminarAvailabilityRow = {
   capacity: number; description: string; end_date: string; ends_at: Date | string; id: number; is_fei: boolean; levels: string[]; location: string;
-  member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
+  expected_amount_cents: number | null; member_price_cents: number; non_member_price_cents: number; payment_method_canonical_id: string | null; payment_status: PaymentStatus | null;
   registered_at: Date | string | null; registered_count: number; registration_deadline: Date | string; registration_status: 'canceled' | 'registered' | null;
   start_date: string; status: 'canceled' | 'draft' | 'published'; title: string;
   language: string; organizing_national_federation: string; course_directors: string; participant_profile: string; course_venue_information: string; application: string; accommodation_information: string;
@@ -121,7 +121,7 @@ function withAvailability(row: SeminarAvailabilityRow) {
  * catalog with no registration_status/payment_method_canonical_id attached to any row. */
 export async function listCurrentSeminarsForMember(profileId: number | null) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.end_date,s.location,s.language,s.organizing_national_federation,s.course_directors,s.participant_profile,s.course_venue_information,s.application,s.accommodation_information,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,r.expected_amount_cents,
     (s.end_date + 1)::timestamp ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -140,7 +140,7 @@ export async function listCurrentSeminarsForMember(profileId: number | null) {
 export async function listPastPublishedSeminars() {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.end_date,s.location,s.language,s.organizing_national_federation,s.course_directors,s.participant_profile,s.course_venue_information,s.application,s.accommodation_information,
     s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,
-    null::varchar(40) payment_method_canonical_id,
+    null::varchar(40) payment_method_canonical_id,null::integer expected_amount_cents,
     (s.end_date + 1)::timestamp ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     null::varchar(20) registration_status,null::varchar(30) payment_status,null::timestamptz registered_at
@@ -159,7 +159,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) return null;
   const [row] = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.end_date,s.location,s.language,s.organizing_national_federation,s.course_directors,s.participant_profile,s.course_venue_information,s.application,s.accommodation_information,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,r.expected_amount_cents,
     (s.end_date + 1)::timestamp ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -171,7 +171,7 @@ export async function getSeminarForRegistrant(seminarIdValue: unknown, profileId
 /** "Past" seminars: this member's own registration history only -- not a general public archive. */
 export async function listPastSeminarsForMember(profileId: number) {
   const rows = await client<SeminarAvailabilityRow[]>`select s.id,s.title,s.description,s.start_date,s.end_date,s.location,s.language,s.organizing_national_federation,s.course_directors,s.participant_profile,s.course_venue_information,s.application,s.accommodation_information,
-    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,
+    s.capacity,s.member_price_cents,s.non_member_price_cents,s.registration_deadline,s.status,s.is_fei,s.levels,r.payment_method_canonical_id,r.expected_amount_cents,
     (s.end_date + 1)::timestamp ends_at,
     (select count(*)::int from idoc.seminar_registrations x where x.seminar_id=s.id and x.registration_status='registered') registered_count,
     r.registration_status,r.payment_status,r.registered_at
@@ -382,7 +382,7 @@ export async function getSeminarEmailDetails(seminarId: number): Promise<Seminar
 }
 
 export async function seminarRegistrationConfirmationBodyHtml({ amountCents, firstName, paymentConfirmed = false, paymentMethod, seminar }: { amountCents?: number; firstName: string; paymentConfirmed?: boolean; paymentMethod: string; seminar: SeminarEmailDetails }) {
-  const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? dateOnly(seminar.start_date) : `${dateOnly(seminar.start_date)} – ${dateOnly(seminar.end_date)}`;
+  const dateRange = dateOnly(seminar.start_date) === dateOnly(seminar.end_date) ? formatDate(dateOnly(seminar.start_date)) : `${formatDate(dateOnly(seminar.start_date))} – ${formatDate(dateOnly(seminar.end_date))}`;
   const levels = seminar.levels?.length ? formatLevels(seminar.levels) : '';
   const memberPrice = `€${(seminar.member_price_cents / 100).toFixed(2)}`;
   const nonMemberPrice = `€${(seminar.non_member_price_cents / 100).toFixed(2)}`;
@@ -404,7 +404,7 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, fir
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
     ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Members: ${escapeHtml(memberPrice)} · Non-members: ${escapeHtml(nonMemberPrice)}`)}
     ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(dateOnly(seminar.registration_deadline))}`)}
+    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
     ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
   </table>`;
 

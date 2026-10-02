@@ -5,6 +5,7 @@ import { SupportForm } from '@/components/support/support-form';
 import { AuthorizationError } from '@/lib/membership/authorization';
 import { CATEGORY_LABELS, listOwnConversations, STATUS_LABELS, SUPPORT_CATEGORIES } from '@/lib/support/inbox';
 import { createSupportConversation } from './actions';
+import { formatDateTime } from '@/lib/format';
 
 export default async function MemberSupportPage() {
   // listOwnConversations() -> requireSupportMember() already enforces the correct policy (entitled
@@ -32,6 +33,6 @@ export default async function MemberSupportPage() {
         <label className="block">Message<textarea className="mt-1 block min-h-32 w-full rounded border p-2" maxLength={10000} name="body" required /></label>
       </SupportForm>
     </section>
-    <section><h2 className="mb-3 text-lg font-semibold">Your conversations</h2>{conversations.length === 0 ? <p className="text-muted-foreground">You have no support conversations.</p> : <ul className="divide-y rounded-lg border">{conversations.map((row) => <li key={String(row.public_id)}><Link className="block p-4 hover:bg-muted" href={`/dashboard/support/${row.public_id}`}><div className="flex items-center justify-between gap-4"><strong>{String(row.subject)}</strong><span className="text-sm">{STATUS_LABELS[String(row.status)]}</span></div><p className="text-sm text-muted-foreground">{CATEGORY_LABELS[row.category as keyof typeof CATEGORY_LABELS]} · {new Date(String(row.updated_at)).toLocaleString()}{row.unread ? ' · New reply' : ''}</p></Link></li>)}</ul>}</section>
+    <section><h2 className="mb-3 text-lg font-semibold">Your conversations</h2>{conversations.length === 0 ? <p className="text-muted-foreground">You have no support conversations.</p> : <ul className="divide-y rounded-lg border">{conversations.map((row) => <li key={String(row.public_id)}><Link className="block p-4 hover:bg-muted" href={`/dashboard/support/${row.public_id}`}><div className="flex items-center justify-between gap-4"><strong>{String(row.subject)}</strong><span className="text-sm">{STATUS_LABELS[String(row.status)]}</span></div><p className="text-sm text-muted-foreground">{CATEGORY_LABELS[row.category as keyof typeof CATEGORY_LABELS]} · {formatDateTime(String(row.updated_at))}{row.unread ? ' · New reply' : ''}</p></Link></li>)}</ul>}</section>
   </div>;
 }
