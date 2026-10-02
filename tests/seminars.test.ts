@@ -652,3 +652,13 @@ test('seminar confirmation email renders full spelled-out calendar dates', () =>
   assert.match(source, /formatDate\(dateOnly\(seminar\.start_date\)\)/);
   assert.match(source, /Registration deadline: \$\{escapeHtml\(formatDate\(dateOnly\(seminar\.registration_deadline\)\)\)\}/);
 });
+
+
+test('member manual registration returns My Seminars before any seminar revalidation', () => {
+  const actions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
+  const manualReturn = actions.indexOf("return { redirectTo: '/seminars?view=my' }");
+  const seminarRevalidation = actions.indexOf("revalidatePath('/seminars')");
+  assert.ok(manualReturn >= 0, 'manual member registration must return a My Seminars target');
+  assert.ok(seminarRevalidation >= 0, 'seminar revalidation should still exist for non-manual paths');
+  assert.ok(manualReturn < seminarRevalidation, 'manual registration redirect must be returned before revalidation can unmount the CTA');
+});
