@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cancelPendingRenewalAction, disableAutomaticRenewalAction, enableAutomaticRenewalAction } from '@/lib/payments/actions';
 import { cancelMembershipAction } from './membership-actions';
+import { formatDate } from '@/lib/format';
 
 type Preference = { currentMode: string; effectiveOn: string | null; expectedChargeCents: number | null; pendingMode: string | null } | null;
 type Action = typeof enableAutomaticRenewalAction;
@@ -115,7 +116,7 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
         {renewalDate ? <>
           <dt className="font-semibold text-foreground">Renewal Date</dt>
           <dd className="flex flex-wrap items-center justify-between gap-3 text-foreground">
-            <span>{renewalDate}</span>
+            <span>{formatDate(renewalDate)}</span>
             {showRenew ? <Link href="/api/ui/flash/membership-renew"><Button size="sm">Renew</Button></Link> : null}
           </dd>
         </> : null}
@@ -130,10 +131,10 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
           <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
           <p className="text-xs text-muted-foreground">
             {selection === 'recurring'
-              ? `(Your membership will automatically renew on ${renewalDate}.)`
-              : `(Your membership will expire on ${renewalDate}.)`}
+              ? `(Your membership will automatically renew on ${formatDate(renewalDate)}.)`
+              : `(Your membership will expire on ${formatDate(renewalDate)}.)`}
           </p>
-          {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {preference?.effectiveOn}.</p> : null}
+          {pendingMode ? <p className="text-xs text-muted-foreground">Change takes effect on {formatDate(preference?.effectiveOn ?? undefined)}.</p> : null}
         </fieldset>
       ) : null}
 
