@@ -15,7 +15,7 @@ import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
 import { setUiFlash } from '@/lib/ui/flash-state';
 
 export type GuestSeminarState = {
-  email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string;
+  email?: string; error?: string; fieldErrors?: Partial<Record<'email' | 'firstName' | 'lastName' | 'paymentMethod' | 'phone', string>>; firstName?: string; lastName?: string; phone?: string; success?: string; redirectTo?: string;
 };
 
 const guestSeminarSchema = guestContactSchema.extend({
@@ -68,7 +68,7 @@ export async function registerAsGuestForSeminarAction(_state: GuestSeminarState,
   if (outcome.paymentMethod === 'cash_event' || outcome.paymentMethod === 'bank_transfer') {
     const targetPath = `/seminars/${seminarId}`;
     await setUiFlash('seminar-registration-success', targetPath);
-    redirect(targetPath);
+    return { redirectTo: targetPath };
   }
   let checkoutUrl: string;
   try {
