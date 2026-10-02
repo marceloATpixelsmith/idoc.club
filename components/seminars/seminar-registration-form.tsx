@@ -30,6 +30,7 @@ export function SeminarRegistrationForm({ paymentMethod, seminarId }: {
       setTurnstileToken('');
       setAttempt((value) => value + 1);
     }
+    if (guestState.redirectTo) window.location.replace(guestState.redirectTo);
   }, [guestState]);
 
   const fieldErrors = guestState.fieldErrors;
