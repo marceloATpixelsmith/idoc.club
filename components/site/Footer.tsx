@@ -88,9 +88,10 @@ export async function Footer({ signedIn }: { signedIn: boolean }) {
       <div className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-xs uppercase tracking-[0.16em] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <span>© {new Date().getFullYear()} IDOC — International Dressage Officials Club</span>
-          <a href="https://www.facebook.com" target="_blank" rel="noreferrer" className="hover:text-gold">
-            Facebook
-          </a>
+          <span className="flex flex-wrap gap-x-4 gap-y-2">
+            <Link href="/privacy" className="hover:text-gold">Privacy</Link>
+            <Link href="/terms" className="hover:text-gold">Terms</Link>
+          </span>
         </div>
       </div>
     </footer>
