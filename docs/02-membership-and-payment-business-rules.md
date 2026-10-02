@@ -277,6 +277,18 @@ Existing migrated users should encounter an account-access/activation flow, not 
 
 - Members may opt out of event notifications and marketing email. They may not opt out of account-standing, payment, security, renewal, expiration, or other messages necessary to operate their account.
 
+## 11.1 Transactional email presentation
+
+All user-facing transactional emails sent through Brevo use the shared IDOC email presentation layer unless a message has a deliberately richer, purpose-specific body. The shared presentation uses the white IDOC logo, the site's dark-blue email background/card palette, IDOC gold headings and accents, white body text, and Barlow as the preferred typeface with email-safe fallbacks.
+
+Authentication, account-access, and account-security notices use the shared branded shell with concise purpose-specific content.
+
+Membership and billing notices use the same shared shell plus a more explicit transactional layout: plain-language explanation of why the message was sent, a compact status/details card using IDOC-gold icons where appropriate, the relevant renewal/expiration/grace/payment state, and a clear next action when action is available. The governed member-facing notices are the automatic-renewal reminder, non-renewing expiration reminder, renewal-payment failure, grace-period reminder, and post-grace membership-expired notice.
+
+Seminar registration confirmations retain their detailed seminar-specific branded layout. Seminar cancellation, seminar payment confirmation, and seminar refund confirmation use the shared branded presentation with status/payment/refund detail cards and explanatory transactional copy. These seminar status messages must remain suitable for both account holders and guest registrants; they must not require a member-dashboard CTA in order to understand or act on the message.
+
+The shared renderer and shared presentation helpers are the canonical source for common transactional-email branding so future brand changes cascade across email types instead of being reimplemented separately.
+
 # 12. Content, seminars and publishing
 
 - CMS content may be public or assigned through a checklist to active-member, Judge, Steward and Veterinarian classifications. Every restricted item must explicitly use either Match any selected classifications (union) or Match all selected classifications (intersection); an administrator cannot rely on an implied default. Administrators can view every published item. An expired member sees only public content.
