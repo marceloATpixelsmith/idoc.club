@@ -663,3 +663,20 @@ test('member manual registration returns My Seminars before any seminar revalida
   assert.ok(seminarRevalidation >= 0, 'seminar revalidation should still exist for non-manual paths');
   assert.ok(manualReturn < seminarRevalidation, 'manual registration redirect must be returned before revalidation can unmount the CTA');
 });
+
+
+test('guest manual registration stays in a dialog instead of replacing the seminar detail CTA', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
+  assert.doesNotMatch(cta, /if \(guestPaymentMethod\) \{[\s\S]*return <SeminarRegistrationForm/);
+  assert.match(cta, /guestPaymentMethod \? \([\s\S]*<SeminarRegistrationForm embedded/);
+  assert.match(form, /embedded \? '' : 'rounded-xl border bg-card p-6 shadow-sm'/);
+});
+
+test('seminar payment-method choices use the same subtle table-control treatment as cancel registration', () => {
+  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
+  assert.match(cta, /data-idoc-table-control=""/);
+  assert.match(cta, /border-dashed/);
+  assert.match(cta, /rounded-md/);
+  assert.match(cta, /font-normal/);
+});
