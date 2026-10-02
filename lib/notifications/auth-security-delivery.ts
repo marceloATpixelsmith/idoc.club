@@ -73,7 +73,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     if (!message) throw new Error('Unsupported security notification kind.');
     const html = renderTransactionalEmail({
       heading: message.heading,
-      bodyHtml: `<p>${message.heading} on ${new Date(record.created_at).toISOString()}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
+      bodyHtml: `<p>${message.heading} on ${formatDateTime(record.created_at)}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
       footerNote: 'This is a security notification for your IDOC account.',
     });
     await sendTransactionalEmail({
