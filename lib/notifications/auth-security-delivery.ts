@@ -5,6 +5,7 @@ import { client } from '@/lib/db/drizzle';
 import { sendTransactionalEmail } from './brevo-transactional';
 import { renderTransactionalEmail } from './email-template';
 import type { AuthSecurityKind } from './auth-security-events';
+import { formatDateTime } from '@/lib/format';
 
 const MAX_ATTEMPTS = 6;
 
