@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SeminarRegistrationForm } from '@/components/seminars/seminar-registration-form';
 import { CsrfField } from '@/components/security/csrf-field';
 import { TurnstileWidget } from '@/components/turnstile-widget';
+import { ArrowUpRight } from 'lucide-react';
 
 /** The single full-width "Register" call to action on a seminar's detail page. A signed-in visitor
  * never re-enters identity data: their authenticated profile is the registration identity for every
@@ -53,7 +54,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
         size="lg"
         type="button"
       >
-        Register
+        Register <ArrowUpRight aria-hidden className="ml-1 size-4" />
       </Button>
       <Dialog onOpenChange={setJoinDialogOpen} open={joinDialogOpen}>
         <DialogContent>
@@ -71,7 +72,7 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
               type="button"
               variant="ghost"
             >
-              Register as a guest
+              Register as a guest <ArrowUpRight aria-hidden className="ml-1 size-4" />
             </Button>
           </div>
         </DialogContent>
