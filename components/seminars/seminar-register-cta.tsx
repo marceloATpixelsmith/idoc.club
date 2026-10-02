@@ -59,14 +59,15 @@ export function SeminarRegisterCta({ isSignedIn, memberDetails, memberPriceLabel
             <DialogDescription>Choose how you&apos;d like to register.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
-            <Button asChild className="w-full">
+            <Button asChild className="h-8 w-full rounded-md border-dashed px-3 font-normal" data-idoc-table-control="" variant="outline">
               <Link href="/sign-up">Join to get member pricing of {memberPriceLabel}</Link>
             </Button>
             <Button
-              className="w-full"
+              className="h-8 w-full rounded-md border-dashed px-3 font-normal"
+              data-idoc-table-control=""
               onClick={() => { setJoinDialogOpen(false); setPaymentDialogOpen(true); }}
               type="button"
-              variant="ghost"
+              variant="outline"
             >
               Register as a guest <ArrowUpRight aria-hidden className="ml-1 size-4" />
             </Button>
