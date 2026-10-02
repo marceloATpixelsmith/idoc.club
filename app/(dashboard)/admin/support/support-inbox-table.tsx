@@ -53,8 +53,8 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
   }, []);
   const columns = useMemo<ColumnDef<AdminSupportRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all support conversations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.subject}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, header: header('member'), meta: { label: 'Member' }, cell: ({ row }) => <div>{row.original.profile_id ? <Link className="font-medium underline" href={`/admin/members?profileId=${row.original.profile_id}`}>{row.original.member_name || 'Member record'}</Link> : row.original.member_name}<span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
-    { id: 'subject', accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => <Link className="font-medium underline" href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent('/admin/support')}`}>{row.original.subject}{row.original.unread ? ' · New' : ''}</Link> },
+    { id: 'member', accessorFn: (row) => `${row.member_name} ${row.member_email}`, header: header('member'), meta: { label: 'Member' }, cell: ({ row }) => <div><span className="font-medium">{row.original.member_name || 'Member record'}</span><span className="block text-sm text-muted-foreground">{row.original.member_email}</span></div> },
+    { id: 'subject', accessorKey: 'subject', header: header('subject'), meta: { label: 'Subject' }, cell: ({ row }) => <span className="font-medium">{row.original.subject}{row.original.unread ? ' · New' : ''}</span> },
     { id: 'category', accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
     { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'multiSelect' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
@@ -68,6 +68,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
       </Button>,
     },
   ], [administrators]);
+  const defaultColumnOrder = ['select', 'activity', 'assigned', 'category', 'subject', 'member', 'status', 'actions'];
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
     return [{ desc: true, id: 'activity' as keyof AdminSupportRow }];
@@ -117,7 +118,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     // faceted filters below to sync through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => row.public_id,
-    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(',') ?? defaultColumnOrder, columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
     startTransition,
