@@ -69,7 +69,8 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
 }
 
 export function emailButton(href: string, label: string): string {
-  return `<p style="margin:26px 0;text-align:center;"><a href="${escapeHtml(href)}" style="display:inline-block;border-radius:6px;background:${IDOC_EMAIL_COLORS.gold};padding:13px 28px;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;line-height:1.2;color:${IDOC_EMAIL_COLORS.background};text-decoration:none;">${escapeHtml(label)}</a></p>`;
+  const buttonLabel = escapeHtml(label.toUpperCase());
+  return `<p style="margin:26px 0;text-align:center;"><a href="${escapeHtml(href)}" style="display:inline-block;border-radius:6px;background:${IDOC_EMAIL_COLORS.gold};padding:13px 28px;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;line-height:1.2;letter-spacing:.08em;color:${IDOC_EMAIL_COLORS.background};text-decoration:none;">${buttonLabel}&nbsp;&#8599;</a></p>`;
 }
 
 export function emailCode(code: string): string {
