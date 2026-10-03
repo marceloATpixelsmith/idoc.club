@@ -1,10 +1,11 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Download, Pencil } from 'lucide-react';
+import { Download, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
@@ -12,8 +13,11 @@ import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
+import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { PAYMENT_STATUS_LABELS, PAYMENT_STATUSES, type PaymentStatus, registrationDisplayLabel } from '@/lib/seminars/status';
@@ -54,6 +58,7 @@ export function RegistrationsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
   const columns = useMemo<ColumnDef<AdminRegistrationRow>[]>(() => [
+    { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all registrations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.registrant_name}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
     { id: 'registrant', accessorFn: (row) => `${row.registrant_name} ${row.registrant_email}`, header: header('registrant'), meta: { label: 'Registrant' }, cell: ({ row }) => <div>{row.original.registrant_name}{row.original.is_guest ? <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Guest</span> : null}<span className="block text-sm text-muted-foreground">{row.original.registrant_email}</span></div> },
     { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
     { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <span className="inline-flex items-center gap-2"><PaymentMethodIcon method={row.original.payment_method_canonical_id} />{registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus).toUpperCase()}</span> },
@@ -68,7 +73,7 @@ export function RegistrationsTable({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seminarOptions is derived server-side per render, stable for this table's lifetime.
   ], [seminarOptions]);
-  const defaultColumnOrder = ['registered', 'registrant', 'seminar', 'status', 'actions'];
+  const defaultColumnOrder = ['select', 'registered', 'registrant', 'seminar', 'status', 'actions'];
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
     return [{ desc: true, id: 'registered' as keyof AdminRegistrationRow }];
@@ -110,6 +115,7 @@ export function RegistrationsTable({
   const { table } = useDataTable({
     columns, data: rows,
     enableAdvancedFilter: false,
+    getRowId: (row) => String(row.id),
     initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(',') ?? defaultColumnOrder, columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
@@ -154,11 +160,14 @@ export function RegistrationsTable({
   }
   const exportParams = currentExportParams();
 
+  const selectedRows = table.getSelectedRowModel().rows;
+  const actionBarVisibility = useActionBarVisibility(selectedRows.length);
   const [dateDraftActive, setDateDraftActive] = useState(false);
   const [dateResetSignal, setDateResetSignal] = useState(0);
   const manuallyFiltered = Boolean(from || to) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   return <><TablePreferenceSync table="seminar_registrations" /><DataTable
+    actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selectedRows.length} selected</ActionBarSelection><ActionBarGroup><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.id))} table="registrations" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}
     emptyState={<div><strong>{filtered ? 'No registrations match this view' : 'No seminar registrations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the result set.' : 'Registrations appear here once members or guests sign up.'}</span></div>}
     loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}
   >
