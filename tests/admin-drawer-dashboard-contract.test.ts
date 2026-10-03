@@ -8,6 +8,10 @@ const resourceTable = readFileSync('components/admin/resource-data-table.tsx', '
 const supportPage = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
 const supportDrawer = readFileSync('app/(dashboard)/admin/support/support-detail-drawer.tsx', 'utf8');
 const supportTable = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+const registrationTable = readFileSync('app/(dashboard)/admin/seminars/registrations/registrations-table.tsx', 'utf8');
+const memberTable = readFileSync('app/(dashboard)/admin/members/members-table.tsx', 'utf8');
+const adminDrawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
+const adminFormSection = readFileSync('components/admin/admin-form-section.tsx', 'utf8');
 const seminarPage = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
 const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
 const bulkActions = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8');
@@ -103,4 +107,34 @@ test('the News Blog edit drawer shows the current image inside the picker sectio
   assert.match(newsDrawer, /Replace image/);
   assert.match(newsDrawer, /No image/);
   assert.match(newsDrawer, /aspect-\[4\/3\] w-28/);
+});
+
+
+test('route-backed admin drawers always reopen after being closed', () => {
+  assert.match(adminDrawer, /<Dialog\.Root open onOpenChange=/);
+  assert.doesNotMatch(adminDrawer, /defaultOpen/);
+});
+
+test('all actionable admin tables show the pulsing table skeleton for internal row navigation', () => {
+  assert.match(memberTable, /openMember\(event/);
+  assert.match(memberTable, /loading=\{isPending\}/);
+  assert.match(memberTable, /\/admin\/support\?memberEmail=/);
+
+  for (const source of [resourceTable, supportTable, registrationTable]) {
+    assert.match(source, /openTableAction/);
+    assert.match(source, /startTransition\(\(\) => router\.push\(href\)\)/);
+    assert.match(source, /loading=\{isPending\}/);
+  }
+
+  assert.match(resourceTable, /\/admin\/news\?articleId=/);
+  assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
+  assert.match(resourceTable, /\/admin\/seminars\/registrations\?seminarId=/);
+  assert.match(supportTable, /\/admin\/support\?supportId=/);
+  assert.match(registrationTable, /registrationId=/);
+});
+
+test('admin drawer and section headers match the Member form hierarchy', () => {
+  assert.match(adminDrawer, /Dialog\.Title className="text-lg font-semibold text-foreground"/);
+  assert.match(adminFormSection, /text-xs font-bold uppercase tracking-wider text-gold/);
+  assert.doesNotMatch(adminDrawer, /Dialog\.Title[^\n]*text-gold/);
 });
