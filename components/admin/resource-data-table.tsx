@@ -1,10 +1,11 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { CircleAlert, CircleCheck, CircleDashed, ClipboardList, Eye, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Eye, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
@@ -28,6 +29,8 @@ export type ResourceRow = {
   status: string;
   subtitle?: string;
   slug?: string;
+  type?: string;
+  thumbnailUrl?: string;
   publication?: string;
   updated?: string;
   date?: string;
@@ -36,27 +39,27 @@ export type ResourceRow = {
   deadline?: string;
   prices?: string;
   registrations?: string;
-  audience?: string;
 };
 
-type ResourceType = 'news' | 'seminars' | 'content_pages';
+type ResourceType = 'news' | 'seminars';
 type ResourceColumn = keyof ResourceRow;
 type ResourceConfig = {
-  audiences?: { label: string; value: string }[];
   columns: { id: ResourceColumn; label: string }[];
   dateFilter: boolean;
   path: string;
   searchLabel: string;
   statuses: { label: string; value: string }[];
+  types?: { label: string; value: string }[];
 };
 
 const CONFIG: Record<ResourceType, ResourceConfig> = {
   news: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'type', label: 'Type' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'updated', label: 'Updated' }],
     dateFilter: true,
     path: '/admin/news',
     searchLabel: 'Search article title, subtitle, or slug',
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Scheduled', value: 'scheduled' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
+    types: [{ label: 'NEWS', value: 'news' }, { label: 'BLOG', value: 'blog' }],
   },
   seminars: {
     columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Prices' }, { id: 'registrations', label: 'Registered / Capacity' }],
@@ -64,14 +67,6 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }, { label: 'Canceled', value: 'canceled' }],
-  },
-  content_pages: {
-    audiences: [{ label: 'Public', value: 'public' }, { label: 'Member', value: 'member' }, { label: 'Judge', value: 'judge' }, { label: 'Steward', value: 'steward' }, { label: 'Veterinarian', value: 'veterinarian' }],
-    columns: [{ id: 'title', label: 'Title' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'audience', label: 'Audience' }, { id: 'updated', label: 'Updated' }],
-    dateFilter: false,
-    path: '/admin/pages',
-    searchLabel: 'Search page title or slug',
-    statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
   },
 };
 
@@ -90,14 +85,14 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 }
 
 export function ResourceDataTable({
-  initialAudience, initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
+  initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialType, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
 }: {
-  initialAudience?: string;
   initialColumnOrder?: string;
   initialFrom?: string;
   initialSearch?: string;
   initialSort?: string;
   initialStatus?: string;
+  initialType?: string;
   initialTo?: string;
   initialVisibleColumns?: string[];
   page: number;
@@ -132,19 +127,25 @@ export function ResourceDataTable({
         id,
         accessorFn: (row) => row[id] ?? '',
         enableHiding: id !== 'title',
-        enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
-        enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
+        enableSorting: ['title', 'type', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
+        enableColumnFilter: id === 'status' || (tableType === 'news' && id === 'type'),
         header: header(label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
-          : id === 'audience'
-            ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
+          : id === 'type' && tableType === 'news'
+            ? { label, options: config.types ?? [], variant: 'multiSelect' }
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
-          ? <span className="font-medium">{row.original.title}</span>
+          ? tableType === 'news'
+            ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-sm text-muted-foreground">{row.original.slug}</span></span>
+            : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
-            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4 text-gold" />{row.original.status.toUpperCase()}</span>; })()
-            : <span>{row.original[id] ?? '—'}</span>,
+            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
+            : id === 'status' && tableType === 'news'
+              ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'scheduled' ? Clock3 : row.original.status === 'archived' ? Archive : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
+              : id === 'type' && tableType === 'news'
+                ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
+                : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 90,
@@ -169,7 +170,9 @@ export function ResourceDataTable({
   }, [config, tableType]);
   const defaultColumnOrder = tableType === 'seminars'
     ? ['select', 'title', 'status', 'prices', 'start', 'end', 'deadline', 'registrations', 'actions']
-    : ['select', ...config.columns.map(({ id }) => id), 'actions'];
+    : tableType === 'news'
+      ? ['select', 'title', 'type', 'status', 'publication', 'subtitle', 'updated', 'actions']
+      : ['select', ...config.columns.map(({ id }) => id), 'actions'];
   const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'start' : 'updated';
   const initialSorting = useMemo(() => {
     try {
@@ -185,7 +188,7 @@ export function ResourceDataTable({
   // `undefined` for these, silently clearing the saved view.
   const initialColumnFilters = useMemo(() => [
     { id: 'status', value: initialStatus ? initialStatus.split(',') : [] },
-    { id: 'audience', value: initialAudience ? initialAudience.split(',') : [] },
+    { id: 'type', value: initialType ? initialType.split(',') : [] },
   ].filter((filter) => filter.value.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
@@ -205,9 +208,9 @@ export function ResourceDataTable({
       q: effectiveSearch || undefined,
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       status: filterToken(state.columnFilters, 'status'),
+      type: tableType === 'news' ? filterToken(state.columnFilters, 'type') : undefined,
     };
     if (config.dateFilter) { preferences.from = effectiveFrom; preferences.to = effectiveTo; }
-    if (tableType === 'content_pages') preferences.audience = filterToken(state.columnFilters, 'audience');
     void persistTablePreferences(tableType, preferences).then((response) => {
       if (!response.ok) setError('Table preferences could not be saved.');
     }).catch(() => setError('Table preferences could not be saved.')).finally(() => startTransition(() => router.refresh()));
@@ -267,7 +270,7 @@ export function ResourceDataTable({
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
