@@ -15,9 +15,10 @@ after(closeHarness);
 function future(days: number) { return new Date(Date.now() + days * 86_400_000).toISOString(); }
 function past(days: number) { return new Date(Date.now() - days * 86_400_000).toISOString(); }
 
-function article(overrides: Partial<{ contentHtml: string; publicationDate: string; slug: string; status: string; subtitle: string | null; title: string }> = {}) {
+function article(overrides: Partial<{ articleType: string; contentHtml: string; publicationDate: string; slug: string; status: string; subtitle: string | null; thumbnailUrl: string | null; title: string }> = {}) {
   return {
-    contentHtml: '<p>Body</p>', publicationDate: past(1), slug: 'a-test-article', status: 'draft', subtitle: null, title: 'A test article',
+    articleType: 'news', contentHtml: '<p>Body</p>', publicationDate: past(1), slug: 'a-test-article',
+    status: 'draft', subtitle: null, thumbnailUrl: null, title: 'A test article',
     ...overrides,
   };
 }
