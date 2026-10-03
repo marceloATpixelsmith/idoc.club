@@ -53,14 +53,18 @@ export default async function Home() {
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
               ) : recentNews.map((item) => (
                 <Link key={String(item.slug)} href={`/news/${item.slug}`}>
-                  <article className="card-midnight overflow-hidden">
-                    {item.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} /> : null}
-                    <div className="p-7">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                    <h3 className="mt-4 text-2xl leading-snug">{String(item.title)}</h3>
-                    {item.subtitle ? <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                  <article className="card-midnight grid overflow-hidden sm:grid-cols-[9rem_1fr]">
+                    {item.thumbnail_url ? (
+                      <img alt="" className="h-full min-h-32 w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
+                    <div className="p-6">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                      <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
+                      {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
                     </div>
                   </article>
                 </Link>
