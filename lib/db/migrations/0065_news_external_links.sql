@@ -1,12 +1,15 @@
 alter table idoc.news_articles
-  add column external_url text;
+  add column if not exists external_url text;
+
+alter table idoc.news_articles
+  drop constraint if exists news_articles_external_url_check;
 
 alter table idoc.news_articles
   add constraint news_articles_external_url_check
   check (external_url is null or external_url ~* '^https?://');
 
 alter table idoc.news_articles
-  drop constraint news_articles_content_length_check;
+  drop constraint if exists news_articles_content_length_check;
 
 alter table idoc.news_articles
   add constraint news_articles_content_length_check
