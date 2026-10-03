@@ -8,7 +8,7 @@ Password creation during signup and password reset checks the new password again
 
 The same password creation policy is used wherever users create or change a password: signup, password reset, account recovery/activation, and authenticated password change. Login checks the existing credential without applying creation-only composition rules.
 
-There is no permanently reserved HIBP test password. The Pwned Passwords corpus can change, and IDOC requires at least 12 characters plus uppercase, lowercase, number, and special character. For deterministic CI coverage, `tests/password-breach-check.test.ts` stubs a matching HIBP suffix. For a live staging test, select a password that meets IDOC's composition rules and confirm it is currently pwned immediately before testing, then follow LIVE-AUTH-034 in the Authentication & Security Test Catalog. Never use that password for a real account.
+There is no permanently reserved HIBP test password. The Pwned Passwords corpus can change, and IDOC requires at least 10 characters plus uppercase, lowercase, number, and special character. For deterministic CI coverage, `tests/password-breach-check.test.ts` stubs a matching HIBP suffix. For a live staging test, select a password that meets IDOC's composition rules and confirm it is currently pwned immediately before testing, then follow LIVE-AUTH-034 in the Authentication & Security Test Catalog. Never use that password for a real account.
 
 ## Dashboard navigation and Organization Settings
 
