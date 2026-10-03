@@ -94,10 +94,12 @@ test('Seminar edit and create stay over the table and table actions own navigati
 
 test('ordinary gold and blue buttons share the canonical Member Login pill radius', () => {
   assert.match(siteHeader, /MemberLoginLink[\s\S]*rounded-full/);
-  assert.match(sharedButton, /rounded-full text-sm/);
-  assert.match(globals, /Canonical button radius/);
+  assert.match(sharedButton, /default: "rounded-full bg-primary/);
+  assert.match(sharedButton, /outline:[\s\S]*"rounded-full border/);
+  assert.match(globals, /background: var\(--gold\);[\s\S]*border-radius: 9999px/);
   assert.match(globals, /\.idoc-secondary-button[\s\S]*border-radius: 9999px/);
   assert.match(globals, /\[data-idoc-table-control\][\s\S]*border-radius: 9999px/);
+  assert.doesNotMatch(sharedButton, /inline-flex[^\n]*rounded-full[^\n]*text-sm/);
 });
 
 
