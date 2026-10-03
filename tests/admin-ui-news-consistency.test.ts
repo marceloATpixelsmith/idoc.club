@@ -34,6 +34,15 @@ test('revenue date filter uses the standard blue dotted filter control', () => {
   assert.match(filters, /<Button className="justify-start" data-idoc-table-control variant="outline">/);
 });
 
+test('table filter, Sort, and View controls use Title Case rather than forced uppercase', () => {
+  const globals = source('app/globals.css');
+  const sort = source('components/data-table/data-table-sort-list.tsx');
+  const view = source('components/data-table/data-table-view-options.tsx');
+  assert.match(globals, /\[data-idoc-table-control\],[\s\S]*text-transform: none;/);
+  assert.match(sort, />\s*Sort\s*</);
+  assert.match(view, />\s*View\s*</);
+});
+
 test('admins can create seminar registrations with manual payment methods only', () => {
   const page = source('app/(dashboard)/admin/seminars/registrations/page.tsx');
   const drawer = source('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx');
