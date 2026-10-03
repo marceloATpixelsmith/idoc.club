@@ -6,6 +6,7 @@ import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } 
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
+import { isEntitled } from '@/lib/membership/entitlement';
 import { countryNameForCode } from '@/lib/membership/countries';
 import { escapeHtml } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
@@ -74,6 +75,10 @@ export async function createAdminSeminarRegistration(fields: {
   if (!seminarId.success) throw new SeminarRegistrationError('Choose a seminar.');
   const paymentMethod = z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
   if (!paymentMethod.success) throw new SeminarRegistrationError('Admin-created registrations must use Bank Transfer or Cash.');
+  const enabledMethods = await listEnabledSeminarPaymentMethods();
+  if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
+    throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
+  }
 
   const emailResult = guestEmailSchema.safeParse(fields.email);
   if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid email address.');
@@ -92,12 +97,22 @@ export async function createAdminSeminarRegistration(fields: {
 
   return client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
-    const [member] = await sql<{ email: string; first_name: string; id: number }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email
+    const [member] = await sql<{ email: string; first_name: string; grace_ends_on: string | null; id: number; status: string | null; valid_until: string | null }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email,
+      m.status,m.valid_until,m.grace_ends_on
       from idoc.profiles p join idoc.users u on u.id=p.user_id
+      left join lateral (
+        select status,valid_until,grace_ends_on from idoc.memberships
+        where profile_id=p.id order by updated_at desc,id desc limit 1
+      ) m on true
       where lower(coalesce(u.email_display,u.email))=${email} limit 1`;
 
     const paymentStatus = initialPaymentStatusForMethod(paymentMethod.data);
-    const priceCents = member ? seminar.member_price_cents : seminar.non_member_price_cents;
+    const memberEntitled = Boolean(member && member.status && member.valid_until && isEntitled({
+      graceEndsOn: member.grace_ends_on,
+      status: member.status,
+      validUntil: member.valid_until,
+    }, new Date().toISOString().slice(0, 10)));
+    const priceCents = memberEntitled ? seminar.member_price_cents : seminar.non_member_price_cents;
     let registrationId: number;
 
     if (member) {
