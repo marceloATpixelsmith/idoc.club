@@ -170,6 +170,16 @@ Administrators and Super Admins manage public News/Blog articles at `/admin/news
 
 ## Seminar operations
 
+### Creating a seminar registration as an administrator
+
+From **Admin → Registrations**, use **New Registration** to open the Registration drawer. Select the seminar and enter the registrant's first name, last name, email, and international phone number. The payment-method selector contains only currently enabled **Bank Transfer** and **Cash** methods from Organization Settings; if neither is enabled, an administrator must enable one there before creating a registration.
+
+The server matches the submitted email to an existing profile when possible. Matching a profile does not automatically grant member pricing: current entitlement is evaluated using the same entitlement rules as the public/profile registration flow. Entitled profiles receive the member price; lapsed, suspended, expired, review-required, or otherwise non-entitled profiles remain attached to their profile but receive the non-member price. Unmatched emails create guest registrations at the non-member price.
+
+A successful create closes the drawer and refreshes the Registrations table. The operation is capacity/deadline checked, duplicate-safe, audited under the administrator actor, and queues the standard branded seminar confirmation. Admin-created registrations never create Stripe Checkout sessions.
+
+
+
 Administrators and Super Admins manage seminars at `/admin/seminars`: create, edit (including publish/cancel/draft, which are just a status field on the same edit form — there is no separate Quick Actions control), search/filter, and download one seminar's own registrations as CSV via the icon button on its edit page. The Registrations item below Seminars in the admin nav (`/admin/seminars/registrations`) is the cross-seminar roster: every registration, member or guest, searchable by registrant name/email and filterable by seminar (published only), payment status, and registration date range, with sort, column visibility, and a download-all-filtered-results icon. Clicking a seminar row's Registrations action (or the icon on its edit page) opens that same page pre-filtered to the clicked seminar. Editing a registration opens a drawer with its own details, registration-status control, and payment recording. Members register and cancel their own registrations at `/seminars`; a signed-out visitor sees the same catalog and can register as a guest, with no account. Deploy migrations `0041`, `0055`, `0056`, `0057`, and `0058` before use.
 
 Legacy seminar announcements from the old `idoc.club` WordPress site are a one-time import via `scripts/data-import/legacy-idoc-club-content-import.sql`; see docs/03 § 10 for the source mapping and required administrator review (two imported seminars are left in Draft pending a currency correction).
