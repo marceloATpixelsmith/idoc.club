@@ -10,8 +10,8 @@ import { listAdminSeminars } from '@/lib/seminars/seminars';
 type ResourceType = 'news' | 'seminars';
 
 const CONFIG = {
-  news: { path: '/admin/news', title: 'News / Blog', description: 'Create, schedule, preview, and publish public articles.', create: 'New article' },
-  seminars: { path: '/admin/seminars', title: 'Seminars', description: 'Create, publish, and manage seminar registrations.', create: 'New seminar' },
+  news: { path: '/admin/news', title: 'News / Blog', description: 'Create, schedule, preview, and publish public articles.', create: 'New article', createHref: '/admin/news?new=1' },
+  seminars: { path: '/admin/seminars', title: 'Seminars', description: 'Create, publish, and manage seminar registrations.', create: 'New seminar', createHref: '/admin/seminars/new' },
 } as const;
 
 export async function ResourceListPage({ tableType }: { tableType: ResourceType }) {
@@ -58,7 +58,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     }));
   }
   return <main className="space-y-6 px-5 py-8 lg:px-8">
-    <header className="flex items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold text-gold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href={`${config.path}/new`}>{config.create}</Link></header>
+    <header className="flex items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold text-gold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Link className="rounded bg-primary px-4 py-2 uppercase tracking-wide text-primary-foreground" href={config.createHref}>{config.create}</Link></header>
     <ResourceDataTable
       initialColumnOrder={typeof preferences?.columnOrder === 'string' ? preferences.columnOrder : undefined}
       initialFrom={listQuery.from}
