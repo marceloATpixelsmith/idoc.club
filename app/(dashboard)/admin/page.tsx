@@ -25,7 +25,7 @@ export default async function AdminPage() {
     listReconciliationFindings(),
     getRevenueReport(),
   ]);
-  const latestReconciliation = reconciliation.slice(0, 5);
+  const latestReconciliation = [...reconciliation].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
 
   return <main className="flex-1 space-y-6 px-5 py-8 lg:px-8">
     <header>
