@@ -21,6 +21,7 @@ async function articleFields(formData: FormData) {
   return {
     articleType: formData.get('articleType'),
     contentHtml: formData.get('contentHtml'),
+    externalUrl: formData.get('externalUrl'),
     publicationDate: formData.get('publicationDate'),
     slug: formData.get('slug'),
     status: formData.get('status'),
