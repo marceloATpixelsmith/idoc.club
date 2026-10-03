@@ -259,6 +259,10 @@ body:has([data-idoc-admin-root]) svg {
   opacity: 0.85;
 }
 
+.idoc-secondary-button--dotted {
+  border-style: dotted;
+}
+
 .idoc-secondary-button:hover,
 [data-idoc-table-control]:hover,
 [data-idoc-table-control][data-state='open'],
