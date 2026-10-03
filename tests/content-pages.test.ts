@@ -1,7 +1,23 @@
-import assert from 'node:assert/strict'; import { readFileSync } from 'node:fs'; import test from 'node:test';
-const source=readFileSync('lib/content/pages.ts','utf8');const actions=readFileSync('app/(dashboard)/admin/pages/actions.ts','utf8');const table=readFileSync('app/(dashboard)/admin/pages/page.tsx','utf8');const migration=readFileSync('lib/db/migrations/0044_restricted_cms.sql','utf8');
-test('CMS persists explicit audiences, match mode, and immutable revisions',()=>{for(const value of ['public','member','judge','steward','veterinarian'])assert.match(migration,new RegExp(value));assert.match(migration,/content_page_revisions/);assert.match(source,/revision\(sql/);assert.match(source,/audience_mode='any'/);assert.match(source,/audience_mode='all'/);});
-test('public reads enforce published/due state and entitlement-role audiences in SQL',()=>{assert.match(source,/p.status='published'/);assert.match(source,/p.publish_at<=now\(\)/);assert.match(source,/valid_until>=current_date/);assert.match(source,/r.effective_to is null/);});
-test('all CMS mutations authorize, validate CSRF, audit, and restrict destructive deletion',()=>{assert.match(source,/requireAccountAccess\('administration'\)/);assert.match(source,/requireAdministrator\(actor\)/);assert.match(actions,/requireCsrfToken/);assert.match(source,/idoc.audit_log/);assert.match(source,/Archive a published page before deleting it/);});
-test('admin pages use the shared Dice UI resource table with server filters and pagination',()=>{const shared=readFileSync('components/admin/resource-data-table.tsx','utf8');assert.match(table,/ResourceListPage/);for(const value of ['DataTableToolbar','DataTableSortList','pageSizeOptions','config.audiences','No records match this view'])assert.match(shared,new RegExp(value));assert.doesNotMatch(shared,/DataTableAdvancedToolbar|DataTableFilterList/);assert.match(source,/advancedListWhere/);});
-test('invalid inputs are bounded and require at least one audience',()=>{assert.match(source,/Select at least one audience/);assert.match(source,/contentHtml\.length > 20_000/);assert.match(source,/slugSchema/);});
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const source = readFileSync('lib/content/pages.ts', 'utf8');
+const migration = readFileSync('lib/db/migrations/0044_restricted_cms.sql', 'utf8');
+
+test('persisted CMS pages retain audience data needed by the public read-only delivery path', () => {
+  for (const value of ['public','member','judge','steward','veterinarian']) assert.match(migration, new RegExp(value));
+  assert.match(migration, /content_page_revisions/);
+});
+
+test('public reads enforce published and due state plus entitlement-role audiences in SQL', () => {
+  assert.match(source, /p\.status='published'/);
+  assert.match(source, /p\.publish_at is null or p\.publish_at<=now\(\)/);
+  assert.match(source, /latest\.valid_until>=current_date/);
+  assert.match(source, /r\.effective_to is null/);
+});
+
+test('Pages administration is retired while existing public CMS delivery remains', () => {
+  assert.match(source, /export async function getVisibleContentPage/);
+  assert.doesNotMatch(source, /listAdminContentPages|getAdminContentPage|saveContentPage|archiveContentPage|deleteContentPage/);
+});
