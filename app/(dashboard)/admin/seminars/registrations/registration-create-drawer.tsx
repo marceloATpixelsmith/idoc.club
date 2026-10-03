@@ -11,12 +11,10 @@ import { SeminarForm } from '@/components/seminars/seminar-form';
 import { createAdminSeminarRegistrationAction } from '../actions';
 
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
-const MANUAL_METHODS = [
-  { label: 'Bank Transfer', value: 'bank_transfer' },
-  { label: 'Cash', value: 'cash_event' },
-] as const;
-
-export function RegistrationCreateDrawer({ seminars }: { seminars: Array<{ id: number; title: string }> }) {
+export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
+  paymentMethods: Array<{ canonical_id: string; display_label: string }>;
+  seminars: Array<{ id: number; title: string }>;
+}) {
   const [phone, setPhone] = useState('');
 
   return (
@@ -59,11 +57,12 @@ export function RegistrationCreateDrawer({ seminars }: { seminars: Array<{ id: n
               <Label htmlFor="paymentMethod">Payment Method</Label>
               <PaymentMethodSelect
                 className={SELECT_CLASSNAME}
-                defaultValue="bank_transfer"
+                defaultValue={paymentMethods[0]?.canonical_id}
                 id="paymentMethod"
                 name="paymentMethod"
-                options={MANUAL_METHODS}
+                options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
               />
+              {paymentMethods.length === 0 ? <p className="text-sm text-destructive">Enable Bank Transfer or Cash in Organization Settings before creating a registration.</p> : null}
             </div>
           </SeminarForm>
         </AdminFormSection>
