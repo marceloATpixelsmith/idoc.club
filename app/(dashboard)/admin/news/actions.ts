@@ -17,6 +17,7 @@ export type AdminNewsState = { error?: string; success?: string };
 async function articleFields(formData: FormData) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
+  await requireNewsArticleSchema();
   return {
     articleType: formData.get('articleType'),
     contentHtml: formData.get('contentHtml'),
