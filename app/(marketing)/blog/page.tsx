@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { NewsTypeSwitch } from '@/components/news/news-type-switch';
 import { PageHeader } from '@/components/site/PageHeader';
 import { listPublicArticles } from '@/lib/news/articles';
 
@@ -22,9 +21,13 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
         ) : (
           <ul className="divide-y divide-border border-t border-border">
             {rows.map((item) => (
-              <li className="grid gap-6 py-10 md:grid-cols-[14rem_1fr]" key={String(item.slug)}>
-                {item.thumbnail_url ? <Link href={`/blog/${item.slug}`}><img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} /></Link> : <div className="hidden md:block" />}
-                <div>
+              <li className="py-10" key={String(item.slug)}>
+                {item.thumbnail_url ? (
+                  <Link className="block" href={`/blog/${item.slug}`}>
+                    <img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                  </Link>
+                ) : null}
+                <div className={item.thumbnail_url ? 'mt-6' : ''}>
                   <p className="text-xs uppercase tracking-[0.18em] text-gold">
                     {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                   </p>
