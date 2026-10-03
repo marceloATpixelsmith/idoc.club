@@ -52,8 +52,10 @@ with the search box pre-filled to that member's email, showing only their conver
 disabled when the member has never submitted a support conversation, regardless of any existing
 conversation's current status.
 
-Roster rows now expose stable profile-ID selection and document a maximum batch size of 50. No
-bulk mutation is enabled yet. The only authority-wide operation is the Super Admin incident action
+Roster rows support selected-row deletion through the shared admin bulk action. Member deletion is a
+soft-delete/anonymization operation: it preserves historical profile, membership, payment and audit records,
+revokes active sessions, and refuses privileged Administrator/Super Admin accounts and the acting admin's own account.
+All destructive bulk actions require fresh MFA step-up and CSRF validation. The incident-only Super Admin action
 **Force Revoke All Authority**; it is not an ordinary canonical Revoke User operation and must not
 be reinterpreted as Bulk Revoke. Product owners must define ordinary revoke eligibility, effects,
 privileged/self protections, notices, and retry semantics before Bulk Revoke can be enabled. A
@@ -895,3 +897,14 @@ Column order is persisted per administrator and table. A saved administrator ord
 - Support: Activity Date, Assigned, Category, Subject, Member, Status.
 
 Seminar registration payment methods use the shared gold-branded icon mapping: card for Online / Stripe, bank for Bank Transfer, and cash for Cash at the Event. The registration search field is labeled simply “Search name or email”.
+
+
+## News/Blog administration and media
+
+News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays title with slug beneath it, TYPE and STATUS as icon-backed uppercase values, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
+
+The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. Runtime upload requires `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`; `CLOUDINARY_CLOUD_NAME` defaults to the IDOC cloud `z6xv27qx` when omitted. Public `/news` and `/blog` listings are type-filtered server-side, include the thumbnail, and route to type-specific detail pages; the homepage uses the same typed database records rather than the legacy static President's Blog array.
+
+The former **Pages** administration surface is retired completely: it has no admin navigation item, routes, actions, editor/form, preview, table configuration, or administrator preference type. Existing persisted CMS pages remain read-only and can still be delivered through the public/member page renderer.
+
+Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
