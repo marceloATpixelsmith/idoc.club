@@ -28,6 +28,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     q: typeof preferences?.q === 'string' ? preferences.q : undefined,
     sort: typeof preferences?.sort === 'string' ? preferences.sort : undefined,
     status: typeof preferences?.status === 'string' ? preferences.status : undefined,
+    type: typeof preferences?.type === 'string' ? preferences.type : undefined,
     to: typeof preferences?.to === 'string' ? preferences.to : undefined,
   };
   let rows: ResourceRow[];
@@ -40,7 +41,8 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
       subtitle: row.subtitle ? String(row.subtitle) : '', slug: String(row.slug),
-      status: String(row.status),
+      status: String(row.status), type: String(row.article_type ?? 'news'),
+      thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : undefined,
       publication: formatAdminDate(new Date(String(row.publication_date)).toISOString().slice(0, 10)),
       updated: new Date(String(row.updated_at)).toLocaleString(),
     }));
@@ -63,6 +65,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       initialSearch={listQuery.q}
       initialSort={listQuery.sort}
       initialStatus={listQuery.status}
+      initialType={listQuery.type}
       initialTo={listQuery.to}
       initialVisibleColumns={Array.isArray(preferences?.columns) ? preferences.columns : undefined}
       page={page} pageSize={pageSize} rows={rows} tableType={tableType} total={total}
