@@ -22,7 +22,7 @@ export default async function NewsPage() {
         {rows.length === 0 ? (
           <p className="py-10 text-muted-foreground">No news articles have been published yet. Check back soon.</p>
         ) : (
-          <div className="flex max-w-3xl flex-col gap-6">
+          <div className="flex max-w-xl flex-col gap-6">
             {rows.map((item) => <PublicNewsCard item={item as never} key={String(item.slug)} />)}
           </div>
         )}
