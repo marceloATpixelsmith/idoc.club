@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { listPublicArticles } from '@/lib/news/articles';
-import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
+import { listCurrentSeminarsForMember, listPastPublishedSeminars } from '@/lib/seminars/registrations';
 
 export const metadata: Metadata = {
   title: 'IDOC — International Dressage Officials Club',
@@ -18,14 +18,16 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const [{ rows: newsRows }, { rows: blogRows }, seminarRows] = await Promise.all([
+  const [{ rows: newsRows }, { rows: blogRows }, seminarRows, pastSeminarRows] = await Promise.all([
     listPublicArticles('1', 'news'),
     listPublicArticles('1', 'blog'),
     listCurrentSeminarsForMember(null),
+    listPastPublishedSeminars(),
   ]);
   const recentNews = newsRows.slice(0, 4);
   const recentBlog = blogRows.slice(0, 3);
   const upcomingSeminars = seminarRows.slice(0, 4);
+  const pastSeminars = pastSeminarRows.slice(0, 4);
   return (
     <>
       <HeroSlider />
@@ -91,17 +93,42 @@ export default async function Home() {
               </Link>
             </div>
 
-            {upcomingSeminars.length === 0 ? (
-              <p className="mt-10 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
-            ) : (
-              <ul className="mt-10 w-full max-w-3xl divide-y divide-border border-y border-border">
-                {upcomingSeminars.map((seminar) => (
-                  <li key={seminar.id}>
-                    <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="mt-10">
+              <h3 className="section-label">Available seminars</h3>
+              {upcomingSeminars.length === 0 ? (
+                <p className="mt-6 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
+              ) : (
+                <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">
+                  {upcomingSeminars.map((seminar) => (
+                    <li key={seminar.id}>
+                      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {pastSeminars.length ? (
+                <div className="mt-12">
+                  <h3 className="section-label">Past seminars</h3>
+                  <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">
+                    {pastSeminars.map((seminar) => (
+                      <li key={seminar.id}>
+                        <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-8">
+              <a
+                className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground transition-opacity hover:opacity-90"
+                href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                FEI Course Calendar <ArrowUpRight className="size-4" />
+              </a>
+            </div>
           </div>
         </div>
       </section>
