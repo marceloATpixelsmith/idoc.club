@@ -8,13 +8,20 @@ import {
   archiveArticle, createArticle, deleteArticle, publishArticle,
   scheduleArticle, unpublishArticle, updateArticle,
 } from '@/lib/news/articles';
+import { resolveNewsThumbnail } from '@/lib/news/thumbnail';
 
 export type AdminNewsState = { error?: string; success?: string };
 
-function articleFields(formData: FormData) {
+async function articleFields(formData: FormData) {
   return {
-    contentHtml: formData.get('contentHtml'), publicationDate: formData.get('publicationDate'),
-    slug: formData.get('slug'), status: formData.get('status'), subtitle: formData.get('subtitle'), title: formData.get('title'),
+    articleType: formData.get('articleType'),
+    contentHtml: formData.get('contentHtml'),
+    publicationDate: formData.get('publicationDate'),
+    slug: formData.get('slug'),
+    status: formData.get('status'),
+    subtitle: formData.get('subtitle'),
+    thumbnailUrl: await resolveNewsThumbnail(formData),
+    title: formData.get('title'),
   };
 }
 
@@ -24,9 +31,11 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
     await operation();
     revalidatePath('/admin/news');
     revalidatePath('/news');
+    revalidatePath('/blog');
+    revalidatePath('/');
     return { success };
   } catch (error) {
-    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError'].includes(error.name)) return { error: error.message };
+    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError', 'NewsThumbnailUploadError'].includes(error.name)) return { error: error.message };
     return { error: 'The article could not be saved.' };
   }
 }
@@ -35,19 +44,21 @@ export async function createNewsArticle(_state: AdminNewsState, formData: FormDa
   let id: number;
   try {
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-    id = await createArticle(articleFields(formData));
+    id = await createArticle(await articleFields(formData));
   } catch (error) {
-    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError'].includes(error.name)) return { error: error.message };
+    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError', 'NewsThumbnailUploadError'].includes(error.name)) return { error: error.message };
     return { error: 'The article could not be created.' };
   }
   revalidatePath('/admin/news');
   revalidatePath('/news');
+  revalidatePath('/blog');
+  revalidatePath('/');
   redirect(`/admin/news/${id}`);
 }
 
 export async function updateNewsArticle(_state: AdminNewsState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateArticle(id, articleFields(formData)), 'Article saved.');
+  return run(formData, async () => updateArticle(id, await articleFields(formData)), 'Article saved.');
 }
 
 export async function publishNewsArticle(_state: AdminNewsState, formData: FormData) {
@@ -76,5 +87,7 @@ export async function deleteNewsArticle(_state: AdminNewsState, formData: FormDa
   }
   revalidatePath('/admin/news');
   revalidatePath('/news');
+  revalidatePath('/blog');
+  revalidatePath('/');
   redirect('/admin/news');
 }
