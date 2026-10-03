@@ -19,8 +19,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHeader eyebrow="Newsroom" title="IDOC News" intro="Announcements, tributes and education updates for judges, stewards and veterinarians." />
-      <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        <div className="mb-10"><NewsTypeSwitch active="news" /></div>
+      <div className="mx-auto max-w-7xl px-5 pb-8 pt-10 lg:px-8 lg:pt-12">
         {rows.length === 0 ? (
           <p className="py-10 text-muted-foreground">No news articles have been published yet. Check back soon.</p>
         ) : (
