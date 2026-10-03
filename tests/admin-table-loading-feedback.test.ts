@@ -30,6 +30,7 @@ test('homepage membership calls to action use shared rounded buttons', () => {
 });
 
 const bulkActions = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8');
+const memberLifecycle = readFileSync('lib/admin/member-lifecycle.ts', 'utf8');
 const archiveMembers = readFileSync('components/admin/bulk-archive-members.tsx', 'utf8');
 const memberTable = readFileSync('app/(dashboard)/admin/members/members-table.tsx', 'utf8');
 const deletionMigration = readFileSync('lib/db/migrations/0066_member_archive_permanent_delete.sql', 'utf8');
@@ -39,13 +40,13 @@ test('member bulk archive is protected and permanently delete removes member dat
   assert.match(archiveMembers, /bulkArchiveMembers/);
   assert.match(archiveMembers, /mutation\.begin\(\)/);
   assert.match(bulkDelete, /Permanently delete/);
-  assert.match(bulkActions, /admin\.member\.permanently_deleted/);
-  assert.match(bulkActions, /delete from idoc\.users where id in/);
-  assert.match(bulkActions, /Cancel active billing subscriptions/);
+  assert.match(memberLifecycle, /admin\.member\.permanently_deleted/);
+  assert.match(memberLifecycle, /delete from idoc\.users where id in/);
+  assert.match(memberLifecycle, /Cancel active billing subscriptions/);
   assert.match(bulkActions, /requireCsrfToken/);
   assert.match(bulkActions, /requireFreshStepUp/);
-  assert.match(bulkActions, /You cannot delete your own administrator account/);
-  assert.match(bulkActions, /Administrator accounts cannot be bulk deleted/);
+  assert.match(memberLifecycle, /You cannot delete your own administrator account/);
+  assert.match(memberLifecycle, /Administrator accounts cannot be bulk deleted/);
   assert.match(deletionMigration, /ON DELETE SET NULL/);
   assert.match(deletionMigration, /idoc\.allow_member_permanent_delete/);
 });
