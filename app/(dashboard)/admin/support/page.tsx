@@ -1,14 +1,15 @@
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { listAdminConversations, listEligibleAdministrators } from '@/lib/support/inbox';
 import { SupportInboxTable } from './support-inbox-table';
+import { SupportDetailDrawer } from './support-detail-drawer';
 
-export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ memberEmail?: string }> }) {
+export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ memberEmail?: string; supportId?: string }> }) {
   // Filters, sort, columns, and pagination all come from the database, never the URL -- see
   // components/admin/table-preference-sync.tsx and docs/07. `memberEmail` is a deliberate exception
   // of the same short-lived, single-step shape as `profileId` on the Members page: the Members
   // table's Support action link seeds the search box with a specific member's email for this one
   // navigation only -- typing further, or a later visit, goes back through the normal DB-persisted `q`.
-  const { memberEmail } = await searchParams;
+  const { memberEmail, supportId } = await searchParams;
   const saved = await getTablePreferences('support');
   const listQuery = {
     activityFrom: typeof saved?.activityFrom === 'string' ? saved.activityFrom : undefined,
@@ -24,5 +25,5 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
     status: typeof saved?.status === 'string' ? saved.status : undefined,
   };
   const [listing, administrators] = await Promise.all([listAdminConversations(listQuery), listEligibleAdministrators()]);
-  return <main className="space-y-6 px-5 py-8 lg:px-8"><header><h1 className="text-3xl font-semibold text-gold">Support Inbox</h1><p className="text-muted-foreground">Member conversations and assignment queue.</p></header><SupportInboxTable administrators={administrators.map((admin) => ({ label: String(admin.display_name), value: String(admin.assignment_key) }))} filters={{ activityFrom: listQuery.activityFrom, activityTo: listQuery.activityTo, assigned: listQuery.assigned, category: listQuery.category, page: listing.page, pageSize: listing.pageSize, q: listQuery.q, sort: listQuery.sort, status: listQuery.status }} initialColumnOrder={typeof saved?.columnOrder === 'string' ? saved.columnOrder : undefined} initialVisibleColumns={Array.isArray(saved?.columns) ? saved.columns : undefined} rows={listing.rows} total={listing.total} /></main>;
+  return <><main className="space-y-6 px-5 py-8 lg:px-8"><header><h1 className="text-3xl font-semibold text-gold">Support Inbox</h1><p className="text-muted-foreground">Member conversations and assignment queue.</p></header><SupportInboxTable administrators={administrators.map((admin) => ({ label: String(admin.display_name), value: String(admin.assignment_key) }))} filters={{ activityFrom: listQuery.activityFrom, activityTo: listQuery.activityTo, assigned: listQuery.assigned, category: listQuery.category, page: listing.page, pageSize: listing.pageSize, q: listQuery.q, sort: listQuery.sort, status: listQuery.status }} initialColumnOrder={typeof saved?.columnOrder === 'string' ? saved.columnOrder : undefined} initialVisibleColumns={Array.isArray(saved?.columns) ? saved.columns : undefined} rows={listing.rows} total={listing.total} /></main>{supportId ? <SupportDetailDrawer publicId={supportId} /> : null}</>;
 }
