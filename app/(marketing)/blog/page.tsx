@@ -14,8 +14,7 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHeader eyebrow="From the Director" title="President's Blog" intro="Reflections on judging standards, horse welfare, data and integrity from IDOC leadership." />
-      <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        <div className="mb-10"><NewsTypeSwitch active="blog" /></div>
+      <div className="mx-auto max-w-7xl px-5 pb-8 pt-10 lg:px-8 lg:pt-12">
         {rows.length === 0 ? (
           <p className="py-10 text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
         ) : (
