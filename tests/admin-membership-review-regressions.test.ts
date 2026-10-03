@@ -7,7 +7,7 @@ const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/membe
 const memberQueries = readFileSync(new URL('../lib/membership/admin-memberships.ts', import.meta.url), 'utf8');
 const revenueReport = readFileSync(new URL('../lib/payments/revenue-report.ts', import.meta.url), 'utf8');
 const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
-const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
+const adminSupportPage = readFileSync(new URL('../app/(dashboard)/admin/support/page.tsx', import.meta.url), 'utf8');
 
 test('member pagination change persists the full current filter/sort/column state alongside the new page, since everything is read fresh from local state at persist time rather than a page-only URL param replacement', () => {
   assert.match(memberTable, /onLiveStateChange: \(state\) => persistAndRefresh\(state\)/);
@@ -88,8 +88,9 @@ test('the revenue page has an explicit empty state for both breakdown tables, no
   assert.match(revenuePage, /report\.overTime\.length === 0/);
 });
 
-test('the admin support thread page resolves an array-valued returnTo parameter to its first value before calling startsWith on it', () => {
-  assert.match(adminSupportThreadPage, /searchParams: Promise<Record<string, string \| string\[\] \| undefined>>/);
-  assert.match(adminSupportThreadPage, /const returnToParam = Array\.isArray\(query\.returnTo\) \? query\.returnTo\[0\] : query\.returnTo;/);
-  assert.match(adminSupportThreadPage, /returnToParam\?\.startsWith\('\/admin\/support'\) \? returnToParam : '\/admin\/support'/);
+test('the admin Support table resolves repeated drawer/search parameters before using them', () => {
+  assert.match(adminSupportPage, /memberEmail\?: string \| string\[\]/);
+  assert.match(adminSupportPage, /supportId\?: string \| string\[\]/);
+  assert.match(adminSupportPage, /Array\.isArray\(params\.supportId\)/);
+  assert.match(adminSupportPage, /SupportDetailDrawer/);
 });
