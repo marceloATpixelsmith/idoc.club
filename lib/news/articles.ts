@@ -251,6 +251,37 @@ export async function deleteArticle(idValue: unknown) {
   });
 }
 
+
+export async function deleteArticles(idValues: unknown[]) {
+  const actor = await requireNewsAdministrator();
+  const ids = [...new Set(idValues.map((value) => parse(idSchema, value, 'Article not found.')))];
+  if (!ids.length) throw new NewsValidationError('Select at least one article.');
+
+  await client.begin(async (sql) => {
+    const rows = await sql<{ id: number; slug: string; status: NewsStatus; title: string }[]>`
+      select id,slug,status,title
+      from idoc.news_articles
+      where id in ${sql(ids)}
+      for update`;
+
+    if (rows.length !== ids.length) {
+      throw new NewsValidationError('One or more selected articles no longer exist.');
+    }
+
+    const blocked = rows.find((row) => row.status !== 'draft' && row.status !== 'archived');
+    if (blocked) {
+      throw new NewsValidationError('Archive every published or scheduled article before deleting the selection.');
+    }
+
+    for (const row of rows) {
+      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json) values
+        (${actor.id},'admin.news_article.deleted','news_article',${String(row.id)},${JSON.stringify({ slug: row.slug, status: row.status, title: row.title })}::jsonb)`;
+    }
+
+    await sql`delete from idoc.news_articles where id in ${sql(ids)}`;
+  });
+}
+
 /** Vercel Cron entry point (see app/api/cron/news-scheduled-publish/route.ts): transitions every
  * 'scheduled' article whose publicationDate has passed to 'published'. Comparisons happen entirely
  * in PostgreSQL via `now()`, the documented single evaluation clock for scheduled publication. */
