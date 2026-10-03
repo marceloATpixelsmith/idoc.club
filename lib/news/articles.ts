@@ -75,6 +75,59 @@ function slugify(title: string): string {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, NEWS_SLUG_MAX_LENGTH).replace(/-+$/g, '') || 'article';
 }
 
+
+const LEGACY_BLOG_SLUGS = [
+  'modern-dressage-judging',
+  'modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen',
+  'stress-in-dressage-horses',
+  'new-research-on-stress-in-dressage-horses',
+  'integrity-beyond-compliance',
+] as const;
+
+async function newsSchemaSupportsTypeAndThumbnail(): Promise<boolean> {
+  const [row] = await client<{ ready: boolean }[]>`
+    select (
+      exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='article_type')
+      and exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='thumbnail_url')
+    ) as ready`;
+  return Boolean(row?.ready);
+}
+
+export async function requireNewsArticleSchema() {
+  if (!(await newsSchemaSupportsTypeAndThumbnail())) {
+    throw new NewsValidationError('News/Blog media is temporarily unavailable until database migration 0064 is applied.');
+  }
+}
+
+function legacyArticleTypeSql() {
+  return client`case
+    when lower(title) in (
+      'modern dressage judging: perception, data, and the evolving role of welfare',
+      'new research on stress in dressage horses',
+      'integrity beyond compliance'
+    ) or slug in ${client([...LEGACY_BLOG_SLUGS])}
+    then 'blog' else 'news' end`;
+}
+
+function legacyThumbnailSql() {
+  return client`case
+    when lower(title) like '%jacques van daele%' or slug in ('in-memoriam-jacques-van-daele','in-memoriam-jacques-van-daele-1953-2026')
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989373/jacques-van-daele.jpg'
+    when lower(title) like '%stephen clarke%' or slug in ('in-memoriam-stephen-clarke','in-memoriam-stephen-clarke-1952-2026')
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989376/stephen-clarke.jpg'
+    when lower(title) like '%judging guidelines%' or slug in ('fei-judging-guidelines','how-to-apply-the-fei-judging-guidelines-on-tension-submission-acceptance-of-the-contact-and-harmony')
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989380/fei-judging-guidelines.jpg'
+    when lower(title) = 'fei rules revision' or slug = 'fei-rules-revision'
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989383/fei-rules-revision.jpg'
+    when lower(title) like 'modern dressage judging:%' or slug in ('modern-dressage-judging','modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen')
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989387/modern-dressage-judging.jpg'
+    when lower(title) = 'new research on stress in dressage horses' or slug in ('stress-in-dressage-horses','new-research-on-stress-in-dressage-horses')
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989391/stress-in-dressage-horses.jpg'
+    when lower(title) = 'integrity beyond compliance' or slug = 'integrity-beyond-compliance'
+      then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989394/integrity-beyond-compliance.jpg'
+    else null end`;
+}
+
 async function requireNewsAdministrator() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
@@ -112,7 +165,7 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const statuses = many(input.status).filter((value): value is NewsStatus => NEWS_STATUSES.includes(value as NewsStatus));
   const statusWhere = statuses.length ? client`status in ${client(statuses)}` : client`true`;
   const types = many(input.type).filter((value): value is NewsType => NEWS_TYPES.includes(value as NewsType));
-  const typeWhere = types.length ? client`article_type in ${client(types)}` : client`true`;
+  const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
@@ -122,10 +175,19 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const advancedWhere = advancedListWhere(input, { title: 'title', status: 'status' }, NEWS_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select id,slug,title,subtitle,article_type,thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
-    where (${statusWhere}) and (${typeWhere}) and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
-    and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
-    order by ${order} limit ${limit + 1} offset ${offset}`;
+  const rows = schemaReady
+    ? await client`select id,slug,title,subtitle,article_type,thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
+        where (${statusWhere}) and (${types.length ? client`article_type in ${client(types)}` : client`true`})
+        and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
+        and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
+        order by ${order} limit ${limit + 1} offset ${offset}`
+    : await client`select id,slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count
+        from idoc.news_articles
+        where (${statusWhere})
+        and (${types.length ? client`${legacyArticleTypeSql()} in ${client(types)}` : client`true`})
+        and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
+        and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
+        order by ${order} limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
 }
 
@@ -133,12 +195,16 @@ export async function getAdminArticle(value: unknown) {
   await requireNewsAdministrator();
   const parsedId = idSchema.safeParse(value);
   if (!parsedId.success) return null;
-  const [row] = await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`;
+  const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const [row] = schemaReady
+    ? await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`
+    : await client`select *,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url from idoc.news_articles where id=${parsedId.data} limit 1`;
   return row ?? null;
 }
 
 export async function createArticle(input: ArticleInput) {
   const actor = await requireNewsAdministrator();
+  await requireNewsArticleSchema();
   const fields = validateFields(input);
   return client.begin(async (sql) => {
     const slugTaken = await sql<{ id: number }[]>`select id from idoc.news_articles where slug=${fields.slug} limit 1`;
@@ -156,6 +222,7 @@ export async function createArticle(input: ArticleInput) {
 
 export async function updateArticle(idValue: unknown, input: ArticleInput) {
   const actor = await requireNewsAdministrator();
+  await requireNewsArticleSchema();
   const id = parse(idSchema, idValue, 'Article not found.');
   const fields = validateFields(input);
   await client.begin(async (sql) => {
@@ -303,17 +370,30 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   const articleType = parsedType.success ? parsedType.data : null;
   const limit = PUBLIC_PAGE_SIZE;
   const offset = (page - 1) * limit;
-  const rows = await client`select slug,title,subtitle,article_type,thumbnail_url,publication_date from idoc.news_articles
-    where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
-    order by publication_date desc limit ${limit + 1} offset ${offset}`;
+  const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const rows = schemaReady
+    ? await client`select slug,title,subtitle,article_type,thumbnail_url,publication_date from idoc.news_articles
+        where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+        order by publication_date desc limit ${limit + 1} offset ${offset}`
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,publication_date
+        from idoc.news_articles
+        where status='published' and publication_date<=now()
+        and (${articleType}::text is null or ${legacyArticleTypeSql()}=${articleType})
+        order by publication_date desc limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
 }
 
 export async function getPublicArticleBySlug(value: unknown, expectedType?: NewsType) {
   const parsedSlug = slugSchema.safeParse(value);
   if (!parsedSlug.success) return null;
-  const [row] = await client`select slug,title,subtitle,article_type,thumbnail_url,content_html,publication_date from idoc.news_articles
-    where slug=${parsedSlug.data} and status='published' and publication_date<=now()
-    and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`;
+  const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const [row] = schemaReady
+    ? await client`select slug,title,subtitle,article_type,thumbnail_url,content_html,publication_date from idoc.news_articles
+        where slug=${parsedSlug.data} and status='published' and publication_date<=now()
+        and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,content_html,publication_date
+        from idoc.news_articles
+        where slug=${parsedSlug.data} and status='published' and publication_date<=now()
+        and (${expectedType ?? null}::text is null or ${legacyArticleTypeSql()}=${expectedType ?? null}) limit 1`;
   return row ?? null;
 }

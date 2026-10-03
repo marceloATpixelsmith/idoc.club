@@ -905,6 +905,15 @@ News and Blog are one durable article system with an explicit `article_type` of 
 
 The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. Runtime upload requires `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`; `CLOUDINARY_CLOUD_NAME` defaults to the IDOC cloud `z6xv27qx` when omitted. Public `/news` and `/blog` listings are type-filtered server-side, include the thumbnail, and route to type-specific detail pages; the homepage uses the same typed database records rather than the legacy static President's Blog array.
 
+
+### News/Blog pre-0064 rollout compatibility
+
+If application code containing the News/Blog type and thumbnail features is deployed before database migration `0064_news_article_type.sql` reaches the shared Render database, read paths remain available in a temporary compatibility mode. In that mode, `/admin/news`, `/news`, `/blog`, homepage article cards, and article detail pages synthesize the known legacy NEWS/BLOG classification and legacy Cloudinary thumbnail URLs instead of querying the missing `article_type` and `thumbnail_url` columns.
+
+This mode is intentionally **read-compatible but write-restricted**. Creating or editing News/Blog content that requires the new fields must fail with a clear migration-required message before any Cloudinary upload or database mutation occurs. Operators should treat that message as a schema rollout issue, not an application/content error.
+
+Recovery action: apply migration `0064_news_article_type.sql` to the shared staging/production database using the normal reviewed database-migration process, verify both new columns and the migration ledger, then redeploy/retest `/admin/news`, `/news`, and `/blog`. The fallback is transitional only and must not be left in place as a substitute for applying migration 0064.
+
 The former **Pages** administration surface is retired completely: it has no admin navigation item, routes, actions, editor/form, preview, table configuration, or administrator preference type. Existing persisted CMS pages remain read-only and can still be delivered through the public/member page renderer.
 
 Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
