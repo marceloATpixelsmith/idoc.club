@@ -3,13 +3,15 @@ import { listAdminConversations, listEligibleAdministrators } from '@/lib/suppor
 import { SupportInboxTable } from './support-inbox-table';
 import { SupportDetailDrawer } from './support-detail-drawer';
 
-export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ memberEmail?: string; supportId?: string }> }) {
+export default async function AdminSupportPage({ searchParams }: { searchParams: Promise<{ memberEmail?: string | string[]; supportId?: string | string[] }> }) {
   // Filters, sort, columns, and pagination all come from the database, never the URL -- see
   // components/admin/table-preference-sync.tsx and docs/07. `memberEmail` is a deliberate exception
   // of the same short-lived, single-step shape as `profileId` on the Members page: the Members
   // table's Support action link seeds the search box with a specific member's email for this one
   // navigation only -- typing further, or a later visit, goes back through the normal DB-persisted `q`.
-  const { memberEmail, supportId } = await searchParams;
+  const params = await searchParams;
+  const memberEmail = Array.isArray(params.memberEmail) ? params.memberEmail[0] : params.memberEmail;
+  const supportId = Array.isArray(params.supportId) ? params.supportId[0] : params.supportId;
   const saved = await getTablePreferences('support');
   const listQuery = {
     activityFrom: typeof saved?.activityFrom === 'string' ? saved.activityFrom : undefined,
