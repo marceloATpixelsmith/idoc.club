@@ -4,7 +4,8 @@ import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/rea
 import { Download, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type { MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
@@ -52,6 +53,11 @@ export function RegistrationsTable({
   const [from, setFrom] = useState(filters.from);
   const [to, setTo] = useState(filters.to);
   const [isPending, startTransition] = useTransition();
+  const openTableAction = useCallback((event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    startTransition(() => router.push(href));
+  }, [router]);
   const initialVisibility = useMemo(() => {
     if (!initialVisibleColumns) return {};
     return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, initialVisibleColumns.includes(column)]));
@@ -68,11 +74,11 @@ export function RegistrationsTable({
       header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
       meta: { label: 'Actions' },
       cell: ({ row }) => <Button asChild aria-label="Edit registration" size="icon-sm" title="Edit registration" variant="ghost">
-        <Link href={`${pathname}?registrationId=${row.original.id}`}><Pencil aria-hidden="true" /></Link>
+        <Link href={`${pathname}?registrationId=${row.original.id}`} onClick={(event) => openTableAction(event, `${pathname}?registrationId=${row.original.id}`)}><Pencil aria-hidden="true" /></Link>
       </Button>,
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seminarOptions is derived server-side per render, stable for this table's lifetime.
-  ], [seminarOptions]);
+  ], [openTableAction, pathname, seminarOptions]);
   const defaultColumnOrder = ['select', 'registered', 'registrant', 'seminar', 'status', 'actions'];
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
