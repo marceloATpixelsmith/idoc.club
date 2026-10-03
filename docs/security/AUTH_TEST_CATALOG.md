@@ -370,8 +370,8 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-MFA-006, AUTH-TRANSACTION-003, AUTH-TRANSACTION-004
-- **CI coverage:** mapped — `tests/fresh-mfa-step-up.test.ts`, `tests/security-e2e/mfa-production-boundaries.spec.ts`
-- **Live:** required; email=no; admin=yes; destructive=no
+- **CI coverage:** mapped — `tests/fresh-mfa-step-up.test.ts`, `tests/security-e2e/mfa-production-boundaries.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
+- **Live:** required; email=no; admin=yes; destructive=yes
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
@@ -383,9 +383,11 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 3. Submit a valid TOTP once.
 4. Do not click the original action a second time; inspect the resulting state/network activity.
 5. Replay refresh/back/callback state after completion.
+6. On disposable admin-table records, exercise Delete selected and confirm fresh MFA resumes the exact selected destructive action without a second click.
 
 ### PASS
 - Wrong code is inert; valid TOTP causes the programmed original action to resume automatically exactly once; no second user click is needed; replay does not repeat the mutation.
+- Admin bulk deletion cannot mutate before fresh step-up, preserves server-side eligibility/retention checks, and executes once after valid MFA.
 
 ### FAIL
 - Mutation happens before valid step-up, requires a second original click, executes twice, or can be replayed.
@@ -492,7 +494,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004
-- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`
+- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
@@ -504,6 +506,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 2. Verify an unauthorized visit to /admin and a Super Admin-only admin page renders a safe denial instead of a generic retry screen.
 3. As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.
 4. Attempt self-elevation or role mutation outside permitted scope.
+5. Attempt bulk delete against protected targets: the acting admin, another privileged administrator, a seminar with registrations, a payment-evidenced registration, and an open support conversation.
 
 ### PASS
 - Every server-side boundary rejects unauthorized role/object access with 401/403 or equivalent safe denial; no protected data or mutation occurs.
@@ -524,7 +527,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-CSRF-003
-- **CI coverage:** mapped — `tests/security-e2e/csrf.spec.ts`, `tests/pending-flow-csrf-nonce.integration.ts`
+- **CI coverage:** mapped — `tests/security-e2e/csrf.spec.ts`, `tests/pending-flow-csrf-nonce.integration.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -754,7 +757,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUDIT-002, AUTH-LOG-001, AUTH-LOG-003
-- **CI coverage:** mapped — `tests/auth-security-events.integration.ts`, `tests/security-event-log-attribution.integration.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/audit-evidence.integration.ts`
+- **CI coverage:** mapped — `tests/auth-security-events.integration.ts`, `tests/security-event-log-attribution.integration.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/audit-evidence.integration.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
