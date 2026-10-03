@@ -49,6 +49,10 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
           <label className="block">Slug
             <input className="mt-1 block w-full border p-2" defaultValue={String(article.slug)} maxLength={160} name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
           </label>
+          <label className="block">External link (optional)
+            <input className="mt-1 block w-full border p-2" defaultValue={article.external_url ? String(article.external_url) : ''} maxLength={2000} name="externalUrl" placeholder="https://www.fei.org/..." type="url" />
+            <span className="mt-1 block text-sm text-muted-foreground">When set, public cards open this URL in a new tab instead of the IDOC article page. A full article body is optional for external-link items.</span>
+          </label>
           <label className="block">Thumbnail
             {article.thumbnail_url ? <img alt="" className="mb-3 aspect-[16/9] w-full max-w-md rounded-lg border object-cover" src={String(article.thumbnail_url)} /> : null}
             <input accept="image/avif,image/jpeg,image/png,image/webp" className="mt-1 block w-full border p-2" name="thumbnail" type="file" />
