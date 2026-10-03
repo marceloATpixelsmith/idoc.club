@@ -26,7 +26,7 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
 }) {
   const isGuest = registration.profile_id === null;
   return (
-    <AdminFormDrawer closeHref={closeHref} title={String(isGuest ? registration.guest_name : registration.member_name)}>
+    <AdminFormDrawer closeHref={closeHref} title="Registration">
       <div className="space-y-4 px-5 py-6 lg:px-8">
         <p className="text-sm text-muted-foreground">{registration.seminar_title} · {isGuest ? 'Guest' : 'Member'}</p>
           <AdminFormSection title="Registrant details">
