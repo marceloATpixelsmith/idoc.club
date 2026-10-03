@@ -14,6 +14,9 @@ const bulkActions = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8'
 const dashboard = readFileSync('app/(dashboard)/admin/page.tsx', 'utf8');
 const exportsPage = readFileSync('app/(dashboard)/admin/exports/page.tsx', 'utf8');
 const pageHeader = readFileSync('components/site/PageHeader.tsx', 'utf8');
+const sharedButton = readFileSync('components/ui/button.tsx', 'utf8');
+const globals = readFileSync('app/globals.css', 'utf8');
+const siteHeader = readFileSync('components/site/Header.tsx', 'utf8');
 const runbook = readFileSync('docs/07-administrator-and-operations-runbook.md', 'utf8');
 const requirements = readFileSync('docs/08-product-roadmap-and-functional-requirements.md', 'utf8');
 
@@ -82,4 +85,13 @@ test('Seminar edit and create stay over the table and table actions own navigati
   assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
   assert.match(resourceTable, /seminars\/registrations\?seminarId=/);
   assert.match(resourceTable, /Download this seminar's registrations/);
+});
+
+
+test('ordinary gold and blue buttons share the canonical Member Login pill radius', () => {
+  assert.match(siteHeader, /MemberLoginLink[\s\S]*rounded-full/);
+  assert.match(sharedButton, /rounded-full text-sm/);
+  assert.match(globals, /Canonical button radius/);
+  assert.match(globals, /\.idoc-secondary-button[\s\S]*border-radius: 9999px/);
+  assert.match(globals, /\[data-idoc-table-control\][\s\S]*border-radius: 9999px/);
 });
