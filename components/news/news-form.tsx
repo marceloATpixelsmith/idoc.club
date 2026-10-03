@@ -14,7 +14,7 @@ export function NewsForm({ action, children, confirmMessage, pendingLabel = 'Sav
   const [state, formAction, pending] = useActionState(action, {});
   const closeDrawer = useAdminFormDrawer();
   useEffect(() => { if (state.success && closeDrawer) closeDrawer(); }, [state.success, closeDrawer]);
-  return <form action={formAction} className="space-y-4" onSubmit={(event) => { if (confirmMessage && !window.confirm(confirmMessage)) event.preventDefault(); }}><CsrfField />{children}
+  return <form action={formAction} className="space-y-4" encType="multipart/form-data" onSubmit={(event) => { if (confirmMessage && !window.confirm(confirmMessage)) event.preventDefault(); }}><CsrfField />{children}
     {state.error ? <p className="text-sm text-red-600" role="alert">{state.error}</p> : null}
     {state.success ? <p className="text-sm text-green-700" role="status">{state.success}</p> : null}
     <Button disabled={pending} type="submit">{pending ? <AuthPendingLabel text={pendingLabel} /> : submitLabel}</Button>
