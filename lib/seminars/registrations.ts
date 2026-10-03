@@ -66,6 +66,99 @@ export async function listAllSeminarPaymentMethodsForAdmin() {
   return client<{ canonical_id: string; display_label: string }[]>`select canonical_id,display_label from idoc.seminar_payment_methods order by display_order`;
 }
 
+export async function createAdminSeminarRegistration(fields: {
+  email?: unknown; firstName?: unknown; lastName?: unknown; paymentMethod?: unknown; phone?: unknown; seminarId?: unknown;
+}): Promise<{ registrationId: number }> {
+  const actor = await requireSeminarAdministrator();
+  const seminarId = idSchema.safeParse(fields.seminarId);
+  if (!seminarId.success) throw new SeminarRegistrationError('Choose a seminar.');
+  const paymentMethod = z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
+  if (!paymentMethod.success) throw new SeminarRegistrationError('Admin-created registrations must use Bank Transfer or Cash.');
+
+  const emailResult = guestEmailSchema.safeParse(fields.email);
+  if (!emailResult.success) throw new SeminarRegistrationError('Enter a valid email address.');
+  const firstNameResult = guestFirstNameSchema.safeParse(fields.firstName);
+  if (!firstNameResult.success) throw new SeminarRegistrationError('Enter a first name.');
+  const lastNameResult = guestLastNameSchema.safeParse(fields.lastName);
+  if (!lastNameResult.success) throw new SeminarRegistrationError('Enter a last name.');
+  const phoneResult = guestPhoneSchema.safeParse(fields.phone);
+  if (!phoneResult.success) throw new SeminarRegistrationError('Enter a valid phone number.');
+
+  const email = emailResult.data.toLowerCase();
+  const firstName = firstNameResult.data;
+  const lastName = lastNameResult.data;
+  const guestName = `${firstName} ${lastName}`;
+  const directDelivery = isStagingSeminarDirectDelivery();
+
+  return client.begin(async (sql) => {
+    const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
+    const [member] = await sql<{ email: string; first_name: string; id: number }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email
+      from idoc.profiles p join idoc.users u on u.id=p.user_id
+      where lower(coalesce(u.email_display,u.email))=${email} limit 1`;
+
+    const paymentStatus = initialPaymentStatusForMethod(paymentMethod.data);
+    const priceCents = member ? seminar.member_price_cents : seminar.non_member_price_cents;
+    let registrationId: number;
+
+    if (member) {
+      const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status
+        from idoc.seminar_registrations where seminar_id=${seminarId.data} and profile_id=${member.id} for update`;
+      if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('This member is already registered for this seminar.');
+      if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
+        throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated.');
+      }
+      if (existing) {
+        await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
+          payment_method_canonical_id=${paymentMethod.data},expected_amount_cents=${priceCents},currency='EUR',
+          stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,stripe_payment_intent_id=null,
+          paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
+          where id=${existing.id}`;
+        registrationId = existing.id;
+      } else {
+        const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations
+          (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
+          values (${seminarId.data},${member.id},${paymentStatus},${paymentMethod.data},${priceCents},'EUR') returning id`;
+        registrationId = row.id;
+      }
+      const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
+      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+        (${member.id},${confirmationKind},
+          jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
+          ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
+    } else {
+      const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status
+        from idoc.seminar_registrations where seminar_id=${seminarId.data} and profile_id is null and lower(guest_email)=${email} for update`;
+      if (existing?.registration_status === 'registered') throw new SeminarRegistrationError('This email is already registered for this seminar.');
+      if (existing && !['unpaid', 'bank_transfer_pending', 'cash_pending'].includes(existing.payment_status)) {
+        throw new SeminarRegistrationError('This registration has payment history and cannot be reactivated.');
+      }
+      if (existing) {
+        await sql`update idoc.seminar_registrations set registration_status='registered',payment_status=${paymentStatus},
+          payment_method_canonical_id=${paymentMethod.data},expected_amount_cents=${priceCents},currency='EUR',
+          guest_name=${guestName},guest_first_name=${firstName},guest_last_name=${lastName},guest_phone=${phoneResult.data},guest_email=${email},
+          stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,stripe_payment_intent_id=null,
+          paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
+          where id=${existing.id}`;
+        registrationId = existing.id;
+      } else {
+        const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations
+          (seminar_id,guest_name,guest_first_name,guest_last_name,guest_email,guest_phone,payment_status,payment_method_canonical_id,expected_amount_cents,currency)
+          values (${seminarId.data},${guestName},${firstName},${lastName},${email},${phoneResult.data},${paymentStatus},${paymentMethod.data},${priceCents},'EUR') returning id`;
+        registrationId = row.id;
+      }
+      const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
+      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
+        (null,${confirmationKind},jsonb_build_object('amountCents',${priceCents}::int,'firstName',${firstName}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${email}::text),
+          ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
+    }
+
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+      (${actor.id},'admin.seminar_registration.created','seminar_registration',${String(registrationId)},
+       ${JSON.stringify({ email, paymentMethod: paymentMethod.data, seminarId: seminarId.data })}::jsonb)`;
+    return { registrationId };
+  });
+}
+
 function validatePaymentMethod(rows: { canonical_id: string }[], value: unknown): string {
   const method = typeof value === 'string' ? value.trim() : '';
   if (!rows.some((row) => row.canonical_id === method)) throw new SeminarRegistrationError('Choose one of the currently accepted payment methods.');
