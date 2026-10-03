@@ -8,6 +8,8 @@ const resourceTable = readFileSync('components/admin/resource-data-table.tsx', '
 const supportPage = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
 const supportDrawer = readFileSync('app/(dashboard)/admin/support/support-detail-drawer.tsx', 'utf8');
 const supportTable = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+const seminarPage = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
+const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
 const bulkActions = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8');
 const dashboard = readFileSync('app/(dashboard)/admin/page.tsx', 'utf8');
 const exportsPage = readFileSync('app/(dashboard)/admin/exports/page.tsx', 'utf8');
@@ -68,4 +70,16 @@ test('admin drawer UX contract is permanent documentation', () => {
     assert.match(source, /Support/);
     assert.match(source, /News\/Blog/);
   }
+});
+
+
+test('Seminar edit and create stay over the table and table actions own navigation/download shortcuts', () => {
+  assert.match(seminarPage, /AdminSeminarDrawer/);
+  assert.match(seminarPage, /seminarId/);
+  assert.match(seminarPage, /new/);
+  assert.match(seminarDrawer, /AdminFormDrawer/);
+  assert.doesNotMatch(seminarDrawer, /Quick links|Quick actions|Download registrations|View registrations/i);
+  assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
+  assert.match(resourceTable, /seminars\/registrations\?seminarId=/);
+  assert.match(resourceTable, /Download this seminar's registrations/);
 });
