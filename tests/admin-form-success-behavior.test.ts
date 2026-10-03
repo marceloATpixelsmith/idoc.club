@@ -36,6 +36,7 @@ test('every mutating member admin form closes the sheet and refreshes the table 
   }
 });
 
+// This regression test intentionally covers UI completion behavior only; auth/security semantics are unchanged.
 test('member admin mutation forms invoke their success callback only after a successful action result', () => {
   for (const { path, source } of successAwareForms) {
     assert.match(source, /onSuccess\?: \(\) => void/, `${path} must accept an onSuccess callback`);
