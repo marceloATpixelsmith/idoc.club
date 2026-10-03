@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
@@ -12,9 +13,11 @@ type FormState = { error?: string; success?: string };
 type Role = { id: number; role: string };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
-export function RolesSection({ activeRoles, userId }: { activeRoles: Role[]; userId: number }) {
+export function RolesSection({ activeRoles, onSuccess, userId }: { activeRoles: Role[]; onSuccess?: () => void; userId: number }) {
   const [grantState, grantAction, grantPending, grantDialog] = useFreshStepUpAction(grantRoleForm, {});
   const [revokeState, revokeAction, revokePending, revokeDialog] = useFreshStepUpAction(revokeRoleForm, {});
+  useEffect(() => { if (grantState.success) onSuccess?.(); }, [grantState.success, onSuccess]);
+  useEffect(() => { if (revokeState.success) onSuccess?.(); }, [revokeState.success, onSuccess]);
   return <><div className="space-y-6">
     <div className="space-y-2">
       <p className="text-sm font-medium text-foreground">Currently active roles</p>
