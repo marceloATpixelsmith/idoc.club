@@ -15,7 +15,7 @@ const successAwareForms = [
 ].map((path) => ({ path, source: readFileSync(path, 'utf8') }));
 
 test('every mutating member admin form closes the sheet and refreshes the table on success', () => {
-  assert.match(memberDetailSheet, /const closeAndRefresh = \(\) => \{ setOpen\(false\); router\.push\(closeHref\); router\.refresh\(\); \};/);
+  assert.match(memberDetailSheet, /const closeAndRefresh = useCallback\(\(\) => \{ setOpen\(false\); router\.push\(closeHref\); router\.refresh\(\); \}, \[closeHref, router\]\);/);
 
   const expectedBindings = [
     'AdminProfileForm',
@@ -43,4 +43,13 @@ test('member admin mutation forms invoke their success callback only after a suc
     assert.match(source, /state\.success|grantState\.success|revokeState\.success/, `${path} must react to successful action state`);
     assert.match(source, /onSuccess\?\.\(\)/, `${path} must invoke the shared completion callback`);
   }
+});
+
+
+test('membership suspension keeps the drawer open when Stripe cancellation needs manual attention', () => {
+  const actions = readFileSync('app/(dashboard)/admin/members/actions.ts', 'utf8');
+  const form = readFileSync('app/(dashboard)/admin/members/membership-status-form.tsx', 'utf8');
+  assert.match(actions, /attentionRequired: true/);
+  assert.match(form, /state\.success && !state\.attentionRequired/);
+  assert.match(form, /text-amber-600/);
 });
