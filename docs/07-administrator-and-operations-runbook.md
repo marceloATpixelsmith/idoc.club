@@ -910,9 +910,9 @@ The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG,
 
 If application code containing the News/Blog type and thumbnail features is deployed before database migration `0064_news_article_type.sql` reaches the shared Render database, read paths remain available in a temporary compatibility mode. In that mode, `/admin/news`, `/news`, `/blog`, homepage article cards, and article detail pages synthesize the known legacy NEWS/BLOG classification and legacy Cloudinary thumbnail URLs instead of querying the missing `article_type` and `thumbnail_url` columns.
 
-This mode is intentionally **read-compatible but write-restricted**. Creating or editing News/Blog content that requires the new fields must fail with a clear migration-required message before any Cloudinary upload or database mutation occurs. Operators should treat that message as a schema rollout issue, not an application/content error.
+This mode is read-compatible and now also self-heals the additive News/Blog schema on the first authorized administrator write. Before any thumbnail upload or article mutation, the server acquires a PostgreSQL advisory transaction lock and creates the missing 0064/0065 News columns, index, and checks idempotently. If the database user cannot perform that DDL, the save fails clearly and no upload/mutation proceeds.
 
-Recovery action: apply migration `0064_news_article_type.sql` to the shared staging/production database using the normal reviewed database-migration process, verify both new columns and the migration ledger, then redeploy/retest `/admin/news`, `/news`, and `/blog`. The fallback is transitional only and must not be left in place as a substitute for applying migration 0064.
+The normal migration runner must still record migrations 0064 and 0065 afterward. Both migration files are idempotent so they can run safely after the write-path repair has already created the additive objects. Verify the new columns and the `idoc.__drizzle_migrations` ledger, then retest `/admin/news`, `/news`, and `/blog`.
 
 
 ### External News/Blog link items
@@ -924,3 +924,8 @@ The former **Pages** administration surface is retired completely: it has no adm
 Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
 
 CI trigger note: external-link support is covered by migration 0065 and the News/Blog regression suite.
+
+
+### Shared light-blue secondary button style
+
+The canonical light-blue/secondary button treatment is the same surface used by administrator table filter controls: `var(--surface-raised)` background, standard input border, foreground text, and `var(--accent)` hover with the gold-tinted border. The reusable `.idoc-secondary-button` class and the shared Button `secondary` variant own this treatment. Admin table controls and seminar registration controls that use `data-idoc-table-control` share the same CSS declarations. Do not introduce one-off blue hex colors. Use `.idoc-secondary-button--dotted` only where a dotted border is explicitly required, such as the FEI Course Calendar control in the Seminars page header.
