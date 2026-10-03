@@ -21,7 +21,10 @@ export function BulkDeleteSelected({ clearSelection, ids, table }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.error, state.success]);
 
-  function requestDelete() {
+  function requestDelete(event: Event) {
+    // Keep the ActionBar mounted while the server action/MFA dialog runs; otherwise its portal
+    // would close and unmount the component that owns the pending destructive action.
+    event.preventDefault();
     if (!ids.length || pending) return;
     const label = ids.length === 1 ? 'record' : 'records';
     if (!window.confirm('Delete ' + ids.length + ' selected ' + label + '? Existing financial, audit, and retention protections still apply.')) return;
