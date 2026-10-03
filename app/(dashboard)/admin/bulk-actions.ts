@@ -94,6 +94,25 @@ async function deleteMembers(ids: string[], actorId: number) {
     return rows.length;
   });
 }
+async function archiveMembers(ids: string[], actorId: number) {
+  const numeric = ids.map(Number);
+  return client.begin(async (sql) => {
+    const rows = await sql<{ id: number }[]>`select id from idoc.users where id in ${sql(numeric)} for update`;
+    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
+    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot archive your own administrator account.');
+    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from idoc.application_roles where user_id in ${sql(numeric)} and role in ('administrator','super_admin')`;
+    if (privileged.length) throw new Error('Administrator accounts cannot be bulk archived. Revoke their administrator role first.');
+    const activeSubscriptions = await sql<{ count: number }[]>`select count(*)::int as count from idoc.subscriptions s join idoc.profiles p on p.id=s.profile_id where p.user_id in ${sql(numeric)} and s.status in ('active','trialing','past_due','incomplete')`;
+    if (activeSubscriptions[0]?.count) throw new Error('Cancel active billing subscriptions before archiving selected members.');
+    for (const row of rows) {
+      await sql`update idoc.users set account_state='deleted',deleted_at=null,session_version=session_version+1,updated_at=now() where id=${row.id}`;
+      await sql`delete from idoc.auth_sessions where user_id=${row.id}`;
+      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason) values (${actorId},'admin.member.archived','user',${String(row.id)},${JSON.stringify({ accountState: 'active' })}::jsonb,${JSON.stringify({ accountState: 'archived' })}::jsonb,'Bulk archive from Members admin table')`;
+    }
+    return rows.length;
+  });
+}
+
 async function deleteSeminars(ids: string[], actorId: number) {
   const numeric = ids.map(Number);
   return client.begin(async (sql) => {
