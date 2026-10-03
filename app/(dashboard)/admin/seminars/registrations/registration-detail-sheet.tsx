@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { SeminarForm } from '@/components/seminars/seminar-form';
 import { SeminarRefundForm } from '@/components/seminars/refund-form';
+import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
 import type { AdminSeminarRegistrationRow } from '@/lib/seminars/registrations';
 import { PAYMENT_STATUS_LABELS, REGISTRATION_STATUSES } from '@/lib/seminars/status';
 import { recordManualSeminarPaymentAction, setAdminRegistrationStatusAction, updateSeminarRegistrationDetailsAction } from '../actions';
@@ -63,9 +64,13 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
               )}
               <div className="space-y-1.5">
                 <Label htmlFor="paymentMethod">Payment method</Label>
-                <select className={SELECT_CLASSNAME} defaultValue={registration.payment_method_canonical_id} id="paymentMethod" name="paymentMethod" required>
-                  {paymentMethods.map((method) => <option key={String(method.canonical_id)} value={String(method.canonical_id)}>{String(method.display_label)}</option>)}
-                </select>
+                <PaymentMethodSelect
+                  className={SELECT_CLASSNAME}
+                  defaultValue={registration.payment_method_canonical_id}
+                  id="paymentMethod"
+                  name="paymentMethod"
+                  options={paymentMethods.map((method) => ({ label: String(method.display_label), value: String(method.canonical_id) }))}
+                />
               </div>
             </SeminarForm>
           </Section>
@@ -95,9 +100,13 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="method">Payment received via</Label>
-                    <select className={SELECT_CLASSNAME} defaultValue="bank_transfer" id="method" name="method" required>
-                      {MANUAL_PAYMENT_METHODS.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                    </select>
+                    <PaymentMethodSelect
+                      className={SELECT_CLASSNAME}
+                      defaultValue="bank_transfer"
+                      id="method"
+                      name="method"
+                      options={MANUAL_PAYMENT_METHODS}
+                    />
                   </div>
                   <div className="space-y-1.5"><Label htmlFor="reference">Reference (optional)</Label><Input id="reference" maxLength={1000} name="reference" /></div>
                 </div>

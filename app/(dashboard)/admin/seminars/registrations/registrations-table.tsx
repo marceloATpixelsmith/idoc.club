@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { PAYMENT_STATUS_LABELS, PAYMENT_STATUSES, type PaymentStatus, registrationDisplayLabel } from '@/lib/seminars/status';
+import { PaymentMethodIcon } from '@/components/seminars/payment-method-icon';
 
 type AdminRegistrationRow = {
   canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; id: number; is_guest: boolean;
@@ -54,8 +55,8 @@ export function RegistrationsTable({
   }, []);
   const columns = useMemo<ColumnDef<AdminRegistrationRow>[]>(() => [
     { id: 'registrant', accessorFn: (row) => `${row.registrant_name} ${row.registrant_email}`, header: header('registrant'), meta: { label: 'Registrant' }, cell: ({ row }) => <div>{row.original.registrant_name}{row.original.is_guest ? <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Guest</span> : null}<span className="block text-sm text-muted-foreground">{row.original.registrant_email}</span></div> },
-    { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <Link className="font-medium underline" href={`/admin/seminars/${row.original.seminar_id}`}>{row.original.seminar_title}</Link> },
-    { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus) },
+    { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
+    { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <span className="inline-flex items-center gap-2"><PaymentMethodIcon method={row.original.payment_method_canonical_id} />{registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus)}</span> },
     { id: 'registered', accessorKey: 'registered_at', header: header('registered'), meta: { label: 'Registered' }, cell: ({ row }) => new Date(row.original.registered_at).toLocaleString() },
     {
       id: 'actions', enableHiding: false, enableSorting: false, size: 90,
@@ -67,6 +68,7 @@ export function RegistrationsTable({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seminarOptions is derived server-side per render, stable for this table's lifetime.
   ], [seminarOptions]);
+  const defaultColumnOrder = ['registered', 'registrant', 'seminar', 'status', 'actions'];
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
     return [{ desc: true, id: 'registered' as keyof AdminRegistrationRow }];
@@ -108,7 +110,7 @@ export function RegistrationsTable({
   const { table } = useDataTable({
     columns, data: rows,
     enableAdvancedFilter: false,
-    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(',') ?? defaultColumnOrder, columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize: filters.pageSize }, sorting: initialSorting },
     onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
     startTransition,
@@ -167,7 +169,7 @@ export function RegistrationsTable({
       pending={isPending}
       onReset={resetAll}
       leading={<>
-        <Input aria-label="Search registrant name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search registrant name or email…" type="search" value={search} />
+        <Input aria-label="Search name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
         <DateRangeFilter from={from} label="Registered" onChange={(nextFrom, nextTo) => { setFrom(nextFrom); setTo(nextTo); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { from: nextFrom, to: nextTo }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={to} />
       </>}
     />

@@ -882,3 +882,16 @@ Seminar create and edit actions open in the shared admin modal drawer rather tha
 The seminar create/edit drawer uses a two-column desktop layout: Core Information occupies the left column, while Status, Schedule, and Pricing are stacked vertically in the right column so Schedule and Pricing fill the space immediately beneath Status. On smaller screens the sections stack responsively.
 
 **Seminar registration confirmation email contract (September 2026):** every registrant receives one seminar registration confirmation using the shared IDOC midnight-navy/gold transactional shell and email-safe PNG logo. Its detail block follows the public seminar detail page order and icon concepts. Payment-specific copy belongs in the opening confirmation area before seminar details: bank transfer includes the current Organization Settings instructions, cash reminds the registrant to bring cash, and Stripe wording must never claim payment was received before the successful Checkout webhook. A separate registrant-facing payment-confirmed email is not sent.
+
+
+## Admin table presentation defaults
+
+Admin record text is display-only; opening or editing a record is done from the Actions column rather than by linking ordinary column text to edit/detail forms. Email addresses may remain `mailto:` links because they are communication actions, not record-edit shortcuts.
+
+Column order is persisted per administrator and table. A saved administrator order always wins. Only when no saved `columnOrder` exists, use these defaults:
+- Members: Name, Status, Membership Type, Expiration, IDOC Region, then remaining optional columns.
+- Seminars: Title, Status, Prices, Start, End, Deadline, Registered / Capacity.
+- Registrations: Registered, Registrant, Seminar, Payment Status.
+- Support: Activity Date, Assigned, Category, Subject, Member, Status.
+
+Seminar registration payment methods use the shared gold-branded icon mapping: card for Online / Stripe, bank for Bank Transfer, and cash for Cash at the Event. The registration search field is labeled simply “Search name or email”.
