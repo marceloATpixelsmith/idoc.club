@@ -58,12 +58,10 @@ export default async function Home() {
                 const href = external ? String(item.external_url) : `/news/${item.slug}`;
                 return (
                   <Link href={href} key={String(item.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
-                    <article className="card-midnight grid overflow-hidden sm:grid-cols-[9rem_1fr]">
+                    <article className="card-midnight overflow-hidden">
                       {item.thumbnail_url ? (
-                        <img alt="" className="h-full min-h-32 w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
-                      ) : (
-                        <div className="hidden sm:block" />
-                      )}
+                        <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                      ) : null}
                       <div className="p-6">
                         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                           {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -121,7 +119,7 @@ export default async function Home() {
             </div>
             <div className="mt-8">
               <a
-                className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground transition-opacity hover:opacity-90"
+                className="idoc-secondary-button px-6 py-3 text-sm"
                 href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
                 rel="noopener noreferrer"
                 target="_blank"
