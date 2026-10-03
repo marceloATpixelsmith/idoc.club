@@ -1753,6 +1753,63 @@
           "Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values."
         ]
       }
+    },
+    {
+      "id": "LIVE-AUTH-034",
+      "title": "Signup and password reset reject passwords found in known data breaches",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-PASSWORD-006"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/password-breach-check.test.ts",
+          "tests/password-reset-adversarial.integration.ts"
+        ],
+        "rationale": "The range-check unit test stubs a matching HIBP suffix for deterministic coverage; the password-reset integration test covers the authorized reset boundary."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use staging.idoc.club, never redesign.idoc.club, a Vercel preview, or localhost.",
+          "Use only a disposable test account and mailbox. Staging shares the production database, so cleanup is required.",
+          "Use a password that meets IDOC's 12-character composition rules and is confirmed as pwned by the HIBP Pwned Passwords check immediately before the run. HIBP does not provide a permanently reserved test password."
+        ],
+        "steps": [
+          "For signup, start signup with a fresh disposable mailbox and complete its email verification step.",
+          "Enter the composition-compliant breached password at password creation and submit.",
+          "Verify the password is rejected with the breached-password message and no account is created.",
+          "For reset, use an existing disposable account, request password reset, and complete the required email OTP or privileged TOTP verification.",
+          "Enter the same currently confirmed breached password and submit.",
+          "Verify the password is rejected and the prior credential remains valid; then complete reset with a unique, non-breached password."
+        ],
+        "pass": [
+          "Both signup and password reset reject the breached password and allow retry with a unique password.",
+          "The rejected signup creates no account; the rejected reset does not change the existing password.",
+          "Neither the raw password nor its full hash is sent to HIBP; only the 5-character SHA-1 prefix is sent."
+        ],
+        "fail": [
+          "Either flow accepts the breached password, changes account state before rejecting it, or sends the raw password/full hash to HIBP."
+        ],
+        "cleanup": [
+          "Complete a successful reset for the disposable account, then remove disposable account state after evidence is captured."
+        ],
+        "evidence": [
+          "Record the test flow, whether HIBP reported the selected password as pwned, visible validation result, and account-state outcome. Never record the password, its hash, OTP/TOTP, cookies, or tokens."
+        ]
+      }
     }
   ]
 }
