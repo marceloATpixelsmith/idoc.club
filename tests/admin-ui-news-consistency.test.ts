@@ -34,13 +34,23 @@ test('revenue date filter uses the standard blue dotted filter control', () => {
   assert.match(filters, /<Button className="justify-start" data-idoc-table-control variant="outline">/);
 });
 
-test('table filter, Sort, and View controls use Title Case rather than forced uppercase', () => {
+test('admin table filter, Sort, and View controls use Title Case without changing public seminar controls', () => {
   const globals = source('app/globals.css');
   const sort = source('components/data-table/data-table-sort-list.tsx');
   const view = source('components/data-table/data-table-view-options.tsx');
-  assert.match(globals, /\[data-idoc-table-control\],[\s\S]*text-transform: none;/);
-  assert.match(sort, />\s*Sort\s*</);
-  assert.match(view, />\s*View\s*</);
+  const seminarRegister = source('components/seminars/seminar-register-cta.tsx');
+
+  assert.match(
+    globals,
+    /body:has\(\[data-idoc-admin-root\]\) \[data-idoc-table-control\],[^{]*\{[^}]*letter-spacing: normal;[^}]*text-transform: none;[^}]*\}/,
+  );
+  assert.doesNotMatch(
+    globals,
+    /(?:^|\n)\[data-idoc-table-control\],[^{]*\{[^}]*text-transform: none;/,
+  );
+  assert.match(sort, /\n\s+Sort\n/);
+  assert.match(view, /\n\s+View\n/);
+  assert.match(seminarRegister, /className="[^"]*uppercase[^"]*"[^>]*>\s*Register/);
 });
 
 test('admins can create seminar registrations with manual payment methods only', () => {
