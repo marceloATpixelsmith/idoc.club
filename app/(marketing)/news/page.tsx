@@ -29,9 +29,13 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
               const href = external ? String(item.external_url) : `/news/${item.slug}`;
               const linkProps = external ? { rel: 'noopener noreferrer', target: '_blank' as const } : {};
               return (
-                <li className="grid gap-6 py-10 sm:grid-cols-[11rem_1fr]" key={String(item.slug)}>
-                  {item.thumbnail_url ? <Link href={href} {...linkProps}><img alt="" className="aspect-[4/3] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} /></Link> : <div className="hidden sm:block" />}
-                  <div>
+                <li className="py-10" key={String(item.slug)}>
+                  {item.thumbnail_url ? (
+                    <Link className="block" href={href} {...linkProps}>
+                      <img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                    </Link>
+                  ) : null}
+                  <div className={item.thumbnail_url ? 'mt-6' : ''}>
                     <p className="text-xs uppercase tracking-[0.18em] text-gold">
                       {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
