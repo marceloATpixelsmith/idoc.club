@@ -228,6 +228,13 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   color: var(--primary-foreground);
 }
 
+/* Admin visual rule: interface icons use the IDOC brand gold consistently across navigation,
+ * tables, forms, dialogs, and action controls. Checkbox/radio glyphs are excluded because those
+ * controls use currentColor for their state indicator rather than acting as standalone icons. */
+[data-idoc-admin-root] svg:not([data-slot='checkbox'] svg):not([data-slot='radio-group-item'] svg) {
+  color: var(--gold);
+}
+
 [data-idoc-table-control],
 [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)) {
   background: var(--surface-raised);
