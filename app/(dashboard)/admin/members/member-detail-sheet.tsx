@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
@@ -89,7 +90,7 @@ export function MemberDetailSheet({
   // lets Radix's own close animation start immediately, independent of how long closeHref's
   // navigation takes underneath.
   const [open, setOpen] = useState(true);
-  const closeAndRefresh = () => { setOpen(false); router.push(closeHref); router.refresh(); };
+  const closeAndRefresh = useCallback(() => { setOpen(false); router.push(closeHref); router.refresh(); }, [closeHref, router]);
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
   // exception used elsewhere -- see app/(dashboard)/admin/members/page.tsx); closing just navigates
