@@ -265,12 +265,13 @@ body:has([data-idoc-admin-root]) svg {
   border-style: dotted;
 }
 
-/* Table controls keep the shared blue/dotted button geometry and weight, but use natural
- * Title Case labels instead of the site's ordinary all-caps button treatment. This covers the
- * filter, date, Sort, View, Reset, and controls rendered inside table popovers. */
-[data-idoc-table-control],
-[data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)),
-[data-idoc-table-panel] [data-slot='select-trigger'] {
+/* Administrator table controls keep the shared blue/dotted button geometry and weight, but
+ * use natural Title Case labels instead of the site's ordinary all-caps button treatment. The
+ * body:has() scope keeps public controls (including seminar registration controls that reuse
+ * data-idoc-table-control) uppercase, while still reaching Radix-portaled table panels. */
+body:has([data-idoc-admin-root]) [data-idoc-table-control],
+body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)),
+body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trigger'] {
   letter-spacing: normal;
   text-transform: none;
 }
