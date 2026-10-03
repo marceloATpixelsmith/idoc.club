@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { CircleAlert, CircleCheck, CircleDashed, ClipboardList, Eye, Pencil, X } from 'lucide-react';
+import { Archive, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Eye, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -52,7 +52,7 @@ type ResourceConfig = {
 
 const CONFIG: Record<ResourceType, ResourceConfig> = {
   news: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
     dateFilter: true,
     path: '/admin/news',
     searchLabel: 'Search article title, subtitle, or slug',
@@ -141,10 +141,14 @@ export function ResourceDataTable({
             ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
-          ? <span className="font-medium">{row.original.title}</span>
+          ? tableType === 'news'
+            ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-sm text-muted-foreground">{row.original.slug}</span></span>
+            : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
-            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4 text-gold" />{row.original.status.toUpperCase()}</span>; })()
-            : <span>{row.original[id] ?? '—'}</span>,
+            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
+            : id === 'status' && tableType === 'news'
+              ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'scheduled' ? Clock3 : row.original.status === 'archived' ? Archive : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
+              : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 90,
