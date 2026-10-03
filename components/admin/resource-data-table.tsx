@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Eye, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Eye, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -157,14 +157,19 @@ export function ResourceDataTable({
         header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
         cell: ({ row }) => <div className="flex items-center gap-1">
           <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
-            <Link href={tableType === 'news' ? `/admin/news?articleId=${row.original.id}` : `${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
+            <Link href={tableType === 'news' ? `/admin/news?articleId=${row.original.id}` : tableType === 'seminars' ? `/admin/seminars?seminarId=${row.original.id}` : `${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
           </Button>
           {tableType !== 'seminars' && <Button asChild aria-label="Preview" size="icon-sm" title="Preview" variant="ghost">
             <Link href={`${config.path}/${row.original.id}/preview`}><Eye aria-hidden="true" /></Link>
           </Button>}
-          {tableType === 'seminars' && <Button asChild aria-label="Registrations" size="icon-sm" title="Registrations" variant="ghost">
-            <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`}><ClipboardList aria-hidden="true" /></Link>
-          </Button>}
+          {tableType === 'seminars' && <>
+            <Button asChild aria-label="Registrations" size="icon-sm" title="View registrations" variant="ghost">
+              <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`}><ClipboardList aria-hidden="true" /></Link>
+            </Button>
+            <Button asChild aria-label="Download registrations" size="icon-sm" title="Download this seminar's registrations" variant="ghost">
+              <a download href={`/api/admin/export/seminar-registrations?seminarId=${row.original.id}`}><Download aria-hidden="true" /></a>
+            </Button>
+          </>}
         </div>,
       },
     ];
