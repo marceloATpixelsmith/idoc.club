@@ -14,8 +14,12 @@ test('News and Blog reads stay compatible when migration 0064 columns are not pr
   assert.match(source, /res\.cloudinary\.com\/z6xv27qx/);
 });
 
-test('writes that require article_type or thumbnail_url fail before upload when 0064 is missing', () => {
+test('admin writes self-heal the additive News Blog schema before upload when 0064 or 0065 is missing', () => {
   assert.match(source, /export async function requireNewsArticleSchema/);
-  assert.match(source, /database migration 0064 is applied/);
+  assert.match(source, /pg_advisory_xact_lock/);
+  assert.match(source, /add column if not exists article_type/);
+  assert.match(source, /add column if not exists thumbnail_url/);
+  assert.match(source, /add column if not exists external_url/);
+  assert.match(source, /create index if not exists news_articles_type_publication_idx/);
   assert.match(actions, /await requireNewsArticleSchema\(\);[\s\S]*?resolveNewsThumbnail/);
 });
