@@ -982,7 +982,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Preconditions
 - Use staging.idoc.club, never redesign.idoc.club, a Vercel preview, or localhost.
 - Use only a disposable test account and mailbox. Staging shares the production database, so cleanup is required.
-- Use a password that meets IDOC's 10-character minimum and composition rules and is confirmed as pwned by the HIBP Pwned Passwords check immediately before the run. HIBP does not provide a permanently reserved test password.
+- Use the designated test password `Password#1` (10 characters; meets the composition rules) for the live HIBP check. Confirm the range response reports a match before submitting it in signup or password reset; use only the disposable test identity.
 
 ### Steps
 1. For signup, start signup with a fresh disposable mailbox and complete its email verification step.
