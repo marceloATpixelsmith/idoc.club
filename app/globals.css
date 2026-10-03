@@ -228,6 +228,15 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   color: var(--primary-foreground);
 }
 
+/* Canonical button radius: the Member Login CTA is the visual reference for every ordinary
+ * site button. Gold/default and blue/secondary controls use the same pill radius; component-specific
+ * color or border treatments may differ, but button corner radius may not. Auth-reference controls
+ * remain governed by their dedicated authentication design system. */
+button:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-password__toggle):not(.idoc-auth-turnstile__retry):not(.idoc-auth-recovery-codes__copy-button),
+[data-slot='button']:not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-turnstile__retry) {
+  border-radius: 9999px;
+}
+
 /* Admin visual rule: interface icons use the IDOC brand gold consistently across navigation,
  * tables, forms, dialogs, and action controls. Checkbox/radio glyphs are excluded because those
  * controls use currentColor for their state indicator rather than acting as standalone icons. */
@@ -246,7 +255,7 @@ body:has([data-idoc-admin-root]) svg {
   border-width: 1px;
   border-style: solid;
   border-color: var(--input);
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 9999px;
   color: var(--foreground);
   font-weight: 500;
   letter-spacing: normal;
