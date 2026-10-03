@@ -344,7 +344,7 @@ export const administratorTablePreferences = idocSchema.table('administrator_tab
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('administrator_table_preferences_user_table_unique').on(table.userId, table.tableIdentifier),
-  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'content_pages')`),
+  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'seminar_registrations')`),
 ]);
 
 /** Member-owned, immutable threaded support. Public UUIDs keep internal sequence IDs out of URLs. */
@@ -420,6 +420,7 @@ export const newsArticles = idocSchema.table('news_articles', {
   subtitle: varchar('subtitle', { length: 300 }),
   contentHtml: text('content_html').notNull(),
   articleType: varchar('article_type', { length: 10 }).notNull().default('news'),
+  thumbnailUrl: text('thumbnail_url'),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
   publicationDate: timestamp('publication_date', { withTimezone: true }).notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
