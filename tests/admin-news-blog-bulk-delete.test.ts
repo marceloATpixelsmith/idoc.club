@@ -83,3 +83,15 @@ test('registration payment status and method are both icon-backed and status is 
 test('admin route icons are consistently brand gold including portalled controls', () => {
   assert.match(globals, /body:has\(\[data-idoc-admin-root\]\) svg[\s\S]*?color: var\(--gold\)/);
 });
+
+
+test('bulk Support close and News status updates keep server authorization, CSRF and audit evidence', () => {
+  assert.match(bulk, /export async function bulkCloseSupportRows/);
+  assert.match(bulk, /export async function bulkSetNewsStatus/);
+  assert.match(bulk, /await requireCsrfToken/);
+  assert.match(bulk, /requireAccountAccess\('administration'\)/);
+  assert.match(bulk, /requireAdministrator\(actor\)/);
+  assert.match(bulk, /support\.conversation\.closed/);
+  assert.match(bulk, /admin\.news_article\.bulk_status_changed/);
+  assert.match(bulk, /Every selected item needs a future publication date before it can be scheduled/);
+});
