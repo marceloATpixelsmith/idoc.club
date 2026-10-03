@@ -1,13 +1,22 @@
 alter table idoc.news_articles
-  add column article_type varchar(10) not null default 'news';
+  add column if not exists article_type varchar(10) not null default 'news';
 
 alter table idoc.news_articles
-  add column thumbnail_url text;
+  add column if not exists thumbnail_url text;
 
-alter table idoc.news_articles
-  add constraint news_articles_type_check check (article_type in ('news', 'blog'));
+do $
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'news_articles_type_check'
+      and conrelid = 'idoc.news_articles'::regclass
+  ) then
+    alter table idoc.news_articles
+      add constraint news_articles_type_check check (article_type in ('news', 'blog'));
+  end if;
+end $;
 
-create index news_articles_type_publication_idx
+create index if not exists news_articles_type_publication_idx
   on idoc.news_articles (article_type, status, publication_date);
 
 -- Existing President's Blog items are migrated into the unified News/Blog store by title/slug.
@@ -29,7 +38,7 @@ or slug in (
 -- Remove stale preferences for the removed Pages admin, then tighten the identifier constraint.
 delete from idoc.administrator_table_preferences where table_identifier = 'content_pages';
 alter table idoc.administrator_table_preferences
-  drop constraint administrator_table_preferences_identifier_check;
+  drop constraint if exists administrator_table_preferences_identifier_check;
 alter table idoc.administrator_table_preferences
   add constraint administrator_table_preferences_identifier_check
   check (table_identifier in ('memberships', 'support', 'news', 'seminars', 'seminar_registrations'));
