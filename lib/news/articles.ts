@@ -104,11 +104,67 @@ async function newsSchemaSupportsExternalUrl(): Promise<boolean> {
 }
 
 export async function requireNewsArticleSchema() {
-  if (!(await newsSchemaSupportsTypeAndThumbnail())) {
-    throw new NewsValidationError('News/Blog media is temporarily unavailable until database migration 0064 is applied.');
+  if ((await newsSchemaSupportsTypeAndThumbnail()) && (await newsSchemaSupportsExternalUrl())) return;
+
+  try {
+    await client.begin(async (sql) => {
+      await sql`select pg_advisory_xact_lock(hashtext('idoc.news_articles.schema'))`;
+
+      await sql`alter table idoc.news_articles
+        add column if not exists article_type varchar(10) not null default 'news'`;
+      await sql`alter table idoc.news_articles
+        add column if not exists thumbnail_url text`;
+      await sql`create index if not exists news_articles_type_publication_idx
+        on idoc.news_articles (article_type, status, publication_date)`;
+
+      await sql`do $
+      begin
+        if not exists (
+          select 1 from pg_constraint
+          where conname = 'news_articles_type_check'
+            and conrelid = 'idoc.news_articles'::regclass
+        ) then
+          alter table idoc.news_articles
+            add constraint news_articles_type_check check (article_type in ('news', 'blog'));
+        end if;
+      end $`;
+
+      await sql`update idoc.news_articles
+        set article_type = 'blog'
+        where lower(title) in (
+          'modern dressage judging: perception, data, and the evolving role of welfare',
+          'new research on stress in dressage horses',
+          'integrity beyond compliance'
+        )
+        or slug in (
+          'modern-dressage-judging',
+          'modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen',
+          'stress-in-dressage-horses',
+          'new-research-on-stress-in-dressage-horses',
+          'integrity-beyond-compliance'
+        )`;
+
+      await sql`alter table idoc.news_articles add column if not exists external_url text`;
+      await sql`alter table idoc.news_articles drop constraint if exists news_articles_external_url_check`;
+      await sql`alter table idoc.news_articles
+        add constraint news_articles_external_url_check
+        check (external_url is null or external_url ~* '^https?://')`;
+      await sql`alter table idoc.news_articles drop constraint if exists news_articles_content_length_check`;
+      await sql`alter table idoc.news_articles
+        add constraint news_articles_content_length_check
+        check (
+          (external_url is null and char_length(content_html) between 1 and 20000)
+          or
+          (external_url is not null and char_length(content_html) between 0 and 20000)
+        )`;
+    });
+  } catch (error) {
+    console.error('news_article_schema_upgrade_failed', error);
+    throw new NewsValidationError('News/Blog database preparation failed. Please retry the save or contact an administrator.');
   }
-  if (!(await newsSchemaSupportsExternalUrl())) {
-    throw new NewsValidationError('News/Blog external links are temporarily unavailable until database migration 0065 is applied.');
+
+  if (!(await newsSchemaSupportsTypeAndThumbnail()) || !(await newsSchemaSupportsExternalUrl())) {
+    throw new NewsValidationError('News/Blog database preparation did not complete. Please retry the save or contact an administrator.');
   }
 }
 
