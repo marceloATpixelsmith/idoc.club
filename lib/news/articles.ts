@@ -14,6 +14,9 @@ import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
  * accordingly); nothing here interprets it in the administrator's local browser timezone. */
 export const NEWS_STATUSES = ['draft', 'scheduled', 'published', 'archived'] as const;
 export type NewsStatus = (typeof NEWS_STATUSES)[number];
+export const NEWS_TYPES = ['news', 'blog'] as const;
+export type NewsType = (typeof NEWS_TYPES)[number];
+export const NEWS_TYPE_LABELS: Record<NewsType, string> = { news: 'NEWS', blog: 'BLOG' };
 
 export const STATUS_LABELS: Record<NewsStatus, string> = {
   archived: 'Archived', draft: 'Draft', published: 'Published', scheduled: 'Scheduled',
@@ -37,6 +40,8 @@ const subtitleSchema = z.string().trim().max(NEWS_SUBTITLE_MAX_LENGTH).nullable(
 const contentSchema = z.string().min(1).max(NEWS_CONTENT_MAX_LENGTH);
 const slugSchema = z.string().trim().toLowerCase().min(1).max(NEWS_SLUG_MAX_LENGTH).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 const statusSchema = z.enum(NEWS_STATUSES);
+const typeSchema = z.enum(NEWS_TYPES);
+const thumbnailUrlSchema = z.string().trim().url().max(2000).nullable();
 const idSchema = z.coerce.number().int().positive();
 const isoDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date');
 
@@ -76,10 +81,11 @@ async function requireNewsAdministrator() {
   return actor;
 }
 
-type ArticleInput = { contentHtml: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; title: unknown };
+type ArticleInput = { articleType: unknown; contentHtml: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; thumbnailUrl: unknown; title: unknown };
 
 function validateFields(input: ArticleInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
+  const articleType = parse(typeSchema, input.articleType, 'Choose NEWS or BLOG.');
   const subtitleRaw = typeof input.subtitle === 'string' ? input.subtitle.trim() : '';
   const subtitle = subtitleRaw ? parse(subtitleSchema, subtitleRaw, 'Subtitle must be 300 characters or fewer.') : null;
   const rawContent = typeof input.contentHtml === 'string' ? input.contentHtml : '';
@@ -94,7 +100,9 @@ function validateFields(input: ArticleInput) {
   }
   const slugInput = typeof input.slug === 'string' ? input.slug.trim() : '';
   const slug = parse(slugSchema, slugInput || slugify(title), 'Slug must use lowercase letters, numbers, and hyphens only.');
-  return { contentHtml, publicationDate, slug, status, subtitle, title };
+  const thumbnailRaw = typeof input.thumbnailUrl === 'string' ? input.thumbnailUrl.trim() : '';
+  const thumbnailUrl = thumbnailRaw ? parse(thumbnailUrlSchema, thumbnailRaw, 'Thumbnail URL is invalid.') : null;
+  return { articleType, contentHtml, publicationDate, slug, status, subtitle, thumbnailUrl, title };
 }
 
 export async function listAdminArticles(input: Record<string, string | string[] | undefined>) {
@@ -103,17 +111,19 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const page = listPage(input);
   const statuses = many(input.status).filter((value): value is NewsStatus => NEWS_STATUSES.includes(value as NewsStatus));
   const statusWhere = statuses.length ? client`status in ${client(statuses)}` : client`true`;
+  const types = many(input.type).filter((value): value is NewsType => NEWS_TYPES.includes(value as NewsType));
+  const typeWhere = types.length ? client`article_type in ${client(types)}` : client`true`;
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
   const from = listDate(fromValue);
   const to = listDate(toValue);
-  const order = listOrder(input, { publication: 'publication_date', title: 'title', status: 'status', updated: 'updated_at' }, 'publication');
+  const order = listOrder(input, { publication: 'publication_date', title: 'title', status: 'status', type: 'article_type', updated: 'updated_at' }, 'publication');
   const advancedWhere = advancedListWhere(input, { title: 'title', status: 'status' }, NEWS_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const rows = await client`select id,slug,title,subtitle,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
-    where (${statusWhere}) and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
+  const rows = await client`select id,slug,title,subtitle,article_type,thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
+    where (${statusWhere}) and (${typeWhere}) and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
     and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
     order by ${order} limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
@@ -135,8 +145,8 @@ export async function createArticle(input: ArticleInput) {
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? new Date() : null;
     const [row] = await sql<{ id: number }[]>`insert into idoc.news_articles
-      (slug,title,subtitle,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
-      values (${fields.slug},${fields.title},${fields.subtitle},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
+      (slug,title,subtitle,article_type,thumbnail_url,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
+      values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.thumbnailUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
@@ -157,7 +167,7 @@ export async function updateArticle(idValue: unknown, input: ArticleInput) {
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? (existing.published_at ?? new Date()) : null;
     await sql`update idoc.news_articles set slug=${fields.slug},title=${fields.title},subtitle=${fields.subtitle},
-      content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
+      article_type=${fields.articleType},thumbnail_url=${fields.thumbnailUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
       published_at=${iso(publishedAt)},updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     const changedFields = [
       existing.slug !== fields.slug && 'slug', existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
@@ -256,19 +266,23 @@ export async function publishScheduledArticles(): Promise<{ published: number }>
   });
 }
 
-export async function listPublicArticles(pageValue: unknown) {
+export async function listPublicArticles(pageValue: unknown, typeValue?: unknown) {
   const page = Math.max(1, Number.parseInt(typeof pageValue === 'string' ? pageValue : '1', 10) || 1);
+  const parsedType = typeSchema.safeParse(typeValue);
+  const articleType = parsedType.success ? parsedType.data : null;
   const limit = PUBLIC_PAGE_SIZE;
   const offset = (page - 1) * limit;
-  const rows = await client`select slug,title,subtitle,publication_date from idoc.news_articles
-    where status='published' and publication_date<=now() order by publication_date desc limit ${limit + 1} offset ${offset}`;
+  const rows = await client`select slug,title,subtitle,article_type,thumbnail_url,publication_date from idoc.news_articles
+    where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+    order by publication_date desc limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
 }
 
-export async function getPublicArticleBySlug(value: unknown) {
+export async function getPublicArticleBySlug(value: unknown, expectedType?: NewsType) {
   const parsedSlug = slugSchema.safeParse(value);
   if (!parsedSlug.success) return null;
-  const [row] = await client`select slug,title,subtitle,content_html,publication_date from idoc.news_articles
-    where slug=${parsedSlug.data} and status='published' and publication_date<=now() limit 1`;
+  const [row] = await client`select slug,title,subtitle,article_type,thumbnail_url,content_html,publication_date from idoc.news_articles
+    where slug=${parsedSlug.data} and status='published' and publication_date<=now()
+    and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`;
   return row ?? null;
 }
