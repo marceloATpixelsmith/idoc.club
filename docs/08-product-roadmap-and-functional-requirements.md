@@ -340,3 +340,16 @@ Drawer forms are sectioned into semantic card groups with consistent gold sectio
 Table selection actions are the place for bulk workflow changes. Support must allow closing all selected tickets; News/Blog must allow applying a chosen status to all selected articles, with the same server-side validation/audit guarantees as individual changes.
 
 The Admin Dashboard must surface the latest unresolved Support tickets assigned to the current administrator, current unresolved Stripe reconciliation findings, and a compact default-period revenue summary (gross, Stripe, manual, payment count by currency). The Exports page uses non-linked text labels in a bullet list with a download icon immediately following each label.
+
+
+### Admin drawer lifecycle, action feedback, and heading hierarchy
+
+These rules apply to every existing and future administrator table that has row actions or a record form:
+
+- **Route-backed drawers must reopen reliably.** A drawer's presence in the route/query state is authoritative: when the record/query parameter is present, the drawer is open. Shared drawers must not rely on an uncontrolled `defaultOpen` state that can remain closed when React/Next.js reuses the component after a previous close.
+- **Every internal table action shows loading feedback.** Clicking an internal row action (Edit, Payment, Support, Preview, Registrations, or another internal admin destination) must start the same transition used by the Members table and set the table's existing `loading` state, producing the pulsing row skeleton until navigation resolves. Modifier-click behavior remains native. Pure downloads and `mailto:` actions are excluded because they do not navigate/refetch the table.
+- **Drawer titles follow the Members hierarchy.** The record/drawer title is `text-lg`, semibold, normal foreground/white. It is not gold and must not use feature-specific oversized typography.
+- **Form section headers follow the Members hierarchy.** Semantic card/section titles are `text-xs font-bold uppercase tracking-wider text-gold`. All admin forms use the shared section treatment rather than hand-styled white/gold headings of different sizes.
+- **Field labels are not section headers.** Individual field labels and legends use the normal foreground label treatment and should not be promoted to gold section-heading styling.
+
+The actionable admin tables currently covered are Members, News/Blog, Seminars, Seminar Registrations, and Support. Read-only tables with no row navigation have no skeleton-triggering row action to implement.
