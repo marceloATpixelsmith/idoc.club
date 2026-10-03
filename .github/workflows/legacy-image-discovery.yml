@@ -1,0 +1,34 @@
+name: Legacy image discovery
+
+on:
+  push:
+    branches:
+      - admin-table-consistency
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract old IDOC article images
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://idoc.club/in-memoriam-jacques-van-daele-1953-2026/"
+            "https://idoc.club/in-memoriam-stephen-clarke/"
+            "https://idoc.club/how-to-apply-the-fei-judging-guidelines-on-tension-submission-acceptance-of-the-contact-and-harmony/"
+            "https://idoc.club/fei-rules-revision/"
+            "https://idoc.club/modern-dressage-judging-perception-data-and-the-evolving-role-of-welfareby-hans-christian-matthiesen/"
+            "https://idoc.club/new-research-on-stress-in-dressage-horses/"
+            "https://idoc.club/integrity-beyond-compliance/"
+          )
+          for url in "${urls[@]}"; do
+            echo "PAGE=$url"
+            html="$(curl -fsSL --max-time 30 "$url")"
+            printf '%s' "$html" | grep -Eio '<meta[^>]+(property|name)=["'\'' ]*(og:image|twitter:image)["'\'' ]*[^>]*>' | head -n 4 || true
+            printf '%s' "$html" | grep -Eio 'https?://[^"'\'' )>]+/wp-content/uploads/[^"'\'' )>]+' | head -n 12 || true
+            echo "---"
+          done
