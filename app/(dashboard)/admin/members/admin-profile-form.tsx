@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,13 +20,14 @@ const FIELD_MAX_LENGTH: Record<string, number> = {
 };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
-export function AdminProfileForm({ member, profileId }: { member: Member; profileId: number }) {
+export function AdminProfileForm({ member, onSuccess, profileId }: { member: Member; onSuccess?: () => void; profileId: number }) {
   const judge = member.roles.find((role) => role.roleType === 'judge');
   const steward = member.roles.find((role) => role.roleType === 'steward');
   const initial = judge && steward ? 'judge_steward' : (judge?.roleType ?? steward?.roleType ?? 'veterinarian');
   const [classification, setClassification] = useState(initial);
   const [state, action, pending] = useActionState(saveMemberProfileByAdminForm, {} as { error?: string; success?: string });
   const official = judge ?? steward;
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
