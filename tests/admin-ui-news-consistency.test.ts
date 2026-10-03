@@ -50,7 +50,7 @@ test('admin table filter, Sort, and View controls use Title Case without changin
   );
   assert.match(sort, /\n\s+Sort\n/);
   assert.match(view, /\n\s+View\n/);
-  assert.match(seminarRegister, /className="[^"]*uppercase[^"]*"[^>]*>\s*Register/);
+  assert.match(seminarRegister, /className="[^"]*uppercase[^"]*"[\s\S]*?>\s*Register\s*<ArrowUpRight/);
 });
 
 test('admins can create seminar registrations with manual payment methods only', () => {
