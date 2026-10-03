@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 import { PageHeader } from '@/components/site/PageHeader';
 import { MemberRegistrations, PublicSeminarsCatalog } from '@/components/seminars/member-registrations';
 import { getPublicUser } from '@/lib/db/queries';
@@ -27,6 +28,16 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader
+        action={(
+          <a
+            className="inline-flex items-center gap-2 rounded-md border border-dotted border-white/45 bg-[#2f5f8f] px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-90"
+            href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            FEI Course Calendar <ArrowUpRight className="size-4" />
+          </a>
+        )}
         eyebrow="Calendar"
         title="Seminars & Courses"
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."

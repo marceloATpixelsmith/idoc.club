@@ -37,11 +37,12 @@ export class NewsValidationError extends Error {
 
 const titleSchema = z.string().trim().min(1).max(NEWS_TITLE_MAX_LENGTH);
 const subtitleSchema = z.string().trim().max(NEWS_SUBTITLE_MAX_LENGTH).nullable();
-const contentSchema = z.string().min(1).max(NEWS_CONTENT_MAX_LENGTH);
+const contentSchema = z.string().max(NEWS_CONTENT_MAX_LENGTH);
 const slugSchema = z.string().trim().toLowerCase().min(1).max(NEWS_SLUG_MAX_LENGTH).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 const statusSchema = z.enum(NEWS_STATUSES);
 const typeSchema = z.enum(NEWS_TYPES);
 const thumbnailUrlSchema = z.string().trim().url().max(2000).nullable();
+const externalUrlSchema = z.string().trim().url().max(2000).refine((value) => ['http:', 'https:'].includes(new URL(value).protocol));
 const idSchema = z.coerce.number().int().positive();
 const isoDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date');
 
@@ -93,9 +94,21 @@ async function newsSchemaSupportsTypeAndThumbnail(): Promise<boolean> {
   return Boolean(row?.ready);
 }
 
+async function newsSchemaSupportsExternalUrl(): Promise<boolean> {
+  const [row] = await client<{ ready: boolean }[]>`
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='idoc' and table_name='news_articles' and column_name='external_url'
+    ) as ready`;
+  return Boolean(row?.ready);
+}
+
 export async function requireNewsArticleSchema() {
   if (!(await newsSchemaSupportsTypeAndThumbnail())) {
     throw new NewsValidationError('News/Blog media is temporarily unavailable until database migration 0064 is applied.');
+  }
+  if (!(await newsSchemaSupportsExternalUrl())) {
+    throw new NewsValidationError('News/Blog external links are temporarily unavailable until database migration 0065 is applied.');
   }
 }
 
@@ -134,16 +147,18 @@ async function requireNewsAdministrator() {
   return actor;
 }
 
-type ArticleInput = { articleType: unknown; contentHtml: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; thumbnailUrl: unknown; title: unknown };
+type ArticleInput = { articleType: unknown; contentHtml: unknown; externalUrl: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; thumbnailUrl: unknown; title: unknown };
 
 function validateFields(input: ArticleInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
   const articleType = parse(typeSchema, input.articleType, 'Choose NEWS or BLOG.');
   const subtitleRaw = typeof input.subtitle === 'string' ? input.subtitle.trim() : '';
   const subtitle = subtitleRaw ? parse(subtitleSchema, subtitleRaw, 'Subtitle must be 300 characters or fewer.') : null;
+  const externalRaw = typeof input.externalUrl === 'string' ? input.externalUrl.trim() : '';
+  const externalUrl = externalRaw ? parse(externalUrlSchema, externalRaw, 'External link must be a valid http:// or https:// URL.') : null;
   const rawContent = typeof input.contentHtml === 'string' ? input.contentHtml : '';
   const sanitizedContent = sanitizeArticleContent(rawContent);
-  if (!hasVisibleContent(sanitizedContent)) throw new NewsValidationError('Article content cannot be empty.');
+  if (!externalUrl && !hasVisibleContent(sanitizedContent)) throw new NewsValidationError('Article content is required when no external link is provided.');
   const contentHtml = parse(contentSchema, sanitizedContent, 'Article content must be 20,000 characters or fewer.');
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const publicationDateIso = parse(isoDateSchema, input.publicationDate, 'Enter a valid publication date.');
@@ -155,7 +170,7 @@ function validateFields(input: ArticleInput) {
   const slug = parse(slugSchema, slugInput || slugify(title), 'Slug must use lowercase letters, numbers, and hyphens only.');
   const thumbnailRaw = typeof input.thumbnailUrl === 'string' ? input.thumbnailUrl.trim() : '';
   const thumbnailUrl = thumbnailRaw ? parse(thumbnailUrlSchema, thumbnailRaw, 'Thumbnail URL is invalid.') : null;
-  return { articleType, contentHtml, publicationDate, slug, status, subtitle, thumbnailUrl, title };
+  return { articleType, contentHtml, externalUrl, publicationDate, slug, status, subtitle, thumbnailUrl, title };
 }
 
 export async function listAdminArticles(input: Record<string, string | string[] | undefined>) {
@@ -166,6 +181,7 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const statusWhere = statuses.length ? client`status in ${client(statuses)}` : client`true`;
   const types = many(input.type).filter((value): value is NewsType => NEWS_TYPES.includes(value as NewsType));
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
@@ -176,12 +192,12 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = schemaReady
-    ? await client`select id,slug,title,subtitle,article_type,thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
+    ? await client`select id,slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
         where (${statusWhere}) and (${types.length ? client`article_type in ${client(types)}` : client`true`})
         and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
         and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
         order by ${order} limit ${limit + 1} offset ${offset}`
-    : await client`select id,slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count
+    : await client`select id,slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count
         from idoc.news_articles
         where (${statusWhere})
         and (${types.length ? client`${legacyArticleTypeSql()} in ${client(types)}` : client`true`})
@@ -196,9 +212,12 @@ export async function getAdminArticle(value: unknown) {
   const parsedId = idSchema.safeParse(value);
   if (!parsedId.success) return null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
   const [row] = schemaReady
-    ? await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`
-    : await client`select *,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url from idoc.news_articles where id=${parsedId.data} limit 1`;
+    ? externalReady
+      ? await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`
+      : await client`select *,null::text as external_url from idoc.news_articles where id=${parsedId.data} limit 1`
+    : await client`select *,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url from idoc.news_articles where id=${parsedId.data} limit 1`;
   return row ?? null;
 }
 
@@ -211,8 +230,8 @@ export async function createArticle(input: ArticleInput) {
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? new Date() : null;
     const [row] = await sql<{ id: number }[]>`insert into idoc.news_articles
-      (slug,title,subtitle,article_type,thumbnail_url,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
-      values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.thumbnailUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
+      (slug,title,subtitle,article_type,thumbnail_url,external_url,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
+      values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.thumbnailUrl},${fields.externalUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
@@ -234,7 +253,7 @@ export async function updateArticle(idValue: unknown, input: ArticleInput) {
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? (existing.published_at ?? new Date()) : null;
     await sql`update idoc.news_articles set slug=${fields.slug},title=${fields.title},subtitle=${fields.subtitle},
-      article_type=${fields.articleType},thumbnail_url=${fields.thumbnailUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
+      article_type=${fields.articleType},thumbnail_url=${fields.thumbnailUrl},external_url=${fields.externalUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
       published_at=${iso(publishedAt)},updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     const changedFields = [
       existing.slug !== fields.slug && 'slug', existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
@@ -371,11 +390,12 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   const limit = PUBLIC_PAGE_SIZE;
   const offset = (page - 1) * limit;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
   const rows = schemaReady
-    ? await client`select slug,title,subtitle,article_type,thumbnail_url,publication_date from idoc.news_articles
+    ? await client`select slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
         where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
         order by publication_date desc limit ${limit + 1} offset ${offset}`
-    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,publication_date
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
         from idoc.news_articles
         where status='published' and publication_date<=now()
         and (${articleType}::text is null or ${legacyArticleTypeSql()}=${articleType})
@@ -387,11 +407,12 @@ export async function getPublicArticleBySlug(value: unknown, expectedType?: News
   const parsedSlug = slugSchema.safeParse(value);
   if (!parsedSlug.success) return null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
   const [row] = schemaReady
-    ? await client`select slug,title,subtitle,article_type,thumbnail_url,content_html,publication_date from idoc.news_articles
+    ? await client`select slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
         where slug=${parsedSlug.data} and status='published' and publication_date<=now()
         and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`
-    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,content_html,publication_date
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,content_html,publication_date
         from idoc.news_articles
         where slug=${parsedSlug.data} and status='published' and publication_date<=now()
         and (${expectedType ?? null}::text is null or ${legacyArticleTypeSql()}=${expectedType ?? null}) limit 1`;

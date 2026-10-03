@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { listPublicArticles } from '@/lib/news/articles';
-import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
+import { listCurrentSeminarsForMember, listPastPublishedSeminars } from '@/lib/seminars/registrations';
 
 export const metadata: Metadata = {
   title: 'IDOC — International Dressage Officials Club',
@@ -18,14 +18,16 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const [{ rows: newsRows }, { rows: blogRows }, seminarRows] = await Promise.all([
+  const [{ rows: newsRows }, { rows: blogRows }, seminarRows, pastSeminarRows] = await Promise.all([
     listPublicArticles('1', 'news'),
     listPublicArticles('1', 'blog'),
     listCurrentSeminarsForMember(null),
+    listPastPublishedSeminars(),
   ]);
   const recentNews = newsRows.slice(0, 4);
   const recentBlog = blogRows.slice(0, 3);
   const upcomingSeminars = seminarRows.slice(0, 4);
+  const pastSeminars = pastSeminarRows.slice(0, 4);
   return (
     <>
       <HeroSlider />
@@ -51,20 +53,28 @@ export default async function Home() {
             <div className="mt-10 flex flex-col gap-6">
               {recentNews.length === 0 ? (
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
-              ) : recentNews.map((item) => (
-                <Link key={String(item.slug)} href={`/news/${item.slug}`}>
-                  <article className="card-midnight overflow-hidden">
-                    {item.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} /> : null}
-                    <div className="p-7">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                    <h3 className="mt-4 text-2xl leading-snug">{String(item.title)}</h3>
-                    {item.subtitle ? <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
-                    </div>
-                  </article>
-                </Link>
-              ))}
+              ) : recentNews.map((item) => {
+                const external = Boolean(item.external_url);
+                const href = external ? String(item.external_url) : `/news/${item.slug}`;
+                return (
+                  <Link href={href} key={String(item.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
+                    <article className="card-midnight grid overflow-hidden sm:grid-cols-[9rem_1fr]">
+                      {item.thumbnail_url ? (
+                        <img alt="" className="h-full min-h-32 w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                      ) : (
+                        <div className="hidden sm:block" />
+                      )}
+                      <div className="p-6">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                        <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
+                        {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
@@ -83,17 +93,42 @@ export default async function Home() {
               </Link>
             </div>
 
-            {upcomingSeminars.length === 0 ? (
-              <p className="mt-10 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
-            ) : (
-              <ul className="mt-10 w-full max-w-3xl divide-y divide-border border-y border-border">
-                {upcomingSeminars.map((seminar) => (
-                  <li key={seminar.id}>
-                    <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="mt-10">
+              <h3 className="section-label">Available seminars</h3>
+              {upcomingSeminars.length === 0 ? (
+                <p className="mt-6 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
+              ) : (
+                <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">
+                  {upcomingSeminars.map((seminar) => (
+                    <li key={seminar.id}>
+                      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {pastSeminars.length ? (
+                <div className="mt-12">
+                  <h3 className="section-label">Past seminars</h3>
+                  <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">
+                    {pastSeminars.map((seminar) => (
+                      <li key={seminar.id}>
+                        <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-8">
+              <a
+                className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground transition-opacity hover:opacity-90"
+                href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                FEI Course Calendar <ArrowUpRight className="size-4" />
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -116,20 +151,24 @@ export default async function Home() {
         <div className="mt-10 grid gap-6 lg:grid-cols-3">
           {recentBlog.length === 0 ? (
             <p className="text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
-          ) : recentBlog.map((post) => (
-            <Link href={`/blog/${post.slug}`} key={String(post.slug)}>
-              <article className="card-midnight flex h-full flex-col overflow-hidden">
-                {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
-                <div className="flex flex-1 flex-col p-7">
-                  <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                    {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                  <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
-                  {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
-                </div>
-              </article>
-            </Link>
-          ))}
+          ) : recentBlog.map((post) => {
+            const external = Boolean(post.external_url);
+            const href = external ? String(post.external_url) : `/blog/${post.slug}`;
+            return (
+              <Link href={href} key={String(post.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
+                <article className="card-midnight flex h-full flex-col overflow-hidden">
+                  {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
+                  <div className="flex flex-1 flex-col p-7">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold">
+                      {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
+                    {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
+                  </div>
+                </article>
+              </Link>
+            );
+          })}
         </div>
       </section>
 

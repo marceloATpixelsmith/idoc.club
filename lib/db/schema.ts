@@ -421,6 +421,7 @@ export const newsArticles = idocSchema.table('news_articles', {
   contentHtml: text('content_html').notNull(),
   articleType: varchar('article_type', { length: 10 }).notNull().default('news'),
   thumbnailUrl: text('thumbnail_url'),
+  externalUrl: text('external_url'),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
   publicationDate: timestamp('publication_date', { withTimezone: true }).notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
@@ -435,7 +436,8 @@ export const newsArticles = idocSchema.table('news_articles', {
   check('news_articles_slug_format_check', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
   check('news_articles_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
   check('news_articles_subtitle_length_check', sql`${table.subtitle} is null or char_length(${table.subtitle}) between 1 and 300`),
-  check('news_articles_content_length_check', sql`char_length(${table.contentHtml}) between 1 and 20000`),
+  check('news_articles_external_url_check', sql`${table.externalUrl} is null or ${table.externalUrl} ~* '^https?://'`),
+  check('news_articles_content_length_check', sql`(${table.externalUrl} is null and char_length(${table.contentHtml}) between 1 and 20000) or (${table.externalUrl} is not null and char_length(${table.contentHtml}) between 0 and 20000)`),
   index('news_articles_publication_queue_idx').on(table.status, table.publicationDate),
   index('news_articles_type_publication_idx').on(table.articleType, table.status, table.publicationDate),
 ]);

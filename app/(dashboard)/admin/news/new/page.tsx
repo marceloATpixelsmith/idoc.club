@@ -25,6 +25,10 @@ export default async function NewNewsArticlePage() {
         <label className="block">Slug (optional — generated from the title if left blank)
           <input className="mt-1 block w-full border p-2" maxLength={160} name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="e.g. spring-education-update" />
         </label>
+        <label className="block">External link (optional)
+          <input className="mt-1 block w-full border p-2" maxLength={2000} name="externalUrl" placeholder="https://www.fei.org/..." type="url" />
+          <span className="mt-1 block text-sm text-muted-foreground">When set, public cards open this URL in a new tab instead of the IDOC article page. A full article body is optional for external-link items.</span>
+        </label>
         <label className="block">Thumbnail
           <input accept="image/avif,image/jpeg,image/png,image/webp" className="mt-1 block w-full border p-2" name="thumbnail" type="file" />
           <span className="mt-1 block text-sm text-muted-foreground">JPG, PNG, WEBP, or AVIF. Maximum 5 MB.</span>

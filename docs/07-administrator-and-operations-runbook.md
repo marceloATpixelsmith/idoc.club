@@ -914,6 +914,13 @@ This mode is intentionally **read-compatible but write-restricted**. Creating or
 
 Recovery action: apply migration `0064_news_article_type.sql` to the shared staging/production database using the normal reviewed database-migration process, verify both new columns and the migration ledger, then redeploy/retest `/admin/news`, `/news`, and `/blog`. The fallback is transitional only and must not be left in place as a substitute for applying migration 0064.
 
+
+### External News/Blog link items
+
+A News or Blog record may optionally point to an external `http://` or `https://` URL instead of an IDOC detail page. The administrator form exposes an **External link** field. When populated, public homepage/listing cards open that URL in a new tab with `noopener noreferrer`; when blank, cards continue to use the normal internal `/news/[slug]` or `/blog/[slug]` route. External-link records may consist only of title, optional subtitle/blurb, thumbnail, publication metadata, and the external URL; a rich-text body remains mandatory for internally hosted articles. Migration `0065_news_external_links.sql` adds the nullable URL and database constraints, and writes are blocked until that migration is present.
+
 The former **Pages** administration surface is retired completely: it has no admin navigation item, routes, actions, editor/form, preview, table configuration, or administrator preference type. Existing persisted CMS pages remain read-only and can still be delivered through the public/member page renderer.
 
 Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
+
+CI trigger note: external-link support is covered by migration 0065 and the News/Blog regression suite.
