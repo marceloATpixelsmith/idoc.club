@@ -44,7 +44,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       id: Number(row.id), title: String(row.title),
       subtitle: row.subtitle ? String(row.subtitle) : '', slug: String(row.slug),
       status: String(row.status),
-      publication: new Date(String(row.publication_date)).toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
+      publication: formatAdminDate(new Date(String(row.publication_date)).toISOString().slice(0, 10)),
       updated: new Date(String(row.updated_at)).toLocaleString(),
     }));
   } else if (tableType === 'seminars') {
