@@ -95,3 +95,12 @@ test('ordinary gold and blue buttons share the canonical Member Login pill radiu
   assert.match(globals, /\.idoc-secondary-button[\s\S]*border-radius: 9999px/);
   assert.match(globals, /\[data-idoc-table-control\][\s\S]*border-radius: 9999px/);
 });
+
+
+test('the News Blog edit drawer shows the current image inside the picker section', () => {
+  assert.match(newsDrawer, /Current image/);
+  assert.match(newsDrawer, /Current article thumbnail/);
+  assert.match(newsDrawer, /Replace image/);
+  assert.match(newsDrawer, /No image/);
+  assert.match(newsDrawer, /aspect-\[4\/3\] w-28/);
+});
