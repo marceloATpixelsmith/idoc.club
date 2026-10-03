@@ -30,7 +30,7 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         action={(
           <a
-            className="inline-flex items-center gap-2 rounded-md border border-dotted border-white/45 bg-[#2f5f8f] px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-90"
+            className="idoc-secondary-button idoc-secondary-button--dotted px-6 py-3 text-sm"
             href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
             rel="noopener noreferrer"
             target="_blank"
