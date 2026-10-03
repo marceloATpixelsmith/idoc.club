@@ -27,8 +27,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
         ) : (
           <ul className="divide-y divide-border border-t border-border">
             {rows.map((item) => (
-              <li className="grid gap-6 py-10 md:grid-cols-[14rem_1fr]" key={String(item.slug)}>
-                {item.thumbnail_url ? <Link href={`/news/${item.slug}`}><img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} /></Link> : <div className="hidden md:block" />}
+              <li className="grid gap-6 py-10 sm:grid-cols-[11rem_1fr]" key={String(item.slug)}>
+                {item.thumbnail_url ? <Link href={`/news/${item.slug}`}><img alt="" className="aspect-[4/3] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} /></Link> : <div className="hidden md:block" />}
                 <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-gold">
                   {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
