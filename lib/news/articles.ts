@@ -85,11 +85,11 @@ const LEGACY_BLOG_SLUGS = [
 ] as const;
 
 async function newsSchemaSupportsTypeAndThumbnail(): Promise<boolean> {
-  const [row] = await client<{ ready: boolean }[]>\`
+  const [row] = await client<{ ready: boolean }[]>`
     select (
       exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='article_type')
       and exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='thumbnail_url')
-    ) as ready\`;
+    ) as ready`;
   return Boolean(row?.ready);
 }
 
@@ -100,17 +100,17 @@ export async function requireNewsArticleSchema() {
 }
 
 function legacyArticleTypeSql() {
-  return client\`case
+  return client`case
     when lower(title) in (
       'modern dressage judging: perception, data, and the evolving role of welfare',
       'new research on stress in dressage horses',
       'integrity beyond compliance'
     ) or slug in ${client([...LEGACY_BLOG_SLUGS])}
-    then 'blog' else 'news' end\`;
+    then 'blog' else 'news' end`;
 }
 
 function legacyThumbnailSql() {
-  return client\`case
+  return client`case
     when lower(title) like '%jacques van daele%' or slug in ('in-memoriam-jacques-van-daele','in-memoriam-jacques-van-daele-1953-2026')
       then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989373/jacques-van-daele.jpg'
     when lower(title) like '%stephen clarke%' or slug in ('in-memoriam-stephen-clarke','in-memoriam-stephen-clarke-1952-2026')
@@ -125,7 +125,7 @@ function legacyThumbnailSql() {
       then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989391/stress-in-dressage-horses.jpg'
     when lower(title) = 'integrity beyond compliance' or slug = 'integrity-beyond-compliance'
       then 'https://res.cloudinary.com/z6xv27qx/image/upload/v1790989394/integrity-beyond-compliance.jpg'
-    else null end\`;
+    else null end`;
 }
 
 async function requireNewsAdministrator() {
