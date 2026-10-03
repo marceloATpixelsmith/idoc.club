@@ -11,7 +11,7 @@ type ResourceType = 'news' | 'seminars';
 
 const CONFIG = {
   news: { path: '/admin/news', title: 'News / Blog', description: 'Create, schedule, preview, and publish public articles.', create: 'New article', createHref: '/admin/news?new=1' },
-  seminars: { path: '/admin/seminars', title: 'Seminars', description: 'Create, publish, and manage seminar registrations.', create: 'New seminar', createHref: '/admin/seminars/new' },
+  seminars: { path: '/admin/seminars', title: 'Seminars', description: 'Create, publish, and manage seminar registrations.', create: 'New seminar', createHref: '/admin/seminars?new=1' },
 } as const;
 
 export async function ResourceListPage({ tableType }: { tableType: ResourceType }) {
