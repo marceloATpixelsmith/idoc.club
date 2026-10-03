@@ -20,7 +20,7 @@ test('requested default column order applies only when no saved order is supplie
   assert.match(members, /initialColumnOrder\?\.split\(','\) \?\? defaultColumnOrder/);
   assert.match(members, /\['select', 'name', 'status', 'type', 'expires', 'region'/);
   assert.match(resources, /\['select', 'title', 'status', 'prices', 'start', 'end', 'deadline', 'registrations', 'actions'\]/);
-  assert.match(registrations, /\['registered', 'registrant', 'seminar', 'status', 'actions'\]/);
+  assert.match(registrations, /\['select', 'registered', 'registrant', 'seminar', 'status', 'actions'\]/);
   assert.match(support, /\['select', 'activity', 'assigned', 'category', 'subject', 'member', 'status', 'actions'\]/);
 });
 

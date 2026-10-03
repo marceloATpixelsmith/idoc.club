@@ -24,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const unreadCount = await adminUnreadCount();
 
   return (
-    <div className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
+    <div data-idoc-admin-root className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
       <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} unreadCount={unreadCount} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>

@@ -18,9 +18,11 @@ export default async function NewsArticlePreviewPage({ params }: { params: Promi
         <span className="ml-4">Preview only — status: <strong>{STATUS_LABELS[String(article.status) as keyof typeof STATUS_LABELS]}</strong>. This page is not publicly reachable.</span>
       </div>
       <ArticleView
+        articleType={String(article.article_type ?? 'news') === 'blog' ? 'blog' : 'news'}
         contentHtml={String(article.content_html)}
         publicationDate={String(article.publication_date)}
         subtitle={article.subtitle ? String(article.subtitle) : null}
+        thumbnailUrl={article.thumbnail_url ? String(article.thumbnail_url) : null}
         title={String(article.title)}
       />
     </main>

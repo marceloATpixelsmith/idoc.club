@@ -19,7 +19,7 @@ export function contentSecurityPolicy(
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "img-src 'self' data:",
+    "img-src 'self' data: https://res.cloudinary.com",
     `script-src 'self' 'nonce-${nonce}'${developmentEval} https://challenges.cloudflare.com`,
     // Next.js and Tailwind currently emit framework/style attributes without a nonce hook. This is
     // deliberately the sole production unsafe-inline exception; scripts never receive it.

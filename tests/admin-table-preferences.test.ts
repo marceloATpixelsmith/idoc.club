@@ -19,7 +19,7 @@ test('administrator table preferences are owner-scoped and uniquely upserted by 
 });
 
 test('only validated durable state is accepted for each supported table', () => {
-  for (const table of ['memberships', 'support', 'news', 'seminars', 'content_pages']) assert.match(preferences, new RegExp(`${table}: z\\.object`));
+  for (const table of ['memberships', 'support', 'news', 'seminars', 'seminar_registrations']) assert.match(preferences, new RegExp(`${table}: z\\.object`));
   for (const transient of ['selected', 'loading', 'openMenu', 'confirmation', 'bulkAction']) assert.doesNotMatch(preferences, new RegExp(`${transient}:`));
   assert.match(preferences, /\.strict\(\)/);
   assert.match(preferences, /z\.union\(\[z\.literal\(10\), z\.literal\(25\), z\.literal\(50\), z\.literal\(100\)\]\)/);
@@ -41,7 +41,7 @@ test('a multi-select facet filter\'s selected values are read from react-table\'
   }
   for (const field of ['country', 'federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
   assert.match(resourceTable, /status: filterToken\(state\.columnFilters, 'status'\)/);
-  assert.match(resourceTable, /preferences\.audience = filterToken\(state\.columnFilters, 'audience'\)/);
+  assert.match(resourceTable, /type: tableType === 'news' \? filterToken\(state\.columnFilters, 'type'\) : undefined/);
   for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
 });
 
