@@ -363,6 +363,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.notification_outbox'] = currentSnapshot.tables['idoc.notification_outbox'];
   expectedSchema['idoc.news_articles'] = currentSnapshot.tables['idoc.news_articles'];
   expectedSchema['idoc.administrator_table_preferences'] = currentSnapshot.tables['idoc.administrator_table_preferences'];
+  expectedSchema['idoc.audit_log'] = currentSnapshot.tables['idoc.audit_log'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
