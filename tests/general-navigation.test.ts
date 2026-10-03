@@ -169,5 +169,8 @@ test('the menu supports mouse hover plus keyboard, click, and touch operation', 
 test('sign out retains the CSRF-protected action and clears shared user state', () => {
   assert.match(menu, /signOut\(readCsrfTokenFromDocumentCookie\(\)\)/);
   assert.match(menu, /mutate\('\/api\/user'\)/);
-  assert.match(menu, /router\.push\('\/'\)/);
+  assert.match(menu, /pathname === '\/admin'.*pathname\.startsWith\('\/admin\/'\)/s);
+  assert.match(menu, /pathname === '\/dashboard'.*pathname\.startsWith\('\/dashboard\/'\)/s);
+  assert.match(menu, /router\.push\('\/sign-in'\)/);
+  assert.match(menu, /router\.refresh\(\)/);
 });
