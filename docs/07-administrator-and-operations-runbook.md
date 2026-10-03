@@ -938,6 +938,10 @@ CI trigger note: external-link support is covered by migration 0065 and the News
 
 ### Shared light-blue secondary button style
 
+Administrator table controls are the casing exception to the site's ordinary all-caps button treatment. Filter triggers, date filters, **Sort**, **View**, **Reset**, and buttons/select triggers inside their table popovers use normal **Title Case** text while retaining the same bold weight, pill radius, light-blue raised surface, and dotted-border treatment. Do not force administrator table-control labels to uppercase.
+
+
+
 The canonical light-blue/secondary button treatment is the same surface used by administrator table filter controls: `var(--surface-raised)` background, standard input border, foreground text, and `var(--accent)` hover with the gold-tinted border. The reusable `.idoc-secondary-button` class and the shared Button `secondary` variant own this treatment. Admin table controls and seminar registration controls that use `data-idoc-table-control` share the same CSS declarations. Do not introduce one-off blue hex colors. Use `.idoc-secondary-button--dotted` only where a dotted border is explicitly required, such as the FEI Course Calendar control in the Seminars page header.
 
 
