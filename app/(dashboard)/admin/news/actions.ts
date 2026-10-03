@@ -7,7 +7,7 @@ import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import {
-  archiveArticle, createArticle, deleteArticle, publishArticle,
+  archiveArticle, createArticle, deleteArticle, publishArticle, requireNewsArticleSchema,
   scheduleArticle, unpublishArticle, updateArticle,
 } from '@/lib/news/articles';
 import { resolveNewsThumbnail } from '@/lib/news/thumbnail';
