@@ -4,7 +4,8 @@ import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/rea
 import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Eye, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type { MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { BulkNewsStatusSelected } from '@/components/admin/bulk-update-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
@@ -110,6 +111,11 @@ export function ResourceDataTable({
   const [to, setTo] = useState(initialTo);
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
+  const openTableAction = useCallback((event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    startTransition(() => router.push(href));
+  }, [router]);
   const optional = useMemo(() => config.columns.filter(({ id }) => id !== 'title').map(({ id }) => id), [config]);
   const initialVisibility = useMemo(() => {
     if (!initialVisibleColumns) return {};
@@ -157,14 +163,20 @@ export function ResourceDataTable({
         header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
         cell: ({ row }) => <div className="flex items-center gap-1">
           <Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost">
-            <Link href={tableType === 'news' ? `/admin/news?articleId=${row.original.id}` : tableType === 'seminars' ? `/admin/seminars?seminarId=${row.original.id}` : `${config.path}/${row.original.id}`}><Pencil aria-hidden="true" /></Link>
+            <Link
+              href={tableType === 'news' ? `/admin/news?articleId=${row.original.id}` : tableType === 'seminars' ? `/admin/seminars?seminarId=${row.original.id}` : `${config.path}/${row.original.id}`}
+              onClick={(event) => {
+                const href = tableType === 'news' ? `/admin/news?articleId=${row.original.id}` : tableType === 'seminars' ? `/admin/seminars?seminarId=${row.original.id}` : `${config.path}/${row.original.id}`;
+                openTableAction(event, href);
+              }}
+            ><Pencil aria-hidden="true" /></Link>
           </Button>
           {tableType !== 'seminars' && <Button asChild aria-label="Preview" size="icon-sm" title="Preview" variant="ghost">
-            <Link href={`${config.path}/${row.original.id}/preview`}><Eye aria-hidden="true" /></Link>
+            <Link href={`${config.path}/${row.original.id}/preview`} onClick={(event) => openTableAction(event, `${config.path}/${row.original.id}/preview`)}><Eye aria-hidden="true" /></Link>
           </Button>}
           {tableType === 'seminars' && <>
             <Button asChild aria-label="Registrations" size="icon-sm" title="View registrations" variant="ghost">
-              <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`}><ClipboardList aria-hidden="true" /></Link>
+              <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`} onClick={(event) => openTableAction(event, `/admin/seminars/registrations?seminarId=${row.original.id}`)}><ClipboardList aria-hidden="true" /></Link>
             </Button>
             <Button asChild aria-label="Download registrations" size="icon-sm" title="Download this seminar's registrations" variant="ghost">
               <a download href={`/api/admin/export/seminar-registrations?seminarId=${row.original.id}`}><Download aria-hidden="true" /></a>
@@ -173,7 +185,7 @@ export function ResourceDataTable({
         </div>,
       },
     ];
-  }, [config, tableType]);
+  }, [config, openTableAction, tableType]);
   const defaultColumnOrder = tableType === 'seminars'
     ? ['select', 'title', 'status', 'prices', 'start', 'end', 'deadline', 'registrations', 'actions']
     : tableType === 'news'
