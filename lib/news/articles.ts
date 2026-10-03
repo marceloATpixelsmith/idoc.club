@@ -212,6 +212,7 @@ export async function getAdminArticle(value: unknown) {
   const parsedId = idSchema.safeParse(value);
   if (!parsedId.success) return null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
   const [row] = schemaReady
     ? externalReady
       ? await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`
