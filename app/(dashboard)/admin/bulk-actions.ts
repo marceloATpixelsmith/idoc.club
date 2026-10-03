@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { client } from '@/lib/db/drizzle';
+import { archiveMembers, deleteMembers } from '@/lib/admin/member-lifecycle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { deleteArticles } from '@/lib/news/articles';
@@ -22,24 +23,6 @@ function parseIds(formData: FormData): { table: BulkTable; ids: string[] } {
     if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) throw new Error('Invalid support record.');
   } else if (!ids.every((id) => /^\d+$/.test(id) && Number(id) > 0)) throw new Error('Invalid selected record.');
   return { table, ids };
-}
-
-async function deleteMembers(ids: string[], actorId: number) {
-  const numeric = ids.map(Number);
-  return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; email: string }[]>`select u.id,u.email from idoc.users u where u.id in ${sql(numeric)} for update`;
-    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
-    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
-    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from idoc.application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
-    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
-    for (const row of rows) {
-      const anonymized = 'deleted-' + row.id + '-' + Date.now() + '@deleted.invalid';
-      await sql`update idoc.users set account_state='deleted',deleted_at=now(),email=${anonymized},email_display=${anonymized},session_version=session_version+1,updated_at=now() where id=${row.id}`;
-      await sql`delete from idoc.auth_sessions where user_id=${row.id}`;
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason) values (${actorId},'admin.member.deleted','user',${String(row.id)},${JSON.stringify({ email: row.email })}::jsonb,${JSON.stringify({ accountState: 'deleted' })}::jsonb,'Bulk delete from Members admin table')`;
-    }
-    return rows.length;
-  });
 }
 
 async function deleteSeminars(ids: string[], actorId: number) {
@@ -114,6 +97,22 @@ export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: For
 }
 
 
+export async function bulkArchiveMembers(_state: BulkDeleteState, formData: FormData): Promise<BulkDeleteState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const { table, ids } = parseIds(formData);
+    if (table !== 'members') throw new Error('Only member records can be archived.');
+    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', '/admin/members');
+    if (stepUp.required) return { stepUpRequired: true };
+    const archived = await archiveMembers(ids, actor.id);
+    revalidatePath('/admin/members');
+    return { success: String(archived) + ' selected member' + (archived === 1 ? '' : 's') + ' archived.' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The selected members could not be archived.' };
+  }
+}
 export type BulkUpdateState = { error?: string; success?: string };
 
 function selectedIds(formData: FormData, table: 'news' | 'support'): string[] {

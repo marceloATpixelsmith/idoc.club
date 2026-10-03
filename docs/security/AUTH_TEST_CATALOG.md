@@ -1005,3 +1005,36 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record the test flow, whether HIBP reported the selected password as pwned, visible validation result, and account-state outcome. Never record the password, its hash, OTP/TOTP, cookies, or tokens.
+
+## LIVE-AUTH-035 — Member archive and permanent deletion enforce authorization, billing guards, and audit retention
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003
+- **CI coverage:** mapped — `tests/admin-table-loading-feedback.test.ts`, `tests/member-lifecycle.integration.ts`, `tests/fresh-mfa-step-up.test.ts`, `tests/csrf-client-cookie-name.test.ts` — The disposable PostgreSQL integration test invokes the same transaction helpers used by the member actions and verifies permanent purge, archive retention, active-subscription and active-role guards, audit actor redaction, immutable-history trigger authorization, and atomic rollback. Shared tests cover the Server Action MFA and CSRF boundaries.
+- **Live:** required; email=no; admin=yes; destructive=yes
+
+### Preconditions
+- Use the designated staging hostname and a disposable ordinary-member identity.
+- Use an identity with no active Stripe subscription; never select an administrator, Super Admin, or the acting administrator.
+- Capture the member-linked audit events before the test.
+
+### Steps
+1. As an administrator with fresh MFA, archive the disposable member and confirm sign-in is denied while profile, payment, registration, and audit records remain.
+2. For a second disposable member with no active subscription, permanently delete the member.
+3. Attempt the same operations with an active subscription and verify both are rejected before any records change.
+4. Verify the deletion preserves audit events with actor_id cleared and removes the member account and linked records.
+
+### PASS
+- Archive removes sign-in and revokes sessions while retaining related records.
+- Permanent delete removes the member account and configured linked records, retains audit event rows with null actor references, and is atomic.
+- Active subscriptions and privileged/self identities are never changed.
+
+### FAIL
+- An unauthorized/CSRF-forged or non-step-up action succeeds; a protected identity is changed; active billing is left chargeable; audit rows are deleted or changed beyond actor redaction; or a failed delete partially purges data.
+
+### Cleanup
+- Keep evidence of audit-row preservation and the active-subscription guard; remove disposable state only after evidence is captured.
+
+### Evidence
+- Record URL, administrator role, action, response, relevant audit-row IDs and before/after table counts. Do not record credentials or payment secrets.

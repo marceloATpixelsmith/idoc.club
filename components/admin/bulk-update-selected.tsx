@@ -4,6 +4,7 @@ import { CheckCircle2, RefreshCcw } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { bulkCloseSupportRows, bulkSetNewsStatus } from '@/app/(dashboard)/admin/bulk-actions';
 import { ActionBarItem } from '@/components/ui/action-bar';
+import { useDataTableMutation } from '@/components/data-table/data-table';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 
 function selectionFormData(ids: string[]) {
@@ -15,14 +16,22 @@ function selectionFormData(ids: string[]) {
 
 export function BulkCloseSupportSelected({ clearSelection, ids }: { clearSelection: () => void; ids: string[] }) {
   const [pending, startTransition] = useTransition();
+  const mutation = useDataTableMutation();
 
   function closeSelected(event: Event) {
     event.preventDefault();
     if (!ids.length || pending) return;
+    mutation.begin();
     startTransition(async () => {
-      const result = await bulkCloseSupportRows({}, selectionFormData(ids));
-      if (result.error) window.alert(result.error);
-      if (result.success) clearSelection();
+      try {
+        const result = await bulkCloseSupportRows({}, selectionFormData(ids));
+        mutation.finish(Boolean(result.success));
+        if (result.error) window.alert(result.error);
+        if (result.success) clearSelection();
+      } catch {
+        mutation.finish(false);
+        window.alert('The selected support records could not be updated.');
+      }
     });
   }
 
@@ -37,16 +46,24 @@ export function BulkCloseSupportSelected({ clearSelection, ids }: { clearSelecti
 export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection: () => void; ids: string[] }) {
   const [status, setStatus] = useState('draft');
   const [pending, startTransition] = useTransition();
+  const mutation = useDataTableMutation();
 
   function applyStatus(event: Event) {
     event.preventDefault();
     if (!ids.length || pending) return;
+    mutation.begin();
     startTransition(async () => {
-      const formData = selectionFormData(ids);
-      formData.set('status', status);
-      const result = await bulkSetNewsStatus({}, formData);
-      if (result.error) window.alert(result.error);
-      if (result.success) clearSelection();
+      try {
+        const formData = selectionFormData(ids);
+        formData.set('status', status);
+        const result = await bulkSetNewsStatus({}, formData);
+        mutation.finish(Boolean(result.success));
+        if (result.error) window.alert(result.error);
+        if (result.success) clearSelection();
+      } catch {
+        mutation.finish(false);
+        window.alert('The selected News/Blog records could not be updated.');
+      }
     });
   }
 

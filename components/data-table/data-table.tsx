@@ -1,5 +1,9 @@
+'use client';
+
 import { flexRender, type Table as TanstackTable } from "@tanstack/react-table";
-import type * as React from "react";
+import * as React from "react";
+import { createContext, useContext, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +17,15 @@ import {
 } from "@/components/ui/table";
 import { getColumnPinningStyle } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
+
+type DataTableMutation = { begin: () => void; finish: (refresh?: boolean) => void };
+const DataTableMutationContext = createContext<DataTableMutation | null>(null);
+
+export function useDataTableMutation() {
+  const value = useContext(DataTableMutationContext);
+  if (!value) throw new Error("Bulk table actions must be used inside DataTable.");
+  return value;
+}
 
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
@@ -33,7 +46,19 @@ export function DataTable<TData>({
   className,
   ...props
 }: DataTableProps<TData>) {
+  const router = useRouter();
+  const [mutationPending, setMutationPending] = useState(false);
+  const [refreshPending, startRefresh] = useTransition();
+  const isLoading = Boolean(loading || mutationPending || refreshPending);
+  const mutation = React.useMemo<DataTableMutation>(() => ({
+    begin: () => setMutationPending(true),
+    finish: (refresh = true) => {
+      setMutationPending(false);
+      if (refresh) startRefresh(() => router.refresh());
+    },
+  }), [router]);
   return (
+    <DataTableMutationContext.Provider value={mutation}>
     <div
       data-idoc-table-root
       className={cn("flex w-full flex-col gap-2.5 overflow-auto", className)}
@@ -41,7 +66,7 @@ export function DataTable<TData>({
     >
       {children}
       <div
-        aria-busy={loading || undefined}
+        aria-busy={isLoading || undefined}
         className="relative overflow-hidden rounded-md border"
       >
         <Table>
@@ -69,7 +94,7 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               // A real skeleton (pulsing placeholder blocks) rather than dimming the outgoing
               // rows' opacity, which just reads as "the text got fainter," not as a loading state.
               // Matches the current row count so the table doesn't visibly resize between the last
@@ -125,5 +150,6 @@ export function DataTable<TData>({
           actionBar}
       </div>
     </div>
+    </DataTableMutationContext.Provider>
   );
 }

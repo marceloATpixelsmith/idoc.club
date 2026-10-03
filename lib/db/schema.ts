@@ -319,7 +319,7 @@ export const profileChangeHistory = idocSchema.table('profile_change_history', {
 
 export const auditLog = idocSchema.table('audit_log', {
   id: serial('id').primaryKey(),
-  actorId: integer('actor_id').references(() => users.id),
+  actorId: integer('actor_id').references(() => users.id, { onDelete: 'set null' }),
   action: varchar('action', { length: 100 }).notNull(),
   entityType: varchar('entity_type', { length: 50 }).notNull(),
   entityId: varchar('entity_id', { length: 100 }).notNull(),

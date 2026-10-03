@@ -35,6 +35,8 @@ export default async function BlogArticlePage({ params }: Props) {
   return (
     <ArticleView
       articleType="blog"
+      backHref="/blog"
+      backLabel="Back to Blog"
       contentHtml={String(article.content_html)}
       publicationDate={String(article.publication_date)}
       subtitle={article.subtitle ? String(article.subtitle) : null}

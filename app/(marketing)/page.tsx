@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
+import { Button } from '@/components/ui/button';
 import { PublicNewsCard } from '@/components/news/public-news-card';
 import { listPublicArticles } from '@/lib/news/articles';
 import { listCurrentSeminarsForMember, listPastPublishedSeminars } from '@/lib/seminars/registrations';
@@ -164,18 +165,12 @@ export default async function Home() {
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
-            <Link
-              href="/membership"
-              className="bg-gold px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground transition-opacity hover:opacity-90"
-            >
-              Become a Member
-            </Link>
-            <Link
-              href="/sign-in"
-              className="border border-gold/60 px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground"
-            >
-              Member Login
-            </Link>
+            <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]">
+              <Link href="/membership">Become a Member</Link>
+            </Button>
+            <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]" variant="secondary">
+              <Link href="/sign-in">Member Login</Link>
+            </Button>
           </div>
         </div>
       </section>

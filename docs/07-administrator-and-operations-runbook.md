@@ -60,10 +60,7 @@ with the search box pre-filled to that member's email, showing only their conver
 disabled when the member has never submitted a support conversation, regardless of any existing
 conversation's current status.
 
-Roster rows support selected-row deletion through the shared admin bulk action. Member deletion is a
-soft-delete/anonymization operation: it preserves historical profile, membership, payment and audit records,
-revokes active sessions, and refuses privileged Administrator/Super Admin accounts and the acting admin's own account.
-All destructive bulk actions require fresh MFA step-up and CSRF validation. The incident-only Super Admin action
+The Members roster has separate **Archive selected** and **Delete selected** bulk actions. Archiving disables member sign-in and revokes sessions while retaining the profile and all related records; it is blocked while a Stripe membership subscription is active, which must be canceled first. Permanent deletion removes the account, profile, membership, payment/refund, registration, profile-change, support, and account-security records. Audit events remain in the append-only log, with the deleted member's actor reference cleared. Permanent deletion is blocked while an active subscription exists. Both actions reject the acting administrator's own account and privileged Administrator/Super Admin accounts, require fresh MFA step-up and CSRF validation, and show the table's pulsing skeleton while the change and refresh run. The incident-only Super Admin action
 **Force Revoke All Authority**; it is not an ordinary canonical Revoke User operation and must not
 be reinterpreted as Bulk Revoke. Product owners must define ordinary revoke eligibility, effects,
 privileged/self protections, notices, and retry semantics before Bulk Revoke can be enabled. A
@@ -71,8 +68,7 @@ future enabled bulk operation must re-fetch every ID, re-authorize and re-evalua
 confirm access removal, prevent duplicate submission, preserve filters, and report per-member
 success/failure/skipped outcomes.
 
-Archive Membership remains unavailable until durable Stripe/Mailchimp external-operation handling
-and seminar-registration identity snapshots exist. Pause Membership remains unavailable until
+The roster's **Archive selected** action disables sign-in and preserves the membership and registration records; it is an account-level archive. The separate membership-status transition **Archive Membership** remains unavailable until durable Stripe/Mailchimp external-operation handling and seminar-registration identity snapshots exist. Pause Membership remains unavailable until
 entitlement, expiration, collection, resumption, manual/one-time behavior, and notice rules are
 approved. Neither control substitutes another account or membership transition.
 
@@ -939,7 +935,7 @@ A News or Blog record may optionally point to an external `http://` or `https://
 
 The former **Pages** administration surface is retired completely: it has no admin navigation item, routes, actions, editor/form, preview, table configuration, or administrator preference type. Existing persisted CMS pages remain read-only and can still be delivered through the public/member page renderer.
 
-Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
+Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are permanently deleted with account-linked profile, payment, registration, profile-change and support records purged; immutable audit events remain with the actor reference cleared. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
 
 CI trigger note: external-link support is covered by migration 0065 and the News/Blog regression suite.
 
