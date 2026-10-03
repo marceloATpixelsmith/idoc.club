@@ -4,17 +4,12 @@ alter table idoc.news_articles
 alter table idoc.news_articles
   add column if not exists thumbnail_url text;
 
-do $
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'news_articles_type_check'
-      and conrelid = 'idoc.news_articles'::regclass
-  ) then
-    alter table idoc.news_articles
-      add constraint news_articles_type_check check (article_type in ('news', 'blog'));
-  end if;
-end $;
+alter table idoc.news_articles
+  drop constraint if exists news_articles_type_check;
+
+alter table idoc.news_articles
+  add constraint news_articles_type_check
+  check (article_type in ('news', 'blog'));
 
 create index if not exists news_articles_type_publication_idx
   on idoc.news_articles (article_type, status, publication_date);
