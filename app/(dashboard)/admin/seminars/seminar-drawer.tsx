@@ -18,7 +18,7 @@ export async function AdminSeminarDrawer({ isNew = false, seminarId }: { isNew?:
 
   if (isNew) {
     return (
-      <AdminFormDrawer closeHref="/admin/seminars" title="New seminar">
+      <AdminFormDrawer closeHref="/admin/seminars" title="Seminar">
         <div className="space-y-4 px-5 py-6 lg:px-8">
           <SeminarForm action={createSeminarAction} submitLabel="Create seminar">
             <AdminFormSection title="Seminar details">
@@ -43,7 +43,7 @@ export async function AdminSeminarDrawer({ isNew = false, seminarId }: { isNew?:
   const status = String(seminar.status);
 
   return (
-    <AdminFormDrawer closeHref="/admin/seminars" title={String(seminar.title)}>
+    <AdminFormDrawer closeHref="/admin/seminars" title="Seminar">
       <div className="space-y-4 px-5 py-6 lg:px-8">
         <SeminarForm action={updateSeminarAction} submitLabel="Save changes">
           <input name="id" type="hidden" value={seminarId} />

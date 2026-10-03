@@ -16,7 +16,7 @@ export default async function AdminReconciliationPage() {
   const [lastRun, findings] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings()]);
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
-    <h1 className="text-3xl font-semibold text-gold">Stripe reconciliation</h1>
+    <h1 className="text-3xl font-semibold text-gold">Stripe Reconciliation</h1>
     <p className="mt-2 text-sm text-foreground">
       A read-only daily comparison of local subscription/billing state against live Stripe data. Act on findings using the existing member tools
       (suspend/reinstate, correct entitlement) from the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link>.

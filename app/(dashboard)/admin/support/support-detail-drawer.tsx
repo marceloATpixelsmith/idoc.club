@@ -15,7 +15,7 @@ export async function SupportDetailDrawer({ publicId }: { publicId: string }) {
   if (!conversation) notFound();
 
   return (
-    <AdminFormDrawer closeHref="/admin/support" title={String(conversation.subject)}>
+    <AdminFormDrawer closeHref="/admin/support" title="Support Inbox">
       <div className="space-y-4 px-5 py-6 lg:px-8">
         <AdminFormSection
           description={String(conversation.member_name) + ' · ' + String(conversation.member_email) + ' · ' + CATEGORY_LABELS[conversation.category as keyof typeof CATEGORY_LABELS] + ' · ' + STATUS_LABELS[String(conversation.status)]}

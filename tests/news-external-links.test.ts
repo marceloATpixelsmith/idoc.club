@@ -6,6 +6,7 @@ const articles = readFileSync('lib/news/articles.ts', 'utf8');
 const actions = readFileSync('app/(dashboard)/admin/news/actions.ts', 'utf8');
 const newsDrawer = readFileSync('app/(dashboard)/admin/news/news-drawer.tsx', 'utf8');
 const newsPage = readFileSync('app/(marketing)/news/page.tsx', 'utf8');
+const publicNewsCard = readFileSync('components/news/public-news-card.tsx', 'utf8');
 const blogPage = readFileSync('app/(marketing)/blog/page.tsx', 'utf8');
 const home = readFileSync('app/(marketing)/page.tsx', 'utf8');
 const migration = readFileSync('lib/db/migrations/0065_news_external_links.sql', 'utf8');
@@ -24,7 +25,9 @@ test('external-link blurbs may omit a body while internal articles still require
 });
 
 test('public News Blog cards open external links in a new tab and keep internal routes otherwise', () => {
-  for (const source of [newsPage, blogPage, home]) {
+  assert.match(newsPage, /PublicNewsCard/);
+  assert.match(home, /PublicNewsCard/);
+  for (const source of [publicNewsCard, blogPage]) {
     assert.match(source, /external_url/);
     assert.match(source, /target.*_blank|target=\{external \? '_blank'/s);
     assert.match(source, /noopener noreferrer/);

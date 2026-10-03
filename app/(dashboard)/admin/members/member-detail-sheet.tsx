@@ -99,7 +99,7 @@ export function MemberDetailSheet({
     <Sheet onOpenChange={(next) => { setOpen(next); if (!next) router.push(closeHref); }} open={open}>
       <SheetContent className="w-full overflow-y-auto sm:w-[70vw] sm:max-w-4xl">
         <SheetHeader>
-          <SheetTitle>{profile.firstName} {profile.lastName}</SheetTitle>
+          <SheetTitle className="text-3xl font-semibold text-gold">Member</SheetTitle>
           <SheetDescription>
             {selected.entitlement ? (MEMBERSHIP_STATUS_LABELS[selected.entitlement.status] ?? selected.entitlement.status) : 'No membership on file'}
             {selected.entitlement && ` · Paid through ${selected.entitlement.validUntil}`}

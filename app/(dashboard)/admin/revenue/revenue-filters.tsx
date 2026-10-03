@@ -54,7 +54,7 @@ export function RevenueFilters({ from, origin, to }: { from?: string; origin?: s
         Date range
         <Popover onOpenChange={setOpen} open={open}>
           <PopoverTrigger asChild>
-            <Button className="justify-start font-normal" variant="outline">
+            <Button className="justify-start" data-idoc-table-control variant="outline">
               <CalendarIcon />
               {dateText}
             </Button>

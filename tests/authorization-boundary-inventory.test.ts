@@ -70,7 +70,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   },
   'app/(dashboard)/admin/bulk-actions.ts': { bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access' },
   'app/(dashboard)/admin/seminars/actions.ts': {
-    createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
+    createAdminSeminarRegistrationAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
     refundSeminarRegistrationAction: 'delegates-to-data-access', setAdminRegistrationStatusAction: 'delegates-to-data-access',
     updateSeminarAction: 'delegates-to-data-access', updateSeminarRegistrationDetailsAction: 'delegates-to-data-access',
   },

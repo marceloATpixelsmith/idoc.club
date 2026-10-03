@@ -32,6 +32,8 @@ export default async function NewsArticlePage({ params }: Props) {
   return (
     <ArticleView
       articleType="news"
+      backHref="/news"
+      backLabel="Back to News"
       contentHtml={String(article.content_html)}
       publicationDate={String(article.publication_date)}
       subtitle={article.subtitle ? String(article.subtitle) : null}

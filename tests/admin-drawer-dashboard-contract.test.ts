@@ -94,12 +94,12 @@ test('Seminar edit and create stay over the table and table actions own navigati
 
 test('ordinary gold and blue buttons share the canonical Member Login pill radius', () => {
   assert.match(siteHeader, /MemberLoginLink[\s\S]*rounded-full/);
-  assert.match(sharedButton, /default: "rounded-full bg-primary/);
-  assert.match(sharedButton, /outline:[\s\S]*"rounded-full border/);
+  assert.match(sharedButton, /inline-flex[^\n]*rounded-full[^\n]*text-sm[^\n]*font-bold/);
+  assert.match(sharedButton, /default: "bg-primary/);
+  assert.match(sharedButton, /outline:[\s\S]*"border border-transparent bg-primary/);
   assert.match(globals, /background: var\(--gold\);[\s\S]*border-radius: 9999px/);
-  assert.match(globals, /\.idoc-secondary-button[\s\S]*border-radius: 9999px/);
+  assert.match(globals, /\.idoc-secondary-button[\s\S]*border-style: dotted;[\s\S]*border-radius: 9999px/);
   assert.match(globals, /\[data-idoc-table-control\][\s\S]*border-radius: 9999px/);
-  assert.doesNotMatch(sharedButton, /inline-flex[^\n]*rounded-full[^\n]*text-sm/);
 });
 
 
@@ -135,8 +135,7 @@ test('all actionable admin tables show the pulsing table skeleton for internal r
   assert.match(registrationTable, /registrationId=/);
 });
 
-test('admin drawer and section headers match the Member form hierarchy', () => {
-  assert.match(adminDrawer, /Dialog\.Title className="text-lg font-semibold text-foreground"/);
+test('admin drawer main headings match table-page headings while section headings stay distinct', () => {
+  assert.match(adminDrawer, /Dialog\.Title className="text-3xl font-semibold text-gold"/);
   assert.match(adminFormSection, /text-xs font-bold uppercase tracking-wider text-gold/);
-  assert.doesNotMatch(adminDrawer, /Dialog\.Title[^\n]*text-gold/);
 });

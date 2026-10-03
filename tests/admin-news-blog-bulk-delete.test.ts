@@ -30,7 +30,7 @@ test('News Blog type and thumbnail are persisted and public listing queries are 
   assert.match(migration, /thumbnail_url text/);
   assert.match(news, /NEWS_TYPES = \['news', 'blog'\]/);
   assert.match(news, /article_type=\$\{articleType\}/);
-  assert.match(newsPage, /listPublicArticles\(pageParam, 'news'\)/);
+  assert.match(newsPage, /listAllPublicArticles\('news'\)/);
   assert.match(blogPage, /listPublicArticles\(pageParam, 'blog'\)/);
   assert.match(home, /listPublicArticles\('1', 'news'\)/);
   assert.match(home, /listPublicArticles\('1', 'blog'\)/);

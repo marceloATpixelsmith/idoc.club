@@ -40,7 +40,7 @@ function TypeStatusFields({ articleType = 'news', status = 'draft' }: { articleT
 export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?: string; isNew?: boolean }) {
   if (isNew) {
     return (
-      <AdminFormDrawer closeHref="/admin/news" title="New article">
+      <AdminFormDrawer closeHref="/admin/news" title="News / Blog">
         <div className="space-y-4 px-5 py-6 lg:px-8">
           <NewsForm action={createNewsArticle} submitLabel="Create article">
             <AdminFormSection description="Choose where this item belongs and how it should be published." title="Publishing">
@@ -79,7 +79,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
   const status = String(article.status);
   const articleType = String(article.article_type ?? 'news');
   return (
-    <AdminFormDrawer closeHref="/admin/news" title={String(article.title)}>
+    <AdminFormDrawer closeHref="/admin/news" title="News / Blog">
       <div className="space-y-4 px-5 py-6 lg:px-8">
         <NewsForm action={updateNewsArticle} submitLabel="Save changes">
           <input name="id" type="hidden" value={articleId} />

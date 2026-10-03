@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
+import { PublicNewsCard } from '@/components/news/public-news-card';
 import { listPublicArticles } from '@/lib/news/articles';
 import { listCurrentSeminarsForMember, listPastPublishedSeminars } from '@/lib/seminars/registrations';
 
@@ -53,26 +54,7 @@ export default async function Home() {
             <div className="mt-10 flex flex-col gap-6">
               {recentNews.length === 0 ? (
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
-              ) : recentNews.map((item) => {
-                const external = Boolean(item.external_url);
-                const href = external ? String(item.external_url) : `/news/${item.slug}`;
-                return (
-                  <Link href={href} key={String(item.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
-                    <article className="card-midnight overflow-hidden">
-                      {item.thumbnail_url ? (
-                        <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
-                      ) : null}
-                      <div className="p-6">
-                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                          {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                        </p>
-                        <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
-                        {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
-                      </div>
-                    </article>
-                  </Link>
-                );
-              })}
+              ) : recentNews.map((item) => <PublicNewsCard item={item as never} key={String(item.slug)} />)}
             </div>
           </div>
 

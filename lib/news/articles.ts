@@ -440,7 +440,7 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
   const rows = schemaReady
-    ? await client`select slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+    ? await client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
         where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
         order by publication_date desc limit ${limit + 1} offset ${offset}`
     : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
@@ -451,13 +451,29 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   return { hasNext: rows.length > limit, page, rows: rows.slice(0, limit) };
 }
 
+export async function listAllPublicArticles(typeValue?: unknown) {
+  const parsedType = typeSchema.safeParse(typeValue);
+  const articleType = parsedType.success ? parsedType.data : null;
+  const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
+  const externalReady = await newsSchemaSupportsExternalUrl();
+  return schemaReady
+    ? client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+        where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+        order by publication_date desc`
+    : client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
+        from idoc.news_articles
+        where status='published' and publication_date<=now()
+        and (${articleType}::text is null or ${legacyArticleTypeSql()}=${articleType})
+        order by publication_date desc`;
+}
+
 export async function getPublicArticleBySlug(value: unknown, expectedType?: NewsType) {
   const parsedSlug = slugSchema.safeParse(value);
   if (!parsedSlug.success) return null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
   const [row] = schemaReady
-    ? await client`select slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
+    ? await client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
         where slug=${parsedSlug.data} and status='published' and publication_date<=now()
         and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`
     : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,content_html,publication_date
