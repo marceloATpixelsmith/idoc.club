@@ -10,7 +10,12 @@ const validPassword = 'StrongPassword1!';
 const ASTRAL_UPPERCASE = '𝔸';
 
 test('password policy accepts a password meeting all required categories', () => {
-  assert.equal(passwordSchema.safeParse(validPassword).success, true);
+  assert.equal(passwordSchema.safeParse('Abcdef1!xy').success, true);
+});
+
+test('password policy accepts a composition-compliant 10-character password', () => {
+  assert.equal(countPasswordCharacters('Abcdef1!xy'), 10);
+  assert.equal(passwordSchema.safeParse('Abcdef1!xy').success, true);
 });
 
 test('password policy rejects missing uppercase, lowercase, number, special character, or minimum length', () => {
@@ -38,16 +43,16 @@ test('countPasswordCharacters counts Unicode code points, not UTF-16 code units'
   assert.equal(countPasswordCharacters(five), 5);
 });
 
-test('a password with fewer than 12 real characters is rejected even though astral-plane characters inflate its UTF-16 length to 12+', () => {
+test('a password with fewer than 10 real characters is rejected even though astral-plane characters inflate its UTF-16 length to 10+', () => {
   // 5 astral uppercase characters + 3 ASCII (lower/number/special) = 8 actual characters, satisfying
   // every composition rule, but only 13 UTF-16 units -- old .length-based validation would have
-  // wrongly accepted this as "12 characters or more".
+  // wrongly accepted this as "10 characters or more".
   const password = `${ASTRAL_UPPERCASE.repeat(5)}a1!`;
   assert.equal(password.length, 13);
   assert.equal(countPasswordCharacters(password), 8);
   const result = passwordSchema.safeParse(password);
   assert.equal(result.success, false);
-  assert.ok(result.error?.issues.some((issue) => issue.message === 'Use at least 12 characters.'));
+  assert.ok(result.error?.issues.some((issue) => issue.message === 'Use at least 10 characters.'));
 });
 
 test('a password with 128 or fewer real characters is accepted even though astral-plane characters inflate its UTF-16 length past 128', () => {
@@ -74,7 +79,7 @@ test('passwordEntrySchema accepts a password with 128 or fewer real characters e
   assert.equal(passwordEntrySchema.safeParse(password).success, true);
 });
 
-test('passwordEntrySchema does not enforce composition rules or the 12-character minimum, since it verifies an existing credential rather than creating one', () => {
+test('passwordEntrySchema does not enforce composition rules or the 10-character minimum, since it verifies an existing credential rather than creating one', () => {
   assert.equal(passwordEntrySchema.safeParse('short').success, true);
   assert.equal(passwordEntrySchema.safeParse('alllowercaseandnospecialchars').success, true);
 });
