@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { forceRevokeAllAuthorityForm, reinstateUserAccountForm, suspendUserAccountForm } from './actions';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
@@ -12,8 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 type FormState = { error?: string; success?: string };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
-export function SuspendAccountForm({ userId }: { userId: number }) {
+export function SuspendAccountForm({ onSuccess, userId }: { onSuccess?: () => void; userId: number }) {
   const [state, action, pending] = useActionState(suspendUserAccountForm, {} as FormState);
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
@@ -33,8 +34,9 @@ const REINSTATE_ACCOUNT_LABELS: Record<string, string> = {
   active: 'Active', migrated_pending: 'Migrated (pending verification)', onboarding: 'Onboarding',
 };
 
-export function ReinstateAccountForm({ userId }: { userId: number }) {
+export function ReinstateAccountForm({ onSuccess, userId }: { onSuccess?: () => void; userId: number }) {
   const [state, action, pending] = useActionState(reinstateUserAccountForm, {} as FormState);
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
@@ -58,8 +60,9 @@ export function ReinstateAccountForm({ userId }: { userId: number }) {
  * live session, every remembered/trusted device, and every enrolled MFA factor for this user, but
  * (unlike suspending the account) leaves the account itself sign-in-eligible so its rightful owner
  * can regain control and re-enroll MFA once they have. */
-export function ForceRevokeAllAuthorityForm({ userId }: { userId: number }) {
+export function ForceRevokeAllAuthorityForm({ onSuccess, userId }: { onSuccess?: () => void; userId: number }) {
   const [state, action, pending, stepUpDialog] = useFreshStepUpAction(forceRevokeAllAuthorityForm, {});
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <><form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="userId" value={userId} />
