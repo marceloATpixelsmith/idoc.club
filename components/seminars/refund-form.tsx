@@ -1,13 +1,17 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
+import { useAdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { Button } from '@/components/ui/button';
 import { refundSeminarRegistrationAction } from '@/app/(dashboard)/admin/seminars/actions';
 
 export function SeminarRefundForm({ registrationId }: { registrationId: string }) {
   const [state, action, pending, stepUpDialog] = useFreshStepUpAction(refundSeminarRegistrationAction, {});
+  const closeDrawer = useAdminFormDrawer();
+  useEffect(() => { if (state.success && closeDrawer) closeDrawer(); }, [state.success, closeDrawer]);
   return <><form action={action} className="mt-2 space-y-2"><CsrfField />
     <input name="registrationId" type="hidden" value={registrationId} />
     <label className="block text-xs" htmlFor={`refund-reason-${registrationId}`}>Administrative refund reason</label>
