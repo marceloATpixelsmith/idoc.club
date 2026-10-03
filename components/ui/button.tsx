@@ -17,7 +17,7 @@ const buttonVariants = cva(
         outline:
           "border border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
         secondary:
-          "bg-primary text-primary-foreground hover:bg-primary/90",
+          "idoc-secondary-button",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
