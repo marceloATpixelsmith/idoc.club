@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
-import { blogPosts } from '@/lib/content/site';
 import { listPublicArticles } from '@/lib/news/articles';
 import { listCurrentSeminarsForMember } from '@/lib/seminars/registrations';
 
@@ -19,11 +18,13 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const [{ rows: newsRows }, seminarRows] = await Promise.all([
-    listPublicArticles('1'),
+  const [{ rows: newsRows }, { rows: blogRows }, seminarRows] = await Promise.all([
+    listPublicArticles('1', 'news'),
+    listPublicArticles('1', 'blog'),
     listCurrentSeminarsForMember(null),
   ]);
   const recentNews = newsRows.slice(0, 4);
+  const recentBlog = blogRows.slice(0, 3);
   const upcomingSeminars = seminarRows.slice(0, 4);
   return (
     <>
@@ -52,12 +53,15 @@ export default async function Home() {
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
               ) : recentNews.map((item) => (
                 <Link key={String(item.slug)} href={`/news/${item.slug}`}>
-                  <article className="card-midnight p-7">
+                  <article className="card-midnight overflow-hidden">
+                    {item.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} /> : null}
+                    <div className="p-7">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                     <h3 className="mt-4 text-2xl leading-snug">{String(item.title)}</h3>
                     {item.subtitle ? <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                    </div>
                   </article>
                 </Link>
               ))}
@@ -110,19 +114,21 @@ export default async function Home() {
         </div>
 
         <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {blogPosts.map((post) => (
-            <article key={post.slug} className="card-midnight flex flex-col p-7">
-              <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                {post.date}
-              </p>
-              <h3 className="mt-4 text-2xl leading-snug">{post.title}</h3>
-              <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">
-                {post.excerpt}
-              </p>
-              <p className="mt-6 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                by {post.author}
-              </p>
-            </article>
+          {recentBlog.length === 0 ? (
+            <p className="text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
+          ) : recentBlog.map((post) => (
+            <Link href={`/blog/${post.slug}`} key={String(post.slug)}>
+              <article className="card-midnight flex h-full flex-col overflow-hidden">
+                {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
+                <div className="flex flex-1 flex-col p-7">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gold">
+                    {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
+                  {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
+                </div>
+              </article>
+            </Link>
           ))}
         </div>
       </section>
