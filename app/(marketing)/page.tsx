@@ -51,24 +51,28 @@ export default async function Home() {
             <div className="mt-10 flex flex-col gap-6">
               {recentNews.length === 0 ? (
                 <p className="text-muted-foreground">No news articles have been published yet. Check back soon.</p>
-              ) : recentNews.map((item) => (
-                <Link key={String(item.slug)} href={`/news/${item.slug}`}>
-                  <article className="card-midnight grid overflow-hidden sm:grid-cols-[9rem_1fr]">
-                    {item.thumbnail_url ? (
-                      <img alt="" className="h-full min-h-32 w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
-                    ) : (
-                      <div className="hidden sm:block" />
-                    )}
-                    <div className="p-6">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </p>
-                      <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
-                      {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
-                    </div>
-                  </article>
-                </Link>
-              ))}
+              ) : recentNews.map((item) => {
+                const external = Boolean(item.external_url);
+                const href = external ? String(item.external_url) : `/news/${item.slug}`;
+                return (
+                  <Link href={href} key={String(item.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
+                    <article className="card-midnight grid overflow-hidden sm:grid-cols-[9rem_1fr]">
+                      {item.thumbnail_url ? (
+                        <img alt="" className="h-full min-h-32 w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                      ) : (
+                        <div className="hidden sm:block" />
+                      )}
+                      <div className="p-6">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                        <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
+                        {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
@@ -120,20 +124,24 @@ export default async function Home() {
         <div className="mt-10 grid gap-6 lg:grid-cols-3">
           {recentBlog.length === 0 ? (
             <p className="text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
-          ) : recentBlog.map((post) => (
-            <Link href={`/blog/${post.slug}`} key={String(post.slug)}>
-              <article className="card-midnight flex h-full flex-col overflow-hidden">
-                {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
-                <div className="flex flex-1 flex-col p-7">
-                  <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                    {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                  <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
-                  {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
-                </div>
-              </article>
-            </Link>
-          ))}
+          ) : recentBlog.map((post) => {
+            const external = Boolean(post.external_url);
+            const href = external ? String(post.external_url) : `/blog/${post.slug}`;
+            return (
+              <Link href={href} key={String(post.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
+                <article className="card-midnight flex h-full flex-col overflow-hidden">
+                  {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
+                  <div className="flex flex-1 flex-col p-7">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold">
+                      {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
+                    {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
+                  </div>
+                </article>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
