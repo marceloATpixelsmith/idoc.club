@@ -922,3 +922,5 @@ A News or Blog record may optionally point to an external `http://` or `https://
 The former **Pages** administration surface is retired completely: it has no admin navigation item, routes, actions, editor/form, preview, table configuration, or administrator preference type. Existing persisted CMS pages remain read-only and can still be delivered through the public/member page renderer.
 
 Selected-row **Delete selected** is available for Members, News/Blog, Seminars, Registrations, and Support. Server-side safeguards are authoritative: News/Blog uses the existing draft/archived rule; Seminars must be Draft or Canceled with no registration history; Registrations must already be canceled and have no Stripe/payment/refund evidence; Support conversations must be closed; Members are soft-deleted/anonymized. Reconciliation and financial/audit report tables remain immutable evidence and do not expose destructive deletion.
+
+CI trigger note: external-link support is covered by migration 0065 and the News/Blog regression suite.
