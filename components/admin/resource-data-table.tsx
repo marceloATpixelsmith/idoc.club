@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
+import { BulkNewsStatusSelected } from '@/components/admin/bulk-update-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
@@ -270,7 +271,7 @@ export function ResourceDataTable({
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
