@@ -43,7 +43,7 @@ export function TokenPasswordForm({ action, heading, token }: { action: Action; 
         <PasswordInput label="New Password" name="password" />
         <PasswordInput label="Confirm Password" name="confirmPassword" />
         <p className="idoc-auth-page__instructions text-left">
-          Use at least 12 characters and follow the password requirements enforced by IDOC.
+          Use at least 10 characters and follow the password requirements enforced by IDOC.
         </p>
         <Feedback state={state} />
         <button className="idoc-auth-button" disabled={pending || !token} type="submit">
