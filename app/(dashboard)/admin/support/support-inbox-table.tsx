@@ -158,7 +158,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
 
   async function copySelectedLinks() {
     try {
-      await navigator.clipboard.writeText(table.getSelectedRowModel().rows.map(({ original }) => `${window.location.origin}/admin/support/${original.public_id}`).join('\n'));
+      await navigator.clipboard.writeText(table.getSelectedRowModel().rows.map(({ original }) => `${window.location.origin}/admin/support?supportId=${encodeURIComponent(original.public_id)}`).join('\n'));
       setCopyNotice('Selected links copied.');
     } catch { setCopyNotice('Could not copy the selected links.'); }
   }
