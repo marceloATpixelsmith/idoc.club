@@ -2,6 +2,14 @@
 
 **Administrator & Operations Runbook**
 
+## Signup and password reset breach checks
+
+Password creation during signup and password reset checks the new password against Have I Been Pwned's free Pwned Passwords range endpoint. The application computes a SHA-1 hash server-side and sends only its first five hexadecimal characters; it compares the returned suffixes locally. The password and full hash are never sent. A breached match is rejected with a request to choose another password. Provider outages are recorded as an unavailable check and do not block password creation.
+
+The same password creation policy is used wherever users create or change a password: signup, password reset, account recovery/activation, and authenticated password change. Login checks the existing credential without applying creation-only composition rules.
+
+The test password `Password#1` is the designated breached-password fixture. It is 10 characters and meets IDOC's uppercase, lowercase, number, and special-character requirements. CI uses it in `tests/password-breach-check.test.ts` and stubs the corresponding HIBP range response so the rejection test is deterministic. For a live staging check, use `Password#1` only with a disposable test identity and verify that HIBP reports a match; follow LIVE-AUTH-034 in the Authentication & Security Test Catalog. Never use it for a real account.
+
 ## Dashboard navigation and Organization Settings
 
 - Administrators and Super Admins enter through **Admin Dashboard** in the authenticated initials menu. Members do not receive that server-derived menu capability and `/admin` remains default-deny.

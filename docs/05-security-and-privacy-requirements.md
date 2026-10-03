@@ -238,7 +238,7 @@ WebAuthn/passkey support for privileged roles was implemented in an earlier revi
 
 ## Password policy
 
-Passwords require 12–128 characters and at least one uppercase letter, one lowercase letter, one number, and one special character. Spaces and Unicode remain allowed, paste is allowed, and the password is preserved exactly as entered: do not trim, normalize, or silently truncate. These requirements are enforced server-side anywhere a new password is accepted; client-side guidance is usability support only. New password storage uses versioned Argon2id. Existing bcrypt hashes remain accepted only as a migration format and are upgraded to the current Argon2id format after a successful credential verification.
+Passwords require 10–128 characters and at least one uppercase letter, one lowercase letter, one number, and one special character. Spaces and Unicode remain allowed, paste is allowed, and the password is preserved exactly as entered: do not trim, normalize, or silently truncate. These requirements are enforced server-side anywhere a new password is accepted; client-side guidance is usability support only. New password storage uses versioned Argon2id. Existing bcrypt hashes remain accepted only as a migration format and are upgraded to the current Argon2id format after a successful credential verification.
 
 ## Client-side error reporting
 

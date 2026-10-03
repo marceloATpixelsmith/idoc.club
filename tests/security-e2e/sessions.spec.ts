@@ -23,7 +23,7 @@ test('logout revokes the registry session so a copied cookie cannot be replayed'
 
   await page.getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByText('Sign out').click();
-  await expect(page).toHaveURL('http://127.0.0.1:3100/');
+  await expect(page).toHaveURL('http://127.0.0.1:3100/sign-in');
 
   const replay = await browser.newContext();
   await replay.addCookies([oldCookie]);
@@ -32,6 +32,7 @@ test('logout revokes the registry session so a copied cookie cannot be replayed'
   await replay.close();
   await context.close();
 });
+
 
 test('authenticated navigation menu works by keyboard without hover', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
@@ -143,5 +144,18 @@ test('account security renders and revokes only the signed-in member active sess
   expect((await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where session_id=${other.session_id}
     and revoked_at is null`)[0].count).toBe(1);
   await sql.end();
+  await context.close();
+});
+
+test('sign out from a public page keeps the member on that page', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
+  const page = await context.newPage();
+  await page.goto('/');
+
+  await page.getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).click();
+  await page.getByText('Sign out').click();
+  await expect(page).toHaveURL('http://127.0.0.1:3100/');
+  await expect.poll(async () => (await page.request.get('/api/user')).json()).toBeNull();
+
   await context.close();
 });

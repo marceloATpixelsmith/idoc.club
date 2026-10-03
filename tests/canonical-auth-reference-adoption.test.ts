@@ -79,7 +79,7 @@ test('auth shell follows canonical split layout and mobile visual behavior', () 
   assert.match(authStyles, /flex: 0 0 50%/);
   assert.match(authStyles, /max-width: 400px/);
   assert.match(authStyles, /height: 220px/);
-  assert.match(authStyles, /calc\(50% \+ 150px\) center/);
+  assert.match(authStyles, /background: url\('\/auth-background\.jpg'\) center \/ cover no-repeat/);
 });
 
 test('canonical field and button geometry stays at the reference 48px height', () => {
