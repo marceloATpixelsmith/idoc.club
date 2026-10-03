@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,9 @@ const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-tran
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function ManualPaymentForm({ currentValidUntil, profileId }: { currentValidUntil: string | null; profileId: number }) {
+export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string | null; onSuccess?: () => void; profileId: number }) {
   const [state, formAction, isPending] = useActionState<ManualPaymentActionState, FormData>(recordManualPaymentForm, {});
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   const [paidAt, setPaidAt] = useState(today());
   const proposedValidUntil = nextValidUntil({ currentValidUntil, paidAt });
 
