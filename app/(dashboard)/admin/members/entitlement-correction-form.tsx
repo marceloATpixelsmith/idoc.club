@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,8 +17,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
-export function EntitlementCorrectionForm({ currentValidUntil, profileId }: { currentValidUntil: string | null; profileId: number }) {
+export function EntitlementCorrectionForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string | null; onSuccess?: () => void; profileId: number }) {
   const [state, action, pending] = useActionState(correctEntitlementForm, {} as FormState);
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
