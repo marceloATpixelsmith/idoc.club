@@ -958,3 +958,5 @@ The main Admin Dashboard is an operational summary, not only a navigation landin
 ### Export list presentation
 
 The Exports page is a plain bullet list. Each export name is normal non-underlined text; a download icon immediately after the text is the download control. Do not append “CSV” to the visible export label merely because the downloaded file format is CSV.
+
+The shared drawer contract is regression-tested alongside the administrator table and privileged bulk-action suites.
