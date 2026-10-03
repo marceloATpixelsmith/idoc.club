@@ -112,3 +112,86 @@ export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: For
     return { error: error instanceof Error ? error.message : 'The selected records could not be deleted.' };
   }
 }
+
+
+export type BulkUpdateState = { error?: string; success?: string };
+
+function selectedIds(formData: FormData, table: 'news' | 'support'): string[] {
+  const ids = [...new Set(formData.getAll('id').map(String).map((value) => value.trim()).filter(Boolean))];
+  if (!ids.length || ids.length > 100) throw new Error('Select between 1 and 100 records.');
+  if (table === 'support') {
+    if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) throw new Error('Invalid support record.');
+  } else if (!ids.every((id) => /^\d+$/.test(id) && Number(id) > 0)) throw new Error('Invalid selected record.');
+  return ids;
+}
+
+export async function bulkCloseSupportRows(_state: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const ids = selectedIds(formData, 'support');
+    const changed = await client.begin(async (sql) => {
+      const rows = await sql<{ id: number; public_id: string; status: string }[]>`
+        select id,public_id::text,status from idoc.support_conversations
+        where public_id::text in ${sql(ids)} for update`;
+      if (rows.length !== ids.length) throw new Error('One or more selected support conversations no longer exist.');
+      let count = 0;
+      for (const row of rows) {
+        if (row.status === 'closed') continue;
+        await sql`update idoc.support_conversations set status='closed',updated_at=now() where id=${row.id}`;
+        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+          values(${actor.id},'support.conversation.closed','support_conversation',${row.public_id},
+          ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status: 'closed' })}::jsonb)`;
+        count += 1;
+      }
+      return count;
+    });
+    revalidatePath('/admin/support');
+    revalidatePath('/admin');
+    return { success: String(changed) + ' selected support record' + (changed === 1 ? '' : 's') + ' closed.' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The selected support records could not be closed.' };
+  }
+}
+
+const BULK_NEWS_STATUSES = ['draft', 'scheduled', 'published', 'archived'] as const;
+
+export async function bulkSetNewsStatus(_state: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const ids = selectedIds(formData, 'news').map(Number);
+    const status = String(formData.get('status') ?? '') as (typeof BULK_NEWS_STATUSES)[number];
+    if (!BULK_NEWS_STATUSES.includes(status)) throw new Error('Choose a valid News/Blog status.');
+
+    await client.begin(async (sql) => {
+      const rows = await sql<{ id: number; publication_date: Date | string; status: string }[]>`
+        select id,status,publication_date from idoc.news_articles where id in ${sql(ids)} for update`;
+      if (rows.length !== ids.length) throw new Error('One or more selected News/Blog records no longer exist.');
+      if (status === 'scheduled' && rows.some((row) => new Date(row.publication_date).getTime() <= Date.now())) {
+        throw new Error('Every selected item needs a future publication date before it can be scheduled.');
+      }
+      for (const row of rows) {
+        if (status === 'published') {
+          const publicationDate = new Date(row.publication_date).getTime() > Date.now() ? new Date().toISOString() : new Date(row.publication_date).toISOString();
+          await sql`update idoc.news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+        } else if (status === 'scheduled') {
+          await sql`update idoc.news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+        } else if (status === 'archived') {
+          await sql`update idoc.news_articles set status='archived',archived_at=now(),updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+        } else {
+          await sql`update idoc.news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+        }
+        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+          values(${actor.id},'admin.news_article.bulk_status_changed','news_article',${String(row.id)},
+          ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status })}::jsonb)`;
+      }
+    });
+    for (const refreshPath of ['/admin/news','/news','/blog','/']) revalidatePath(refreshPath);
+    return { success: String(ids.length) + ' selected News/Blog record' + (ids.length === 1 ? '' : 's') + ' updated.' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The selected News/Blog records could not be updated.' };
+  }
+}

@@ -1,12 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
+import { AdminFormSection } from '@/components/admin/admin-form-section';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { SeminarForm } from '@/components/seminars/seminar-form';
 import { SeminarRefundForm } from '@/components/seminars/refund-form';
 import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
@@ -24,29 +21,15 @@ function money(amountCents: number | null, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(amountCents / 100);
 }
 
-function Section({ children, title }: { children: React.ReactNode; title: string }) {
-  return <Card><CardHeader><CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">{title}</CardTitle></CardHeader><CardContent className="space-y-4">{children}</CardContent></Card>;
-}
-
 export function RegistrationDetailSheet({ closeHref, paymentMethods, registration }: {
   closeHref: string; paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>; registration: AdminSeminarRegistrationRow;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(true);
   const isGuest = registration.profile_id === null;
   return (
-    <Sheet onOpenChange={(next) => { setOpen(next); if (!next) router.push(closeHref); }} open={open}>
-      <SheetContent className="w-full overflow-y-auto sm:w-[70vw] sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>{isGuest ? registration.guest_name : registration.member_name}</SheetTitle>
-          <SheetDescription>
-            <Link className="underline underline-offset-4" href={`/admin/seminars/${registration.seminar_id}`}>{registration.seminar_title}</Link>
-            {' · '}{isGuest ? 'Guest' : 'Member'}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="mt-4 space-y-4">
-          <Section title="Registrant details">
+    <AdminFormDrawer closeHref={closeHref} title={String(isGuest ? registration.guest_name : registration.member_name)}>
+      <div className="space-y-4 px-5 py-6 lg:px-8">
+        <p className="text-sm text-muted-foreground">{registration.seminar_title} · {isGuest ? 'Guest' : 'Member'}</p>
+          <AdminFormSection title="Registrant details">
             <SeminarForm action={updateSeminarRegistrationDetailsAction} submitLabel="Save details">
               <input name="registrationId" type="hidden" value={registration.id} />
               {isGuest ? (
@@ -73,9 +56,9 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
                 />
               </div>
             </SeminarForm>
-          </Section>
+          </AdminFormSection>
 
-          <Section title="Registration status">
+          <AdminFormSection title="Registration status">
             <SeminarForm action={setAdminRegistrationStatusAction} submitLabel="Update status">
               <input name="registrationId" type="hidden" value={registration.id} />
               <fieldset className="flex flex-wrap gap-4">
@@ -87,9 +70,9 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
                 ))}
               </fieldset>
             </SeminarForm>
-          </Section>
+          </AdminFormSection>
 
-          <Section title="Payment">
+          <AdminFormSection title="Payment">
             <p className="text-sm">Status: <strong>{PAYMENT_STATUS_LABELS[registration.payment_status]}</strong></p>
             <p className="text-sm">Amount due: <strong>{money(registration.expected_amount_cents, registration.currency)}</strong></p>
             {registration.paid_at ? <p className="text-sm">Paid at: {new Date(registration.paid_at).toLocaleString()}</p> : null}
@@ -114,9 +97,8 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
             ) : registration.payment_status === 'paid' ? (
               <SeminarRefundForm registrationId={String(registration.id)} />
             ) : null}
-          </Section>
-        </div>
-      </SheetContent>
-    </Sheet>
+          </AdminFormSection>
+      </div>
+    </AdminFormDrawer>
   );
 }

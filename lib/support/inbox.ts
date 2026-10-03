@@ -367,3 +367,30 @@ export async function setCategoryDefault(categoryValue: unknown, administratorVa
       values(${actor.id},'support.category_default.changed','support_category_default',${category},${JSON.stringify({ administratorIds: current.map((row) => row.administrator_user_id) })}::jsonb,${JSON.stringify({ administratorIds })}::jsonb)`;
   });
 }
+
+
+export async function listAssignedOpenConversationsForDashboard(limit = 5) {
+  const actor = await requireAccountAccess('administration');
+  requireAdministrator(actor);
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 10);
+  return client<{
+    category: SupportCategory;
+    member_email: string;
+    member_name: string;
+    public_id: string;
+    status: string;
+    subject: string;
+    updated_at: Date;
+  }[]>`
+    select c.public_id::text,c.subject,c.category,c.status,c.updated_at,
+      coalesce(p.first_name||' '||p.last_name,'') member_name,
+      coalesce(u.email_display,u.email) member_email
+    from idoc.support_conversations c
+    join idoc.support_conversation_administrators ca
+      on ca.conversation_id=c.id and ca.administrator_user_id=${actor.id}
+    join idoc.users u on u.id=c.member_user_id
+    left join idoc.profiles p on p.user_id=u.id
+    where c.status<>'closed'
+    order by c.updated_at desc,c.id desc
+    limit ${safeLimit}`;
+}

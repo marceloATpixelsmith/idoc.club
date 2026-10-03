@@ -929,3 +929,34 @@ CI trigger note: external-link support is covered by migration 0065 and the News
 ### Shared light-blue secondary button style
 
 The canonical light-blue/secondary button treatment is the same surface used by administrator table filter controls: `var(--surface-raised)` background, standard input border, foreground text, and `var(--accent)` hover with the gold-tinted border. The reusable `.idoc-secondary-button` class and the shared Button `secondary` variant own this treatment. Admin table controls and seminar registration controls that use `data-idoc-table-control` share the same CSS declarations. Do not introduce one-off blue hex colors. Use `.idoc-secondary-button--dotted` only where a dotted border is explicitly required, such as the FEI Course Calendar control in the Seminars page header.
+
+
+## Admin table and form interaction contract
+
+Every administrator feature backed by a record table must follow the same interaction pattern as the Members editor. This is a permanent product requirement for existing and future functional areas.
+
+- **Edit/create forms open in drawers over the table.** The row Edit action opens the record in the shared administrator drawer rather than navigating the administrator to a standalone edit page. Where a table also supports Create/New, that form uses the same drawer pattern.
+- **Successful submit closes and refreshes.** A successful create/edit/workflow submission closes the drawer and refreshes the underlying table so the updated row, counts, filters, and status values are immediately current. Validation/server errors remain in the drawer and do not close it.
+- **Consistent sectioned layout.** Drawer forms use carded sections with small uppercase gold section headings, matching the Members form. Related fields are grouped semantically and sections may use responsive two-column grids to make good use of the drawer width. Dense forms must not fall back to one long unstructured vertical field list.
+- **Field spacing is deliberate.** Labels use a consistent label-to-control gap; related fields sit together; unrelated controls do not touch; explanatory/help text is visually separated from both the label and control. Full-width fields are reserved for content that benefits from width (titles, URLs, rich text, long text areas); shorter paired fields share rows where logical.
+- **Drawer width is standardized.** Table-backed admin drawers use the shared approximately 70vw / max-5xl working width on larger screens and full width on small screens.
+- **No form-level quick links.** Edit drawers contain the record form and record-specific workflow controls only. Navigation shortcuts, export/download shortcuts, preview links, and other table-level actions belong in the table Actions column or surrounding admin page, not in a “Quick links/Quick actions” panel inside the form.
+- **Workflow state belongs in the form.** If a record has an editable workflow state, expose it as a normal field/toggle in an appropriate form section. Support tickets therefore use a Closed toggle in the drawer; News/Blog status is part of the Publishing section rather than separate publish/archive shortcut forms.
+- **Bulk operations stay table-level.** Selection-based state changes belong in the table action bar and execute server-authorized, audited operations. Support provides Close selected; News/Blog provides Apply status to selected records; destructive deletion keeps its existing retention and MFA protections.
+- **Legacy direct edit URLs are compatibility routes only.** They redirect back to the table-backed drawer experience rather than maintaining a second full-page editing UI.
+
+Current table-backed admin implementations covered by this contract are Members, News/Blog, Seminars, Seminar Registrations, and Support. Read-only evidence/reporting tables such as reconciliation do not need an edit drawer because they expose no record form.
+
+### Admin dashboard summary requirements
+
+The main Admin Dashboard is an operational summary, not only a navigation landing page. It shows:
+- the latest unresolved Support tickets assigned to the currently logged-in administrator;
+- the latest current Stripe reconciliation findings requiring attention;
+- a compact revenue overview for the default reporting period, by currency, including gross recorded revenue, Stripe revenue, manual revenue, and payment count;
+- direct links from each summary area to the full corresponding admin surface.
+
+### Export list presentation
+
+The Exports page is a plain bullet list. Each export name is normal non-underlined text; a download icon immediately after the text is the download control. Do not append “CSV” to the visible export label merely because the downloaded file format is CSV.
+
+The shared drawer contract is regression-tested alongside the administrator table and privileged bulk-action suites.

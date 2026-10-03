@@ -89,6 +89,7 @@ export function MemberDetailSheet({
   // lets Radix's own close animation start immediately, independent of how long closeHref's
   // navigation takes underneath.
   const [open, setOpen] = useState(true);
+  const closeAndRefresh = () => { setOpen(false); router.push(closeHref); router.refresh(); };
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
   // exception used elsewhere -- see app/(dashboard)/admin/members/page.tsx); closing just navigates
@@ -132,7 +133,7 @@ export function MemberDetailSheet({
 
           <TabsContent value="edit">
             <p className="mb-4 text-sm text-muted-foreground">Membership type changes preserve role history and do not change expiration, payments, or Stripe billing.</p>
-            <AdminProfileForm member={selected} profileId={profile.id} />
+            <AdminProfileForm member={selected} onSuccess={closeAndRefresh} profileId={profile.id} />
           </TabsContent>
 
           <TabsContent value="membership">

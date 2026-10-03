@@ -1,6 +1,5 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -49,17 +48,17 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
   }
 }
 
-export async function createSeminarAction(_state: AdminSeminarState, formData: FormData) {
-  let id: number;
+export async function createSeminarAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
   try {
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-    id = await createSeminar(seminarFields(formData));
+    await createSeminar(seminarFields(formData));
+    revalidatePath('/admin/seminars');
+    revalidatePath('/seminars');
+    return { success: 'Seminar created.' };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
     return { error: 'The seminar could not be created.' };
   }
-  revalidatePath('/admin/seminars');
-  redirect(`/admin/seminars/${id}`);
 }
 
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {

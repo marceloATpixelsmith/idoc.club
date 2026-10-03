@@ -436,13 +436,19 @@ test('the IDOC contact registration form is only for anonymous bank-transfer/cas
   assert.match(form, />Register<\/h2>/);
 });
 
-test('the admin seminar edit page has no Quick Actions box and offers a "View registrations" and an icon-only "Download registrations" action instead', () => {
-  const adminEditPage = readFileSync('app/(dashboard)/admin/seminars/[id]/page.tsx', 'utf8');
-  assert.doesNotMatch(adminEditPage, /Quick [Aa]ctions/);
-  assert.doesNotMatch(adminEditPage, /publishSeminarAction|cancelSeminarAction|revertSeminarToDraftAction|markSeminarRegistrationPaidAction/);
-  assert.doesNotMatch(adminEditPage, /id="registrations"/);
-  assert.match(adminEditPage, /seminars\/registrations\?seminarId=/);
-  assert.match(adminEditPage, /title="Download this seminar's registrations"/);
+test('the admin Seminar table owns registration/download actions while edit/create forms open as table-backed drawers', () => {
+  const adminListPage = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
+  const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
+  const resourceTable = readFileSync('components/admin/resource-data-table.tsx', 'utf8');
+  assert.match(adminListPage, /AdminSeminarDrawer/);
+  assert.match(adminListPage, /seminarId/);
+  assert.match(adminListPage, /new/);
+  assert.match(seminarDrawer, /AdminFormDrawer/);
+  assert.doesNotMatch(seminarDrawer, /Quick [Aa]ctions/);
+  assert.doesNotMatch(seminarDrawer, /publishSeminarAction|cancelSeminarAction|revertSeminarToDraftAction|markSeminarRegistrationPaidAction/);
+  assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
+  assert.match(resourceTable, /seminars\/registrations\?seminarId=/);
+  assert.match(resourceTable, /title="Download this seminar's registrations"/);
 });
 
 test('the admin Registrations page is a cross-seminar roster with search, seminar/payment-status filters, sort, and a download-all-filtered-results action', () => {
