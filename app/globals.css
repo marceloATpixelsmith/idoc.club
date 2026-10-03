@@ -245,13 +245,14 @@ body:has([data-idoc-admin-root]) svg {
   gap: 0.5rem;
   background: var(--surface-raised);
   border-width: 1px;
-  border-style: solid;
+  border-style: dotted;
   border-color: var(--input);
   border-radius: 9999px;
   color: var(--foreground);
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
