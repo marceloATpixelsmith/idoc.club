@@ -40,10 +40,12 @@ test('admins can create seminar registrations with manual payment methods only',
   const registrations = source('lib/seminars/registrations.ts');
   assert.match(page, /New Registration/);
   assert.match(page, /RegistrationCreateDrawer/);
-  assert.match(drawer, /Bank Transfer/);
-  assert.match(drawer, /Cash/);
-  assert.doesNotMatch(drawer, /Stripe/);
+  assert.match(drawer, /paymentMethods\.map/);
+  assert.doesNotMatch(drawer, /online_stripe/);
   assert.match(registrations, /z\.enum\(MANUAL_PAYMENT_METHODS\)/);
+  assert.match(registrations, /enabledMethods\.some/);
+  assert.match(registrations, /isEntitled/);
+  assert.match(registrations, /memberEntitled \? seminar\.member_price_cents : seminar\.non_member_price_cents/);
   assert.match(registrations, /Admin-created registrations must use Bank Transfer or Cash/);
 });
 
