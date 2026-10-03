@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { createSeminar, updateSeminar } from '@/lib/seminars/seminars';
-import { recordManualSeminarPayment, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
+import { createAdminSeminarRegistration, recordManualSeminarPayment, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -64,6 +64,17 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {
   const id = formData.get('id');
   return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar saved.', `/admin/seminars/${id}`);
+}
+
+export async function createAdminSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
+  return run(formData, () => createAdminSeminarRegistration({
+    email: formData.get('email'),
+    firstName: formData.get('firstName'),
+    lastName: formData.get('lastName'),
+    paymentMethod: formData.get('paymentMethod'),
+    phone: formData.get('phone'),
+    seminarId: formData.get('seminarId'),
+  }).then(() => undefined), 'Registration created.', '/admin/seminars/registrations');
 }
 
 export async function recordManualSeminarPaymentAction(_state: AdminSeminarState, formData: FormData) {
