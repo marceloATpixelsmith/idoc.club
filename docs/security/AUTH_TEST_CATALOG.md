@@ -971,38 +971,37 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values.
 
-
 ## LIVE-AUTH-034 — Signup and password reset reject passwords found in known data breaches
 
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-PASSWORD-006
-- **CI coverage:** mapped — `tests/password-breach-check.test.ts`, `tests/password-reset-adversarial.integration.ts`
+- **CI coverage:** mapped — `tests/password-breach-check.test.ts`, `tests/password-reset-adversarial.integration.ts` — The range-check unit test stubs a matching HIBP suffix for deterministic coverage; the password-reset integration test covers the authorized reset boundary.
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
-- Use `staging.idoc.club`, never production or a Vercel preview.
-- Use only a disposable account and mailbox.
-- Confirm immediately before the run that the selected password meets IDOC's composition requirements and is currently listed by HIBP. There is no permanently reserved test password.
+- Use staging.idoc.club, never redesign.idoc.club, a Vercel preview, or localhost.
+- Use only a disposable test account and mailbox. Staging shares the production database, so cleanup is required.
+- Use a password that meets IDOC's 12-character composition rules and is confirmed as pwned by the HIBP Pwned Passwords check immediately before the run. HIBP does not provide a permanently reserved test password.
 
 ### Steps
-1. For signup, create a fresh disposable identity and complete email verification.
-2. Submit the confirmed breached password during password creation.
-3. Verify signup is rejected and no account is created.
-4. For reset, request a reset for a disposable existing account and complete email OTP or required privileged TOTP verification.
-5. Submit the same breached password and verify reset is rejected and the previous credential remains valid.
-6. Complete reset with a unique, non-breached password.
+1. For signup, start signup with a fresh disposable mailbox and complete its email verification step.
+2. Enter the composition-compliant breached password at password creation and submit.
+3. Verify the password is rejected with the breached-password message and no account is created.
+4. For reset, use an existing disposable account, request password reset, and complete the required email OTP or privileged TOTP verification.
+5. Enter the same currently confirmed breached password and submit.
+6. Verify the password is rejected and the prior credential remains valid; then complete reset with a unique, non-breached password.
 
 ### PASS
-- Signup and reset reject the breached password without creating an account or changing the existing credential.
-- Both flows allow retry with a unique password.
-- The raw password and full hash are never sent to HIBP.
+- Both signup and password reset reject the breached password and allow retry with a unique password.
+- The rejected signup creates no account; the rejected reset does not change the existing password.
+- Neither the raw password nor its full hash is sent to HIBP; only the 5-character SHA-1 prefix is sent.
 
 ### FAIL
-- Either flow accepts the breached password, changes account state before rejection, or discloses the raw password/full hash to HIBP.
+- Either flow accepts the breached password, changes account state before rejecting it, or sends the raw password/full hash to HIBP.
 
 ### Cleanup
-- Complete a successful reset for the disposable account, then remove disposable state after capturing evidence.
+- Complete a successful reset for the disposable account, then remove disposable account state after evidence is captured.
 
 ### Evidence
-- Record the flow, HIBP's current result for the selected password, visible validation result, and account-state outcome. Never record the password, its hash, OTP/TOTP, cookies, or tokens.
+- Record the test flow, whether HIBP reported the selected password as pwned, visible validation result, and account-state outcome. Never record the password, its hash, OTP/TOTP, cookies, or tokens.
