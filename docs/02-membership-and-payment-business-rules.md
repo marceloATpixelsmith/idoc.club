@@ -291,6 +291,16 @@ The shared renderer and shared presentation helpers are the canonical source for
 
 # 12. Content, seminars and publishing
 
+## 12.1 Administrator-created seminar registrations
+
+Administrators may create seminar registrations directly from the Registrations table using the same drawer-based admin workflow as other record creation. An administrator-created registration accepts only currently enabled offline seminar payment methods: **Bank Transfer** or **Cash**. Online/Stripe payment is never available for an administrator-created registration.
+
+The entered email is used only to determine whether the registration belongs to an existing IDOC profile. If a matching profile exists, the registration remains profile-backed even when that profile is lapsed, suspended, or otherwise not currently entitled. **Current membership entitlement, not profile existence, determines price:** an entitled profile receives the member seminar price; a non-entitled profile receives the non-member seminar price. If no matching profile exists, the registration is stored as a guest registration at the non-member price.
+
+The same duplicate/reactivation, capacity, deadline, payment-state, audit, and confirmation-notification rules used by normal registrations apply. Successful admin creation records the administrator actor in the audit log and queues the same branded seminar confirmation appropriate to the selected offline payment method.
+
+
+
 - CMS content may be public or assigned through a checklist to active-member, Judge, Steward and Veterinarian classifications. Every restricted item must explicitly use either Match any selected classifications (union) or Match all selected classifications (intersection); an administrator cannot rely on an implied default. Administrators can view every published item. An expired member sees only public content.
 
 - **Implemented seminar slice:** administrators create and edit date-only seminars with start/end calendar dates, language, organizing National Federation, capacity, pricing, deadline, status, and five sanitized rich-text information sections. Seminars contain no time-of-day or timezone. The payment method remains chosen per registration, prices remain immutable after registration, and registration/payment state remain independent.
