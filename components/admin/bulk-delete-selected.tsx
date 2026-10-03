@@ -17,7 +17,9 @@ export function BulkDeleteSelected({ clearSelection, ids, table }: {
   useEffect(() => {
     if (state.success) clearSelection();
     if (state.error) window.alert(state.error);
-  }, [clearSelection, state.error, state.success]);
+  // clearSelection is intentionally read only when a new result arrives; table instances recreate callbacks during render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.error, state.success]);
 
   function requestDelete() {
     if (!ids.length || pending) return;
