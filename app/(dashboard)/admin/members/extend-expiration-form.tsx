@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { extendExpirationForm } from './actions';
 
-export function ExtendExpirationForm({ currentValidUntil, profileId }: { currentValidUntil: string; profileId: number }) {
+export function ExtendExpirationForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string; onSuccess?: () => void; profileId: number }) {
   const [state, action, pending] = useActionState(extendExpirationForm, {} as { error?: string; success?: string });
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input name="profileId" type="hidden" value={profileId} />
