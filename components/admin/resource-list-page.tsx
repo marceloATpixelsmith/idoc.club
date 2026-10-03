@@ -31,10 +31,10 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     type: typeof preferences?.type === 'string' ? preferences.type : undefined,
     to: typeof preferences?.to === 'string' ? preferences.to : undefined,
   };
-  let rows: ResourceRow[];
-  let page: number;
-  let pageSize: number;
-  let total: number;
+  let rows: ResourceRow[] = [];
+  let page = 1;
+  let pageSize = 25;
+  let total = 0;
   if (tableType === 'news') {
     const listing = await listAdminArticles(listQuery);
     ({ page, pageSize, total } = listing);
