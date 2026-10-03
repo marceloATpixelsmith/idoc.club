@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation';
 'use server';
+
+import { redirect } from 'next/navigation';
 
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
