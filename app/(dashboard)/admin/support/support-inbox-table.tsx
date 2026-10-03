@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
+import { BulkCloseSupportSelected } from '@/components/admin/bulk-update-selected';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DataTable } from '@/components/data-table/data-table';
@@ -172,7 +173,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
   const [dateResetSignal, setDateResetSignal] = useState(0);
   const manuallyFiltered = Boolean(activityFrom || activityTo) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
-  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => row.original.public_id)} table="support" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
+  return <><TablePreferenceSync table="support" /><DataTable actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => void copySelectedLinks()}>Copy selected links</ActionBarItem><BulkCloseSupportSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => row.original.public_id)} /><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => row.original.public_id)} table="support" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>} emptyState={<div><strong>{filtered ? 'No conversations match this view' : 'No support conversations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the queue.' : 'New member conversations will appear here.'}</span></div>} loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}>
     <DataTableToolbar
       className="rounded-xl border bg-background p-3"
       table={table}
