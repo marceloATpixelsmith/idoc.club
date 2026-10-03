@@ -57,7 +57,7 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
               <Label htmlFor="paymentMethod">Payment Method</Label>
               <PaymentMethodSelect
                 className={SELECT_CLASSNAME}
-                defaultValue={paymentMethods[0]?.canonical_id}
+                defaultValue={paymentMethods[0]?.canonical_id ?? ''}
                 id="paymentMethod"
                 name="paymentMethod"
                 options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
