@@ -12,6 +12,7 @@ import { DataTableActionsRow } from '@/components/data-table/data-table-actions-
 import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
+import { BulkArchiveMembersSelected } from '@/components/admin/bulk-archive-members';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
@@ -218,7 +219,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
 
   return <>
     <TablePreferenceSync table="memberships" />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.userId))} table="members" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><BulkArchiveMembersSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.userId))} /><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.userId))} table="members" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}

@@ -23,10 +23,15 @@ export function BulkCloseSupportSelected({ clearSelection, ids }: { clearSelecti
     if (!ids.length || pending) return;
     mutation.begin();
     startTransition(async () => {
-      const result = await bulkCloseSupportRows({}, selectionFormData(ids));
-      mutation.finish(Boolean(result.success));
-      if (result.error) window.alert(result.error);
-      if (result.success) clearSelection();
+      try {
+        const result = await bulkCloseSupportRows({}, selectionFormData(ids));
+        mutation.finish(Boolean(result.success));
+        if (result.error) window.alert(result.error);
+        if (result.success) clearSelection();
+      } catch {
+        mutation.finish(false);
+        window.alert('The selected support records could not be updated.');
+      }
     });
   }
 
@@ -48,12 +53,17 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
     if (!ids.length || pending) return;
     mutation.begin();
     startTransition(async () => {
-      const formData = selectionFormData(ids);
-      formData.set('status', status);
-      const result = await bulkSetNewsStatus({}, formData);
-      mutation.finish(Boolean(result.success));
-      if (result.error) window.alert(result.error);
-      if (result.success) clearSelection();
+      try {
+        const formData = selectionFormData(ids);
+        formData.set('status', status);
+        const result = await bulkSetNewsStatus({}, formData);
+        mutation.finish(Boolean(result.success));
+        if (result.error) window.alert(result.error);
+        if (result.success) clearSelection();
+      } catch {
+        mutation.finish(false);
+        window.alert('The selected News/Blog records could not be updated.');
+      }
     });
   }
 

@@ -34,7 +34,8 @@ export function BulkDeleteSelected({ clearSelection, ids, table }: {
     event.preventDefault();
     if (!ids.length || pending) return;
     const label = ids.length === 1 ? 'record' : 'records';
-    if (!window.confirm('Delete ' + ids.length + ' selected ' + label + '? Existing financial, audit, and retention protections still apply.')) return;
+    const prompt = table === 'members' ? 'Permanently delete ' + ids.length + ' selected member' + (ids.length === 1 ? '' : 's') + '? Payment, profile-change, registration, and support history will be removed. Audit events will remain without an actor link.' : 'Delete ' + ids.length + ' selected ' + label + '? Existing financial, audit, and retention protections still apply.';
+    if (!window.confirm(prompt)) return;
     mutationStarted.current = true;
     mutation.begin();
     const formData = new FormData();
