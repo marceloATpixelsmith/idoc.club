@@ -8,6 +8,7 @@ const members = readFileSync('app/(dashboard)/admin/members/members-table.tsx', 
 const registrations = readFileSync('app/(dashboard)/admin/seminars/registrations/registrations-table.tsx', 'utf8');
 const support = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
 const bulk = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8');
+const memberLifecycle = readFileSync('lib/admin/member-lifecycle.ts', 'utf8');
 const news = readFileSync('lib/news/articles.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0064_news_article_type.sql', 'utf8');
 const globals = readFileSync('app/globals.css', 'utf8');
@@ -68,7 +69,7 @@ test('all five mutable record tables expose protected selected-row deletion', ()
   assert.match(support, /table="support"/);
   assert.match(bulk, /requireCsrfToken/);
   assert.match(bulk, /requireFreshStepUp/);
-  assert.match(bulk, /Administrator accounts cannot be bulk deleted/);
+  assert.match(memberLifecycle, /Administrator accounts cannot be bulk deleted/);
   assert.match(bulk, /must be Draft or Canceled and have no registration history/);
   assert.match(bulk, /Registrations can only be deleted after cancellation/);
   assert.match(bulk, /Support conversations must be closed before they can be deleted/);
