@@ -1,37 +1,44 @@
 import type { Metadata } from 'next';
-import { blogPosts } from '@/lib/content/site';
+import Link from 'next/link';
+import { NewsTypeSwitch } from '@/components/news/news-type-switch';
 import { PageHeader } from '@/components/site/PageHeader';
+import { listPublicArticles } from '@/lib/news/articles';
 
 export const metadata: Metadata = {
   title: "President's Blog — IDOC",
-  description:
-    "Articles from the IDOC President on judging standards, welfare, data and the evolving role of the dressage official.",
-  openGraph: {
-    title: "President's Blog — IDOC",
-    description: 'Reflections on judging standards, horse welfare and integrity in dressage sport.',
-  },
+  description: "Articles from the IDOC President on judging standards, welfare, data and the evolving role of the dressage official.",
 };
 
-export default function BlogPage() {
+export default async function BlogPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
+  const { rows, page, hasNext } = await listPublicArticles(pageParam, 'blog');
   return (
     <>
-      <PageHeader
-        eyebrow="From the Director"
-        title="President's Blog"
-        intro="Reflections on judging standards, horse welfare, data and integrity by IDOC President Hans Christian Matthiesen."
-      />
+      <PageHeader eyebrow="From the Director" title="President's Blog" intro="Reflections on judging standards, horse welfare, data and integrity from IDOC leadership." />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        <ul className="divide-y divide-border border-t border-border">
-          {blogPosts.map((post) => (
-            <li key={post.slug} className="py-10">
-              <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                {post.date} · by {post.author}
-              </p>
-              <h2 className="mt-4 text-3xl leading-snug">{post.title}</h2>
-              <p className="mt-4 leading-relaxed text-muted-foreground">{post.excerpt}</p>
-            </li>
-          ))}
-        </ul>
+        <div className="mb-10"><NewsTypeSwitch active="blog" /></div>
+        {rows.length === 0 ? (
+          <p className="py-10 text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
+        ) : (
+          <ul className="divide-y divide-border border-t border-border">
+            {rows.map((item) => (
+              <li className="grid gap-6 py-10 md:grid-cols-[14rem_1fr]" key={String(item.slug)}>
+                {item.thumbnail_url ? <Link href={`/blog/${item.slug}`}><img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} /></Link> : <div className="hidden md:block" />}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-gold">
+                    {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  <h2 className="mt-4 text-3xl leading-snug"><Link className="hover:underline" href={`/blog/${item.slug}`}>{String(item.title)}</Link></h2>
+                  {item.subtitle ? <p className="mt-4 leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <nav className="flex gap-4 pt-6">
+          {page > 1 ? <Link href={`/blog?page=${page - 1}`}>← Previous</Link> : null}
+          {hasNext ? <Link href={`/blog?page=${page + 1}`}>Next →</Link> : null}
+        </nav>
       </div>
     </>
   );
