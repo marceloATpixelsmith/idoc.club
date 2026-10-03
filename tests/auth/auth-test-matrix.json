@@ -672,13 +672,14 @@
         "coverage": "mapped",
         "tests": [
           "tests/fresh-mfa-step-up.test.ts",
-          "tests/security-e2e/mfa-production-boundaries.spec.ts"
+          "tests/security-e2e/mfa-production-boundaries.spec.ts",
+          "tests/admin-news-blog-bulk-delete.test.ts"
         ],
         "rationale": ""
       },
       "live": {
         "enabled": true,
-        "destructive": false,
+        "destructive": true,
         "requiresEmail": false,
         "requiresAdmin": true,
         "preconditions": [
@@ -690,10 +691,12 @@
           "Submit a wrong TOTP and verify no mutation.",
           "Submit a valid TOTP once.",
           "Do not click the original action a second time; inspect the resulting state/network activity.",
-          "Replay refresh/back/callback state after completion."
+          "Replay refresh/back/callback state after completion.",
+          "On disposable admin-table records, exercise Delete selected and confirm fresh MFA resumes the exact selected destructive action without a second click."
         ],
         "pass": [
-          "Wrong code is inert; valid TOTP causes the programmed original action to resume automatically exactly once; no second user click is needed; replay does not repeat the mutation."
+          "Wrong code is inert; valid TOTP causes the programmed original action to resume automatically exactly once; no second user click is needed; replay does not repeat the mutation.",
+          "Admin bulk deletion cannot mutate before fresh step-up, preserves server-side eligibility/retention checks, and executes once after valid MFA."
         ],
         "fail": [
           "Mutation happens before valid step-up, requires a second original click, executes twice, or can be replayed."
@@ -889,7 +892,8 @@
           "tests/authorization-boundary-inventory.test.ts",
           "tests/authorization-matrix.integration.ts",
           "tests/authorization-privilege-boundaries.integration.ts",
-          "tests/security-e2e/api-authorization-disclosure.spec.ts"
+          "tests/security-e2e/api-authorization-disclosure.spec.ts",
+          "tests/admin-news-blog-bulk-delete.test.ts"
         ],
         "rationale": ""
       },
@@ -906,7 +910,8 @@
           "As a normal member, directly request admin routes/APIs.",
           "Verify an unauthorized visit to /admin and a Super Admin-only admin page renders a safe denial instead of a generic retry screen.",
           "As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.",
-          "Attempt self-elevation or role mutation outside permitted scope."
+          "Attempt self-elevation or role mutation outside permitted scope.",
+          "Attempt bulk delete against protected targets: the acting admin, another privileged administrator, a seminar with registrations, a payment-evidenced registration, and an open support conversation."
         ],
         "pass": [
           "Every server-side boundary rejects unauthorized role/object access with 401/403 or equivalent safe denial; no protected data or mutation occurs.",
@@ -943,7 +948,8 @@
         "coverage": "mapped",
         "tests": [
           "tests/security-e2e/csrf.spec.ts",
-          "tests/pending-flow-csrf-nonce.integration.ts"
+          "tests/pending-flow-csrf-nonce.integration.ts",
+          "tests/admin-news-blog-bulk-delete.test.ts"
         ],
         "rationale": ""
       },
@@ -1366,7 +1372,8 @@
           "tests/auth-security-events.integration.ts",
           "tests/security-event-log-attribution.integration.ts",
           "tests/security-event-taxonomy.integration.ts",
-          "tests/audit-evidence.integration.ts"
+          "tests/audit-evidence.integration.ts",
+          "tests/admin-news-blog-bulk-delete.test.ts"
         ],
         "rationale": ""
       },
