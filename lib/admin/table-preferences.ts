@@ -11,9 +11,8 @@ import { IDOC_REGIONS, ISO_COUNTRY_CODES } from '@/lib/membership/validation';
 import { SUPPORT_CATEGORIES, SUPPORT_STATUSES } from '@/lib/support/inbox';
 import { NEWS_STATUSES } from '@/lib/news/articles';
 import { PAYMENT_STATUSES, SEMINAR_STATUSES } from '@/lib/seminars/status';
-import { CONTENT_AUDIENCES, CONTENT_STATUSES } from '@/lib/content/pages';
 
-export const ADMIN_TABLE_IDENTIFIERS = ['memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'content_pages'] as const;
+export const ADMIN_TABLE_IDENTIFIERS = ['memberships', 'support', 'news', 'seminars', 'seminar_registrations'] as const;
 export type AdminTableIdentifier = typeof ADMIN_TABLE_IDENTIFIERS[number];
 const identifierSchema = z.enum(ADMIN_TABLE_IDENTIFIERS);
 const text = (max = 200) => z.string().trim().max(max).optional();
@@ -48,7 +47,6 @@ const schemas = {
   news: z.object({ columns: columns(['title', 'subtitle', 'slug', 'status', 'publication', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), to: date }).strict(),
   seminars: z.object({ columns: columns(['title', 'status', 'start', 'end', 'deadline', 'prices', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), page, pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
   seminar_registrations: z.object({ columns: columns(['registrant', 'seminar', 'status', 'registered']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, paymentStatus: multiToken(PAYMENT_STATUSES, 500), q: text(), seminarId: z.string().trim().max(4000).refine((value) => value.split(',').every((item) => /^\d+$/.test(item.trim())), 'Invalid selection').optional(), sort: text(1000), to: date }).strict(),
-  content_pages: z.object({ audience: multiToken(CONTENT_AUDIENCES, 200), columns: columns(['title', 'slug', 'status', 'audience', 'updated']), columnOrder: text(500), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, publicationState: text(30), q: text(), sort: text(1000), status: multiToken(CONTENT_STATUSES, 200) }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;
 
 export type TablePreferenceState = Record<string, string | string[] | number | undefined>;
