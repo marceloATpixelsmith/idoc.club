@@ -21,6 +21,7 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
   const article = await getAdminArticle(id);
   if (!article) notFound();
   const status = String(article.status);
+  const articleType = String(article.article_type ?? 'news');
   return (
     <main className="space-y-8 py-8 px-5 lg:px-8">
       <Link className="underline" href="/admin/news">← News / Blog</Link>
@@ -35,10 +36,24 @@ export default async function EditNewsArticlePage({ params }: { params: Promise<
       <section className="grid gap-6 lg:grid-cols-[1fr_18rem]">
         <NewsForm action={updateNewsArticle} submitLabel="Save changes">
           <input name="id" type="hidden" value={id} />
+          <input name="existingThumbnailUrl" type="hidden" value={article.thumbnail_url ? String(article.thumbnail_url) : ''} />
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Type</legend>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2"><input defaultChecked={articleType === 'news'} name="articleType" type="radio" value="news" />NEWS</label>
+              <label className="flex items-center gap-2"><input defaultChecked={articleType === 'blog'} name="articleType" type="radio" value="blog" />BLOG</label>
+            </div>
+          </fieldset>
           <label className="block">Title<input className="mt-1 block w-full border p-2" defaultValue={String(article.title)} maxLength={200} name="title" required /></label>
           <label className="block">Subtitle (optional)<input className="mt-1 block w-full border p-2" defaultValue={article.subtitle ? String(article.subtitle) : ''} maxLength={300} name="subtitle" /></label>
           <label className="block">Slug
             <input className="mt-1 block w-full border p-2" defaultValue={String(article.slug)} maxLength={160} name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
+          </label>
+          <label className="block">Thumbnail
+            {article.thumbnail_url ? <img alt="" className="mb-3 aspect-[16/9] w-full max-w-md rounded-lg border object-cover" src={String(article.thumbnail_url)} /> : null}
+            <input accept="image/avif,image/jpeg,image/png,image/webp" className="mt-1 block w-full border p-2" name="thumbnail" type="file" />
+            <span className="mt-1 block text-sm text-muted-foreground">Upload a new image to replace the current thumbnail. Maximum 5 MB.</span>
+            {article.thumbnail_url ? <label className="mt-2 flex items-center gap-2 text-sm"><input name="removeThumbnail" type="checkbox" value="1" />Remove current thumbnail</label> : null}
           </label>
           <label className="block">Publication date (UTC)
             <input className="mt-1 block w-full border p-2" defaultValue={toDatetimeLocalUtc(article.publication_date)} name="publicationDate" required type="datetime-local" />
