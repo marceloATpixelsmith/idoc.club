@@ -8,14 +8,14 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "rounded-full bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+          "rounded-full bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
         // Every non-destructive button variant shares the site's gold/dark-blue treatment -- only
         // `destructive` (and the separate pixelsmith-auth-reference-governed .idoc-auth-* controls,
         // carved out in app/globals.css) keeps its own color.
         outline:
-          "border border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
+          "rounded-full border border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
         secondary:
           "idoc-secondary-button",
         ghost:

@@ -8,12 +8,19 @@ const resourceTable = readFileSync('components/admin/resource-data-table.tsx', '
 const supportPage = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
 const supportDrawer = readFileSync('app/(dashboard)/admin/support/support-detail-drawer.tsx', 'utf8');
 const supportTable = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+const registrationTable = readFileSync('app/(dashboard)/admin/seminars/registrations/registrations-table.tsx', 'utf8');
+const memberTable = readFileSync('app/(dashboard)/admin/members/members-table.tsx', 'utf8');
+const adminDrawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
+const adminFormSection = readFileSync('components/admin/admin-form-section.tsx', 'utf8');
 const seminarPage = readFileSync('app/(dashboard)/admin/seminars/page.tsx', 'utf8');
 const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
 const bulkActions = readFileSync('app/(dashboard)/admin/bulk-actions.ts', 'utf8');
 const dashboard = readFileSync('app/(dashboard)/admin/page.tsx', 'utf8');
 const exportsPage = readFileSync('app/(dashboard)/admin/exports/page.tsx', 'utf8');
 const pageHeader = readFileSync('components/site/PageHeader.tsx', 'utf8');
+const sharedButton = readFileSync('components/ui/button.tsx', 'utf8');
+const globals = readFileSync('app/globals.css', 'utf8');
+const siteHeader = readFileSync('components/site/Header.tsx', 'utf8');
 const runbook = readFileSync('docs/07-administrator-and-operations-runbook.md', 'utf8');
 const requirements = readFileSync('docs/08-product-roadmap-and-functional-requirements.md', 'utf8');
 
@@ -82,4 +89,54 @@ test('Seminar edit and create stay over the table and table actions own navigati
   assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
   assert.match(resourceTable, /seminars\/registrations\?seminarId=/);
   assert.match(resourceTable, /Download this seminar's registrations/);
+});
+
+
+test('ordinary gold and blue buttons share the canonical Member Login pill radius', () => {
+  assert.match(siteHeader, /MemberLoginLink[\s\S]*rounded-full/);
+  assert.match(sharedButton, /default: "rounded-full bg-primary/);
+  assert.match(sharedButton, /outline:[\s\S]*"rounded-full border/);
+  assert.match(globals, /background: var\(--gold\);[\s\S]*border-radius: 9999px/);
+  assert.match(globals, /\.idoc-secondary-button[\s\S]*border-radius: 9999px/);
+  assert.match(globals, /\[data-idoc-table-control\][\s\S]*border-radius: 9999px/);
+  assert.doesNotMatch(sharedButton, /inline-flex[^\n]*rounded-full[^\n]*text-sm/);
+});
+
+
+test('the News Blog edit drawer shows the current image inside the picker section', () => {
+  assert.match(newsDrawer, /Current image/);
+  assert.match(newsDrawer, /Current article thumbnail/);
+  assert.match(newsDrawer, /Replace image/);
+  assert.match(newsDrawer, /No image/);
+  assert.match(newsDrawer, /aspect-\[4\/3\] w-28/);
+});
+
+
+test('route-backed admin drawers always reopen after being closed', () => {
+  assert.match(adminDrawer, /<Dialog\.Root open onOpenChange=/);
+  assert.doesNotMatch(adminDrawer, /defaultOpen/);
+});
+
+test('all actionable admin tables show the pulsing table skeleton for internal row navigation', () => {
+  assert.match(memberTable, /openMember\(event/);
+  assert.match(memberTable, /loading=\{isPending\}/);
+  assert.match(memberTable, /\/admin\/support\?memberEmail=/);
+
+  for (const source of [resourceTable, supportTable, registrationTable]) {
+    assert.match(source, /openTableAction/);
+    assert.match(source, /startTransition\(\(\) => router\.push\(href\)\)/);
+    assert.match(source, /loading=\{isPending\}/);
+  }
+
+  assert.match(resourceTable, /\/admin\/news\?articleId=/);
+  assert.match(resourceTable, /\/admin\/seminars\?seminarId=/);
+  assert.match(resourceTable, /\/admin\/seminars\/registrations\?seminarId=/);
+  assert.match(supportTable, /\/admin\/support\?supportId=/);
+  assert.match(registrationTable, /registrationId=/);
+});
+
+test('admin drawer and section headers match the Member form hierarchy', () => {
+  assert.match(adminDrawer, /Dialog\.Title className="text-lg font-semibold text-foreground"/);
+  assert.match(adminFormSection, /text-xs font-bold uppercase tracking-wider text-gold/);
+  assert.doesNotMatch(adminDrawer, /Dialog\.Title[^\n]*text-gold/);
 });
