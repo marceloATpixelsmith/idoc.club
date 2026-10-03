@@ -113,14 +113,14 @@ test('hiding a column in the View popover only clears sorting when that column w
   assert.match(viewOptions, /table\.setSorting\(\(sorting\) => sorting\.filter\(\(item\) => item\.id !== column\.id\)\);/);
 });
 
-test('saved facet filters (status/type/country/federation/region, status/audience, category/status/assigned) are hydrated into each table\'s initial columnFilters, since the server applies them from saved preferences regardless -- otherwise the toolbar shows no active facets while the table is already filtered, and the next unrelated change persists undefined for them, silently clearing the saved view', () => {
+test('saved facet filters (status/type/country/federation/region, News status/type, category/status/assigned) are hydrated into each table\'s initial columnFilters, since the server applies them from saved preferences regardless -- otherwise the toolbar shows no active facets while the table is already filtered, and the next unrelated change persists undefined for them, silently clearing the saved view', () => {
   assert.match(memberTable, /\{ id: 'type', value: filters\.membershipTypes \?\? \[\] \}/);
   assert.match(memberTable, /\{ id: 'status', value: filters\.statuses \?\? \[\] \}/);
   assert.match(memberTable, /\{ id: 'federation', value: filters\.federations \?\? \[\] \}/);
   assert.match(memberTable, /\{ id: 'country', value: filters\.countries \?\? \[\] \}/);
   assert.match(memberTable, /\{ id: 'region', value: filters\.regions \?\? \[\] \}/);
   assert.match(resourceTable, /\{ id: 'status', value: initialStatus \? initialStatus\.split\(','\) : \[\] \}/);
-  assert.match(resourceTable, /\{ id: 'audience', value: initialAudience \? initialAudience\.split\(','\) : \[\] \}/);
+  assert.match(resourceTable, /\{ id: 'type', value: initialType \? initialType\.split\(','\) : \[\] \}/);
   assert.match(supportTable, /\{ id: 'category', value: filters\.category \? filters\.category\.split\(','\) : \[\] \}/);
   assert.match(supportTable, /\{ id: 'status', value: filters\.status \? filters\.status\.split\(','\) : \[\] \}/);
   assert.match(supportTable, /\{ id: 'assigned', value: filters\.assigned \? filters\.assigned\.split\(','\) : \[\] \}/);
