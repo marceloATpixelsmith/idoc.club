@@ -21,7 +21,7 @@ export function AdminFormDrawer({ children, closeHref, title }: { children: Reac
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <Dialog.Content className="fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none sm:w-[70vw] sm:max-w-5xl">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-5 py-4 backdrop-blur lg:px-8">
-            <Dialog.Title className="text-xl font-semibold text-gold">{title}</Dialog.Title>
+            <Dialog.Title className="text-lg font-semibold text-foreground">{title}</Dialog.Title>
             <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button></Dialog.Close>
           </div>
           <AdminFormDrawerContext.Provider value={closeAndRefresh}>
