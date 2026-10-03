@@ -6,7 +6,7 @@ import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
-import { deleteArticle } from '@/lib/news/articles';
+import { deleteArticles } from '@/lib/news/articles';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
 export type BulkDeleteState = { error?: string; stepUpRequired?: boolean; success?: string };
@@ -102,7 +102,7 @@ export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: For
     if (stepUp.required) return { stepUpRequired: true };
     let deleted = 0;
     if (table === 'members') deleted = await deleteMembers(ids, actor.id);
-    else if (table === 'news') { for (const id of ids) await deleteArticle(id); deleted = ids.length; }
+    else if (table === 'news') { await deleteArticles(ids); deleted = ids.length; }
     else if (table === 'seminars') deleted = await deleteSeminars(ids, actor.id);
     else if (table === 'registrations') deleted = await deleteRegistrations(ids, actor.id);
     else deleted = await deleteSupport(ids, actor.id);
