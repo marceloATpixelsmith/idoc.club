@@ -10,7 +10,7 @@ export function ArticleView({ articleType, backHref, backLabel, contentHtml, pub
   subtitle?: string | null; thumbnailUrl?: string | null; title: string;
 }) {
   return (
-    <article className="mx-auto max-w-3xl px-5 py-12 lg:px-8">
+    <article className="w-full px-5 py-12 lg:px-8">
       {backHref && backLabel ? <BackLink href={backHref}>{backLabel}</BackLink> : null}
       <p className="mt-6 text-xs uppercase tracking-[0.18em] text-gold">{articleType.toUpperCase()}</p>
       <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold">

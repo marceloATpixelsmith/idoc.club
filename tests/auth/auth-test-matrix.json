@@ -1832,10 +1832,11 @@
         "coverage": "mapped",
         "tests": [
           "tests/admin-table-loading-feedback.test.ts",
+          "tests/member-lifecycle.integration.ts",
           "tests/fresh-mfa-step-up.test.ts",
           "tests/csrf-client-cookie-name.test.ts"
         ],
-        "rationale": "The admin regression verifies the member action's CSRF, fresh-MFA, role/self guards, active-subscription guard, scoped purge, and retained audit events; shared tests cover the underlying MFA and CSRF boundaries."
+        "rationale": "The disposable PostgreSQL integration test invokes the same transaction helpers used by the member actions and verifies permanent purge, archive retention, active-subscription and active-role guards, audit actor redaction, immutable-history trigger authorization, and atomic rollback. Shared tests cover the Server Action MFA and CSRF boundaries."
       },
       "live": {
         "enabled": true,

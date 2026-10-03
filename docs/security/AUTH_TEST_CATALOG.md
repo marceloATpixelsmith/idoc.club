@@ -1011,7 +1011,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003
-- **CI coverage:** mapped — `tests/admin-table-loading-feedback.test.ts`, `tests/fresh-mfa-step-up.test.ts`, `tests/csrf-client-cookie-name.test.ts` — The admin regression verifies the member action's CSRF, fresh-MFA, role/self guards, active-subscription guard, scoped purge, and retained audit events; shared tests cover the underlying MFA and CSRF boundaries.
+- **CI coverage:** mapped — `tests/admin-table-loading-feedback.test.ts`, `tests/member-lifecycle.integration.ts`, `tests/fresh-mfa-step-up.test.ts`, `tests/csrf-client-cookie-name.test.ts` — The disposable PostgreSQL integration test invokes the same transaction helpers used by the member actions and verifies permanent purge, archive retention, active-subscription and active-role guards, audit actor redaction, immutable-history trigger authorization, and atomic rollback. Shared tests cover the Server Action MFA and CSRF boundaries.
 - **Live:** required; email=no; admin=yes; destructive=yes
 
 ### Preconditions
