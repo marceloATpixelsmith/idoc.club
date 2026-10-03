@@ -14,4 +14,6 @@ test('news and blog details fill the available content width and return to their
   assert.doesNotMatch(articleView, /mx-auto max-w-3xl/);
   assert.match(newsPage, /backHref="\/news"/);
   assert.match(blogPage, /backHref="\/blog"/);
+  assert.match(newsListingPage, /grid grid-cols-1 gap-8 md:grid-cols-2/);
+  assert.match(homepage, /className="mt-10 flex flex-col gap-6"/);
 });
