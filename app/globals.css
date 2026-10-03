@@ -235,15 +235,23 @@ body:has([data-idoc-admin-root]) svg {
   color: var(--gold);
 }
 
+.idoc-secondary-button,
 [data-idoc-table-control],
 [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   background: var(--surface-raised);
   border-width: 1px;
+  border-style: solid;
   border-color: var(--input);
+  border-radius: calc(var(--radius) - 2px);
   color: var(--foreground);
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
+  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
 [data-idoc-table-control] svg {
@@ -251,6 +259,7 @@ body:has([data-idoc-admin-root]) svg {
   opacity: 0.85;
 }
 
+.idoc-secondary-button:hover,
 [data-idoc-table-control]:hover,
 [data-idoc-table-control][data-state='open'],
 [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)):hover {
