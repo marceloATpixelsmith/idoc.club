@@ -52,8 +52,8 @@ test('deletion enforces the retention rule: only draft or archived articles may 
 });
 
 test('public queries never return draft, scheduled, or archived articles, even by exact slug', () => {
-  const publicQueries = source.match(/export async function (?:listPublicArticles|getPublicArticleBySlug)[\s\S]*?\n\}/g) ?? [];
-  assert.equal(publicQueries.length, 2);
+  const publicQueries = source.match(/export async function (?:listPublicArticles|listAllPublicArticles|getPublicArticleBySlug)[\s\S]*?\n\}/g) ?? [];
+  assert.equal(publicQueries.length, 3);
   for (const query of publicQueries) {
     assert.match(query, /status='published'/);
     assert.match(query, /publication_date<=now\(\)/);
@@ -65,9 +65,10 @@ test('the public article page 404s rather than rendering when the article is not
   assert.match(publicPage, /alternates: \{ canonical/);
 });
 
-test('the public listing page has an explicit empty state and pagination', () => {
+test('the public News listing has an explicit empty state and renders every published News article', () => {
   assert.match(listPage, /No news articles have been published yet/);
-  assert.match(listPage, /hasNext/);
+  assert.match(listPage, /listAllPublicArticles\('news'\)/);
+  assert.doesNotMatch(listPage, /hasNext|Previous|Next/);
 });
 
 test('the admin article table uses the shared Dice UI resource controls and server sorting', () => {
