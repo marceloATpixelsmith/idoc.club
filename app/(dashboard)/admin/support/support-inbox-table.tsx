@@ -65,7 +65,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
       header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
       meta: { label: 'Actions' },
       cell: ({ row }) => <Button asChild aria-label="Open conversation" size="icon-sm" title="Open conversation" variant="ghost">
-        <Link href={`/admin/support/${row.original.public_id}?returnTo=${encodeURIComponent('/admin/support')}`}><Pencil aria-hidden="true" /></Link>
+        <Link href={`/admin/support?supportId=${encodeURIComponent(row.original.public_id)}`}><Pencil aria-hidden="true" /></Link>
       </Button>,
     },
   ], [administrators]);
