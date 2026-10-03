@@ -1,6 +1,5 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireAdministrator } from '@/lib/membership/authorization';
@@ -46,20 +45,16 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
   }
 }
 
-export async function createNewsArticle(_state: AdminNewsState, formData: FormData) {
-  let id: number;
+export async function createNewsArticle(_state: AdminNewsState, formData: FormData): Promise<AdminNewsState> {
   try {
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
-    id = await createArticle(await articleFields(formData));
+    await createArticle(await articleFields(formData));
+    for (const path of ['/admin/news','/news','/blog','/']) revalidatePath(path);
+    return { success: 'Article created.' };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError', 'NewsThumbnailUploadError'].includes(error.name)) return { error: error.message };
     return { error: 'The article could not be created.' };
   }
-  revalidatePath('/admin/news');
-  revalidatePath('/news');
-  revalidatePath('/blog');
-  revalidatePath('/');
-  redirect(`/admin/news/${id}`);
 }
 
 export async function updateNewsArticle(_state: AdminNewsState, formData: FormData) {
