@@ -3,6 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
+import { requireAdministrator } from '@/lib/membership/authorization';
+import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import {
   archiveArticle, createArticle, deleteArticle, publishArticle,
@@ -13,6 +15,8 @@ import { resolveNewsThumbnail } from '@/lib/news/thumbnail';
 export type AdminNewsState = { error?: string; success?: string };
 
 async function articleFields(formData: FormData) {
+  const actor = await requireAccountAccess('administration');
+  requireAdministrator(actor);
   return {
     articleType: formData.get('articleType'),
     contentHtml: formData.get('contentHtml'),
