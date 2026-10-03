@@ -1,7 +1,7 @@
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
-import { getAdminSeminarRegistration, listAdminAllSeminarRegistrations, listAllSeminarPaymentMethodsForAdmin, listPublishedSeminarsForRegistrationFilter } from '@/lib/seminars/registrations';
+import { getAdminSeminarRegistration, listAdminAllSeminarRegistrations, listAllSeminarPaymentMethodsForAdmin, listEnabledSeminarPaymentMethods, listPublishedSeminarsForRegistrationFilter } from '@/lib/seminars/registrations';
 import { RegistrationsTable } from './registrations-table';
 import { RegistrationDetailSheet } from './registration-detail-sheet';
 import { RegistrationCreateDrawer } from './registration-create-drawer';
@@ -30,10 +30,11 @@ export default async function AdminSeminarRegistrationsPage({ searchParams }: { 
     sort: typeof saved?.sort === 'string' ? saved.sort : undefined,
     to: typeof saved?.to === 'string' ? saved.to : undefined,
   };
-  const [listing, seminarOptions, paymentMethods] = await Promise.all([
+  const [listing, seminarOptions, paymentMethods, enabledPaymentMethods] = await Promise.all([
     listAdminAllSeminarRegistrations(listQuery),
     listPublishedSeminarsForRegistrationFilter(),
     listAllSeminarPaymentMethodsForAdmin(),
+    listEnabledSeminarPaymentMethods(),
   ]);
   const registrationId = registrationIdParam ? Number(registrationIdParam) : null;
   const selected = registrationId && Number.isInteger(registrationId) ? await getAdminSeminarRegistration(registrationId) : null;
@@ -47,6 +48,6 @@ export default async function AdminSeminarRegistrationsPage({ searchParams }: { 
       seminarOptions={seminarOptions.map((seminar) => ({ label: String(seminar.title), value: String(seminar.id) }))}
       total={listing.total}
     />
-    {isNew ? <RegistrationCreateDrawer seminars={seminarOptions} /> : selected ? <RegistrationDetailSheet closeHref="/admin/seminars/registrations" paymentMethods={paymentMethods} registration={selected} /> : null}
+    {isNew ? <RegistrationCreateDrawer paymentMethods={enabledPaymentMethods.filter((method) => ['bank_transfer', 'cash_event'].includes(method.canonical_id))} seminars={seminarOptions} /> : selected ? <RegistrationDetailSheet closeHref="/admin/seminars/registrations" paymentMethods={paymentMethods} registration={selected} /> : null}
   </main>;
 }
