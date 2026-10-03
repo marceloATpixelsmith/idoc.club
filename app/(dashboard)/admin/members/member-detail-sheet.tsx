@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
@@ -89,7 +90,7 @@ export function MemberDetailSheet({
   // lets Radix's own close animation start immediately, independent of how long closeHref's
   // navigation takes underneath.
   const [open, setOpen] = useState(true);
-  const closeAndRefresh = () => { setOpen(false); router.push(closeHref); router.refresh(); };
+  const closeAndRefresh = useCallback(() => { setOpen(false); router.push(closeHref); router.refresh(); }, [closeHref, router]);
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
   // exception used elsewhere -- see app/(dashboard)/admin/members/page.tsx); closing just navigates
@@ -140,17 +141,17 @@ export function MemberDetailSheet({
             <div className="grid gap-4 md:grid-cols-2">
               {selected.entitlement && (
                 <Section description="Extension only: this does not add a payment or change Stripe billing dates. Use Correct entitlement for a genuine correction." title="Extend expiration date">
-                  <ExtendExpirationForm currentValidUntil={selected.entitlement.validUntil} profileId={profile.id} />
+                  <ExtendExpirationForm currentValidUntil={selected.entitlement.validUntil} onSuccess={closeAndRefresh} profileId={profile.id} />
                 </Section>
               )}
               <Section title="Correct entitlement">
-                <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} profileId={profile.id} />
+                <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} onSuccess={closeAndRefresh} profileId={profile.id} />
               </Section>
               <Section title="Membership status">
                 {selected.entitlement?.status === 'suspended'
-                  ? <ReinstateForm profileId={profile.id} />
+                  ? <ReinstateForm onSuccess={closeAndRefresh} profileId={profile.id} />
                   : selected.entitlement
-                    ? <SuspendForm profileId={profile.id} />
+                    ? <SuspendForm onSuccess={closeAndRefresh} profileId={profile.id} />
                     : <p className="text-sm text-muted-foreground">No membership on file — nothing to suspend.</p>}
               </Section>
             </div>
@@ -159,12 +160,12 @@ export function MemberDetailSheet({
           <TabsContent value="payment">
             <div className="grid gap-4 md:grid-cols-2">
               <Section title="Record a manual payment">
-                <ManualPaymentForm currentValidUntil={selected.entitlement?.validUntil ?? null} profileId={profile.id} />
+                <ManualPaymentForm currentValidUntil={selected.entitlement?.validUntil ?? null} onSuccess={closeAndRefresh} profileId={profile.id} />
               </Section>
               <Section title="Stripe payment history">
                 {stripePayments.length === 0 ? <p className="text-sm">No refundable Stripe payments.</p> : <div className="space-y-3">{stripePayments.map((payment) => <article className="border-t pt-3 first:border-t-0 first:pt-0" key={payment.id}>
                   <p className="text-sm">{payment.source} · {new Intl.NumberFormat('en-IE', { currency: payment.currency, style: 'currency' }).format(payment.amount_cents / 100)} · {new Date(payment.paid_at).toLocaleDateString()}</p>
-                  {payment.refund_status === 'succeeded' ? <p className="text-sm font-medium">Refunded</p> : <MembershipRefundForm paymentId={String(payment.id)} profileId={String(profile.id)} />}
+                  {payment.refund_status === 'succeeded' ? <p className="text-sm font-medium">Refunded</p> : <MembershipRefundForm onSuccess={closeAndRefresh} paymentId={String(payment.id)} profileId={String(profile.id)} />}
                 </article>)}</div>}
               </Section>
             </div>
@@ -173,8 +174,8 @@ export function MemberDetailSheet({
           <TabsContent value="account">
             <Section description="Distinct from membership status: this controls whether the user can sign in at all." title="Account authentication">
               {accountState === 'suspended'
-                ? <ReinstateAccountForm userId={profile.userId} />
-                : <SuspendAccountForm userId={profile.userId} />}
+                ? <ReinstateAccountForm onSuccess={closeAndRefresh} userId={profile.userId} />
+                : <SuspendAccountForm onSuccess={closeAndRefresh} userId={profile.userId} />}
             </Section>
           </TabsContent>
 
@@ -182,10 +183,10 @@ export function MemberDetailSheet({
             <TabsContent value="roles">
               <div className="grid gap-4 md:grid-cols-2">
                 <Section title="Application roles">
-                  <RolesSection activeRoles={activeRoles} userId={profile.userId} />
+                  <RolesSection activeRoles={activeRoles} onSuccess={closeAndRefresh} userId={profile.userId} />
                 </Section>
                 <Section title="Incident response">
-                  <ForceRevokeAllAuthorityForm userId={profile.userId} />
+                  <ForceRevokeAllAuthorityForm onSuccess={closeAndRefresh} userId={profile.userId} />
                 </Section>
               </div>
             </TabsContent>

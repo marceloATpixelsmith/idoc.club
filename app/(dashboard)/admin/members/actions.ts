@@ -15,7 +15,7 @@ async function requireCsrf(formData: FormData): Promise<void> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
 }
 
-type FormState = { error?: string; stepUpRequired?: boolean; success?: string };
+type FormState = { attentionRequired?: boolean; error?: string; stepUpRequired?: boolean; success?: string };
 
 function friendlyError(error: unknown, fallback: string): FormState {
   if (error instanceof Error && error.name === 'ZodError') return { error: 'Review the highlighted fields.' };
@@ -63,7 +63,7 @@ export async function suspendMembershipForm(_state: FormState, formData: FormDat
   try {
     const result = await suspendMembership(profileId, formData.get('reason'));
     if (result.stripeCancelError) {
-      return { success: `Membership suspended. Warning: could not cancel the Stripe subscription (${result.stripeCancelError}) — cancel it manually.` };
+      return { attentionRequired: true, success: `Membership suspended. Warning: could not cancel the Stripe subscription (${result.stripeCancelError}) — cancel it manually.` };
     }
     return { success: result.stripeCancelled ? 'Membership suspended and the Stripe subscription cancelled.' : 'Membership suspended.' };
   } catch (error) {

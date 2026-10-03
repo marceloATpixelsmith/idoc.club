@@ -1,17 +1,18 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { reinstateMembershipForm, suspendMembershipForm } from './actions';
 
-type FormState = { error?: string; success?: string };
+type FormState = { attentionRequired?: boolean; error?: string; success?: string };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
-export function SuspendForm({ profileId }: { profileId: number }) {
+export function SuspendForm({ onSuccess, profileId }: { onSuccess?: () => void; profileId: number }) {
   const [state, action, pending] = useActionState(suspendMembershipForm, {} as FormState);
+  useEffect(() => { if (state.success && !state.attentionRequired) onSuccess?.(); }, [state.attentionRequired, state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
@@ -21,7 +22,7 @@ export function SuspendForm({ profileId }: { profileId: number }) {
     </div>
     <Button disabled={pending} type="submit" variant="destructive">Suspend membership</Button>
     {state.error && <p className="text-sm text-red-400">{state.error}</p>}
-    {state.success && <p className="text-sm text-green-400">{state.success}</p>}
+    {state.success && <p className={state.attentionRequired ? 'text-sm text-amber-600' : 'text-sm text-green-400'}>{state.success}</p>}
   </form>;
 }
 
@@ -30,8 +31,9 @@ const REINSTATE_LABELS: Record<string, string> = {
   active: 'Active', canceled: 'Canceled', complimentary: 'Complimentary', grace: 'Payment grace period',
 };
 
-export function ReinstateForm({ profileId }: { profileId: number }) {
+export function ReinstateForm({ onSuccess, profileId }: { onSuccess?: () => void; profileId: number }) {
   const [state, action, pending] = useActionState(reinstateMembershipForm, {} as FormState);
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
