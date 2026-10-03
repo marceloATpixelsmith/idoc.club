@@ -71,6 +71,8 @@ administrator routes continue to authorize every direct request on the server. A
 
 **Button consistency:** the site's light-blue secondary controls use one shared treatment derived from the administrator table filters (`.idoc-secondary-button` / Button `secondary` variant). Seminar registration controls and admin filters share those declarations; one-off blue button colors are not permitted. The FEI Course Calendar CTAs use this same style, with the Seminars-page header version adding only the explicitly requested dotted-border modifier.
 
+**Administrator table-control casing:** filter, date-filter, Sort, View, Reset, and related table-popover controls use Title Case rather than the site's ordinary all-caps button casing. Their radius, font size, bold weight, light-blue surface, and dotted border remain consistent with the shared table-control treatment.
+
 **Button radius consistency:** the public Member Login CTA defines the canonical ordinary-button corner radius. All ordinary gold/default and light-blue/secondary buttons, including administrator table filter controls and FEI calendar CTAs, use the same pill radius. Button color, border style, and icon treatment may vary by role, but ordinary button radius must not vary by feature area. Authentication-reference controls remain governed by their dedicated auth design system.
 
 ### Seminars cross-cutting capability
