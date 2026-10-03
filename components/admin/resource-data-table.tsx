@@ -36,13 +36,11 @@ export type ResourceRow = {
   deadline?: string;
   prices?: string;
   registrations?: string;
-  audience?: string;
 };
 
-type ResourceType = 'news' | 'seminars' | 'content_pages';
+type ResourceType = 'news' | 'seminars';
 type ResourceColumn = keyof ResourceRow;
 type ResourceConfig = {
-  audiences?: { label: string; value: string }[];
   columns: { id: ResourceColumn; label: string }[];
   dateFilter: boolean;
   path: string;
@@ -65,14 +63,6 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     searchLabel: 'Search seminar title or location',
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }, { label: 'Canceled', value: 'canceled' }],
   },
-  content_pages: {
-    audiences: [{ label: 'Public', value: 'public' }, { label: 'Member', value: 'member' }, { label: 'Judge', value: 'judge' }, { label: 'Steward', value: 'steward' }, { label: 'Veterinarian', value: 'veterinarian' }],
-    columns: [{ id: 'title', label: 'Title' }, { id: 'slug', label: 'Slug' }, { id: 'status', label: 'Status' }, { id: 'audience', label: 'Audience' }, { id: 'updated', label: 'Updated' }],
-    dateFilter: false,
-    path: '/admin/pages',
-    searchLabel: 'Search page title or slug',
-    statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }, { label: 'Archived', value: 'archived' }],
-  },
 };
 
 function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'], type: ResourceType) {
@@ -90,9 +80,8 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 }
 
 export function ResourceDataTable({
-  initialAudience, initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
+  initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
 }: {
-  initialAudience?: string;
   initialColumnOrder?: string;
   initialFrom?: string;
   initialSearch?: string;
@@ -133,13 +122,11 @@ export function ResourceDataTable({
         accessorFn: (row) => row[id] ?? '',
         enableHiding: id !== 'title',
         enableSorting: ['title', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
-        enableColumnFilter: id === 'status' || (tableType === 'content_pages' && id === 'audience'),
+        enableColumnFilter: id === 'status',
         header: header(label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
-          : id === 'audience'
-            ? { label, options: config.audiences ?? [], variant: 'multiSelect' }
-            : { label, variant: 'text' },
+          : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
             ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-sm text-muted-foreground">{row.original.slug}</span></span>
@@ -189,7 +176,6 @@ export function ResourceDataTable({
   // `undefined` for these, silently clearing the saved view.
   const initialColumnFilters = useMemo(() => [
     { id: 'status', value: initialStatus ? initialStatus.split(',') : [] },
-    { id: 'audience', value: initialAudience ? initialAudience.split(',') : [] },
   ].filter((filter) => filter.value.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
@@ -211,7 +197,6 @@ export function ResourceDataTable({
       status: filterToken(state.columnFilters, 'status'),
     };
     if (config.dateFilter) { preferences.from = effectiveFrom; preferences.to = effectiveTo; }
-    if (tableType === 'content_pages') preferences.audience = filterToken(state.columnFilters, 'audience');
     void persistTablePreferences(tableType, preferences).then((response) => {
       if (!response.ok) setError('Table preferences could not be saved.');
     }).catch(() => setError('Table preferences could not be saved.')).finally(() => startTransition(() => router.refresh()));
