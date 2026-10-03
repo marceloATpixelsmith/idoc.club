@@ -1,8 +1,12 @@
+import type { ReactNode } from 'react';
+
 export function PageHeader({
+  action,
   eyebrow,
   title,
   intro,
 }: {
+  action?: ReactNode;
   eyebrow: string;
   title: string;
   intro?: string;
@@ -15,6 +19,7 @@ export function PageHeader({
         {intro && (
           <p className="mt-6 max-w-2xl leading-relaxed text-muted-foreground">{intro}</p>
         )}
+        {action ? <div className="mt-8">{action}</div> : null}
       </div>
     </section>
   );
