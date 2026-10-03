@@ -88,4 +88,3 @@ export async function archiveMembers(ids: string[], actorId: number) {
     return rows.length;
   });
 }
-
