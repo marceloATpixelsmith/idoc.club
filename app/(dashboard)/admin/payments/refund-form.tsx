@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
@@ -7,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { refundMembershipPaymentForm } from './actions';
 
-export function MembershipRefundForm({ paymentId, profileId }: { paymentId: string; profileId: string }) {
+export function MembershipRefundForm({ onSuccess, paymentId, profileId }: { onSuccess?: () => void; paymentId: string; profileId: string }) {
   const [state, action, pending, dialog] = useFreshStepUpAction(refundMembershipPaymentForm, {});
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
   return <><form action={action} className="space-y-2"><CsrfField /><input name="paymentId" type="hidden" value={paymentId} /><input name="profileId" type="hidden" value={profileId} />
     <Textarea aria-label="Administrative refund reason" maxLength={1000} minLength={5} name="reason" placeholder="Approved policy reason" required rows={2} />
     {state.error ? <p className="text-sm text-red-600" role="alert">{state.error}</p> : null}{state.success ? <p className="text-sm text-green-700" role="status">{state.success}</p> : null}
