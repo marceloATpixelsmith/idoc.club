@@ -104,9 +104,30 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
             </div>
           </AdminFormSection>
           <AdminFormSection title="Image">
-            {article.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full max-w-xl rounded-lg border object-cover" src={String(article.thumbnail_url)} /> : null}
-            <div className="space-y-1.5"><Label htmlFor="thumbnail">Replace thumbnail</Label><Input accept="image/avif,image/jpeg,image/png,image/webp" id="thumbnail" name="thumbnail" type="file" /></div>
-            {article.thumbnail_url ? <label className="flex items-center gap-2 text-sm"><input name="removeThumbnail" type="checkbox" value="1" />Remove current thumbnail</label> : null}
+            <div className="grid gap-4 sm:grid-cols-[7rem_1fr] sm:items-start">
+              <div>
+                <p className="mb-1.5 text-sm font-medium">Current image</p>
+                {article.thumbnail_url ? (
+                  <img
+                    alt="Current article thumbnail"
+                    className="aspect-[4/3] w-28 rounded-md border border-input object-cover"
+                    src={String(article.thumbnail_url)}
+                  />
+                ) : (
+                  <div className="flex aspect-[4/3] w-28 items-center justify-center rounded-md border border-dashed border-input text-center text-xs text-muted-foreground">
+                    No image
+                  </div>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="thumbnail">Replace image</Label>
+                  <Input accept="image/avif,image/jpeg,image/png,image/webp" id="thumbnail" name="thumbnail" type="file" />
+                  <p className="text-sm text-muted-foreground">JPG, PNG, WEBP, or AVIF. Maximum 5 MB.</p>
+                </div>
+                {article.thumbnail_url ? <label className="flex items-center gap-2 text-sm"><input name="removeThumbnail" type="checkbox" value="1" />Remove current image</label> : null}
+              </div>
+            </div>
           </AdminFormSection>
           <AdminFormSection title="Content">
             <ArticleContentEditor initialHtml={String(article.content_html)} />
