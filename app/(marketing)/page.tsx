@@ -94,6 +94,16 @@ export default async function Home() {
                 ))}
               </ul>
             )}
+            <div className="mt-8">
+              <a
+                className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground transition-opacity hover:opacity-90"
+                href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                FEI Course Calendar <ArrowUpRight className="size-4" />
+              </a>
+            </div>
           </div>
         </div>
       </section>
