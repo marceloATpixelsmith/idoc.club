@@ -31,8 +31,8 @@ async function run(formData: FormData, operation: () => Promise<void>, success: 
     await operation();
     revalidatePath('/admin/news');
     revalidatePath('/news');
-  revalidatePath('/blog');
-  revalidatePath('/');
+    revalidatePath('/blog');
+    revalidatePath('/');
     return { success };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError', 'NewsThumbnailUploadError'].includes(error.name)) return { error: error.message };
@@ -46,17 +46,19 @@ export async function createNewsArticle(_state: AdminNewsState, formData: FormDa
     await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
     id = await createArticle(await articleFields(formData));
   } catch (error) {
-    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError'].includes(error.name)) return { error: error.message };
+    if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'NewsValidationError', 'NewsThumbnailUploadError'].includes(error.name)) return { error: error.message };
     return { error: 'The article could not be created.' };
   }
   revalidatePath('/admin/news');
   revalidatePath('/news');
+  revalidatePath('/blog');
+  revalidatePath('/');
   redirect(`/admin/news/${id}`);
 }
 
 export async function updateNewsArticle(_state: AdminNewsState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateArticle(id, await articleFields(formData)), 'Article saved.');
+  return run(formData, async () => updateArticle(id, await articleFields(formData)), 'Article saved.');
 }
 
 export async function publishNewsArticle(_state: AdminNewsState, formData: FormData) {
@@ -85,5 +87,7 @@ export async function deleteNewsArticle(_state: AdminNewsState, formData: FormDa
   }
   revalidatePath('/admin/news');
   revalidatePath('/news');
+  revalidatePath('/blog');
+  revalidatePath('/');
   redirect('/admin/news');
 }
