@@ -20,22 +20,27 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
           <p className="py-10 text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
         ) : (
           <ul className="divide-y divide-border border-t border-border">
-            {rows.map((item) => (
-              <li className="py-10" key={String(item.slug)}>
-                {item.thumbnail_url ? (
-                  <Link className="block" href={`/blog/${item.slug}`}>
-                    <img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} />
-                  </Link>
-                ) : null}
-                <div className={item.thumbnail_url ? 'mt-6' : ''}>
-                  <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                    {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                  <h2 className="mt-4 text-3xl leading-snug"><Link className="hover:underline" href={`/blog/${item.slug}`}>{String(item.title)}</Link></h2>
-                  {item.subtitle ? <p className="mt-4 leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
-                </div>
-              </li>
-            ))}
+            {rows.map((item) => {
+              const external = Boolean(item.external_url);
+              const href = external ? String(item.external_url) : `/blog/${item.slug}`;
+              const linkProps = external ? { rel: 'noopener noreferrer', target: '_blank' as const } : {};
+              return (
+                <li className="py-10" key={String(item.slug)}>
+                  {item.thumbnail_url ? (
+                    <Link className="block" href={href} {...linkProps}>
+                      <img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                    </Link>
+                  ) : null}
+                  <div className={item.thumbnail_url ? 'mt-6' : ''}>
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold">
+                      {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <h2 className="mt-4 text-3xl leading-snug"><Link className="hover:underline" href={href} {...linkProps}>{String(item.title)}</Link></h2>
+                    {item.subtitle ? <p className="mt-4 leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
         <nav className="flex gap-4 pt-6">
