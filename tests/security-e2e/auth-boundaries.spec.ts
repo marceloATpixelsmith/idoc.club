@@ -49,10 +49,13 @@ test('account-state and role boundaries are enforced on direct requests', async 
 // have caught a 500, so this asserts the redirect status explicitly).
 test('an onboarding-state account is redirected, not crashed, off later dashboard steps', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
-  for (const route of ['/dashboard/membership', '/dashboard/profile', '/dashboard/security', '/dashboard/support']) {
+  for (const route of ['/dashboard/membership', '/dashboard/profile', '/dashboard/security']) {
     const response = await context.request.get(route, { maxRedirects: 0 });
     expect(response.status(), route).toBe(307);
     expect(response.headers()['location'], route).toBe('/dashboard');
   }
+  const legacySupport = await context.request.get('/dashboard/support', { maxRedirects: 0 });
+  expect(legacySupport.status()).toBe(307);
+  expect(legacySupport.headers()['location']).toBe('/contact');
   await context.close();
 });
