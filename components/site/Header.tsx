@@ -91,9 +91,8 @@ function NavDropdown({
 
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
  * subpages dropdown once entitled, or a plain link to /dashboard/membership beforehand (never-paid or
- * post-grace-expired), where the membership page itself renders the payment controls. Support is excluded from the
- * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
- * separate /admin/support inbox) -- see dashboardNavItems. */
+ * post-grace-expired), where the membership page itself renders the payment controls. Support is
+ * reached through Contact for eligible members; administrators use /admin/support. */
 function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
   if (!entitled) {
     return (
