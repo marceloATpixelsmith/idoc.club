@@ -13,6 +13,16 @@ Rules needed to keep membership entitlement correct across Stripe and non-Stripe
 
 Working project document. Update this document when project decisions change.
 
+## Current staging alignment — 3 October 2026
+
+This remains the governing business-rules document for membership. For the implemented cross-domain contract tying authentication, membership billing/access, and seminar registration together, also read [document 28](28-auth-membership-seminar-current-state.md).
+
+- Current ordinary-member sessions use a 7-day idle timeout and a 14-day absolute lifetime; privileged sessions use a 30-minute idle timeout and a 12-hour absolute lifetime. Ordinary-member returning-login device trust lasts 14 days and is separate from privileged TOTP.
+- Membership entitlement remains webhook-authoritative. Turning automatic renewal on for an existing non-recurring member uses Stripe Checkout in setup mode and makes the recurring transition effective on the current `valid_until`; turning it off uses `cancel_at_period_end`.
+- Seminar registration and seminar payments are a separate domain. An entitled profile receives the seminar member price; a signed-in profile without current entitlement and an anonymous guest receive the non-member price. No seminar payment may create or extend membership entitlement.
+
+If older narrative in this document conflicts with this current-state subsection or document 28, this current-state subsection governs until the older passage is repaired.
+
 # 1. Membership types
 
 | **Type**        | **Stored representation**                 | **Billing difference** |
