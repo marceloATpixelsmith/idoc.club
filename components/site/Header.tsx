@@ -91,10 +91,9 @@ function NavDropdown({
 
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
  * subpages dropdown once entitled, or a plain link to /dashboard/membership beforehand (never-paid or
- * post-grace-expired), where the membership page itself renders the payment controls. Support is excluded from the
- * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
- * separate /admin/support inbox) -- see dashboardNavItems. */
-function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; memberSupport: boolean; pathname: string }) {
+ * post-grace-expired), where the membership page itself renders the payment controls. Support is
+ * reached through Contact for eligible members; administrators use /admin/support. */
+function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
   if (!entitled) {
     return (
       <Link href="/dashboard/membership" className={navClassName(isActive(pathname, '/dashboard/membership'))}>
@@ -102,7 +101,7 @@ function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; m
       </Link>
     );
   }
-  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={dashboardNavItems(memberSupport)} label="My IDOC" pathname={pathname} />;
+  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={dashboardNavItems()} label="My IDOC" pathname={pathname} />;
 }
 
 function MemberLoginLink({ className, onClick }: { className?: string; onClick?: () => void }) {
@@ -116,13 +115,11 @@ function MemberLoginLink({ className, onClick }: { className?: string; onClick?:
 export function Header({
   entitled,
   loggedOut,
-  memberSupport,
   showAdminDashboard,
   signedIn,
 }: {
   entitled: boolean;
   loggedOut?: ReactNode;
-  memberSupport: boolean;
   showAdminDashboard: boolean;
   signedIn: boolean;
 }) {
@@ -148,18 +145,11 @@ export function Header({
                 </Link>
               ))}
 
-              {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
+              {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
 
-              {/* Contact is hidden for every signed-in account that already has a working way back into
-                * the site (entitled members and privileged administrators/super_admins alike -- the
-                * former via My IDOC's own Support/Contact entry, the latter via /admin/support). An
-                * onboarding/unpaid member (payment-only My IDOC fallback, entitled false) still needs
-                * it, since they have no other path to reach the secretariat. */}
-              {(!signedIn || !entitled) && (
-                <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
-                  {contactLink.label}
-                </Link>
-              )}
+              <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
+                {contactLink.label}
+              </Link>
 
               <span className="text-border" aria-hidden="true">
                 |
@@ -242,7 +232,7 @@ export function Header({
                       My IDOC
                     </p>
                     <ul className="flex flex-col">
-                      {dashboardNavItems(memberSupport).map((item) => (
+                      {dashboardNavItems().map((item) => (
                         <li key={item.href}>
                           <Link
                             href={item.href}
@@ -267,17 +257,15 @@ export function Header({
                   </li>
                 )
               )}
-              {(!signedIn || !entitled) && (
-                <li>
-                  <Link
-                    href={contactLink.href}
-                    onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                  >
-                    {contactLink.label}
-                  </Link>
-                </li>
-              )}
+              <li>
+                <Link
+                  href={contactLink.href}
+                  onClick={() => setOpen(false)}
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  {contactLink.label}
+                </Link>
+              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"

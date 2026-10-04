@@ -43,30 +43,28 @@ test('the renewal mode explains what the selected mode means in plain language',
   await context.close();
 });
 
-test('the Support tab stays highlighted on its own subpages, only My Membership matches exactly', async ({ browser }) => {
+test('member support lives under Contact and its thread returns to the ticket list', async ({ browser }) => {
   const { userId } = JSON.parse(await readFile('.security-e2e/member-a-sessions.json', 'utf8')) as { userId: number };
   const databaseUrl = process.env.TEST_DATABASE_URL;
   expect(databaseUrl).toBeTruthy();
   const sql = postgres(databaseUrl!, { max: 1, onnotice: () => {} });
   const [conversation] = await sql`insert into idoc.support_conversations(member_user_id,category,subject)
-    values(${userId},'technical_support','Nav highlight regression fixture') returning id,public_id`;
-  // A real conversation always carries at least its opening message -- exercise that join, not just
-  // an empty thread, so this fixture also covers getOwnConversation's own message query.
+    values(${userId},'technical_support','Contact support regression fixture') returning id,public_id`;
   await sql`insert into idoc.support_messages(conversation_id,author_user_id,author_side,body,idempotency_key)
-    values(${conversation.id},${userId},'member','Nav highlight regression fixture message',gen_random_uuid())`;
+    values(${conversation.id},${userId},'member','Contact support regression fixture message',gen_random_uuid())`;
 
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
-  const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
-  const supportButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' }).locator('button');
-
-  await page.goto(`/dashboard/support/${conversation.public_id}`);
-  await expect(supportButton()).toHaveClass(/border-gold/);
-  await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
-
-  await page.goto('/dashboard');
-  await expect(myMembershipButton()).toHaveClass(/border-gold/);
-  await expect(supportButton()).not.toHaveClass(/border-gold/);
+  await page.goto('/contact');
+  await expect(page.getByRole('heading', { name: 'Your conversations' })).toBeVisible();
+  await expect(page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' })).toHaveCount(0);
+  await page.getByRole('link', { name: /Contact support regression fixture/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/contact/${conversation.public_id}$`));
+  const backLink = page.getByRole('link', { name: 'Back to My Support Tickets' });
+  await expect(backLink).toHaveAttribute('href', '/contact');
+  await backLink.click();
+  await expect(page).toHaveURL(/\/contact$/);
+  await expect(page.getByRole('heading', { name: 'Your conversations' })).toBeVisible();
 
   await context.close();
   await sql.end();
@@ -82,12 +80,11 @@ test('a not-yet-entitled member sees payment directly on My Membership, with no 
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
   await expect(page).toHaveURL(/\/dashboard\/membership$/);
-  // Regression: dashboard/support/page.tsx's listOwnConversations() -> requireAccountAccess('member')
-  // throws AuthorizationError for a non-entitled member; left uncaught, that crashed into Next.js's
-  // generic error boundary instead of redirecting, unlike profile/security which proactively check
-  // entitlement themselves before rendering (AUTH-AUTHZ-010).
+  // The legacy member-support URL now redirects to the Contact experience; the generic public form
+  // remains available to this non-entitled account.
   await page.goto('/dashboard/support');
-  await expect(page).toHaveURL(/\/dashboard\/membership$/);
+  await expect(page).toHaveURL(/\/contact$/);
+  await expect(page.getByRole('heading', { name: 'Send a message' })).toBeVisible();
   // Available Seminars (not My Seminars) is the default landing view at bare /seminars for every
   // visitor, entitled or not (docs/08) -- this expired member reaches their own registration
   // history via the explicit My Seminars tab (?view=my), same as any other member.

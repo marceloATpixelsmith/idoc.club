@@ -4,10 +4,19 @@ import test from 'node:test';
 
 const page = readFileSync('app/(marketing)/contact/page.tsx', 'utf8');
 const form = readFileSync('app/(marketing)/contact/contact-form.tsx', 'utf8');
+const memberSupport = readFileSync('components/support/member-support-home.tsx', 'utf8');
 const widget = readFileSync('components/turnstile-widget.tsx', 'utf8');
 const widgetCss = readFileSync('components/turnstile-widget.css', 'utf8');
 
-test('the contact page uses the same max-w-7xl container every other marketing page and the header/footer use, so its content starts at the same left edge as the page title above it', () => {
+test('the public contact form remains available and entitled members see member ticketing at the same Contact URL', () => {
+  assert.match(page, /getMainNavAccess\(\)/);
+  assert.match(page, /if \(navAccess\.memberSupport\)/);
+  assert.match(page, /<MemberSupportHome \/>/);
+  assert.match(memberSupport, /Your conversations/);
+  assert.match(page, /<ContactForm \/>/);
+});
+
+test('the public contact page uses the shared max-w-7xl content container', () => {
   assert.match(page, /mx-auto grid max-w-7xl gap-12/);
   assert.doesNotMatch(page, /max-w-5xl/);
 });

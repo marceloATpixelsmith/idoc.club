@@ -8,7 +8,6 @@ export default async function MarketingLayout({ children }: { children: React.Re
     <div className="flex min-h-screen flex-col">
       <Header
         entitled={navAccess.entitled}
-        memberSupport={navAccess.memberSupport}
         showAdminDashboard={navAccess.showAdminDashboard}
         signedIn={navAccess.signedIn}
       />

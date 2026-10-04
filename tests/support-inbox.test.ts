@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync('lib/support/inbox.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0039_support_inbox.sql', 'utf8');
-const memberThread = readFileSync('app/(dashboard)/dashboard/support/[publicId]/page.tsx', 'utf8');
+const memberThread = readFileSync('components/support/member-support-thread.tsx', 'utf8');
 
 test('support categories, states, body lengths, and opaque identifiers are constrained in both layers', () => {
   for (const value of ['billing_membership', 'seminars', 'technical_support', 'admin_responded', 'member_replied', 'closed']) {
@@ -125,6 +125,7 @@ test('a member can close their own conversation, mirroring the admin workflow ac
   assert.match(memberActions, /export async function closeOwnConversation/);
   assert.match(memberActions, /setOwnConversationClosed\(publicId, true\)/);
   assert.match(memberThread, /closeOwnConversation/);
+  assert.match(memberThread, /<BackLink href="\/contact">Back to My Support Tickets<\/BackLink>/);
   assert.match(memberThread, /Close conversation/);
 });
 
