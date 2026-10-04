@@ -43,30 +43,28 @@ test('the renewal mode explains what the selected mode means in plain language',
   await context.close();
 });
 
-test('the Support tab stays highlighted on its own subpages, only My Membership matches exactly', async ({ browser }) => {
+test('member support lives under Contact and its thread returns to the ticket list', async ({ browser }) => {
   const { userId } = JSON.parse(await readFile('.security-e2e/member-a-sessions.json', 'utf8')) as { userId: number };
   const databaseUrl = process.env.TEST_DATABASE_URL;
   expect(databaseUrl).toBeTruthy();
   const sql = postgres(databaseUrl!, { max: 1, onnotice: () => {} });
   const [conversation] = await sql`insert into idoc.support_conversations(member_user_id,category,subject)
-    values(${userId},'technical_support','Nav highlight regression fixture') returning id,public_id`;
-  // A real conversation always carries at least its opening message -- exercise that join, not just
-  // an empty thread, so this fixture also covers getOwnConversation's own message query.
+    values(${userId},'technical_support','Contact support regression fixture') returning id,public_id`;
   await sql`insert into idoc.support_messages(conversation_id,author_user_id,author_side,body,idempotency_key)
-    values(${conversation.id},${userId},'member','Nav highlight regression fixture message',gen_random_uuid())`;
+    values(${conversation.id},${userId},'member','Contact support regression fixture message',gen_random_uuid())`;
 
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
-  const myMembershipButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'My Membership' }).locator('button');
-  const supportButton = () => page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' }).locator('button');
-
-  await page.goto(`/dashboard/support/${conversation.public_id}`);
-  await expect(supportButton()).toHaveClass(/border-gold/);
-  await expect(myMembershipButton()).not.toHaveClass(/border-gold/);
-
-  await page.goto('/dashboard');
-  await expect(myMembershipButton()).toHaveClass(/border-gold/);
-  await expect(supportButton()).not.toHaveClass(/border-gold/);
+  await page.goto('/contact');
+  await expect(page.getByRole('heading', { name: 'Your conversations' })).toBeVisible();
+  await expect(page.locator('nav[aria-label="My Dashboard"] a', { hasText: 'Support' })).toHaveCount(0);
+  await page.getByRole('link', { name: /Contact support regression fixture/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/contact/${conversation.public_id}$`));
+  const backLink = page.getByRole('link', { name: 'Back to My Support Tickets' });
+  await expect(backLink).toHaveAttribute('href', '/contact');
+  await backLink.click();
+  await expect(page).toHaveURL(/\/contact$/);
+  await expect(page.getByRole('heading', { name: 'Your conversations' })).toBeVisible();
 
   await context.close();
   await sql.end();
