@@ -36,6 +36,10 @@ async function openPaymentChoices(page: Page, seminarId: number) {
 }
 
 test.beforeAll(async () => {
+  // A serial-group retry re-runs from the start against the same database: restore the default of
+  // only the online method being enabled, which the first test below relies on.
+  await withDatabase((sql) => sql`update idoc.seminar_payment_methods set enabled = false, instructions_html = null
+    where canonical_id in ('bank_transfer', 'cash_event')`);
   for (const [key, seminar] of Object.entries(SEMINARS)) ids[key as keyof typeof SEMINARS] = await insertSeminar(seminar);
 });
 
