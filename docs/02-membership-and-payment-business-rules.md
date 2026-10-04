@@ -331,7 +331,7 @@ The same duplicate/reactivation, capacity, deadline, payment-state, audit, and c
 
 ## Refund policy implementation
 
-[10 Refund Policy](10-refund-policy.md) governs membership and seminar refunds. Refunds are administrator-authorized, reasoned, full-only, explicit actions; cancellation never automatically refunds. Original payments remain immutable evidence. Seminar refunds do not change membership entitlement, dates, subscriptions, or membership payment history. Provider-side partial refunds, disputes, chargebacks, and unmatched state produce reconciliation findings.
+[10 Refund Policy](10-refund-policy.md) governs membership and seminar refunds. Individual registration refunds are administrator-authorized, reasoned, full-only, explicit actions; canceling an individual registration does not automatically refund it. The explicit exception is cancellation of the entire seminar: confirmed Stripe seminar payments are automatically refunded and open Checkout Sessions are expired by the cancellation worker. Original payments remain immutable evidence. Seminar refunds do not change membership entitlement, dates, subscriptions, or membership payment history. Provider-side partial refunds, disputes, chargebacks, and unmatched state produce reconciliation findings.
 
 
 ## 12. Stripe Checkout retry behavior
