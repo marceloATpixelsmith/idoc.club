@@ -48,3 +48,11 @@ test('active admin role icons appear in gold directly after the member name', ()
   assert.match(memberQueries, /coalesce\(app_roles\.is_super_admin,false\) "isSuperAdmin"/);
   assert.match(memberQueries, /where user_id=u\.id and revoked_at is null\) app_roles/);
 });
+
+test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
+  assert.match(members, /steward: \{ icon: HorseshoeIcon, label: 'STEWARD' \}/);
+  assert.match(members, /const HorseshoeIcon: LucideIcon = forwardRef/);
+  assert.match(members, /<path d="M6 3v8a6 6 0 0 0 12 0V3" \/>/);
+  assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
+  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" \/>/);
+});
