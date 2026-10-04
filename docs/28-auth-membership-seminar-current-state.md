@@ -1,6 +1,6 @@
 # Auth, membership billing, and seminar registration — current staging alignment
 
-**Status:** Current-state alignment for the `staging` branch  
+**Status:** Current-state alignment for the `staging` branch
 **Aligned:** 3 October 2026
 
 This document records the implemented cross-domain behavior that must stay consistent across authentication, membership billing/access, and seminar registration. It does not replace the subject documents; it resolves cross-document drift and gives maintainers one place to verify how these three systems interact. When older narrative in a subject document conflicts with the current-state notes added by this alignment pass, the newer current-state note in that subject document governs.
