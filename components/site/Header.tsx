@@ -232,7 +232,7 @@ export function Header({
                       My IDOC
                     </p>
                     <ul className="flex flex-col">
-                      {dashboardNavItems(memberSupport).map((item) => (
+                      {dashboardNavItems().map((item) => (
                         <li key={item.href}>
                           <Link
                             href={item.href}
