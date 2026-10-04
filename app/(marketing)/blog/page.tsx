@@ -18,29 +18,33 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
         {rows.length === 0 ? (
           <p className="py-10 text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
         ) : (
-          <ul className="divide-y divide-border border-t border-border">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
             {rows.map((item) => {
               const external = Boolean(item.external_url);
-              const href = external ? String(item.external_url) : `/blog/${item.slug}`;
-              const linkProps = external ? { rel: 'noopener noreferrer', target: '_blank' as const } : {};
+              const href = external ? String(item.external_url) : `/blog/${String(item.slug)}`;
               return (
-                <li className="py-10" key={String(item.slug)}>
-                  {item.thumbnail_url ? (
-                    <Link className="block" href={href} {...linkProps}>
-                      <img alt="" className="aspect-[16/9] w-full rounded-lg object-cover" loading="lazy" src={String(item.thumbnail_url)} />
-                    </Link>
-                  ) : null}
-                  <div className={item.thumbnail_url ? 'mt-6' : ''}>
-                    <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                      {new Date(String(item.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                    <h2 className="mt-4 text-3xl leading-snug"><Link className="hover:underline" href={href} {...linkProps}>{String(item.title)}</Link></h2>
-                    {item.subtitle ? <p className="mt-4 leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
-                  </div>
-                </li>
+                <Link
+                  href={href}
+                  key={String(item.slug)}
+                  rel={external ? 'noopener noreferrer' : undefined}
+                  target={external ? '_blank' : undefined}
+                >
+                  <article className="card-midnight overflow-hidden">
+                    {item.thumbnail_url ? (
+                      <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                    ) : null}
+                    <div className="p-6">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        {new Date(item.publication_date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                      <h3 className="mt-3 text-2xl leading-snug">{String(item.title)}</h3>
+                      {item.subtitle ? <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{String(item.subtitle)}</p> : null}
+                    </div>
+                  </article>
+                </Link>
               );
             })}
-          </ul>
+          </div>
         )}
         <nav className="flex gap-4 pt-6">
           {page > 1 ? <Link href={`/blog?page=${page - 1}`}>← Previous</Link> : null}
