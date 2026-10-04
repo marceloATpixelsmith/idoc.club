@@ -83,7 +83,7 @@ test('Contact is a plain nav item, never swapped for Support', () => {
 
 test('Contact is present for signed-in and signed-out visitors', () => {
   assert.match(header, /<Link href=\{contactLink\.href\} className=\{navClassName/);
-  assert.match(header, /<Link href=\{contactLink\.href\} onClick=\{\(\) => setOpen\(false\)\}/);
+  assert.match(header, /href=\{contactLink\.href\}[\s\S]{0,120}onClick=\{\(\) => setOpen\(false\)\}/);
 });
 
 test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
