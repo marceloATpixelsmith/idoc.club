@@ -70,7 +70,7 @@ test('the paid member directory rate-limits searches per account and per origin 
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.first_name'), memberDirectorySource.indexOf('${from} where ${where} order'));
   assert.match(select, /coalesce\(u\.email_display, u\.email\) email/);
-  assert.match(memberDirectorySource, /join idoc\.users u on u\.id = p\.user_id and u\.deleted_at is null/);
+  assert.match(memberDirectorySource, /join idoc\.users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state <> 'deleted'/);
   assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
 });
 
