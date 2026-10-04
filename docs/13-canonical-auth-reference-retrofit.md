@@ -20,6 +20,13 @@ The current, from-scratch `AUTH-*` evidence matrix against this baseline lives i
 [`docs/22-canonical-auth-evidence-matrix.md`](22-canonical-auth-evidence-matrix.md); it supersedes
 per-requirement status claims elsewhere in this document and in `docs/21`.
 
+### Current staging alignment — 3 October 2026
+
+The cross-domain current-state snapshot is [document 28](28-auth-membership-seminar-current-state.md). The live session policy distinguishes ordinary members from privileged accounts: member sessions use a 7-day idle timeout and 14-day absolute lifetime, while Administrator/Super Admin sessions use the canonical 30-minute idle timeout and 12-hour absolute lifetime. Every session is registry-backed; possession of a signed session JWT alone is not authentication authority.
+
+Ordinary-member returning-login trust lasts 14 days and is stored as a separate revocable opaque credential. It never substitutes for Administrator/Super Admin TOTP, recovery, enrollment, replacement, or fresh sensitive-action step-up. The current password minimum is 10 characters, with the existing composition/maximum policy and breached-password rejection retained.
+
+
 ## IDOC application model
 
 IDOC uses the canonical single-application role model: Member, Admin, and Super Admin. Professional member classifications such as Judge, Steward, Combo Judge/Steward, and Veterinarian are membership-domain attributes, not authentication roles and must never grant administrator authority.
@@ -115,8 +122,10 @@ IDOC uses versioned, persisted canonical sessions with a distinct random session
 
 The security boundaries are:
 
-- idle timeout: 30 minutes (`1800` seconds);
-- absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
+- ordinary-member idle timeout: 7 days;
+- ordinary-member absolute timeout: 14 days from the original authentication event;
+- privileged Administrator/Super Admin idle timeout: 30 minutes (`1800` seconds);
+- privileged Administrator/Super Admin absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
 - middleware may advance only last activity, never original authentication or absolute expiration;
 - production uses the host-only `__Host-idoc-session` cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, no Domain attribute, and explicit absolute expiration;
 - every successful authentication creates a new random `sessionId`;
