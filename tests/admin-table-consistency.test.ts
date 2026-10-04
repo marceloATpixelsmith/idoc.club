@@ -40,6 +40,13 @@ test('Judge icon remains the sitewide bell in the admin members table', () => {
   assert.doesNotMatch(members, /\bGavel\b/);
 });
 
+test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
+  assert.match(members, /steward: \{ icon: HorseshoeIcon, label: 'STEWARD' \}/);
+  assert.match(members, /const HorseshoeIcon: LucideIcon = forwardRef/);
+  assert.match(members, /<path d="M6 3v8a6 6 0 0 0 12 0V3" \/>/);
+  assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
+});
+
 test('active admin role icons appear in gold directly after the member name', () => {
   const memberQueries = readFileSync('lib/membership/admin-memberships.ts', 'utf8');
   assert.match(members, /row\.original\.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" role="img"/);
