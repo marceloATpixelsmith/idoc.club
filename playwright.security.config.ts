@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 import { GOOGLE_MOCK_IDP_URL } from './tests/security-e2e/google-mock-idp';
+import { STRIPE_MOCK_PORT } from './tests/security-e2e/stripe-mock';
+import {
+  E2E_CONTROL_FILE, E2E_MAIL_SINK, E2E_OUTBOUND_PRELOAD, E2E_STRIPE_MEMBERSHIP_PRODUCT_ID,
+  E2E_STRIPE_SECRET_KEY, E2E_STRIPE_WEBHOOK_SECRET,
+} from './tests/security-e2e/support/e2e-env';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl || !/(?:^|[_-])test(?:$|[_-])|\/[^/?]*test[^/?]*(?:\?|$)/i.test(databaseUrl)) {
@@ -40,6 +45,7 @@ export default defineConfig({
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: 'security-e2e-site-key',
       MFA_TOTP_ACTIVE_KEY_ID: 'e2e-v1',
       MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ 'e2e-v1': 'uCl5FBBt6lgvPFEEQVFOOPNh7TVGKX8E4GEBoQuQerw' }),
+      LOGIN_DEVICE_TRUST_DIGEST_KEY: 'FJesfNo9wJfSVTcxnCCthBImoJMqNRJJFJyF-MSPafE',
       MFA_PENDING_AUTH_SIGNING_KEY: 'P-rFOz-JzQlJ6iijr4i9SBPWg-1dn72SbPPY-CHkoqQ',
       MFA_RECOVERY_CODE_DIGEST_KEY: 'zaoDYF2rFZXfbool4YgF40tqjFyibcoukUB8Q13y1Nc',
       // Synthetic, not a real Google OAuth client -- loadGoogleOidcConfig only requires these to be
@@ -51,6 +57,19 @@ export default defineConfig({
       GOOGLE_OAUTH_CLIENT_SECRET_ACTIVE_VERSION: 'v1',
       GOOGLE_OAUTH_REDIRECT_URI: 'http://127.0.0.1:3100/api/auth/google/callback',
       GOOGLE_OIDC_TEST_PROVIDER_BASE_URL: GOOGLE_MOCK_IDP_URL,
+      // Provider stand-ins: the preload redirects Turnstile/Brevo/HaveIBeenPwned/Stripe network calls
+      // to local deterministic fakes while the application's real code paths run unchanged. See
+      // tests/security-e2e/support/outbound-preload.cjs.
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${E2E_OUTBOUND_PRELOAD}`.trim(),
+      E2E_MAIL_SINK,
+      E2E_CONTROL_FILE,
+      STRIPE_MOCK_PORT: String(STRIPE_MOCK_PORT),
+      STRIPE_SECRET_KEY: E2E_STRIPE_SECRET_KEY,
+      STRIPE_WEBHOOK_SECRET: E2E_STRIPE_WEBHOOK_SECRET,
+      STRIPE_MEMBERSHIP_PRODUCT_ID: E2E_STRIPE_MEMBERSHIP_PRODUCT_ID,
+      BREVO_API_KEY: 'security-e2e-brevo-not-contacted',
+      BREVO_FROM_EMAIL: 'idoc-e2e@security.example.test',
+      IDOC_ADMIN_NOTIFICATION_EMAIL: 'ops-e2e@security.example.test',
     },
   },
 });
