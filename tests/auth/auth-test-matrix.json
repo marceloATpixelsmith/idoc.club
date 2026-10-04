@@ -20,7 +20,7 @@
       "layers": {
         "unit": false,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -28,7 +28,9 @@
         "coverage": "mapped",
         "tests": [
           "tests/email-identity-normalization.integration.ts",
-          "tests/auth-email-resend-safety.integration.ts"
+          "tests/auth-email-resend-safety.integration.ts",
+          "tests/security-e2e/member-signup.spec.ts",
+          "tests/security-e2e/member-lifecycle.spec.ts"
         ],
         "rationale": ""
       },
@@ -74,7 +76,7 @@
       "layers": {
         "unit": false,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -83,7 +85,8 @@
         "tests": [
           "tests/email-identity-normalization.integration.ts",
           "tests/auth-error-classes.integration.ts",
-          "tests/rate-limit-normalization.integration.ts"
+          "tests/rate-limit-normalization.integration.ts",
+          "tests/security-e2e/member-signup.spec.ts"
         ],
         "rationale": ""
       },
@@ -127,7 +130,7 @@
       "layers": {
         "unit": true,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -136,7 +139,8 @@
         "tests": [
           "tests/password-hash.test.ts",
           "tests/auth-error-classes.integration.ts",
-          "tests/rate-limit-normalization.integration.ts"
+          "tests/rate-limit-normalization.integration.ts",
+          "tests/security-e2e/member-signin.spec.ts"
         ],
         "rationale": ""
       },
@@ -353,7 +357,9 @@
         "coverage": "mapped",
         "tests": [
           "tests/security-e2e/auth-boundaries.spec.ts",
-          "tests/security-e2e/dashboard-membership-tabs.spec.ts"
+          "tests/security-e2e/dashboard-membership-tabs.spec.ts",
+          "tests/security-e2e/member-lifecycle.spec.ts",
+          "tests/security-e2e/password-recovery-and-change.spec.ts"
         ],
         "rationale": ""
       },
@@ -405,7 +411,8 @@
       "ci": {
         "coverage": "mapped",
         "tests": [
-          "tests/security-e2e/auth-boundaries.spec.ts"
+          "tests/security-e2e/auth-boundaries.spec.ts",
+          "tests/security-e2e/member-lifecycle.spec.ts"
         ],
         "rationale": ""
       },
@@ -610,7 +617,7 @@
       "layers": {
         "unit": true,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -618,7 +625,8 @@
         "coverage": "mapped",
         "tests": [
           "tests/canonical-mfa-runtime.test.ts",
-          "tests/production-mfa-finalization.integration.ts"
+          "tests/production-mfa-finalization.integration.ts",
+          "tests/security-e2e/member-signin.spec.ts"
         ],
         "rationale": ""
       },
@@ -721,7 +729,7 @@
       "layers": {
         "unit": true,
         "integration": false,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -729,7 +737,8 @@
         "coverage": "mapped",
         "tests": [
           "tests/account-security-management.test.ts",
-          "tests/password-security-hardening.test.ts"
+          "tests/password-security-hardening.test.ts",
+          "tests/security-e2e/password-recovery-and-change.spec.ts"
         ],
         "rationale": ""
       },
@@ -774,7 +783,7 @@
       "layers": {
         "unit": false,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -782,7 +791,8 @@
         "coverage": "mapped",
         "tests": [
           "tests/password-reset-adversarial.integration.ts",
-          "tests/account-token-lifecycles.integration.ts"
+          "tests/account-token-lifecycles.integration.ts",
+          "tests/security-e2e/password-recovery-and-change.spec.ts"
         ],
         "rationale": ""
       },
@@ -1051,7 +1061,7 @@
       "layers": {
         "unit": false,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -1059,7 +1069,8 @@
         "coverage": "mapped",
         "tests": [
           "tests/rate-limit-normalization.integration.ts",
-          "tests/rate-limit-correlation.integration.ts"
+          "tests/rate-limit-correlation.integration.ts",
+          "tests/security-e2e/member-signin.spec.ts"
         ],
         "rationale": ""
       },
@@ -1103,7 +1114,7 @@
       "layers": {
         "unit": true,
         "integration": false,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -1112,7 +1123,8 @@
         "tests": [
           "tests/turnstile-contract.test.ts",
           "tests/turnstile-retry-restore.test.ts",
-          "tests/turnstile-widget-resilience.test.ts"
+          "tests/turnstile-widget-resilience.test.ts",
+          "tests/security-e2e/member-signup.spec.ts"
         ],
         "rationale": ""
       },
@@ -1417,7 +1429,7 @@
       "layers": {
         "unit": true,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -1426,7 +1438,8 @@
         "tests": [
           "tests/auth-error-classes.integration.ts",
           "tests/dependency-risk-register.test.ts",
-          "tests/google-oauth-failure-alerting.test.ts"
+          "tests/google-oauth-failure-alerting.test.ts",
+          "tests/security-e2e/member-signup.spec.ts"
         ],
         "rationale": ""
       },
@@ -1757,16 +1770,17 @@
     },
     {
       "id": "LIVE-AUTH-034",
-      "title": "Signup and password reset reject passwords found in known data breaches",
+      "title": "Signup, password reset and password change reject passwords found in known data breaches",
       "risk": "high",
       "canonicalControls": [
-        "AUTH-PASSWORD-006"
+        "AUTH-PASSWORD-006",
+        "AUTH-PASSWORD-007"
       ],
       "applicability": "applicable",
       "layers": {
         "unit": true,
         "integration": true,
-        "browser": false,
+        "browser": true,
         "live": true,
         "adversarial": true
       },
@@ -1774,9 +1788,11 @@
         "coverage": "mapped",
         "tests": [
           "tests/password-breach-check.test.ts",
-          "tests/password-reset-adversarial.integration.ts"
+          "tests/password-reset-adversarial.integration.ts",
+          "tests/security-e2e/member-signup.spec.ts",
+          "tests/security-e2e/password-recovery-and-change.spec.ts"
         ],
-        "rationale": "The range-check unit test stubs a matching HIBP suffix for deterministic coverage; the password-reset integration test covers the authorized reset boundary."
+        "rationale": "The range-check unit test stubs a matching HIBP suffix for deterministic coverage; the password-reset integration test covers the authorized reset boundary. The browser specs drive the real signup, reset and Security-page password-change forms against a local breach-API stand-in, including the operations alert and the documented fail-open behavior."
       },
       "live": {
         "enabled": true,
@@ -1794,12 +1810,14 @@
           "Verify the password is rejected with the breached-password message and no account is created.",
           "For reset, use an existing disposable account, request password reset, and complete the required email OTP or privileged TOTP verification.",
           "Enter the same currently confirmed breached password and submit.",
-          "Verify the password is rejected and the prior credential remains valid; then complete reset with a unique, non-breached password."
+          "Verify the password is rejected and the prior credential remains valid; then complete reset with a unique, non-breached password.",
+          "For self-service change, sign in as a disposable paid-up member, open Security settings, enter the current password and the same confirmed breached password as the new one, and submit; verify it is rejected and the current password still works."
         ],
         "pass": [
           "Both signup and password reset reject the breached password and allow retry with a unique password.",
           "The rejected signup creates no account; the rejected reset does not change the existing password.",
-          "Neither the raw password nor its full hash is sent to HIBP; only the 5-character SHA-1 prefix is sent."
+          "Neither the raw password nor its full hash is sent to HIBP; only the 5-character SHA-1 prefix is sent.",
+          "Self-service password change also rejects the breached password and leaves the current credential unchanged; any configured operations alert names the flow and account and never contains the password."
         ],
         "fail": [
           "Either flow accepts the breached password, changes account state before rejecting it, or sends the raw password/full hash to HIBP."
@@ -1868,6 +1886,68 @@
         ],
         "evidence": [
           "Record URL, administrator role, action, response, relevant audit-row IDs and before/after table counts. Do not record credentials or payment secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-036",
+      "title": "Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-AUTHZ-005",
+        "AUTH-API-004",
+        "AUTH-CSRF-003"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": false,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/checkout.integration.ts",
+          "tests/stripe-webhook.integration.ts",
+          "tests/seminars.integration.ts",
+          "tests/security-e2e/member-lifecycle.spec.ts",
+          "tests/security-e2e/seminar-registration.spec.ts"
+        ],
+        "rationale": "The browser specs run the real app and Stripe SDK against a local Stripe stand-in with webhooks signed by Stripe's own SDK; the Stripe-hosted payment page remains covered by the opt-in tests/stripe-e2e suite."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data.",
+          "The staged deployment must be using Stripe test-mode credentials and have a published, fee-bearing test seminar; never use live-mode keys. Staging shares the production database, so cleanup is required."
+        ],
+        "steps": [
+          "Sign up a fresh member, complete onboarding, and confirm seminar registration is unavailable while unpaid.",
+          "Start membership checkout and return from Stripe without paying; confirm entitlement is not granted by the return redirect alone.",
+          "Pay with a Stripe test card and wait for the verified webhook; confirm entitlement becomes active exactly once.",
+          "Register for a seminar by each enabled payment method; for online payment complete Stripe test checkout and confirm the registration becomes paid once.",
+          "Confirm a full seminar and a seminar past its registration deadline reject registration with a clear message, and that cancellation updates My Seminars."
+        ],
+        "pass": [
+          "Entitlement and seminar payment status change only after a verified provider event, never from browser redirects or client-supplied fields.",
+          "Redelivered events do not double-credit.",
+          "Capacity, deadline, disabled payment methods and unpaid-member restrictions are enforced server-side."
+        ],
+        "fail": [
+          "Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
         ]
       }
     }
