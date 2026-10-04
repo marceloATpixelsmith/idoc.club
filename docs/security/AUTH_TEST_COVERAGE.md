@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **35 cases** — CI mapped 32, CI gaps 2, not applicable 1.
+Summary: **36 cases** — CI mapped 33, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -39,5 +39,6 @@ Summary: **35 cases** — CI mapped 32, CI gaps 2, not applicable 1.
 | LIVE-AUTH-031 | Cleanup and failure preservation are deterministic and auditable | gap | required | AUTH-OPERATIONS-011 |
 | LIVE-AUTH-032 | Invitation auth testing is explicitly not applicable to the current product model | na | N/A | AUTH-INVITE-001, AUTH-INVITE-002, AUTH-INVITE-003 |
 | LIVE-AUTH-033 | Ordinary member sessions use a 7-day idle timeout and 14-day absolute lifetime while privileged sessions retain strict limits | mapped | required | AUTH-SESSION-005, AUTH-SESSION-010 |
-| LIVE-AUTH-034 | Signup and password reset reject passwords found in known data breaches | mapped | required | AUTH-PASSWORD-006 |
+| LIVE-AUTH-034 | Signup, password reset and password change reject passwords found in known data breaches | mapped | required | AUTH-PASSWORD-006, AUTH-PASSWORD-007 |
 | LIVE-AUTH-035 | Member archive and permanent deletion enforce authorization, billing guards, and audit retention | mapped | required | AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003 |
+| LIVE-AUTH-036 | Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004, AUTH-CSRF-003 |
