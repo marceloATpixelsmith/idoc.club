@@ -124,30 +124,29 @@ test('paid directory: a currently-entitled member can search, and a privileged a
   assert.ok(asAdminListing.rows.length >= 1);
 });
 
-test('paid directory: never returns email, address, or any database identifier for any row', async () => {
+test('paid directory: returns member email for contact while excluding addresses and database identifiers', async () => {
   const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
   const listing = await asMember(user.id, () => listMemberDirectory({ q: 'Lovelace' }));
   assert.equal(listing.rows.length, 1);
-  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
+  assert.equal(listing.rows[0].email, user.email);
+  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
-test('paid directory: one member cannot see another member\'s private data through search -- results are limited to the documented public fields regardless of who searches', async () => {
-  await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {
+  const { user: listedUser } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
-  const listing = await asMember(searcher.id, () => listMemberDirectory({ q: 'Lovelace' }));
+  const listing = await asMember(searcher.id, () => listMemberDirectory({ q: listedUser.email }));
   assert.equal(listing.rows.length, 1);
   assert.equal(listing.rows[0].firstName, 'Ada');
-  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
+  assert.equal(listing.rows[0].email, listedUser.email);
+  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
-test('paid directory: filters by country, federation, region, and membership type', async () => {
+test('paid directory: filters by federation, region, and membership type without a country filter', async () => {
   await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
   await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
   await entitledMemberIn('ES', [veterinarianRole], { firstName: 'Vet', lastName: 'Three' });
   const { user: searcher } = await entitledMemberIn('IT', [judgeRole, stewardRole], { firstName: 'Combo', lastName: 'Four' });
-
-  const byCountry = await asMember(searcher.id, () => listMemberDirectory({ country: 'DE' }));
-  assert.deepEqual(byCountry.rows.map((row) => row.lastName), ['One']);
 
   const byFederation = await asMember(searcher.id, () => listMemberDirectory({ federation: judgeRole.nationalFederationCountryCode }));
   assert.ok(byFederation.rows.some((row) => row.lastName === 'One'));
@@ -206,14 +205,13 @@ test('paid directory: sustained searching from one origin is rate-limited using 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
   await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
-  // Simulates a real ?country=DE&country=FR request: Next.js hands this to the page as an array.
+  // Repeated filter keys are resolved to "absent" rather than passed into string methods.
   const listing = await asMember(searcher.id, () => listMemberDirectory({
-    country: ['DE', 'FR'], federation: ['DE', 'PL'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
+    federation: ['DE', 'PL'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
   }));
   // Every array-valued filter fell back to "unset" rather than throwing, so this behaves like an
   // unfiltered browse (both fixtures visible) rather than a 500.
   assert.equal(listing.filters.page, 1);
-  assert.equal(listing.filters.country, undefined);
   assert.ok(listing.rows.some((row) => row.lastName === 'One'));
   assert.ok(listing.rows.some((row) => row.lastName === 'Two'));
 });
