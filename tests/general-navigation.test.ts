@@ -68,8 +68,8 @@ test('the shared menu drops My Dashboard, keeping only the conditional Admin Das
   assert.match(menu, /href="\/admin"/);
 });
 
-test('the header exposes a My IDOC dropdown of the dashboard subpages (including Support), gated on entitlement -- falling back to My Membership for a signed-in member who is not yet entitled', () => {
-  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} memberSupport=\{memberSupport\} pathname=\{pathname\} \/>/);
+test('the header exposes My IDOC dashboard subpages, excluding Support, and falls back to My Membership before entitlement', () => {
+  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} pathname=\{pathname\} \/>/);
   assert.match(header, /label="My IDOC"/);
   assert.match(header, /href="\/dashboard\/membership"/);
   assert.match(header, /from '@\/lib\/navigation\/dashboard-nav'/);
@@ -109,14 +109,12 @@ test('Membership is hidden from the top nav once signed in -- a member already h
   assert.doesNotMatch(header, /nav\.slice\(1\)\.map/);
 });
 
-test('Support lives in both the dashboard sidebar and the header My IDOC dropdown, hidden from privileged administrators in either', () => {
-  assert.match(dashboardTabs, /LifeBuoy/);
-  assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
+test('Support is not part of the My IDOC sidebar or dropdown', () => {
   const dashboardNav = readFileSync('lib/navigation/dashboard-nav.ts', 'utf8');
-  assert.match(dashboardNav, /\{ href: '\/dashboard\/support', label: 'Support\/Contact' \}/);
-  assert.match(dashboardNav, /export function dashboardNavItems\(memberSupport: boolean\)/);
-  assert.match(dashboardTabs, /dashboardNavItems\(memberSupport\)/);
-  assert.match(header, /dashboardNavItems\(memberSupport\)/);
+  assert.doesNotMatch(dashboardNav, /dashboard\/support/);
+  assert.doesNotMatch(dashboardTabs, /Support|LifeBuoy|supportUnread/);
+  assert.match(dashboardTabs, /dashboardNavItems\(\)/);
+  assert.match(header, /dashboardNavItems\(\)/);
 });
 
 test('every dashboard nav item URL matches its label and no entry is a prefix of another, in both the sidebar and the header dropdown, so a dashboard subpage never highlights two items at once', () => {
