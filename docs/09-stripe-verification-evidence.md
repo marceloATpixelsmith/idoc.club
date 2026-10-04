@@ -100,7 +100,7 @@ hosts Checkout loads. Without them the CLI hangs at "Getting ready..." and Chrom
 9. **Run.** With `NODE_OPTIONS=--conditions=react-server` (the seminar spec imports a `server-only` module),
    `PLAYWRIGHT_CHROMIUM_EXECUTABLE` pointing at the installed Chromium when its build differs from the one
    Playwright expects, and `--trace off` (the hosted Checkout spec starts its own tracing), run
-   `pnpm test:stripe-e2e -- --trace off`. Use a unique `STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<run>@example.test`
+   `pnpm test:stripe-e2e --trace off`. Use a unique `STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<run>@example.test`
    and `STRIPE_E2E_EVIDENCE_DIR=.stripe-e2e/evidence/<run>`; `.stripe-e2e/` is not gitignored, so do not commit it.
 10. **Clean up.** Stop the app, TLS proxy and `stripe listen`; drop both databases and the role; delete the
     throwaway certificates. Do not leave test-mode objects that identify a person.
