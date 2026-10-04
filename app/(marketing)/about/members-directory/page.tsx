@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/site/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getUser } from '@/lib/db/queries';
+import { getPublicUser } from '@/lib/db/queries';
 import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
 import {
   DirectoryRateLimitedError,
@@ -42,9 +42,9 @@ type PageParams = MemberDirectoryFilters & { tab?: string | string[] };
 
 export default async function MembersDirectoryPage({ searchParams }: { searchParams: Promise<PageParams> }) {
   const params = await searchParams;
-  const activeTab = first(params.tab) === 'directory' ? 'directory' : 'map';
+  const user = await getPublicUser();
+  const activeTab = user && first(params.tab) === 'directory' ? 'directory' : 'map';
   const concentration = activeTab === 'map' ? await getPublicMemberConcentration() : null;
-  const user = activeTab === 'directory' ? await getUser() : null;
   let listing: Awaited<ReturnType<typeof listMemberDirectory>> | null = null;
   let unavailable = false;
 
@@ -78,10 +78,10 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
   return <>
     <PageHeader eyebrow="Members" title="Members Directory" intro="Explore IDOC's worldwide member concentration. Active members can search and contact other members in the directory." />
     <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
-      <nav aria-label="Members directory views" className="flex gap-4 border-b border-border">
+      {user ? <nav aria-label="Members directory views" className="flex gap-4 border-b border-border">
         <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'map' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory">Map / Infographic</Link>
         <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'directory' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory?tab=directory">Search Directory</Link>
-      </nav>
+      </nav> : null}
       {activeTab === 'map' ? <div className="mt-8">
         {!concentration?.ok ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The members map is temporarily unavailable. Please try again shortly.</p>
           : concentration.areas.length === 0 ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">Not enough member data is available yet to show the map. Check back soon.</p>

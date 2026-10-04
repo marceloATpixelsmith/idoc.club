@@ -125,11 +125,17 @@ test('the dashboard navigation omits Directory while the public website retains 
 });
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
-  assert.match(memberPageSource, /activeTab = first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberPageSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
   assert.match(memberPageSource, /Map \/ Infographic/);
   assert.match(memberPageSource, /Search Directory/);
   assert.match(memberPageSource, /if \(activeTab === 'directory' && user\)/);
   assert.match(memberPageSource, /getPublicMemberConcentration/);
+});
+
+test('signed-out visitors see only the map, with no tabs and no directory even through a direct tab URL', () => {
+  assert.match(memberPageSource, /const user = await getPublicUser\(\)/);
+  assert.match(memberPageSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberPageSource, /\{user \? <nav aria-label="Members directory views"/);
 });
 
 test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
