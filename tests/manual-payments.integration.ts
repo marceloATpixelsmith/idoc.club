@@ -196,6 +196,17 @@ test('a suspended membership stays suspended after a manual payment, even though
   assert.equal(result.membership.validUntil, '2100-12-31');
 });
 
+test('a canceled membership stays canceled after a manual payment until an administrator reverses the cancellation', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source) values(${profile.id},'canceled','2025-01-01','2099-12-31','migration')`;
+  const result = await asAdmin(admin.id, () => recordManualPayment({
+    paidAt: '2026-01-01', profileId: profile.id, reason: 'Late payment after cancellation', source: 'cash',
+  }));
+  assert.equal(result.membership.status, 'canceled');
+});
+
 test('searchMembersForAdmin matches case-insensitively on name or email, requires 2+ characters, and is administrator-only', async () => {
   const admin = await adminUser();
   const member = await createUser();

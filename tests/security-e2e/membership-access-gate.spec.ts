@@ -13,6 +13,7 @@ import {
 test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 
 const PAYMENT_PAGE = /\/dashboard\/membership$/;
+const IN_FIVE_DAYS = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 test.beforeEach(async ({ page }) => {
@@ -67,7 +68,8 @@ test('a member whose membership lapsed can sign in but sees only the payment pag
 test('a canceled membership keeps full access until the paid-through date and shows when it ends', async ({ page }) => {
   const email = uniqueEmail('gate-canceled-in-cycle');
   await createActiveMember(page, email);
-  await setMembershipInDatabase(email, 'canceled', '2099-12-31');
+  // Five days before the end: an ordinary member would now be offered renewal, a canceled one is not.
+  await setMembershipInDatabase(email, 'canceled', IN_FIVE_DAYS);
   await page.goto('/seminars');
   await expect(page).toHaveURL(/\/seminars$/);
   await page.goto('/dashboard/security');
@@ -75,6 +77,8 @@ test('a canceled membership keeps full access until the paid-through date and sh
   await page.goto('/dashboard/membership');
   await expect(page.getByText(/Your membership has been canceled\. You keep full access until/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel membership' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Renew/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Renew/ })).toHaveCount(0);
 });
 
 test('once a canceled membership passes its paid-through date the session ends and sign-in is refused', async ({ page }) => {

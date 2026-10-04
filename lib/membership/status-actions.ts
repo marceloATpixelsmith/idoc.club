@@ -2,12 +2,13 @@ import 'server-only';
 
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, memberships } from '@/lib/db/schema';
+import { auditLog, memberships, profiles, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator } from './authorization';
 import { lockLatestMembership } from './locking';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 
 const REINSTATABLE_STATUSES = ['active', 'grace', 'complimentary'] as const;
@@ -56,6 +57,15 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
   });
 
   const stripeResult = await cancelOpenSubscriptionIfAny(profileId, testStripeClient);
+  // Like a member's own cancellation, an administrator's removes the member from the marketing
+  // mailing list. Best-effort: it can never block or undo the membership-level cancellation.
+  if (!wasAlreadySuspended) {
+    const [account] = await db.select({ email: users.email }).from(profiles).innerJoin(users, eq(users.id, profiles.userId))
+      .where(eq(profiles.id, profileId)).limit(1);
+    if (account?.email) {
+      try { await unsubscribeFromMarketingAudience(account.email); } catch { /* best-effort only */ }
+    }
+  }
   if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError) {
     throw new Error('This membership is already canceled.');
   }

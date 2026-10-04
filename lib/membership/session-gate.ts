@@ -40,9 +40,13 @@ const PAYMENT_ONLY_PATH_PREFIXES = [
   // The payment page, and the dashboard entry that hosts the onboarding wizard / forwards to it.
   '/dashboard/membership',
   '/onboarding',
-  // Server routes the payment and sign-out flows themselves depend on (Stripe return, flash
-  // messages, address lookup for onboarding, session endpoints); each authorizes itself.
-  '/api/',
+  // The specific server routes the payment, onboarding and sign-out flows depend on, named one by
+  // one rather than exempting every handler: the Stripe return and webhook, one-time UI messages,
+  // the header's identity lookup, onboarding's address lookup, client error reports, health checks,
+  // and the provider webhooks and scheduled jobs (which carry their own secrets and no session).
+  // Everything else under /api -- account linking, administrator exports, the team and
+  // table-preference handlers -- is gated like any other page.
+  '/api/stripe/', '/api/ui/', '/api/user', '/api/address/', '/api/client-error', '/api/health', '/api/brevo/', '/api/cron/',
   // Authentication pages, so a signed-in member can sign out, complete step-up, or switch accounts.
   '/sign-in', '/sign-up', '/mfa', '/recover-password', '/reset-password', '/verify-email', '/activate', '/request-activation',
   // Legal documents the onboarding consent text links to.

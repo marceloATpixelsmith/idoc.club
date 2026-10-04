@@ -105,7 +105,8 @@ export default async function DashboardMembershipPage() {
   }
 
   const mode = renewalMode(subscription, entitlement);
-  const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
+  // A canceled membership has ended by choice: no renewal offer. An administrator reverses it.
+  const showRenew = Boolean(entitlement) && entitlement!.status !== 'canceled' && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
   const renewalPerks = showRenew && flash === 'membership-renew-panel' ? await getMembershipPerks() : null;
   const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
     listOwnPaymentHistory(),

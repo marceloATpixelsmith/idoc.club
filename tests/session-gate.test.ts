@@ -42,10 +42,10 @@ test('administrators are never gated by membership, and states this policy does 
 });
 
 test('a payment-only session may reach only the payment page and what it depends on', () => {
-  for (const path of ['/dashboard', '/dashboard/membership', '/onboarding', '/api/stripe/checkout', '/api/ui/flash/consume', '/sign-in', '/mfa', '/terms', '/privacy', '/logo.svg', '/_next/static/chunk.js']) {
+  for (const path of ['/dashboard', '/dashboard/membership', '/onboarding', '/api/stripe/checkout', '/api/stripe/webhook', '/api/ui/flash/consume', '/api/user', '/api/address/autocomplete', '/api/health', '/sign-in', '/mfa', '/terms', '/privacy', '/logo.svg', '/_next/static/chunk.js']) {
     assert.equal(paymentOnlyAllows(path), true, path);
   }
-  for (const path of ['/', '/seminars', '/seminars/12', '/about', '/about/members-directory', '/news', '/contact', '/membership', '/dashboard/profile', '/dashboard/security', '/dashboard/support', '/dashboard/seminars', '/admin', '/admin/members', '/dashboard-evil']) {
+  for (const path of ['/', '/seminars', '/seminars/12', '/about', '/about/members-directory', '/news', '/contact', '/membership', '/dashboard/profile', '/dashboard/security', '/dashboard/support', '/dashboard/seminars', '/admin', '/admin/members', '/dashboard-evil', '/api/auth/google/link/start', '/api/auth/google/link/status', '/api/admin/export/members', '/api/team', '/api/users']) {
     assert.equal(paymentOnlyAllows(path), false, path);
   }
 });
