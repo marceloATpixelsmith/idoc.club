@@ -56,6 +56,58 @@ configured webhook endpoint subscribes to the event list in docs/04, retries del
 Customer Portal settings match policy, and restricted-key/secret rotation has been tested. Record
 evidence in the release checklist; do not paste secrets or payment details.
 
+## Running the suite from a sandbox without a public tunnel
+
+Use this procedure for agent or cloud sandboxes whose outbound traffic is proxied and allow-listed
+(no ngrok, no Cloudflare tunnel, no public URL). It keeps every Stripe interaction in test mode and
+never touches staging or production data. Never print or commit any value named below.
+
+**Network allow-list** (Stripe CLI and hosted Checkout): `api.stripe.com`, `stripecli-ws-nw.stripe.com`,
+`checkout.stripe.com`, `js.stripe.com` and the other `*.stripe.com`, `*.stripe.network`, `*.stripecdn.com`
+hosts Checkout loads. Without them the CLI hangs at "Getting ready..." and Chromium fails with
+`net::ERR_TUNNEL_CONNECTION_FAILED` when it redirects to `checkout.stripe.com`.
+
+1. **Runtime.** Node 24.9 (Node 22 lacks Argon2id), `pnpm install --frozen-lockfile`, and a running local
+   PostgreSQL (`service postgresql start`; it can stop mid-session, so re-check before each run).
+2. **Stripe CLI.** If the GitHub release download is blocked, build it through the Go module proxy:
+   `GOBIN=/usr/local/bin go install github.com/stripe/stripe-cli/cmd/stripe@<version>`.
+3. **Throwaway database.** Create a local role and two databases: `idoc_test_stripe_<run>` for
+   `TEST_DATABASE_URL` (global setup drops and rebuilds its `idoc` schema) and a different
+   `idoc_e2e_app_<run>` for `POSTGRES_URL`. Never reuse staging's `POSTGRES_URL`, `AUTH_SECRET`,
+   `CRON_SECRET`, `BASE_URL` or Google redirect. Generate fresh random `AUTH_SECRET` and `CRON_SECRET`.
+4. **Local HTTPS.** `BASE_URL` must be HTTPS (`validateStripeBaseUrl`), and Stripe Checkout redirects the
+   browser back to it. Create a throwaway CA and a `localhost` certificate with `openssl`, import the CA into
+   Chromium's NSS store (`certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n e2e-ca -i ca.crt`), and run a
+   small TLS reverse proxy on `https://localhost:3443` that forwards to `next dev -p 3000`. Set
+   `BASE_URL` and `STRIPE_E2E_APP_URL` to `https://localhost:3443`.
+5. **Webhooks without a tunnel.** Run `STRIPE_API_KEY=$STRIPE_SECRET_KEY stripe listen --events <list> --forward-to
+   http://localhost:3000/api/stripe/webhook` (use the environment variable, not `--api-key`, so the key never
+   appears in the process list). `<list>` is the event set in `lib/payments/webhook-handlers.ts`
+   (`charge.dispute.closed`, `charge.dispute.created`, `charge.refunded`, `checkout.session.completed`,
+   `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_action_required`,
+   `invoice.payment_failed`, `payment_intent.succeeded`). Use the signing secret it prints as
+   `STRIPE_WEBHOOK_SECRET` for both the app and the suite; no Dashboard endpoint is created, so there is
+   nothing to delete afterwards.
+6. **Safe third-party settings for the app process.** Use Cloudflare's public always-pass Turnstile test keys
+   (`1x00000000000000000000AA` / `1x0000000000000000000000000000000AA`), a dummy `BREVO_API_KEY`, and an
+   empty `MAILCHIMP_MARKETING_API_KEY`, so a run cannot send real mail or add marketing contacts.
+7. **Proxy-aware Node.** Both the app and the test runner call Stripe from Node, which ignores
+   `HTTPS_PROXY` by default. Export `NODE_USE_ENV_PROXY=1` and point `NODE_EXTRA_CA_CERTS` at a bundle holding the
+   sandbox proxy CA plus the throwaway CA. Start the app with that same environment.
+8. **Start the app yourself.** Do not set `STRIPE_E2E_START_COMMAND`: `playwright.stripe.config.ts` then forces
+   `POSTGRES_URL` to equal `TEST_DATABASE_URL` for the launched app and the database guard refuses to start.
+   Start `next dev -p 3000` with a distinct `POSTGRES_URL` and the real `TEST_DATABASE_URL` instead.
+9. **Run.** With `NODE_OPTIONS=--conditions=react-server` (the seminar spec imports a `server-only` module),
+   `PLAYWRIGHT_CHROMIUM_EXECUTABLE` pointing at the installed Chromium when its build differs from the one
+   Playwright expects, and `--trace off` (the hosted Checkout spec starts its own tracing), run
+   `pnpm test:stripe-e2e -- --trace off`. Use a unique `STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<run>@example.test`
+   and `STRIPE_E2E_EVIDENCE_DIR=.stripe-e2e/evidence/<run>`; `.stripe-e2e/` is not gitignored, so do not commit it.
+10. **Clean up.** Stop the app, TLS proxy and `stripe listen`; drop both databases and the role; delete the
+    throwaway certificates. Do not leave test-mode objects that identify a person.
+
+Known suite assumptions that no longer match the application are tracked in the pull request that added this
+section; fix them in the specs rather than weakening the application.
+
 ## Gaps deliberately not hidden
 
 Provider-backed browser evidence cannot honestly be claimed by ordinary CI without disposable Stripe
