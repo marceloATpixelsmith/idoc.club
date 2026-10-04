@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { client, db } from '@/lib/db/drizzle';
-import { billingAccounts, profiles, subscriptions, users } from '@/lib/db/schema';
+import { billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
@@ -57,6 +57,11 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   const actor = await requireAccountAccess('billing_boundary');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
   if (!profile) throw new Error('A member profile is required before checkout.');
+  // A canceled membership has ended by choice and is reversed only by an administrator, so it
+  // cannot be renewed by paying again.
+  const [latestMembership] = await db.select({ status: memberships.status }).from(memberships)
+    .where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1);
+  if (latestMembership?.status === 'canceled') throw new Error('This membership has been canceled and cannot be renewed.');
   if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
     throw new Error('An active or pending subscription already exists for this membership.');
   }

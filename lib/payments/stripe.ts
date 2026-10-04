@@ -153,19 +153,19 @@ export async function getOwnPaymentMethodSummary(testStripeClient?: PaymentMetho
 // Only the one call this module makes for cancellation, so tests can inject a fake without
 // satisfying the entire real Stripe SDK surface (same pattern as PortalStripeClient above).
 export type CancellationStripeClient = {
-  subscriptions: { cancel: (id: string) => Promise<{ id: string; status: string }> };
+  subscriptions: { update: (id: string, params: { cancel_at_period_end: boolean }) => Promise<{ id: string; status: string }> };
 };
 
 /**
- * Cancels a member's Stripe subscription immediately (not at-period-end). No authorization check
- * of its own — this is an internal helper reachable only from already-authorized admin code
- * (lib/membership/status-actions.ts's suspendMembership), matching checkout.ts's private
- * resolveOrCreateBillingAccount. Does not write subscriptions.status itself: that stays the
- * exclusive job of the customer.subscription.deleted webhook this call triggers, preserving the
- * app's rule that every Stripe-triggered local write goes through the webhook, never client-side.
+ * Ends a member's Stripe subscription at the end of the paid period (never immediately): a canceled
+ * membership keeps working through its paid-through date, so billing must simply not renew. No
+ * authorization check of its own -- an internal helper reachable only from already-authorized code
+ * (lib/membership/status-actions.ts's suspendMembership and data-access.ts's cancelOwnMembership).
+ * Does not write subscriptions.status itself: that stays the job of the Stripe webhooks, preserving
+ * the app's rule that every Stripe-triggered local write goes through the webhook.
  */
-export async function cancelMemberSubscription(subscriptionId: string, testStripeClient?: CancellationStripeClient): Promise<void> {
+export async function cancelMemberSubscriptionAtPeriodEnd(subscriptionId: string, testStripeClient?: CancellationStripeClient): Promise<void> {
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
-  await stripe.subscriptions.cancel(subscriptionId);
+  await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
 }

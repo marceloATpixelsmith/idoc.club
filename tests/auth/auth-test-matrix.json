@@ -340,14 +340,14 @@
     },
     {
       "id": "LIVE-AUTH-007",
-      "title": "Unpaid/expired member access is restricted to the intended payment/membership flow",
+      "title": "Unpaid/expired member sees only the payment page while signed in",
       "risk": "high",
       "canonicalControls": [
         "AUTH-AUTHZ-001"
       ],
       "applicability": "applicable",
       "layers": {
-        "unit": false,
+        "unit": true,
         "integration": false,
         "browser": true,
         "live": true,
@@ -359,7 +359,9 @@
           "tests/security-e2e/auth-boundaries.spec.ts",
           "tests/security-e2e/dashboard-membership-tabs.spec.ts",
           "tests/security-e2e/member-lifecycle.spec.ts",
-          "tests/security-e2e/password-recovery-and-change.spec.ts"
+          "tests/security-e2e/password-recovery-and-change.spec.ts",
+          "tests/security-e2e/membership-access-gate.spec.ts",
+          "tests/session-gate.test.ts"
         ],
         "rationale": ""
       },
@@ -373,16 +375,18 @@
           "Use only disposable test identities and test data."
         ],
         "steps": [
-          "Authenticate as an unpaid/expired disposable member.",
-          "Confirm the first authenticated screen is the intended payment/membership state.",
-          "Directly request ordinary member dashboard routes and APIs.",
-          "After test payment/state transition, verify access updates."
+          "Authenticate as an unpaid or lapsed disposable member (completed onboarding, no current membership).",
+          "Confirm the first screen after sign-in is the membership-payment page.",
+          "Directly request the homepage, a public page (for example /seminars), ordinary member dashboard routes, /admin, and a non-GET request to a gated page.",
+          "Confirm /terms and /privacy remain reachable and that signing out restores the public site.",
+          "After a test payment and verified webhook, verify access updates."
         ],
         "pass": [
-          "Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation to any entitlement-gated member route/API produces a clean redirect or safe denial -- never an uncaught error/generic error boundary, which fails to grant access but also fails to redirect the member anywhere useful."
+          "While signed in, an unpaid or lapsed member can reach only the payment page, the authentication pages, the legal documents and the routes the payment flow needs; every other page redirects to the payment page and any other non-GET request is refused.",
+          "The payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation never surfaces an uncaught error or generic error boundary."
         ],
         "fail": [
-          "Protected member content is accessible before entitlement, the user is trapped behind an unnecessary/incorrect intermediate state, OR direct navigation to an entitlement-gated route surfaces an uncaught error/generic error boundary instead of a clean redirect."
+          "A signed-in unpaid or lapsed member can see the public site, member dashboard content, or register for a seminar, is trapped on an incorrect page, or a gated route surfaces an uncaught error instead of a clean redirect."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
@@ -1942,6 +1946,67 @@
         ],
         "fail": [
           "Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-037",
+      "title": "A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused",
+      "risk": "critical",
+      "canonicalControls": [
+        "AUTH-AUTHZ-001",
+        "AUTH-AUTHZ-004",
+        "AUTH-SESSION-002"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/session-gate.test.ts",
+          "tests/membership-cancellation.integration.ts",
+          "tests/status-actions.integration.ts",
+          "tests/security-e2e/membership-access-gate.spec.ts"
+        ],
+        "rationale": "The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data.",
+          "Use a disposable, paid-up member. Staging shares the production database, so cleanup is required.",
+          "Moving the paid-through date requires administrator entitlement correction; record the original value first."
+        ],
+        "steps": [
+          "Sign in as the paid-up disposable member and cancel the membership from My Membership, confirming the dialog.",
+          "Confirm the member stays signed in with full access and My Membership shows when access ends.",
+          "Have an administrator move the paid-through date to yesterday (entitlement correction, with a reason).",
+          "Reload any page in the member's session and confirm it is signed out, then attempt password sign-in and, if linked, Google sign-in.",
+          "Have an administrator reverse the cancellation and confirm sign-in works again."
+        ],
+        "pass": [
+          "Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.",
+          "After the paid-through date the existing session ends and both sign-in methods are refused, with the canceled-membership message shown only after a correct password.",
+          "An administrator's reversal restores sign-in."
+        ],
+        "fail": [
+          "Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."

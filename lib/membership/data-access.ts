@@ -224,23 +224,17 @@ export async function deleteOwnAccount() {
 }
 
 /**
- * Self-service membership cancellation -- distinct from both deleteOwnAccount (which mangles the
- * login email and denies all future sign-in) and disableAutomaticRenewal/the Renewal Mode control
- * (which only stops future billing while access continues through the paid-through date). This
- * ends access immediately, reusing suspendMembership's own proven status/access semantics ('canceled'
- * plus a backdated valid_until was tried first and rejected: it can violate memberships_dates_check
- * when starts_on is today, silently rolling back the whole cancellation while leaving access and any
- * subscription active) -- 'suspended' denies access regardless of valid_until without touching it at
- * all, so no date arithmetic and no constraint risk. The distinct audit action name
- * ('member.membership_canceled' vs admin suspension's 'admin.membership.suspended') is what
- * distinguishes a self-cancellation from an administrator's suspension-for-cause in the record; nothing
- * in the schema needs to. The login/profile record itself is untouched -- a member can sign back in
- * later, though (like any other non-entitled member) they land on the My Membership payment view, not an entitled-member dashboard
- * view of the canceled membership. Best-effort cancels any open Stripe subscription immediately (not
- * at-period-end) and unsubscribes from the marketing mailing list; neither failure blocks the
- * membership-level cancellation, which is unconditional and DB-only. handleInvoicePaid and
- * handleInvoicePaymentFailed both check for this 'suspended' status before touching entitlement, so a
- * Stripe event already in flight at the moment of cancellation can never silently revive it.
+ * Self-service membership cancellation -- distinct from deleteOwnAccount (which mangles the login
+ * email and denies all future sign-in) and from disableAutomaticRenewal/the Renewal Mode control
+ * (which only stops future billing and leaves the membership active). Like every cancellation, by
+ * the member or an administrator, it works through the end of the current paid cycle: the
+ * membership becomes 'canceled' with valid_until untouched (so no date constraint is at risk), the
+ * member keeps full access until that date, any open Stripe subscription is set to end at period
+ * end rather than renew, and the member is removed from the mailing list. Once the paid-through
+ * date passes, the relationship is over: lib/membership/session-gate.ts ends the session and sign-in
+ * is refused. Neither the Stripe call nor the mailing-list removal can block the membership-level
+ * cancellation, which is unconditional and DB-only. handleInvoicePaid and handleInvoicePaymentFailed
+ * leave a 'canceled' membership alone, so an in-flight Stripe event cannot silently revive it.
  */
 export async function cancelOwnMembership(testStripeClient?: CancellationStripeClient) {
   const actor = await authenticatedActor('billing_boundary');
@@ -252,7 +246,7 @@ export async function cancelOwnMembership(testStripeClient?: CancellationStripeC
     const current = await lockLatestMembership(tx, profile.id);
     if (!current) throw new Error('No membership on file to cancel.');
     const [updated] = await tx.update(memberships).set({
-      status: 'suspended', updatedAt: new Date(),
+      status: 'canceled', updatedAt: new Date(),
     }).where(eq(memberships.id, current.id)).returning();
     await tx.insert(auditLog).values({
       action: 'member.membership_canceled', actorId: actor.id,

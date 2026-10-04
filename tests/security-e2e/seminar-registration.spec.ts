@@ -9,7 +9,9 @@ import {
 // availability, every payment method, member and non-member pricing, cancellation, capacity, closed
 // registration, webhook redelivery and anonymous guest registration. Stripe is the only stand-in
 // (tests/security-e2e/stripe-mock.ts).
-test.use({ storageState: { cookies: [], origins: [] } });
+// Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
+// keep their host-only session cookies across the membership gate's redirects.
+test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: 'serial' });
 
 const SEMINARS = {
@@ -19,7 +21,6 @@ const SEMINARS = {
   full: { capacity: 1, deadlineDays: 30, memberCents: 2000, nonMemberCents: 4000, title: 'E2E Full Seminar' },
   guestBank: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5100, title: 'E2E Guest Bank Seminar' },
   guestStripe: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5300, title: 'E2E Guest Stripe Seminar' },
-  nonMemberOnline: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5400, title: 'E2E Non-Member Online Seminar' },
   online: { capacity: 20, deadlineDays: 30, memberCents: 6000, nonMemberCents: 9000, title: 'E2E Online Seminar' },
 } as const;
 const ids: Record<keyof typeof SEMINARS, number> = {} as Record<keyof typeof SEMINARS, number>;
@@ -161,20 +162,14 @@ test.describe('member two', () => {
 test.describe('signed-in member who has not paid for membership', () => {
   test.use({ storageState: '.security-e2e/seminar-unpaid.json' });
 
-  // KNOWN DEFECT (found by this specification, reproduced on the staging branch): a signed-in profile
-  // without current entitlement is routed to the non-member-price registration (the seminar detail
-  // page comment describes exactly this path). registerForSeminarAtNonMemberPrice creates the
-  // registration, but createSeminarCheckoutSession then calls requireAccountAccess('member'), which
-  // only entitled members or administrators pass, so no Stripe Checkout Session is created, the
-  // member is left registered-but-unpaid with the Register button gone, and no error reaches them.
-  // test.fail() keeps this documented without hiding it: the run goes red the moment it is fixed,
-  // at which point this marker must be removed.
-  test.fail('registering online at the non-member price reaches Stripe Checkout', async ({ page }) => {
-    const dialog = await openPaymentChoices(page, ids.nonMemberOnline);
-    await dialog.getByRole('button', { name: /Online/ }).click();
-    await page.waitForURL(/checkout\.stripe\.com\/c\/pay\/cs_test_e2e/, { timeout: 10_000 });
-    const session = (await mockStripeSessions()).find((candidate) => candidate.metadata.seminarId === String(ids.nonMemberOnline));
-    expect(session?.amount_total).toBe(SEMINARS.nonMemberOnline.nonMemberCents);
+  // A signed-in member without a current membership sees only the payment page (docs/02), so the
+  // seminar pages, and with them any registration, are not reachable until they pay or sign out.
+  test('cannot reach a seminar page or register until the membership is paid', async ({ page }) => {
+    await page.goto(`/seminars/${ids.online}`);
+    await expect(page).toHaveURL(/\/dashboard\/membership$/);
+    await page.goto('/seminars');
+    await expect(page).toHaveURL(/\/dashboard\/membership$/);
+    expect(await registrationFor(unpaidMember, SEMINARS.online.title)).toBeUndefined();
   });
 });
 

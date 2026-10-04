@@ -26,6 +26,9 @@ import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { setUiFlash } from '@/lib/ui/flash-state';
+import { loadSessionGate } from '@/lib/membership/session-gate-loader';
+import { paymentOnlyDestination } from '@/lib/membership/session-gate';
+import { supportEmailForServer } from '@/lib/runtime/configuration';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -64,6 +67,14 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     return { error: 'Invalid email or password. Please try again.', email };
   }
 
+  // The relationship ended: a membership canceled by the member or an administrator works through
+  // its paid-through date, after which the account can no longer sign in. Checked only after the
+  // password is verified, so this never reveals anything to someone who does not hold the credential.
+  const sessionGate = await loadSessionGate(foundUser.id);
+  if (sessionGate.gate === 'ended') {
+    return { error: `This membership has been canceled, so signing in is no longer available. Contact ${supportEmailForServer()} if you believe this is a mistake.`, email };
+  }
+
   if (passwordHashNeedsUpgrade(foundUser.passwordHash)) {
     const upgradedHash = await hashPassword(password);
     await db.update(users)
@@ -74,7 +85,11 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const role = await authoritativeMfaRole(foundUser.id);
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
-  const loginDestination = foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
+  // A member who has not paid (or whose membership lapsed) sees only the payment page, so that is
+  // where sign-in lands them rather than the homepage they would be redirected away from.
+  const loginDestination = sessionGate.gate === 'payment_only'
+    ? paymentOnlyDestination(foundUser.accountState)
+    : foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
 
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();

@@ -87,7 +87,7 @@ async function enqueueExpirationReminders(today: string): Promise<number> {
     from idoc.memberships m
     join idoc.profiles p on p.id = m.profile_id
     join idoc.users u on u.id = p.user_id
-    where m.status in ('active', 'complimentary', 'canceled')
+    where m.status in ('active', 'complimentary')
       and m.valid_until between ${today}::date and (${today}::date + ${NON_RENEWAL_EXPIRATION_NOTICE_DAYS}::int)
       and not exists (
         select 1 from idoc.subscriptions s2
@@ -156,7 +156,7 @@ async function transitionNonRecurringTerms(today: string): Promise<number> {
       status = case when m.valid_until + 5 < ${today}::date then 'expired' else 'grace' end,
       grace_ends_on = case when m.valid_until + 5 < ${today}::date then null else m.valid_until + 5 end,
       updated_at = now()
-    where m.status in ('active', 'canceled', 'complimentary') and m.valid_until < ${today}::date
+    where m.status in ('active', 'complimentary') and m.valid_until < ${today}::date
       and not exists (select 1 from idoc.subscriptions s where s.profile_id=m.profile_id
         and s.status in ('active','trialing','past_due','incomplete') and s.cancel_at_period_end=false)
     returning m.id

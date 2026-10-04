@@ -8,7 +8,9 @@ import {
 
 // Password reset and password change against the real app. HaveIBeenPwned is the only stand-in; the
 // emailed reset code is the real one the app generated.
-test.use({ storageState: { cookies: [], origins: [] } });
+// Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
+// keep their host-only session cookies across the membership gate's redirects.
+test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 
 const NEW_PASSWORD = 'Another-Strong-Pass-42!';
 
@@ -63,8 +65,8 @@ test('LIVE-AUTH-015 after a reset the old password no longer works and the new o
   await page.locator('input[name="password"]').fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Sign In' }).click();
   await submitOtp(page, extractOtp(await waitForMail(email, 'sign-in code', before)));
-  // A fully set-up account lands on the homepage after sign-in.
-  await expect(page).toHaveURL(/127\.0\.0\.1:3100\/$/);
+  // A member who has not paid lands on the payment page after sign-in.
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
   expect((await page.context().cookies()).some((cookie) => cookie.name === 'idoc-session')).toBe(true);
 });
 

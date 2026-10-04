@@ -248,3 +248,28 @@ export async function fillPhone(page: Page, numberInputSelector: string, scope: 
   await scope.getByRole('option').first().click();
   await scope.locator(numberInputSelector).fill('301234567');
 }
+
+/** Rewrites an onboarded member's latest membership row (status and paid-through date). */
+export async function setMembershipInDatabase(email: string, status: string, validUntil: string) {
+  await withDatabase(async (sql) => {
+    const [profile] = await sql<{ id: number }[]>`
+      select p.id from idoc.profiles p join idoc.users u on u.id = p.user_id where u.email = ${email}`;
+    const updated = await sql`update idoc.memberships set status = ${status}, valid_until = ${validUntil}, updated_at = now()
+      where profile_id = ${profile.id}`;
+    if (updated.count === 0) {
+      await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+        values (${profile.id}, ${status}, '2025-01-01', ${validUntil}, 'migration')`;
+    }
+  });
+}
+
+/** Password sign-in from a signed-out browser, up to the first answer the server gives. */
+export async function submitSignIn(page: Page, email: string, password: string) {
+  await page.goto('/sign-in');
+  await page.getByLabel('Email Address').fill(email);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.locator('input[name="password"]').fill(password);
+  const answered = page.waitForResponse((response) => response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await answered;
+}

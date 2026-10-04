@@ -10,14 +10,14 @@ import {
 // payment. Stripe is the only stand-in (tests/security-e2e/stripe-mock.ts); the app's real Stripe
 // SDK, Checkout parameters, signature verification and webhook handlers all run. The Stripe-hosted
 // payment page itself is covered separately by the opt-in test-mode suite (tests/stripe-e2e).
-test.use({ storageState: { cookies: [], origins: [] } });
+// Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
+// keep their host-only session cookies across the membership gate's redirects.
+test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: 'serial' });
 
 const email = uniqueEmail('lifecycle');
 const MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 4500, nonMemberCents: 7000, title: 'E2E Lifecycle Member Seminar' };
-const NON_MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5500, title: 'E2E Lifecycle Non-Member Seminar' };
 let memberSeminarId = 0;
-let nonMemberSeminarId = 0;
 
 async function profileRow() {
   return withDatabase(async (sql) => {
@@ -31,7 +31,6 @@ async function profileRow() {
 
 test.beforeAll(async () => {
   memberSeminarId = await insertSeminar(MEMBER_SEMINAR);
-  nonMemberSeminarId = await insertSeminar(NON_MEMBER_SEMINAR);
 });
 
 test.beforeEach(async ({ page }) => {
@@ -66,13 +65,12 @@ test.describe('after signup', () => {
     expect(row.profile_id).not.toBeNull();
   });
 
-  test('3. before paying for membership, the seminar shows both prices and offers registration', async ({ page }) => {
-    await page.goto(`/seminars/${nonMemberSeminarId}`);
-    await expect(page.getByText(/Members: .*30.* · Non-members: .*55/)).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Register/ })).toBeVisible();
-    // The member-price registration is not available yet: the Seminars list tags nothing as registered.
-    await page.goto('/seminars?view=my');
-    await expect(page.locator('li', { hasText: NON_MEMBER_SEMINAR.title })).toHaveCount(0);
+  test('3. before paying for membership, a signed-in member sees only the payment page', async ({ page }) => {
+    for (const route of ['/', `/seminars/${memberSeminarId}`, '/seminars', '/about', '/dashboard/profile']) {
+      await page.goto(route);
+      await expect(page, route).toHaveURL(/\/dashboard\/membership$/);
+    }
+    await expect(page.getByRole('heading', { name: 'My Membership' })).toBeVisible();
   });
 
   test('4. membership checkout is server-created at 80 EUR and returning from Stripe alone grants nothing', async ({ page }) => {

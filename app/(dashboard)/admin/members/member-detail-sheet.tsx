@@ -148,11 +148,11 @@ export function MemberDetailSheet({
                 <EntitlementCorrectionForm currentValidUntil={selected.entitlement?.validUntil ?? null} onSuccess={closeAndRefresh} profileId={profile.id} />
               </Section>
               <Section title="Membership status">
-                {selected.entitlement?.status === 'suspended'
+                {selected.entitlement?.status === 'suspended' || selected.entitlement?.status === 'canceled'
                   ? <ReinstateForm onSuccess={closeAndRefresh} profileId={profile.id} />
                   : selected.entitlement
                     ? <SuspendForm onSuccess={closeAndRefresh} profileId={profile.id} />
-                    : <p className="text-sm text-muted-foreground">No membership on file — nothing to suspend.</p>}
+                    : <p className="text-sm text-muted-foreground">No membership on file — nothing to cancel.</p>}
               </Section>
             </div>
           </TabsContent>

@@ -7,7 +7,9 @@ import {
 
 // Email/password sign-in negatives and device trust, against the real app. Brevo's mailbox is
 // captured, so the sign-in code used below is the real one the app emailed.
-test.use({ storageState: { cookies: [], origins: [] } });
+// Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
+// keep their host-only session cookies across the membership gate's redirects.
+test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 
 test.beforeEach(async ({ page }) => {
   await resetRateLimits();
@@ -85,7 +87,7 @@ test('LIVE-AUTH-012 "Remember me" skips the emailed code on the next password si
   await page.locator('input[name="code"]').fill(extractOtp(await waitForMail(email, 'sign-in code', before)));
   await page.getByLabel(/Remember me/).check();
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect(page).toHaveURL(/127\.0\.0\.1:3100\/$/);
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
 
   // Same browser, session removed but the device-trust cookie kept: password alone signs in.
   const trusted = (await page.context().cookies()).filter((cookie) => cookie.name !== 'idoc-session');
@@ -94,7 +96,7 @@ test('LIVE-AUTH-012 "Remember me" skips the emailed code on the next password si
   const afterTrust = mailCount();
   await startSignIn(page, email);
   await submitPassword(page, STRONG_PASSWORD);
-  await expect(page).toHaveURL(/127\.0\.0\.1:3100\/$/);
+  await expect(page).toHaveURL(/\/dashboard\/membership$/);
   expect(mailCount()).toBe(afterTrust);
 
   // A different browser has no device trust and is asked for a fresh code.

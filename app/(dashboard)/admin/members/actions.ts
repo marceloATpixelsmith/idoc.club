@@ -58,27 +58,27 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
 }
 
 export async function suspendMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
-  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be suspended.'); }
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be canceled.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     const result = await suspendMembership(profileId, formData.get('reason'));
     if (result.stripeCancelError) {
-      return { attentionRequired: true, success: `Membership suspended. Warning: could not cancel the Stripe subscription (${result.stripeCancelError}) — cancel it manually.` };
+      return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — end it manually.` };
     }
-    return { success: result.stripeCancelled ? 'Membership suspended and the Stripe subscription cancelled.' : 'Membership suspended.' };
+    return { success: result.stripeCancelled ? 'Membership canceled; access continues to the end of the paid period and the Stripe subscription will not renew.' : 'Membership canceled; access continues to the end of the paid period.' };
   } catch (error) {
-    return friendlyError(error, 'The membership could not be suspended.');
+    return friendlyError(error, 'The membership could not be canceled.');
   }
 }
 
 export async function reinstateMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
-  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be reinstated.'); }
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The cancellation could not be reversed.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     await reinstateMembership(profileId, { reason: formData.get('reason'), status: formData.get('status') });
-    return { success: 'Membership reinstated.' };
+    return { success: 'Cancellation reversed.' };
   } catch (error) {
-    return friendlyError(error, 'The membership could not be reinstated.');
+    return friendlyError(error, 'The cancellation could not be reversed.');
   }
 }
 

@@ -48,9 +48,10 @@ function RenewalModeGroup({ dispatch, selection }: { dispatch: Action; selection
   </>;
 }
 
-/** Distinct from, and never triggered by, the Renewal Mode control above -- this ends access
- * immediately rather than just stopping future billing, so it gets its own explicit confirmation
- * naming exactly what happens before anything is submitted. */
+/** Distinct from, and never triggered by, the Renewal Mode control above -- this ends the
+ * membership (access continues to the end of the paid period, then sign-in stops) rather than just
+ * stopping future billing, so it gets its own explicit confirmation naming exactly what happens
+ * before anything is submitted. */
 function CancelMembershipButton() {
   const [state, submit, pending, dialog] = useFreshStepUpAction(cancelMembershipAction, {});
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -61,12 +62,13 @@ function CancelMembershipButton() {
         <DialogHeader>
           <DialogTitle>Cancel your membership?</DialogTitle>
           <DialogDescription>
-            This ends your membership immediately, removes you from the mailing list, and signs you out of every device. It does not delete your account or login -- you can sign back in later, but your membership will show as canceled.
+            You keep full access until the end of your current paid period. Your subscription, if you have one, will not renew, and you will be removed from the mailing list. After that date you will no longer be able to sign in. This does not delete your account.
           </DialogDescription>
         </DialogHeader>
         <form action={submit}>
           <CsrfField />
           {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
+          {state.success ? <p className="text-sm text-green-400" role="status">{state.success}</p> : null}
           <DialogFooter className="mt-2">
             <DialogClose asChild><Button type="button" variant="outline">Keep my membership</Button></DialogClose>
             <Button disabled={pending} type="submit">{pending ? <AuthPendingLabel text="Canceling" /> : 'Yes, cancel my membership'}</Button>
@@ -78,7 +80,8 @@ function CancelMembershipButton() {
   </>;
 }
 
-export function MembershipCard({ renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
+export function MembershipCard({ canceled, renewalDate, showRenew, statusLabel, preference, recurring, typeIcon, typeLabel }: {
+  canceled: boolean;
   preference: Preference;
   recurring: boolean;
   renewalDate: string | null;
@@ -125,7 +128,13 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
         <dd className="text-foreground">€80 / year</dd>
       </dl>
 
-      {renewalDate ? (
+      {canceled && renewalDate ? (
+        <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+          Your membership has been canceled. You keep full access until {formatDate(renewalDate)}, after which you will no longer be able to sign in.
+        </p>
+      ) : null}
+
+      {!canceled && renewalDate ? (
         <fieldset className="mt-5 space-y-2 border-t border-border pt-4">
           <legend className="text-sm font-bold uppercase tracking-wider text-gold">Renewal Mode</legend>
           <RenewalModeGroup dispatch={dispatchRenewalMode} selection={selection} />
@@ -138,7 +147,7 @@ export function MembershipCard({ renewalDate, showRenew, statusLabel, preference
         </fieldset>
       ) : null}
 
-      {renewalDate ? (
+      {!canceled && renewalDate ? (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
           <CancelMembershipButton />
         </div>

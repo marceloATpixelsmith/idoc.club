@@ -183,6 +183,8 @@ The `secure:true`-unconditional cookies (pending-signup/login/password-reset, st
 
 # 6. Authorization and account-state controls (AUTH-AUTHZ)
 
+> Update (membership access gate): the page-level part of this delta is now enforced centrally on every request -- `middleware.ts` applies `lib/membership/session-gate.ts`, so a signed-in account that has never paid, whose term and grace ended, or that is still onboarding reaches only the payment page, onboarding wizard, authentication pages, legal documents and payment-flow routes, and any other non-GET request is refused; a membership canceled by the member or an administrator works through its paid-through date and then ends the session and refuses password and Google sign-in (`app/(login)/actions.ts`, `lib/auth/google-account.ts`). The per-operation allowances in the matrix below are unchanged defense in depth. Browser evidence: `tests/security-e2e/membership-access-gate.spec.ts`; policy unit tests: `tests/session-gate.test.ts`.
+>
 > Approved-policy delta (2 September 2026): the matrix below accurately inventories the current implementation, including the `active, not entitled` allowances. Those allowances no longer satisfy the approved product contract. Docs/02 and docs/25 require never-paid and post-five-day-grace ordinary accounts to retain only the membership-payment boundary and logout; profile, account-maintenance, security, history, Portal, and member access must be denied. AUTH-AUTHZ-001/004/005 therefore require remediation and new boundary evidence before this area can be considered aligned with current policy.
 
 | ID | Behavior / invariant | Code | DB | Docs | Tests | Status |
