@@ -893,7 +893,8 @@
           "tests/authorization-matrix.integration.ts",
           "tests/authorization-privilege-boundaries.integration.ts",
           "tests/security-e2e/api-authorization-disclosure.spec.ts",
-          "tests/admin-news-blog-bulk-delete.test.ts"
+          "tests/admin-news-blog-bulk-delete.test.ts",
+          "tests/security-e2e/dashboard-membership-tabs.spec.ts"
         ],
         "rationale": ""
       },
