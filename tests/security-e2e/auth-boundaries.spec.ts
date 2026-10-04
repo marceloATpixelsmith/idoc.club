@@ -41,12 +41,8 @@ test('account-state and role boundaries are enforced on direct requests', async 
 });
 
 // A deep link to a later dashboard step must redirect (307) an onboarding-state account back to
-// /dashboard, never crash: requireAccountAccess('profile')/('member') throws AuthorizationError for
-// accountState 'onboarding' (only the 'onboarding' operation itself is allowed), and left uncaught
-// that reaches Next.js's generic error boundary (500) instead -- the same bug class fixed at
-// AUTH-AUTHZ-009 (dashboard/layout.tsx), AUTH-AUTHZ-010 (support pages), and AUTH-AUTHZ-011
-// (membership/page.tsx, found live via LIVE-AUTH-008 deep-link testing: 'not 200' alone would not
-// have caught a 500, so this asserts the redirect status explicitly).
+// /dashboard, never crash. The legacy member support URL now redirects to the public Contact route;
+// member ticket data remains guarded by requireSupportMember() in the support query functions.
 test('an onboarding-state account is redirected, not crashed, off later dashboard steps', async ({ browser }) => {
   const context = await browser.newContext({ storageState: '.security-e2e/onboarding.json' });
   for (const route of ['/dashboard/membership', '/dashboard/profile', '/dashboard/security']) {
