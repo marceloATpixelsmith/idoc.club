@@ -12,6 +12,19 @@ Organization Settings remains a Super-Admin-only function. It is the single owne
 
 > **Authentication release gate:** Authentication/account-security changes must pass the isolated integration and Chromium adversarial acceptance command documented in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). This gate excludes the planned payment/subscription security suite and does not replace independent penetration testing. The control-by-control implementation/documentation/test traceability behind this gate is [Authentication & account-security control inventory](21-authentication-security-control-inventory.md).
 
+### Current seminar registration contract — 3 October 2026
+
+The implemented registration/payment behavior is summarized with its auth and membership dependencies in [document 28](28-auth-membership-seminar-current-state.md).
+
+- A currently entitled signed-in member registers against the member's profile at the member price. A signed-in account holder who has a profile but no current membership entitlement still registers against that same profile, but at the non-member price.
+- Bank Transfer and Cash create a registration immediately and queue the branded confirmation; signed-in registrants are routed to My Seminars.
+- Anonymous Bank Transfer/Cash registration uses the dialog contact form for first name, last name, email, and international phone. Server submission requires CSRF, Turnstile, validation, and rate limiting.
+- Anonymous Online registration is Stripe-first: IDOC collects no duplicate contact form before Checkout. Stripe collects email, phone, First name, and Last name. Only a verified paid webhook may create the guest registration, after rechecking price, currency, seminar state, deadline, capacity, and duplicate email. If a paid Checkout can no longer become a valid registration, the system attempts an idempotent refund and records reconciliation evidence when needed.
+- Online profile-backed registrations are created before Checkout but are marked paid and sent their registration confirmation only after the verified paid webhook.
+- Seminar cancellation preserves the canceled seminar, cancels registrations, refunds eligible paid Stripe registrations, and expires open Checkout sessions through the resumable cancellation worker.
+- Administrator-created registrations support Bank Transfer or Cash only; existing account emails attach to the profile, and the member price applies only while that profile is currently entitled.
+
+
 From the deployed raw starter to membership launch, restricted content, seminars, news, and blog publishing
 
 | **Field**         | **Value**                                                                                                         |
