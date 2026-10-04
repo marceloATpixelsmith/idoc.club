@@ -13,6 +13,16 @@ How to keep existing recurring subscriptions while adopting the Vercel subscript
 
 Working project document. Update this document when project decisions change.
 
+## Current staging alignment — 3 October 2026
+
+For the cross-domain current-state contract, see [document 28](28-auth-membership-seminar-current-state.md). The current implementation preserves these billing invariants:
+
+- Membership access changes only from verified, idempotent Stripe webhook evidence or an approved audited administrator workflow; browser success redirects are never payment authority.
+- Enabling automatic renewal for an already-paid non-recurring member uses Stripe Checkout `setup` mode to collect payment authorization without an immediate charge. The pending recurring transition is effective on the membership's current `valid_until`, with persisted transition state and stable idempotency.
+- Disabling automatic renewal sets the existing subscription to `cancel_at_period_end`; it does not cancel the membership or shorten paid entitlement.
+- Seminar Checkout uses separate metadata classifications, registration/payment records, and webhook handlers. Seminar payments never update membership entitlement even when amounts or Stripe customers overlap.
+
+
 # 1. Guiding decision
 
 Do not cancel and recreate legitimate existing Stripe subscriptions solely because the new Next.js application uses a different database or a new canonical Product/Price configuration. The new application should attach itself to the existing Stripe objects by storing their identifiers and responding to verified Stripe events.
