@@ -39,3 +39,12 @@ test('Judge icon remains the sitewide bell in the admin members table', () => {
   assert.match(members, /judge: \{ icon: Bell/);
   assert.doesNotMatch(members, /\bGavel\b/);
 });
+
+test('active admin role icons appear in gold directly after the member name', () => {
+  const memberQueries = readFileSync('lib/membership/admin-memberships.ts', 'utf8');
+  assert.match(members, /row\.original\.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold"/);
+  assert.match(members, /row\.original\.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold"/);
+  assert.match(memberQueries, /coalesce\(app_roles\.is_administrator,false\) "isAdministrator"/);
+  assert.match(memberQueries, /coalesce\(app_roles\.is_super_admin,false\) "isSuperAdmin"/);
+  assert.match(memberQueries, /where user_id=u\.id and revoked_at is null\) app_roles/);
+});
