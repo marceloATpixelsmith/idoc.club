@@ -80,12 +80,11 @@ test('a not-yet-entitled member sees payment directly on My Membership, with no 
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
   await expect(page).toHaveURL(/\/dashboard\/membership$/);
-  // Regression: dashboard/support/page.tsx's listOwnConversations() -> requireAccountAccess('member')
-  // throws AuthorizationError for a non-entitled member; left uncaught, that crashed into Next.js's
-  // generic error boundary instead of redirecting, unlike profile/security which proactively check
-  // entitlement themselves before rendering (AUTH-AUTHZ-010).
+  // The legacy member-support URL now redirects to the Contact experience; the generic public form
+  // remains available to this non-entitled account.
   await page.goto('/dashboard/support');
-  await expect(page).toHaveURL(/\/dashboard\/membership$/);
+  await expect(page).toHaveURL(/\/contact$/);
+  await expect(page.getByRole('heading', { name: 'Send a message' })).toBeVisible();
   // Available Seminars (not My Seminars) is the default landing view at bare /seminars for every
   // visitor, entitled or not (docs/08) -- this expired member reaches their own registration
   // history via the explicit My Seminars tab (?view=my), same as any other member.
