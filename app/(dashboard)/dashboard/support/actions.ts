@@ -19,7 +19,7 @@ export async function createSupportConversation(_state: SupportFormState, formDa
     await csrf(formData);
     publicId = await createConversation({ body: formData.get('body'), category: formData.get('category'), idempotencyKey: formData.get('idempotencyKey'), subject: formData.get('subject') });
   } catch (error) { return errorState(error); }
-  redirect(`/dashboard/support/${publicId}`);
+  redirect(`/contact/${encodeURIComponent(publicId)}`);
 }
 
 export async function replyToSupportConversation(_state: SupportFormState, formData: FormData): Promise<SupportFormState> {
@@ -27,7 +27,7 @@ export async function replyToSupportConversation(_state: SupportFormState, formD
     await csrf(formData);
     await replyAsMember({ body: formData.get('body'), idempotencyKey: formData.get('idempotencyKey'), publicId: formData.get('publicId') });
   } catch (error) { return errorState(error); }
-  redirect(`/dashboard/support/${String(formData.get('publicId'))}`);
+  redirect(`/contact/${encodeURIComponent(String(formData.get('publicId')))}`);
 }
 
 /** The member's own equivalent of the admin's changeSupportConversationStatus -- typically used
@@ -42,6 +42,6 @@ export async function closeOwnConversation(_state: SupportFormState, formData: F
     await csrf(formData);
     await setOwnConversationClosed(publicId, true);
   } catch (error) { return errorState(error); }
-  revalidatePath(`/dashboard/support/${publicId}`);
+  revalidatePath(`/contact/${encodeURIComponent(publicId)}`);
   return { success: 'Conversation closed.' };
 }
