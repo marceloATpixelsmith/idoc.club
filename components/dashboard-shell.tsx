@@ -16,7 +16,6 @@ export function DashboardShell({
       <ProtectedSessionRedirect initiallySignedIn={navAccess.signedIn} />
       <Header
         entitled={navAccess.entitled}
-        memberSupport={navAccess.memberSupport}
         showAdminDashboard={navAccess.showAdminDashboard}
         signedIn={navAccess.signedIn}
       />
