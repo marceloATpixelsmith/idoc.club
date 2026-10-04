@@ -132,6 +132,18 @@ test('paid directory: returns member email for contact while excluding addresses
   assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
+test('paid directory: archived paid-through accounts are excluded from results and contact emails', async () => {
+  const archived = await entitledMemberIn('DE', [judgeRole], { firstName: 'Archived', lastName: 'Member' });
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
+  await sql`update idoc.users set account_state='deleted' where id=${archived.user.id}`;
+  const [archivedAccount] = await sql<{ deleted_at: Date | null }[]>`select deleted_at from idoc.users where id=${archived.user.id}`;
+  assert.equal(archivedAccount.deleted_at, null);
+
+  const listing = await asMember(searcher.id, () => listMemberDirectory());
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows.some((row) => row.email === archived.user.email), false);
+});
+
 test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {
   const { user: listedUser } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
