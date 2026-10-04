@@ -54,4 +54,5 @@ test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
   assert.match(members, /const HorseshoeIcon: LucideIcon = forwardRef/);
   assert.match(members, /<path d="M6 3v8a6 6 0 0 0 12 0V3" \/>/);
   assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
+  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" \/>/);
 });
