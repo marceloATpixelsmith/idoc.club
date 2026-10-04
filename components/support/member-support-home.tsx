@@ -1,12 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { AuthorizationError } from '@/lib/membership/authorization';
 import { SupportForm } from '@/components/support/support-form';
 import { CATEGORY_LABELS, listOwnConversations, STATUS_LABELS, SUPPORT_CATEGORIES } from '@/lib/support/inbox';
 import { createSupportConversation } from '@/app/(dashboard)/dashboard/support/actions';
 import { formatDateTime } from '@/lib/format';
 
 export async function MemberSupportHome() {
-  const conversations = await listOwnConversations();
+  let conversations;
+  try {
+    conversations = await listOwnConversations();
+  } catch (error) {
+    if (error instanceof AuthorizationError) redirect('/dashboard');
+    throw error;
+  }
   return <div className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-8"><header><h1 className="text-2xl font-semibold">Support</h1><p className="text-muted-foreground">Ask the IDOC team for help and follow your conversations.</p></header>
     <section className="rounded-lg border p-5"><h2 className="mb-4 text-lg font-bold uppercase tracking-wider text-gold">New conversation</h2>
       <SupportForm action={createSupportConversation} pendingLabel="Sending" submitLabel="Start conversation">
