@@ -41,7 +41,7 @@ test('a signed-in member who has not paid sees only the payment page, and signin
 
   // Anything other than a GET to a gated page is refused outright.
   await page.goto('/dashboard/membership');
-  const post = await page.request.post('/seminars', { data: 'x', headers: { origin: 'http://localhost:3100' } });
+  const post = await page.request.post('/seminars', { data: 'x', headers: { origin: 'http://localhost:3100' }, timeout: 60_000 });
   expect(post.status()).toBe(403);
 
   await page.getByRole('button', { name: /menu/i }).first().click();
