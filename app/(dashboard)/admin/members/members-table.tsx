@@ -1,8 +1,8 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import type { MouseEvent } from 'react';
-import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
+import { forwardRef, type MouseEvent } from 'react';
+import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X, type LucideIcon, type LucideProps } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -49,8 +49,14 @@ const TYPE_OPTIONS = [
 ];
 const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
+const HorseshoeIcon: LucideIcon = forwardRef<SVGSVGElement, LucideProps>((props, ref) => (
+  <svg ref={ref} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M6 3v8a6 6 0 0 0 12 0V3" />
+    <path d="M6 7h3M6 12h3M15 7h3M15 12h3" />
+  </svg>
+));
 const TYPE_DISPLAY = {
-  judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: Shield, label: 'STEWARD' },
+  judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: HorseshoeIcon, label: 'STEWARD' },
   combo: { icon: Bell, label: 'JUDGE & STEWARD' }, veterinarian: { icon: Stethoscope, label: 'VETERINARIAN' },
 };
 const STATUS_DISPLAY = {
