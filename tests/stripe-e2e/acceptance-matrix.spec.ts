@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
+import { openSeminarRegistration } from './support/seminar-registration';
 import Stripe from 'stripe';
 
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
@@ -20,7 +21,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     expect(billings).toHaveLength(2);
     const [billing, forgedBilling] = billings;
     const customer = await stripe.customers.retrieve(billing.external_customer_id);
-    expect(customer.deleted).toBe(false);
+    expect(customer.deleted ?? false).toBe(false); // Stripe omits `deleted` for live Customers
     if (!customer.deleted) {
       expect(customer.livemode).toBe(false);
       expect(customer.email).toBe(billing.email);
@@ -47,7 +48,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
 
   test('shows authoritative paid-through and renewal state after returning to the dashboard', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText(/renewal date:/i)).toBeVisible();
+    await expect(page.getByText(/renewal date/i)).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Automatic' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Manual' })).toBeVisible();
     const rows = await sql`select e.valid_until from idoc.memberships e
@@ -65,14 +66,14 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
     await expect(cards).toHaveCount(2);
     const prices = await cards.locator('p').filter({ hasText: /€|No fee/ }).allTextContents();
     expect(prices.map((price) => price.trim())).toEqual(expect.arrayContaining(['€50.00', '€75.00']));
-    const registrationButtons = page.getByRole('button', { name: /register/i });
-    await expect(registrationButtons).toHaveCount(2);
+    // Registration lives on each seminar's own page, so every card links to its detail page.
+    await expect(cards.getByRole('link')).toHaveCount(2);
   });
 
   test('rejects a member from accessing administrator refund controls', async ({ page }) => {
     const response = await page.goto('/admin/payments');
+    // Administrator routes are hidden from members: a redirect or a not-found, never the admin page.
     expect(response?.status()).toBeGreaterThanOrEqual(300);
-    expect(response?.status()).toBeLessThan(400);
     await expect(page.locator('body')).not.toContainText(/approve full refund|refund seminar registration/i);
   });
 
@@ -98,10 +99,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
 
 
 test('BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one provider Checkout Session', async ({ page }) => {
-  await page.goto('/seminars?view=available');
-  const cards = page.locator('section[aria-labelledby="available-seminars-heading"] li');
-  const firstRegister = cards.filter({ hasText: 'Stripe E2E Seminar B' }).getByRole('button', { name: /register/i });
-  await expect(firstRegister).toBeVisible();
+  const firstRegister = await openSeminarRegistration(page, 'Stripe E2E Seminar B');
   await firstRegister.dblclick();
   await page.waitForURL(/checkout\.stripe\.com/);
   expect(page.url()).toContain('checkout.stripe.com');
@@ -109,7 +107,11 @@ test('BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one
   expect(rows).toHaveLength(1);
   expect(rows[0].checkout_status).toBe('open');
   expect([5000, 7500]).toContain(rows[0].expected_amount_cents);
-  const providerSessions = await stripe.checkout.sessions.list({ limit: 100 });
+  // Registration ids restart in every disposable database while the Stripe test account is shared
+  // across runs, so only count Sessions that belong to this run's fixture Customer.
+  const [memberBilling] = await sql`select b.external_customer_id from idoc.billing_accounts b
+    join idoc.profiles p on p.id=b.profile_id join idoc.users u on u.id=p.user_id where u.email=${memberEmail}`;
+  const providerSessions = await stripe.checkout.sessions.list({ limit: 100, customer: memberBilling.external_customer_id });
   const matchingProviderSessions = providerSessions.data.filter((session) =>
     session.livemode === false && session.metadata?.kind === 'seminar_registration' &&
     session.metadata?.registrationId === String(rows[0].id));
@@ -122,19 +124,22 @@ test('BROWSER-EXPIRED-SESSION rejects protected reads and mutations without leak
     where u.email=${memberEmail} order by a.authenticated_at desc limit 1`;
   expect(sessionRows).toHaveLength(1);
   await sql`update idoc.auth_sessions set absolute_expires_at=now()-interval '1 second' where session_id=${sessionRows[0].session_id}`;
-  const response = await page.goto('/admin/reconciliation');
-  expect(response?.status()).toBeGreaterThanOrEqual(300);
-  await expect(page.locator('body')).not.toContainText(/reconciliation finding|stripe customer|payment intent/i);
-  const mutation = await page.request.post('/api/stripe/checkout', { data: { mode: 'one_time' } });
-  expect(mutation.status()).toBeGreaterThanOrEqual(400);
-  expect(await mutation.text()).not.toMatch(/cus_|pi_|cs_|registration/i);
-  await sql`update idoc.auth_sessions set absolute_expires_at=${sessionRows[0].absolute_expires_at} where session_id=${sessionRows[0].session_id}`;
+  try {
+    const response = await page.goto('/admin/reconciliation');
+    // goto resolves to the final response, so an expired session shows up as a sign-in redirect.
+    expect((response?.status() ?? 0) >= 300 || new URL(page.url()).pathname.startsWith('/sign-in')).toBe(true);
+    await expect(page.locator('body')).not.toContainText(/reconciliation finding|stripe customer|payment intent/i);
+    const mutation = await page.request.post('/api/stripe/checkout', { data: { mode: 'one_time' } });
+    expect(mutation.status()).toBeGreaterThanOrEqual(400);
+    expect(await mutation.text()).not.toMatch(/cus_|pi_|cs_|registration/i);
+  } finally {
+    await sql`update idoc.auth_sessions set absolute_expires_at=${sessionRows[0].absolute_expires_at} where session_id=${sessionRows[0].session_id}`;
+  }
 });
 
 test('BROWSER-CSRF-FAILURE rejects a seminar mutation with missing CSRF and creates no database or Stripe object', async ({ page }) => {
-  await page.goto('/seminars?view=available');
+  const button = await openSeminarRegistration(page, 'Stripe E2E Seminar A');
   const before = await sql`select count(*)::int count from idoc.seminar_registrations`;
-  const button = page.locator('section[aria-labelledby="available-seminars-heading"] li').first().getByRole('button', { name: /register/i });
   await button.evaluate((element) => element.closest('form')?.querySelector('input[name="csrf_token"]')?.remove());
   await button.click();
   await expect(page.getByRole('alert')).toContainText(/security check failed/i);
@@ -152,7 +157,7 @@ test('BROWSER-UNAUTHORIZED-MEMBER denies cross-member billing, seminar, payment,
     const body = await page.locator('body').innerText();
     expect(body).not.toContain(other.external_customer_id);
     expect(body).not.toMatch(/pi_|internal error|reconciliation finding/i);
-    if (path.startsWith('/admin/')) expect(response?.status()).toBeGreaterThanOrEqual(300);
+    if (path.startsWith('/admin/')) expect((response?.status() ?? 0) >= 300 || new URL(page.url()).pathname.startsWith('/sign-in')).toBe(true);
   }
 });
 

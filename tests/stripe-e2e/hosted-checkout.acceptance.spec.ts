@@ -73,8 +73,9 @@ async function completeHostedCheckout(page: import('@playwright/test').Page, aut
   expect(checkoutSessionId).toBeTruthy();
   await page.getByLabel(/card number/i).fill('4242424242424242');
   await page.getByLabel(/expiration/i).fill('1230');
-  await page.getByLabel(/security code|cvc/i).fill('123');
-  await page.getByRole('button', { name: /pay|subscribe|complete/i }).click();
+  await page.getByRole('textbox', { name: /cvc|security code/i }).fill('123');
+  await page.getByRole('textbox', { name: /cardholder name/i }).fill('Stripe E2E');
+  await page.getByTestId('hosted-payment-submit-button').click();
   await page.waitForURL(/dashboard\/membership|dashboard/, { timeout: 60_000 });
   return checkoutSessionId as string;
 }

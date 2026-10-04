@@ -64,7 +64,8 @@ never touches staging or production data. Never print or commit any value named 
 
 **Network allow-list** (Stripe CLI and hosted Checkout): `api.stripe.com`, `stripecli-ws-nw.stripe.com`,
 `checkout.stripe.com`, `js.stripe.com` and the other `*.stripe.com`, `*.stripe.network`, `*.stripecdn.com`
-hosts Checkout loads. Without them the CLI hangs at "Getting ready..." and Chromium fails with
+hosts Checkout loads, plus `*.hcaptcha.com` (card payments on hosted Checkout load hCaptcha; with it blocked
+the Pay button stays on "Processing"). Without them the CLI hangs at "Getting ready..." and Chromium fails with
 `net::ERR_TUNNEL_CONNECTION_FAILED` when it redirects to `checkout.stripe.com`.
 
 1. **Runtime.** Node 24.9 (Node 22 lacks Argon2id), `pnpm install --frozen-lockfile`, and a running local
@@ -94,19 +95,24 @@ hosts Checkout loads. Without them the CLI hangs at "Getting ready..." and Chrom
 7. **Proxy-aware Node.** Both the app and the test runner call Stripe from Node, which ignores
    `HTTPS_PROXY` by default. Export `NODE_USE_ENV_PROXY=1` and point `NODE_EXTRA_CA_CERTS` at a bundle holding the
    sandbox proxy CA plus the throwaway CA. Start the app with that same environment.
-8. **Start the app yourself.** Do not set `STRIPE_E2E_START_COMMAND`: `playwright.stripe.config.ts` then forces
-   `POSTGRES_URL` to equal `TEST_DATABASE_URL` for the launched app and the database guard refuses to start.
-   Start `next dev -p 3000` with a distinct `POSTGRES_URL` and the real `TEST_DATABASE_URL` instead.
-9. **Run.** With `NODE_OPTIONS=--conditions=react-server` (the seminar spec imports a `server-only` module),
-   `PLAYWRIGHT_CHROMIUM_EXECUTABLE` pointing at the installed Chromium when its build differs from the one
-   Playwright expects, and `--trace off` (the hosted Checkout spec starts its own tracing), run
-   `pnpm test:stripe-e2e --trace off`. Use a unique `STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<run>@example.test`
-   and `STRIPE_E2E_EVIDENCE_DIR=.stripe-e2e/evidence/<run>`; `.stripe-e2e/` is not gitignored, so do not commit it.
+8. **App launch.** Either start `next dev -p 3000` yourself (with the environment above) or set
+   `STRIPE_E2E_START_COMMAND`; the configuration passes only `TEST_DATABASE_URL` to a launched app, so keep
+   `POSTGRES_URL` distinct from it (the database guard refuses identical values).
+9. **Run.** `pnpm test:stripe-e2e` needs no extra flags: the script already passes
+   `--conditions=react-server` (the seminar spec imports a `server-only` module) and the configuration keeps
+   Playwright's automatic tracing off because the hosted Checkout spec records its own. Set
+   `PLAYWRIGHT_CHROMIUM_EXECUTABLE` when the installed Chromium build differs from the one Playwright expects.
+   Use a unique `STRIPE_E2E_MEMBER_EMAIL=stripe-e2e-<run>@example.test` and
+   `STRIPE_E2E_EVIDENCE_DIR=.stripe-e2e/evidence/<run>`; `.stripe-e2e/` is not gitignored, so do not commit it.
+   Global setup starts the profile id sequence at a per-run offset because the application derives Stripe
+   idempotency keys from profile ids and Stripe keeps them for 24 hours; without it a second run inside 24
+   hours is rejected with `StripeIdempotencyError`.
 10. **Clean up.** Stop the app, TLS proxy and `stripe listen`; drop both databases and the role; delete the
     throwaway certificates. Do not leave test-mode objects that identify a person.
 
-Known suite assumptions that no longer match the application are tracked in the pull request that added this
-section; fix them in the specs rather than weakening the application.
+Hosted Checkout requires a cardholder name and uses `data-testid="hosted-payment-submit-button"` for the submit
+button; seminar registration starts on the seminar's own page (`tests/stripe-e2e/support/seminar-registration.ts`).
+When the application's UI changes, update the specs rather than weakening the application.
 
 ## Gaps deliberately not hidden
 

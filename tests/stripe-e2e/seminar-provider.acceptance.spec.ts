@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import Stripe from 'stripe';
+import { openSeminarRegistration } from './support/seminar-registration';
 import { withTestMembershipBoundary } from '../../lib/membership/test-boundary';
 import { refundSeminarRegistration } from '../../lib/payments/refunds';
 
@@ -59,8 +60,9 @@ function completedEvent(session: Stripe.Checkout.Session, overrides: Partial<Str
 async function fillStripeCard(page: import('@playwright/test').Page) {
   await page.getByLabel(/card number/i).fill('4242424242424242');
   await page.getByLabel(/expiration/i).fill('1230');
-  await page.getByLabel(/security code|cvc/i).fill('123');
-  await page.getByRole('button', { name: /pay|complete/i }).click();
+  await page.getByRole('textbox', { name: /cvc|security code/i }).fill('123');
+  await page.getByRole('textbox', { name: /cardholder name/i }).fill('Stripe E2E');
+  await page.getByTestId('hosted-payment-submit-button').click();
   await page.waitForURL(/seminars/, { timeout: 60_000 });
 }
 
@@ -70,9 +72,7 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
   let paidRegistration: Registration;
 
   test('SEMINAR-CHECKOUT-PROVIDER retrieves the exact server-created Session and ignores client-controlled payment fields', async ({ page }) => {
-    await page.goto('/seminars?view=available');
-    const card = page.locator('section[aria-labelledby="available-seminars-heading"] li').filter({ hasText: 'Stripe E2E Seminar A' });
-    const button = card.getByRole('button', { name: /register/i });
+    const button = await openSeminarRegistration(page, 'Stripe E2E Seminar A');
     await button.evaluate((element) => {
       const form = element.closest('form');
       if (!form) throw new Error('Seminar registration form missing.');
