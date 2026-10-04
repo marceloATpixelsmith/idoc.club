@@ -10,8 +10,8 @@ import { lockLatestMembership } from './locking';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 
-const REINSTATABLE_STATUSES = ['active', 'grace', 'complimentary', 'canceled'] as const;
-// Deliberately excludes 'suspended': all suspension goes through suspendMembership below, which
+const REINSTATABLE_STATUSES = ['active', 'grace', 'complimentary'] as const;
+// Deliberately excludes 'suspended' (legacy): cancellation goes through suspendMembership below, which
 // has a Stripe-cancellation safety net this generic correction tool doesn't. Letting 'suspended'
 // through here would split the audit taxonomy across two action names for the same transition.
 const CORRECTABLE_STATUSES = ['active', 'grace', 'expired', 'canceled', 'complimentary', 'review_required'] as const;
@@ -25,13 +25,16 @@ function isRealCalendarDate(value: string): boolean {
 }
 
 /**
- * Suspends a membership (docs/08 item 14): denies access regardless of paid-through date, freezes
- * valid_until (a reinstated member keeps whatever remaining term they had), and best-effort
- * cancels an open Stripe subscription immediately so a suspended member is never billed. The DB
- * suspension commits first and always succeeds independent of Stripe's availability — access
- * control must not depend on a network call. If already suspended with an open subscription still
- * on file (e.g. a prior Stripe cancel failed or never fired), re-running this retries the Stripe
- * cancellation without writing a duplicate audit entry.
+ * Administrator cancellation of a membership (docs/08 item 14; the action keeps its original name).
+ * Like a member's own cancellation it works through the end of the current paid cycle: the
+ * membership becomes 'canceled' with valid_until untouched, the member keeps access until that
+ * date, any open Stripe subscription is set to end at period end rather than renew, and the audit
+ * trail records the required reason. After the paid-through date the relationship is over and the
+ * member can no longer sign in (lib/membership/session-gate.ts). To cut a compromised or abusive
+ * account off immediately, use suspendUserAccount (account-suspension.ts) instead. The DB change
+ * commits first and always succeeds independent of Stripe's availability -- access control must not
+ * depend on a network call. If already canceled with an open subscription still on file (e.g. a
+ * prior Stripe call failed), re-running this retries the Stripe call without a duplicate audit entry.
  */
 export async function suspendMembership(profileId: number, untrustedReason: unknown, testStripeClient?: CancellationStripeClient) {
   const reason = reasonSchema.parse(untrustedReason);
@@ -40,12 +43,12 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
 
   const { membership, wasAlreadySuspended } = await db.transaction(async (tx) => {
     const current = await lockLatestMembership(tx, profileId);
-    if (!current) throw new Error('Member has no membership on file to suspend.');
-    if (current.status === 'suspended') return { membership: current, wasAlreadySuspended: true };
-    const [updated] = await tx.update(memberships).set({ status: 'suspended', updatedAt: new Date() })
+    if (!current) throw new Error('Member has no membership on file to cancel.');
+    if (current.status === 'canceled' || current.status === 'suspended') return { membership: current, wasAlreadySuspended: true };
+    const [updated] = await tx.update(memberships).set({ status: 'canceled', updatedAt: new Date() })
       .where(eq(memberships.id, current.id)).returning();
     await tx.insert(auditLog).values({
-      action: 'admin.membership.suspended', actorId: actor.id,
+      action: 'admin.membership.canceled', actorId: actor.id,
       afterJson: { membership: updated }, beforeJson: { membership: current },
       entityId: String(profileId), entityType: 'profile', reason,
     });
@@ -54,7 +57,7 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
 
   const stripeResult = await cancelOpenSubscriptionIfAny(profileId, testStripeClient);
   if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError) {
-    throw new Error('This membership is already suspended.');
+    throw new Error('This membership is already canceled.');
   }
   return { membership, ...stripeResult };
 }
@@ -64,7 +67,7 @@ const reinstateSchema = z.object({
   status: z.enum(REINSTATABLE_STATUSES),
 });
 
-/** Restores access for a suspended membership. valid_until is untouched — restores whatever remaining term was frozen at suspension time. */
+/** Reverses a cancellation (or a legacy suspension). valid_until is untouched, so the member keeps whatever term was paid for. */
 export async function reinstateMembership(profileId: number, untrustedInput: unknown) {
   const input = reinstateSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
@@ -73,7 +76,7 @@ export async function reinstateMembership(profileId: number, untrustedInput: unk
   return db.transaction(async (tx) => {
     const current = await lockLatestMembership(tx, profileId);
     if (!current) throw new Error('Member has no membership on file to reinstate.');
-    if (current.status !== 'suspended') throw new Error('This membership is not currently suspended.');
+    if (current.status !== 'canceled' && current.status !== 'suspended') throw new Error('This membership is not currently canceled.');
     const [updated] = await tx.update(memberships).set({ status: input.status, updatedAt: new Date() })
       .where(eq(memberships.id, current.id)).returning();
     await tx.insert(auditLog).values({

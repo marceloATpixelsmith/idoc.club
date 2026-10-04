@@ -80,17 +80,12 @@ test('a not-yet-entitled member sees payment directly on My Membership, with no 
   // Dashboard routes remain gated; public website pages remain public and do not become dashboard routes.
   await page.goto('/dashboard/profile');
   await expect(page).toHaveURL(/\/dashboard\/membership$/);
-  // The legacy member-support URL now redirects to the Contact experience; the generic public form
-  // remains available to this non-entitled account.
-  await page.goto('/dashboard/support');
-  await expect(page).toHaveURL(/\/contact$/);
-  await expect(page.getByRole('heading', { name: 'Send a message' })).toBeVisible();
-  // Available Seminars (not My Seminars) is the default landing view at bare /seminars for every
-  // visitor, entitled or not (docs/08) -- this expired member reaches their own registration
-  // history via the explicit My Seminars tab (?view=my), same as any other member.
-  await page.goto('/seminars?view=my');
-  await expect(page).toHaveURL(/\/seminars\?view=my$/);
-  await expect(page.getByRole('heading', { name: 'My seminar registrations' })).toBeVisible();
+  // A signed-in member who has not paid sees only the payment page (docs/02): every other page,
+  // public ones included, sends them back here. They sign out to see the public site.
+  for (const route of ['/dashboard/support', '/seminars', '/seminars?view=my', '/', '/about']) {
+    await page.goto(route);
+    await expect(page, route).toHaveURL(/\/dashboard\/membership$/);
+  }
   await context.close();
 });
 

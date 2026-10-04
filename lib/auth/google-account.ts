@@ -1,3 +1,4 @@
+import { loadSessionGate } from '@/lib/membership/session-gate-loader';
 import 'server-only';
 
 import { randomBytes } from 'node:crypto';
@@ -114,6 +115,8 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
   if (!user || !user.emailVerifiedAt || !['active', 'onboarding'].includes(user.accountState)) {
     throw new GoogleAccountNotEligibleError();
   }
+  // A canceled membership past its paid-through date can no longer sign in, by any method.
+  if ((await loadSessionGate(user.id)).gate === 'ended') throw new GoogleAccountNotEligibleError();
 
   // An account that hasn't finished onboarding still needs the wizard, not wherever the caller asked
   // to land -- but a returnTo that's already dashboard-scoped (e.g. a signup's own

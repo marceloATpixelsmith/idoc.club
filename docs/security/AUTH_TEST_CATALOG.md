@@ -186,12 +186,12 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
 
-## LIVE-AUTH-007 — Unpaid/expired member access is restricted to the intended payment/membership flow
+## LIVE-AUTH-007 — Unpaid/expired member sees only the payment page while signed in
 
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001
-- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`
+- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`, `tests/security-e2e/membership-access-gate.spec.ts`, `tests/session-gate.test.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -199,16 +199,18 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Authenticate as an unpaid/expired disposable member.
-2. Confirm the first authenticated screen is the intended payment/membership state.
-3. Directly request ordinary member dashboard routes and APIs.
-4. After test payment/state transition, verify access updates.
+1. Authenticate as an unpaid or lapsed disposable member (completed onboarding, no current membership).
+2. Confirm the first screen after sign-in is the membership-payment page.
+3. Directly request the homepage, a public page (for example /seminars), ordinary member dashboard routes, /admin, and a non-GET request to a gated page.
+4. Confirm /terms and /privacy remain reachable and that signing out restores the public site.
+5. After a test payment and verified webhook, verify access updates.
 
 ### PASS
-- Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation to any entitlement-gated member route/API produces a clean redirect or safe denial -- never an uncaught error/generic error boundary, which fails to grant access but also fails to redirect the member anywhere useful.
+- While signed in, an unpaid or lapsed member can reach only the payment page, the authentication pages, the legal documents and the routes the payment flow needs; every other page redirects to the payment page and any other non-GET request is refused.
+- The payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation never surfaces an uncaught error or generic error boundary.
 
 ### FAIL
-- Protected member content is accessible before entitlement, the user is trapped behind an unnecessary/incorrect intermediate state, OR direct navigation to an entitlement-gated route surfaces an uncaught error/generic error boundary instead of a clean redirect.
+- A signed-in unpaid or lapsed member can see the public site, member dashboard content, or register for a seminar, is trapped on an incorrect page, or a gated route surfaces an uncaught error instead of a clean redirect.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
@@ -1068,6 +1070,41 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### FAIL
 - Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-037 — A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002
+- **CI coverage:** mapped — `tests/session-gate.test.ts`, `tests/membership-cancellation.integration.ts`, `tests/status-actions.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- Use a disposable, paid-up member. Staging shares the production database, so cleanup is required.
+- Moving the paid-through date requires administrator entitlement correction; record the original value first.
+
+### Steps
+1. Sign in as the paid-up disposable member and cancel the membership from My Membership, confirming the dialog.
+2. Confirm the member stays signed in with full access and My Membership shows when access ends.
+3. Have an administrator move the paid-through date to yesterday (entitlement correction, with a reason).
+4. Reload any page in the member's session and confirm it is signed out, then attempt password sign-in and, if linked, Google sign-in.
+5. Have an administrator reverse the cancellation and confirm sign-in works again.
+
+### PASS
+- Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.
+- After the paid-through date the existing session ends and both sign-in methods are refused, with the canceled-membership message shown only after a correct password.
+- An administrator's reversal restores sign-in.
+
+### FAIL
+- Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.

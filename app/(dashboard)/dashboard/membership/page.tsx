@@ -127,6 +127,7 @@ export default async function DashboardMembershipPage() {
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <MembershipCard
+          canceled={entitlement?.status === 'canceled'}
           preference={renewalPreference}
           recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
           renewalDate={entitlement?.validUntil ?? null}

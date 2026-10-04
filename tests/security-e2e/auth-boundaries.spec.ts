@@ -48,10 +48,12 @@ test('an onboarding-state account is redirected, not crashed, off later dashboar
   for (const route of ['/dashboard/membership', '/dashboard/profile', '/dashboard/security']) {
     const response = await context.request.get(route, { maxRedirects: 0 });
     expect(response.status(), route).toBe(307);
-    expect(response.headers()['location'], route).toBe('/dashboard');
+    // Absolute or relative depending on whether the membership gate (middleware) or the page redirected.
+    expect(new URL(response.headers()['location'], 'http://localhost:3100').pathname, route).toBe('/dashboard');
   }
+  // The legacy support URL is a gated page like any other: an onboarding account is held to the wizard.
   const legacySupport = await context.request.get('/dashboard/support', { maxRedirects: 0 });
   expect(legacySupport.status()).toBe(307);
-  expect(legacySupport.headers()['location']).toBe('/contact');
+  expect(new URL(legacySupport.headers()['location'], 'http://localhost:3100').pathname).toBe('/dashboard');
   await context.close();
 });

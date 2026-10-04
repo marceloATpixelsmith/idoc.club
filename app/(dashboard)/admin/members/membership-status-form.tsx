@@ -16,19 +16,20 @@ export function SuspendForm({ onSuccess, profileId }: { onSuccess?: () => void; 
   return <form action={action} className="space-y-4">
     <CsrfField />
     <input type="hidden" name="profileId" value={profileId} />
+    <p className="text-sm text-muted-foreground">The member keeps access until the end of their current paid period, billing stops renewing, and after that date they can no longer sign in. To cut an account off immediately, use Account authentication.</p>
     <div className="space-y-1.5">
       <Label htmlFor="suspend-membership-reason">Reason (required)</Label>
       <Textarea id="suspend-membership-reason" name="reason" required rows={2} />
     </div>
-    <Button disabled={pending} type="submit" variant="destructive">Suspend membership</Button>
+    <Button disabled={pending} type="submit" variant="destructive">Cancel membership</Button>
     {state.error && <p className="text-sm text-red-400">{state.error}</p>}
     {state.success && <p className={state.attentionRequired ? 'text-sm text-amber-600' : 'text-sm text-green-400'}>{state.success}</p>}
   </form>;
 }
 
-const REINSTATE_STATUSES = ['active', 'grace', 'complimentary', 'canceled'] as const;
+const REINSTATE_STATUSES = ['active', 'grace', 'complimentary'] as const;
 const REINSTATE_LABELS: Record<string, string> = {
-  active: 'Active', canceled: 'Canceled', complimentary: 'Complimentary', grace: 'Payment grace period',
+  active: 'Active', complimentary: 'Complimentary', grace: 'Payment grace period',
 };
 
 export function ReinstateForm({ onSuccess, profileId }: { onSuccess?: () => void; profileId: number }) {
@@ -47,7 +48,7 @@ export function ReinstateForm({ onSuccess, profileId }: { onSuccess?: () => void
       <Label htmlFor="reinstate-membership-reason">Reason (required)</Label>
       <Textarea id="reinstate-membership-reason" name="reason" required rows={2} />
     </div>
-    <Button disabled={pending} type="submit">Reinstate membership</Button>
+    <Button disabled={pending} type="submit">Reverse cancellation</Button>
     {state.error && <p className="text-sm text-red-400">{state.error}</p>}
     {state.success && <p className="text-sm text-green-400">{state.success}</p>}
   </form>;

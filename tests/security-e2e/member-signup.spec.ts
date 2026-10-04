@@ -9,7 +9,9 @@ import {
 // Email/password member signup, driven through the real UI against the real Next.js server and
 // real Postgres. Turnstile, Brevo and HaveIBeenPwned are the only stand-ins (see
 // tests/security-e2e/support/outbound-preload.cjs): the OTP below is the real code the app emailed.
-test.use({ storageState: { cookies: [], origins: [] } });
+// Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
+// keep their host-only session cookies across the membership gate's redirects.
+test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origins: [] } });
 
 test.beforeEach(async ({ page }) => {
   await resetRateLimits();

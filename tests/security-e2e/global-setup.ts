@@ -105,22 +105,23 @@ export default async function globalSetup() {
       .setIssuedAt()
       .setExpirationTime(Math.floor(expires.getTime() / 1000))
       .sign(new TextEncoder().encode(AUTH_SECRET));
-    const storageState = (domain: string) => JSON.stringify({
-      cookies: [
-        {
-          name: 'idoc-session',
-          value: token,
-          domain,
-          path: '/',
-          expires: Math.floor(expires.getTime() / 1000),
-          httpOnly: true,
-          secure: false,
-          sameSite: 'Lax',
-        },
-      ],
+    // The same session for both hostnames the app answers on: the browser reaches it as 127.0.0.1,
+    // but Next's dev server rewrites middleware redirects onto `localhost`, and a host-only cookie
+    // would not follow the browser there.
+    const storageState = (domains: string[]) => JSON.stringify({
+      cookies: domains.map((domain) => ({
+        name: 'idoc-session',
+        value: token,
+        domain,
+        path: '/',
+        expires: Math.floor(expires.getTime() / 1000),
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      })),
       origins: [],
     });
-    await writeFile(`.security-e2e/${name}.json`, storageState('127.0.0.1'));
+    await writeFile(`.security-e2e/${name}.json`, storageState(['127.0.0.1', 'localhost']));
   }
   await sql.end();
 

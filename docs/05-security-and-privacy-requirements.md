@@ -53,7 +53,7 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 - A normal member can read only their own private profile, membership, professional roles and approved payment summary.
 
-- An authenticated account without current paid/grace entitlement cannot read even its ordinary member dashboard, profile, security, or payment-history surfaces. It receives only the server-authorized membership-payment gate and logout. Direct URLs, Server Actions, Route Handlers, and data-access calls must enforce the same denial.
+- An authenticated account without current paid/grace entitlement cannot read even its ordinary member dashboard, profile, security, or payment-history surfaces. It receives only the server-authorized membership-payment gate and logout. Direct URLs, Server Actions, Route Handlers, and data-access calls must enforce the same denial. The page-level rule is enforced centrally for every request in `middleware.ts` (policy in `lib/membership/session-gate.ts`): such a session reaches only the payment page, the onboarding wizard, the authentication pages, the legal documents and the routes the payment flow needs, and any other non-GET request is refused. A membership canceled by the member or an administrator keeps working through its paid-through date; after that date the session is ended and password and Google sign-in are refused (the message is shown only after the password is verified, so it reveals nothing to someone without the credential).
 
 - A normal member cannot write membership status, validity dates, payment records, administrator flags, or audit records. Members may update approved signup and professional fields only through the server-side validation/history workflow.
 
@@ -73,7 +73,7 @@ Release 1 data-access functions resolve the actor from the server session, load 
 
 - Use least privilege: membership administrators should not automatically receive deployment, database or Stripe secret access.
 
-- Every administrator action requires an audit entry. Sensitive actions such as suspending membership, changing paid-through dates, granting complimentary membership, deciding a refund consequence, merging identities or changing admin roles also require an explicit reason and before/after values where applicable.
+- Every administrator action requires an audit entry. Sensitive actions such as canceling membership, changing paid-through dates, granting complimentary membership, deciding a refund consequence, merging identities or changing admin roles also require an explicit reason and before/after values where applicable.
 
 - Do not expose migration/import tooling to normal authenticated users.
 
