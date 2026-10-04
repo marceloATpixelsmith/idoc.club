@@ -257,17 +257,15 @@ export function Header({
                   </li>
                 )
               )}
-              {(!signedIn || !entitled) && (
-                <li>
-                  <Link
-                    href={contactLink.href}
-                    onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                  >
-                    {contactLink.label}
-                  </Link>
-                </li>
-              )}
+              <li>
+                <Link
+                  href={contactLink.href}
+                  onClick={() => setOpen(false)}
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  {contactLink.label}
+                </Link>
+              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"
