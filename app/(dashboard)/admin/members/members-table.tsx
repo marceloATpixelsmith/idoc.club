@@ -1,8 +1,8 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import type { MouseEvent } from 'react';
-import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
+import { forwardRef, type MouseEvent } from 'react';
+import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X, type LucideIcon, type LucideProps } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -49,8 +49,14 @@ const TYPE_OPTIONS = [
 ];
 const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
+const HorseshoeIcon: LucideIcon = forwardRef<SVGSVGElement, LucideProps>((props, ref) => (
+  <svg ref={ref} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M6 3v8a6 6 0 0 0 12 0V3" />
+    <path d="M6 7h3M6 12h3M15 7h3M15 12h3" />
+  </svg>
+));
 const TYPE_DISPLAY = {
-  judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: Shield, label: 'STEWARD' },
+  judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: HorseshoeIcon, label: 'STEWARD' },
   combo: { icon: Bell, label: 'JUDGE & STEWARD' }, veterinarian: { icon: Stethoscope, label: 'VETERINARIAN' },
 };
 const STATUS_DISPLAY = {
@@ -93,9 +99,9 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
 
   const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <span className="font-medium uppercase">{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</span> : <span className="text-muted-foreground">Profile not completed</span> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => <span className="inline-flex items-center gap-2 font-medium uppercase">{row.original.profileId ? <>{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</> : <span className="text-muted-foreground">Profile not completed</span>}{row.original.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" role="img" />}{row.original.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" role="img" />}</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
-    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <Shield aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
+    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
     { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—' },
     { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? countryNameForCode(row.original.country) : '—' },

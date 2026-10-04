@@ -176,7 +176,7 @@ export function DataTableFacetedFilter<TData, TValue>({
       </PopoverTrigger>
       <PopoverContent
         data-idoc-table-panel
-        className="w-50 p-0"
+        className="w-max max-w-[calc(100vw-2rem)] p-0"
         align="start"
         onPointerDownOutside={onPointerDownOutside}
       >
@@ -205,7 +205,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                       <Check />
                     </div>
                     {option.icon && <option.icon />}
-                    <span className="truncate">{option.label}</span>
+                    <span className="whitespace-normal break-words">{option.label}</span>
                     {option.count && (
                       <span className="ml-auto font-mono text-xs">
                         {option.count}

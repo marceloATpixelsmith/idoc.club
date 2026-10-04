@@ -209,3 +209,9 @@ test('page navigation (page count + first/prev/next/last buttons) only renders o
   // "Rows per page" must appear before the conditional wrapper in source, i.e. outside it.
   assert.ok(pagination.indexOf('Rows per page') < pagination.indexOf('{hasMultiplePages && ('));
 });
+
+test('facet filter popovers expand to fit their longest option instead of truncating labels', () => {
+  assert.match(facetedFilter, /className="w-max max-w-\[calc\(100vw-2rem\)\] p-0"/);
+  assert.match(facetedFilter, /<span className="whitespace-normal break-words">\{option\.label\}<\/span>/);
+  assert.doesNotMatch(facetedFilter, /className="truncate">\{option\.label\}/);
+});
