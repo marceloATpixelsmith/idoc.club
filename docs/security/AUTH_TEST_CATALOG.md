@@ -494,7 +494,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004
-- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
+- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
