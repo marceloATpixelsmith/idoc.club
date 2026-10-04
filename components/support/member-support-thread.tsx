@@ -7,8 +7,7 @@ import { closeOwnConversation, replyToSupportConversation } from '@/app/(dashboa
 import { formatDateTime } from '@/lib/format';
 import { BackLink } from '@/components/ui/back-link';
 
-export async function MemberSupportThread({ params }: { params: Promise<{ publicId: string }> }) {
-  const { publicId } = await params;
+export async function MemberSupportThread({ publicId }: { publicId: string }) {
   let conversation;
   try {
     conversation = await getOwnConversation(publicId);
