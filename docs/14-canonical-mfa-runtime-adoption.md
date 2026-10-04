@@ -6,6 +6,11 @@ This document records IDOC's first adoption slice of the merged `pixelsmith-auth
 
 The initial slice added reusable trusted-server MFA primitives and migration `0020_durable_mfa_persistence` added `PostgresMfaStore`. The live integration now enforces authenticator-app enrollment, routine login TOTP, and authenticator-app verification during password reset and recovery-authorized authenticator replacement for Administrator and Super Admin grants. Ordinary members retain emailed password-reset OTP. Fresh sensitive-action step-up is now integrated for privileged password and email changes, privileged role grant/revocation, and Google identity security-setting mutations. Factor management surfaces remain separate follow-up work; ordinary-member returning-login trust is implemented separately from factor-bound TOTP devices.
 
+### Current staging alignment — 3 October 2026
+
+The implemented session and login-trust boundaries are summarized in [document 28](28-auth-membership-seminar-current-state.md). Ordinary-member login-device trust is a separate 14-day, revocable credential and is not a remembered privileged TOTP device. Administrator and Super Admin login still requires TOTP on every login. Member sessions use a 7-day idle / 14-day absolute lifetime; privileged sessions use a 30-minute idle / 12-hour absolute lifetime.
+
+
 ## Canonical baseline
 
 The adopted runtime preserves the merged reference behavior for:
@@ -52,7 +57,7 @@ The login/enrollment/reset slice does not make the broader MFA program release-c
 
 ## Password-creation guidance
 
-IDOC password creation requires at least 12 characters plus at least one uppercase letter, one lowercase letter, one number, and one special character. The member-facing guidance is progressive: each unmet requirement is shown and disappears immediately when satisfied. The 128-character ceiling remains enforced server-side but is not advertised as normal guidance; it is surfaced only when the entered password exceeds that maximum. Passwords are preserved exactly as entered and are not trimmed, normalized, or silently truncated.
+IDOC password creation requires at least 10 characters plus at least one uppercase letter, one lowercase letter, one number, and one special character. The member-facing guidance is progressive: each unmet requirement is shown and disappears immediately when satisfied. The 128-character ceiling remains enforced server-side but is not advertised as normal guidance; it is surfaced only when the entered password exceeds that maximum. Passwords are preserved exactly as entered and are not trimmed, normalized, or silently truncated.
 
 ## Payment isolation
 
