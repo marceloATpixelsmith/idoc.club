@@ -28,24 +28,22 @@ export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
 // calling string methods on a value that might actually be an array.
 type RawFilterValue = string | string[] | undefined;
 export type MemberDirectoryFilters = {
-  country?: RawFilterValue; federation?: RawFilterValue; membershipType?: RawFilterValue;
+  federation?: RawFilterValue; membershipType?: RawFilterValue;
   page?: number | RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
 };
 
 export type DirectoryRoleDetail = { officialStatuses: string[] | null; roleType: string };
 
-/** Deliberately excludes email, address, exact coordinates, and every internal/sequential
- * identifier (profile id, user id) -- see docs/05's paid-directory privacy requirement. Only the
- * fields the placeholder page at app/(marketing)/about/members-directory previously documented as
- * the eventual real directory's content (name, country, role, level), plus federation/region so the
- * documented filters have something to display alongside each result. */
+/** Contact email is intentionally available only to entitled members in this re-authorized
+ * directory so members can contact one another. Exact addresses, coordinates, and all internal
+ * identifiers remain excluded; the public map never returns contact details. */
 export type DirectoryMemberRow = {
-  country: string; federation: string | null; firstName: string;
+  country: string; email: string; federation: string | null; firstName: string;
   lastName: string; membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
 
 type RawDirectoryRow = {
-  country: string; federation: string | null; firstName: string; lastName: string;
+  country: string; email: string; federation: string | null; firstName: string; lastName: string;
   membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
 
@@ -62,7 +60,6 @@ function normalized(input: MemberDirectoryFilters) {
   const page = pageNumber(input.page);
   const membershipType = firstString(input.membershipType);
   return {
-    country: firstString(input.country)?.trim().toUpperCase().slice(0, 2) || undefined,
     federation: firstString(input.federation)?.trim().toUpperCase().slice(0, 2) || undefined,
     membershipType: membershipType && MEMBERSHIP_TYPE_FILTERS.includes(membershipType as MembershipTypeFilter) ? membershipType as MembershipTypeFilter : undefined,
     page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, DIRECTORY_MAX_PAGE) : 1,
@@ -81,9 +78,8 @@ function queryParts(raw: MemberDirectoryFilters) {
   ];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
+    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\')`);
   }
-  if (filters.country) conditions.push(sql`p.country_code = ${filters.country}`);
   if (filters.federation) conditions.push(sql`roles.federation = ${filters.federation}`);
   if (filters.region) conditions.push(sql`roles.region = ${filters.region}`);
   if (filters.membershipType) conditions.push(filters.membershipType === 'combo'
@@ -93,6 +89,7 @@ function queryParts(raw: MemberDirectoryFilters) {
 }
 
 const from = sql`from idoc.profiles p
+  join idoc.users u on u.id = p.user_id and u.deleted_at is null
   join lateral (select status, valid_until, grace_ends_on from idoc.memberships where profile_id = p.id order by valid_until desc, id desc limit 1) m on true
   left join lateral (
     select array_agg(distinct role_type)::text[] role_types, bool_or(role_type = 'judge') has_judge, bool_or(role_type = 'steward') has_steward,
@@ -120,7 +117,7 @@ export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
   const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * DIRECTORY_PAGE_SIZE;
   const [rows, counts] = await Promise.all([
-    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", p.country_code country, roles.federation, roles.region,
+    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", coalesce(u.email_display, u.email) email, p.country_code country, roles.federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
       roles.role_details "roles" ${from} where ${where} order by ${order} limit ${DIRECTORY_PAGE_SIZE} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
