@@ -81,15 +81,9 @@ test('Contact is a plain nav item, never swapped for Support', () => {
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
-test('Contact is hidden for every signed-in, entitled account (ordinary members and privileged administrators alike) -- never for a signed-out visitor or a signed-in account with no other way back in (onboarding/unpaid)', () => {
-  const desktopContactBlock = header.slice(header.indexOf('<MyIdocNav '), header.indexOf('<span className="text-border"'));
-  assert.match(desktopContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
-  assert.match(desktopContactBlock, /href=\{contactLink\.href\}/);
-
-  const mobilePaymentFallback = header.lastIndexOf('href="/dashboard/membership"');
-  const mobileContactBlock = header.slice(mobilePaymentFallback, header.indexOf('facebook.com/groups', mobilePaymentFallback));
-  assert.match(mobileContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
-  assert.match(mobileContactBlock, /href=\{contactLink\.href\}/);
+test('Contact is present for signed-in and signed-out visitors', () => {
+  assert.match(header, /<Link href=\{contactLink\.href\} className=\{navClassName/);
+  assert.match(header, /<Link href=\{contactLink\.href\} onClick=\{\(\) => setOpen\(false\)\}/);
 });
 
 test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
