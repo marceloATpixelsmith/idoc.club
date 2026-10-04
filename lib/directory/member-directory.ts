@@ -89,7 +89,8 @@ function queryParts(raw: MemberDirectoryFilters) {
 }
 
 const from = sql`from idoc.profiles p
-  join idoc.users u on u.id = p.user_id and u.deleted_at is null and u.account_state <> 'deleted'
+  join idoc.users u on u.id = p.user_id and u.deleted_at is null and u.account_state = 'active'
+  and not exists (select 1 from idoc.application_roles ar where ar.user_id = u.id and ar.revoked_at is null and ar.role in ('administrator', 'super_admin'))
   join lateral (select status, valid_until, grace_ends_on from idoc.memberships where profile_id = p.id order by valid_until desc, id desc limit 1) m on true
   left join lateral (
     select array_agg(distinct role_type)::text[] role_types, bool_or(role_type = 'judge') has_judge, bool_or(role_type = 'steward') has_steward,
