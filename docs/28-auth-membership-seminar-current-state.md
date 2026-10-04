@@ -10,7 +10,7 @@ This document records the implemented cross-domain behavior that must stay consi
 - IDOC has three authentication roles: Member, Administrator, and Super Admin. Judge, Steward, Judge + Steward, and Veterinarian are membership classifications, not authentication roles.
 - Passwords have a 10-character minimum and retain the existing composition/maximum-length policy. Password creation and change flows perform the Have I Been Pwned Pwned Passwords k-anonymity check; breached passwords are rejected.
 - Ordinary member returning login uses the email/password flow plus the canonical member login verification flow. A member may trust the current login device for 14 days; the browser stores only an opaque secure `httpOnly` credential and the server stores its keyed digest in the revocable trusted-device registry.
-- Administrator and Super Admin login uses authenticator-app TOTP and does not use the ordinary-member login-device bypass.
+- Administrator and Super Admin login uses authenticator-app TOTP and never uses the ordinary-member 14-day login-device bypass. By default, privileged login challenges for TOTP on every login. A separate canonical privileged remembered-TOTP-device feature exists behind `REMEMBER_TOTP_DEVICE_ENABLED=true`; when that opt-in policy is enabled and a valid remembered-device credential is present, the routine privileged login challenge may be satisfied by that credential. This does not bypass recovery, enrollment, authenticator replacement, or fresh sensitive-action step-up.
 - Privileged/sensitive mutations require fresh MFA step-up where defined by the canonical auth contract. Step-up authority is purpose-bound and does not create a second independent login session.
 - Every authenticated session is registry-backed. A signed JWT by itself is not sufficient authority; the persisted session must still be active, match the user/session version, and satisfy the session lifetime policy.
 - Ordinary member sessions use a 7-day idle timeout and a 14-day absolute lifetime.
@@ -26,7 +26,7 @@ This document records the implemented cross-domain behavior that must stay consi
 - Browser success redirects never grant membership. Entitlement changes only after verified, idempotent Stripe webhook processing validates the expected membership payment evidence.
 - `valid_until` is the paid-through date. Early renewal adds 12 months to the existing paid-through date; a payment after expiry starts a new 12-month term from the successful payment date.
 - Failed recurring renewal enters the five-calendar-day grace policy without moving `valid_until`. The separate `grace_ends_on` records the inclusive end of grace.
-- A never-paid account, or a previously paid account after grace ends, is restricted to the membership-payment experience plus logout. Hiding navigation is not sufficient; server-rendered pages, actions, handlers, and data access enforce the entitlement boundary.
+- A never-paid account, or a previously paid account after grace ends, is denied ordinary entitled-member dashboard/content capabilities and is routed to the membership-payment experience for membership access. Read-only own-account/profile boundaries remain available where explicitly permitted by the account-access policy, and seminar registration is a deliberate exception: a signed-in profile without current membership entitlement may register at the non-member seminar price and manage that durable registration history. Hiding navigation is not sufficient; each server-rendered page, action, handler, and data-access boundary enforces its own account-function policy.
 - Turning automatic renewal off does not cancel membership. The active Stripe subscription is set to `cancel_at_period_end`; access remains through the already-paid term and applicable grace.
 - Turning automatic renewal on for an existing non-recurring member uses Stripe Checkout in `setup` mode to collect authorization without charging immediately. The pending recurring transition is effective on the current `valid_until`, and the webhook path creates/persists the future subscription schedule from verified setup evidence.
 - A pending renewal-mode change can be canceled before it takes effect. Idempotency keys and persisted transition state prevent duplicate subscription schedules, subscriptions, or Checkout sessions.
@@ -49,7 +49,8 @@ Seminars have separate member and non-member prices. Registration status and pay
 
 - If the account has its own member profile, the seminar registration remains tied to that real profile rather than becoming a guest registration.
 - The non-member seminar price applies.
-- The same payment-method, redirect, history, cancellation, and Stripe-verification behavior applies as for an entitled member.
+- Bank Transfer and Cash follow the same profile-backed registration, redirect, history, and cancellation behavior as for an entitled member.
+- **Current staging gap:** profile-backed Online via Stripe is not presently usable for a signed-in profile without current membership entitlement. Registration creation succeeds at the non-member price, but `createSeminarCheckoutSession()` still requires the stricter `member` account boundary before opening Stripe Checkout. This leaves the newly created registration unpaid and a retry is rejected as a duplicate. The intended product behavior is parity with the entitled-member Online path, but the current implementation must be fixed before documentation may claim that parity.
 
 ### 3.3 Anonymous guest — Bank Transfer or Cash
 
