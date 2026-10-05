@@ -167,7 +167,7 @@ test('multiple membership-type facets stay grouped with the other access and sea
 test('directory defaults to the requested separate name, member detail, email, and contact columns', () => {
   const columnBlock = memberPageSource.slice(memberPageSource.indexOf('id: \'firstName\''), memberPageSource.indexOf('], []),'));
   const ids = [...columnBlock.matchAll(/id: \'([^\']+)\'/g)].map((match) => match[1]);
-  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'contact']);
+  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions']);
   assert.match(columnBlock, /header: header\('Member Type'\)/);
   assert.match(columnBlock, /header: \(\) => <span>CONTACT<\/span>/);
 });
