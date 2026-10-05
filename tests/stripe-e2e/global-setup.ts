@@ -33,6 +33,11 @@ export default async function globalSetup() {
   if (!email || !/^stripe-e2e-[a-z0-9-]+@example\.test$/i.test(email)) {
     throw new Error('STRIPE_E2E_MEMBER_EMAIL must be an unmistakably test-only @example.test address.');
   }
+  // The application derives Stripe idempotency keys from profile ids, and Stripe keeps those keys
+  // for 24 hours. This disposable database restarts its sequences every run while each run creates a
+  // new Stripe Customer, so a second run inside 24 hours would reuse a key with different parameters.
+  // Start the profile sequence at a per-run offset so keys never collide across runs.
+  await sql`select setval(pg_get_serial_sequence('idoc.profiles','id'), ${1_000 + Math.floor(Math.random() * 2_000_000_000)})`;
   const [user] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
     values(${email},'stripe-e2e-disabled-password',now(),'active')
     returning id,session_version`;
