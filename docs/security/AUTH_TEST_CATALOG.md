@@ -973,7 +973,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-STORAGE-005, AUTH-PASSWORD-006, AUTH-AUTHZ-001
-- **CI coverage:** mapped — `tests/password-hash.test.ts`, `tests/password-hash-migration.integration.ts`, `tests/legacy-first-login.test.ts`, `tests/legacy-import.test.ts`
+- **CI coverage:** mapped — `tests/password-hash.test.ts`, `tests/password-hash-migration.integration.ts`, `tests/legacy-first-login.test.ts`, `tests/legacy-import.test.ts`, `tests/account-profile.integration.ts`, `tests/unified-migrated-login.test.ts`
 - **Live:** required; email=yes; admin=yes; destructive=no
 
 ### Preconditions
