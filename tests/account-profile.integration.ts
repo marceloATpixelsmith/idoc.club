@@ -57,7 +57,7 @@ test('legacy profile review grants only its official-profile projection and upda
 
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
     updateMemberProfile(profile.id, profileInput(), { legacyProfileReview: true }));
-  const [updated] = await sql<{ legacy_profile_review_required: boolean; legacy_profile_reviewed_at: Date | null }>`
+  const [updated] = await sql<{ legacy_profile_review_required: boolean; legacy_profile_reviewed_at: Date | null }[]>`
     select legacy_profile_review_required, legacy_profile_reviewed_at from idoc.users where id=${user.id}`;
   assert.equal(updated.legacy_profile_review_required, false);
   assert.ok(updated.legacy_profile_reviewed_at);
