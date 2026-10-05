@@ -164,8 +164,16 @@ test('multiple membership-type facets stay grouped with the other access and sea
   assert.match(memberDirectorySource, /conditions\.push\(sql`\(\$\{sql\.join\(filters\.membershipType/);
 });
 
+test('directory defaults to the requested separate name, member detail, email, and contact columns', () => {
+  const columnBlock = memberPageSource.slice(memberPageSource.indexOf('id: \'firstName\''), memberPageSource.indexOf('], []),'));
+  const ids = [...columnBlock.matchAll(/id: \'([^\']+)\'/g)].map((match) => match[1]);
+  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'contact']);
+  assert.match(columnBlock, /header: header\('Member Type'\)/);
+  assert.match(columnBlock, /header: \(\) => <span>CONTACT<\/span>/);
+});
+
 test('descending name sorting applies the same direction to last and first names', () => {
-  assert.ok(memberDirectorySource.includes("...(id === 'name' ? [sql`p.first_name ${direction} nulls last`] : [])"));
+  assert.ok(memberDirectorySource.includes("...(id === 'name' || id === 'lastName' ? [sql`p.first_name ${direction} nulls last`] : [])"));
 });
 
 test('Reset appears for search-only state and cancels a pending debounced search', () => {
