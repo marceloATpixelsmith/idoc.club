@@ -28,14 +28,12 @@ test('supported WordPress portable phpass credentials verify exactly and malform
   assert.equal(passwordHashNeedsUpgrade(legacy), true);
 });
 
-test('WordPress 6.8 bcrypt credentials use the required SHA-384 pre-hash', async () => {
-  const password = 'Synthetic WordPress 68!';
-  const { createHash } = await import('node:crypto');
-  const prehash = createHash('sha384').update(password, 'utf8').digest('base64');
-  const bcrypt = await hashBcrypt(prehash, 10);
-  const legacy = `$wp${bcrypt.replace('$2b$', '$2y$')}`;
-  assert.equal(await comparePasswords(password, legacy), true);
-  assert.equal(await comparePasswords(`${password}x`, legacy), false);
+test('a WordPress 6.8 bcrypt fixture verifies using its trimmed HMAC-SHA384 pre-hash', async () => {
+  // WordPress-format test vector: hashpwn -> $wp + PHP bcrypt(HMAC-SHA384(trim(password), "wp-sha384")).
+  const legacy = '$wp$2y$10$607XKVrBjPEqujeOXNwbYuOJ.gPMd2TelMMknmeV70Kap1E81Ovo6';
+  assert.equal(await comparePasswords('hashpwn', legacy), true);
+  assert.equal(await comparePasswords(' hashpwn ', legacy), true);
+  assert.equal(await comparePasswords('wrong password', legacy), false);
   assert.equal(passwordHashNeedsUpgrade(legacy), true);
 });
 
