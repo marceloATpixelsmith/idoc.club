@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { createMembership, createProfile, createUser, closeHarness, grantRole, judgeRole, persistedGraph, profileInput, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
-import { createOwnMemberProfile, getOwnPrivateMember, requireAccountAccess, updateMemberProfile } from '../lib/membership/data-access.ts';
+import { createOwnMemberProfile, getOwnLegacyProfileReviewData, getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requireAccountAccess, updateMemberProfile } from '../lib/membership/data-access.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -30,6 +30,32 @@ test('persisted account-state and entitlement matrix is enforced at the direct s
       else await assert.rejects(invocation);
     }
   }
+});
+
+test('legacy profile review grants only its official-profile projection and update boundary', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id, true);
+  await sql`update idoc.users set legacy_profile_review_required=true where id=${user.id}`;
+
+  const review = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnLegacyProfileReviewData());
+  assert.equal(review?.profile.id, profile.id);
+  assert.ok(review?.roles.length);
+  assert.equal('entitlement' in (review ?? {}), false);
+  assert.equal('subscription' in (review ?? {}), false);
+
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => getOwnPrivateMember()));
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => hasOwnBillingAccount()));
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => listOwnPaymentHistory()));
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => requireAccountAccess('profile')));
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => requireAccountAccess('profile_mutation')));
+
+  await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
+    updateMemberProfile(profile.id, profileInput(), { legacyProfileReview: true }));
+  const [updated] = await sql<{ legacy_profile_review_required: boolean; legacy_profile_reviewed_at: Date | null }>`
+    select legacy_profile_review_required, legacy_profile_reviewed_at from idoc.users where id=${user.id}`;
+  assert.equal(updated.legacy_profile_review_required, false);
+  assert.ok(updated.legacy_profile_reviewed_at);
 });
 
 test('administrator and Super Admin access comes only from persisted grants', async () => {
