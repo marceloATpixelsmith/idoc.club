@@ -155,9 +155,9 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   return result.profile;
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { legacyProfileReview?: boolean; reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor('profile_mutation');
+  const actor = await authenticatedActor(options?.legacyProfileReview ? 'profile_review' : 'profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
