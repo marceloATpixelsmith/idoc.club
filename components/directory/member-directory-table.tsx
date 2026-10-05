@@ -77,37 +77,42 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const { table } = useDataTable({
     columns: useMemo<ColumnDef<DirectoryMemberRow>[]>(() => [
       {
-        id: 'name', accessorFn: (row) => `${row.lastName}, ${row.firstName}`,
-        header: header('Name'), meta: { label: 'Name' },
-        cell: ({ row }) => <span className="font-medium uppercase">{row.original.lastName}, {row.original.firstName}</span>,
+        id: 'firstName', accessorKey: 'firstName',
+        header: header('First Name'), meta: { label: 'First Name' },
+        cell: ({ row }) => <span className="font-medium uppercase">{row.original.firstName}</span>,
+      },
+      {
+        id: 'lastName', accessorKey: 'lastName',
+        header: header('Last Name'), meta: { label: 'Last Name' },
+        cell: ({ row }) => <span className="font-medium uppercase">{row.original.lastName}</span>,
+      },
+      {
+        id: 'type', accessorKey: 'membershipType', enableColumnFilter: true,
+        header: header('Member Type'),
+        meta: { label: 'Member Type', options: TYPE_OPTIONS, variant: 'multiSelect' },
+        cell: ({ row }) => row.original.roles?.length
+          ? row.original.roles.map((role) => TYPE_LABELS[role.roleType] ?? role.roleType).join('; ')
+          : '—',
+      },
+      {
+        id: 'region', accessorKey: 'region', enableColumnFilter: true,
+        header: header('Region'),
+        meta: { label: 'Region', options: REGION_OPTIONS, variant: 'multiSelect' },
+        cell: ({ row }) => row.original.region ?? '—',
+      },
+      {
+        id: 'federation', accessorKey: 'federation', enableColumnFilter: true,
+        header: header('Federation'),
+        meta: { label: 'Federation', options: FEDERATION_OPTIONS, variant: 'multiSelect' },
+        cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—',
       },
       {
         id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
         cell: ({ row }) => <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a>,
       },
       {
-        id: 'type', accessorKey: 'membershipType', enableColumnFilter: true,
-        header: header('Membership Type'),
-        meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' },
-        cell: ({ row }) => row.original.roles?.length
-          ? row.original.roles.map((role) => TYPE_LABELS[role.roleType] ?? role.roleType).join('; ')
-          : '—',
-      },
-      {
-        id: 'federation', accessorKey: 'federation', enableColumnFilter: true,
-        header: header('National Federation'),
-        meta: { label: 'National Federation', options: FEDERATION_OPTIONS, variant: 'multiSelect' },
-        cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—',
-      },
-      {
-        id: 'region', accessorKey: 'region', enableColumnFilter: true,
-        header: header('IDOC Region'),
-        meta: { label: 'IDOC Region', options: REGION_OPTIONS, variant: 'multiSelect' },
-        cell: ({ row }) => row.original.region ?? '—',
-      },
-      {
-        id: 'actions', enableHiding: false, enableSorting: false, size: 56,
-        header: () => <span>Actions</span>,
+        id: 'actions', enableHiding: false, enableSorting: false, size: 80,
+        header: () => <span>CONTACT</span>,
         cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
           <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
         </Button>,
@@ -115,6 +120,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     ], []),
     data: rows,
     initialState: {
+      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'],
       columnFilters: initialFilterState(filters),
       pagination: { pageIndex: filters.page - 1, pageSize },
       sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],
