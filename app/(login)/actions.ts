@@ -85,7 +85,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const role = await authoritativeMfaRole(foundUser.id);
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
-  const loginDestination = foundUser.accountState === 'onboarding' || foundUser.legacyProfileReviewRequired ? '/dashboard' : '/';
+  const loginDestination = foundUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
 
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();
@@ -129,7 +129,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
         await clearPendingLogin();
         return { error: 'Your sign-in session expired. Start again.', email };
       }
-      if (await beginPrimaryMfa(currentUser, 'password', currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
+      if (await beginPrimaryMfa(currentUser, 'password', currentUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
         await clearPendingLogin();
         redirect('/mfa');
       }
