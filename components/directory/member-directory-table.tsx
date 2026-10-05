@@ -15,10 +15,10 @@ import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { countryNameForCode, COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGIONS } from '@/lib/membership/validation';
-import { MEMBERSHIP_TYPE_FILTERS, type DirectoryMemberRow, type DirectorySort } from '@/lib/directory/member-directory';
+import type { DirectoryMemberRow, DirectorySort } from '@/lib/directory/member-directory';
 
 const PAGE_SIZES = [10, 25, 50, 100];
-const TYPE_LABELS: Record<string, string> = {
+const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;\nconst TYPE_LABELS: Record<string, string> = {
   combo: 'Judge + Steward', judge: 'Judge', steward: 'Steward', veterinarian: 'Veterinarian',
 };
 const TYPE_OPTIONS = MEMBERSHIP_TYPE_FILTERS.map((value) => ({ value, label: TYPE_LABELS[value] }));
