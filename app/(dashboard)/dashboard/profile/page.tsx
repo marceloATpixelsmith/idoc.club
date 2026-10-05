@@ -15,7 +15,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   // status or pushed into onboarding for lacking a member profile -- they just see the account
   // email field alone, no profile section.
   if (!member && !privileged) redirect('/dashboard');
-  if (member && !privileged && !user.legacyProfileReviewRequired && !isEntitled('entitlement' in member ? member.entitlement : null, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
+  if (member && !privileged && !user.legacyProfileReviewRequired && !isEntitled((member as NonNullable<Awaited<ReturnType<typeof getOwnPrivateMember>>>).entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   const { confirmDetails } = await searchParams;
   return (
     <section className="py-4 lg:py-8 px-5 lg:px-8">
