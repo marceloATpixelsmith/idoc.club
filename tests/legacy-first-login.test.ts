@@ -19,6 +19,14 @@ test('legacy review is a durable server-side gate completed only by the canonica
   }
 });
 
+test('legacy profile review action keeps email immutable and uses only the scoped mutation', () => {
+  const action = read('app/(dashboard)/account/actions.ts');
+  const review = action.slice(action.indexOf('if (legacyReviewRequired)'), action.indexOf('const accountResult = await updateAccount'));
+  assert.match(review, /normalizeEmail\(submittedEmail\) !== normalizeEmail\(user\.email\)/);
+  assert.match(review, /updateMemberProfile\(member\.profile\.id, profileInput, \{ legacyProfileReview: true \}\)/);
+  assert.doesNotMatch(review, /updateAccount\(/);
+});
+
 test('legacy password migration checks policy and breach status before compare-and-swap upgrade', () => {
   const login = read('app/(login)/actions.ts');
   const branch = login.slice(login.indexOf('if (passwordHashNeedsUpgrade'), login.indexOf('const role ='));
