@@ -64,8 +64,7 @@ never touches staging or production data. Never print or commit any value named 
 
 **Network allow-list** (Stripe CLI and hosted Checkout): `api.stripe.com`, `stripecli-ws-nw.stripe.com`,
 `checkout.stripe.com`, `js.stripe.com` and the other `*.stripe.com`, `*.stripe.network`, `*.stripecdn.com`
-hosts Checkout loads, plus `*.hcaptcha.com` (card payments on hosted Checkout load hCaptcha; with it blocked
-the Pay button stays on "Processing"). Without them the CLI hangs at "Getting ready..." and Chromium fails with
+hosts Checkout loads (it also loads `*.hcaptcha.com` frames; allow them so a risk check cannot be blocked).
 `net::ERR_TUNNEL_CONNECTION_FAILED` when it redirects to `checkout.stripe.com`.
 
 1. **Runtime.** Node 24.9 (Node 22 lacks Argon2id), `pnpm install --frozen-lockfile`, and a running local
@@ -79,7 +78,9 @@ the Pay button stays on "Processing"). Without them the CLI hangs at "Getting re
 4. **Local HTTPS.** `BASE_URL` must be HTTPS (`validateStripeBaseUrl`), and Stripe Checkout redirects the
    browser back to it. Create a throwaway CA and a `localhost` certificate with `openssl`, import the CA into
    Chromium's NSS store (`certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n e2e-ca -i ca.crt`), and run a
-   small TLS reverse proxy on `https://localhost:3443` that forwards to `next dev -p 3000`. Set
+   small TLS reverse proxy on `https://localhost:3443` that forwards to `next dev -p 3000` and rewrites any redirect
+   `Location` of `https://localhost:3000` back to `https://localhost:3443` (Next builds redirect URLs from its own
+   origin; without the rewrite the browser lands on port 3000 after Checkout and fails with `ERR_SSL_PROTOCOL_ERROR`). Set
    `BASE_URL` and `STRIPE_E2E_APP_URL` to `https://localhost:3443`.
 5. **Webhooks without a tunnel.** Run `STRIPE_API_KEY=$STRIPE_SECRET_KEY stripe listen --events <list> --forward-to
    http://localhost:3000/api/stripe/webhook` (use the environment variable, not `--api-key`, so the key never
@@ -110,8 +111,9 @@ the Pay button stays on "Processing"). Without them the CLI hangs at "Getting re
 10. **Clean up.** Stop the app, TLS proxy and `stripe listen`; drop both databases and the role; delete the
     throwaway certificates. Do not leave test-mode objects that identify a person.
 
-Hosted Checkout requires a cardholder name and uses `data-testid="hosted-payment-submit-button"` for the submit
-button; seminar registration starts on the seminar's own page (`tests/stripe-e2e/support/seminar-registration.ts`).
+Hosted Checkout requires a cardholder name, a postal code when the billing country has one, and a phone number
+while "Save my information" (Link) is ticked; `tests/stripe-e2e/support/hosted-card.ts` fills the first two and
+unticks Link. Its submit button is `data-testid="hosted-payment-submit-button"`; seminar registration starts on the seminar's own page (`tests/stripe-e2e/support/seminar-registration.ts`).
 When the application's UI changes, update the specs rather than weakening the application.
 
 ## Gaps deliberately not hidden
