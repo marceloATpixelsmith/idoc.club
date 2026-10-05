@@ -123,7 +123,9 @@ export async function comparePasswords(plainTextPassword: string, storedHash: st
   // WordPress 6.8+ bcrypt hashes pre-hash the UTF-8 password with SHA-384/base64. WordPress uses
   // the `$wp` marker specifically so these cannot be confused with ordinary bcrypt credentials.
   if (/^\$wp\$2y\$/.test(storedHash)) {
-    const digest = crypto.createHash('sha384').update(plainTextPassword, 'utf8').digest('base64');
+    const digest = crypto.createHmac('sha384', 'wp-sha384')
+      .update(plainTextPassword.trim(), 'utf8')
+      .digest('base64');
     return compareBcrypt(digest, storedHash.slice(3));
   }
   return false;
