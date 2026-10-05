@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 export class DirectoryRateLimitedError extends Error {
@@ -12,79 +13,92 @@ export class DirectoryRateLimitedError extends Error {
   }
 }
 
-// Fixed, server-controlled -- never a client-supplied value -- so a caller cannot request an
-// arbitrarily large page to bulk-harvest the directory in one request.
+export const DIRECTORY_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DIRECTORY_PAGE_SIZE = 25;
-// Bounds total reachable depth to DIRECTORY_MAX_PAGE * DIRECTORY_PAGE_SIZE (5,000) rows even for an
-// unfiltered browse -- deep-offset scraping has a hard ceiling independent of how many members exist.
-export const DIRECTORY_MAX_PAGE = 200;
+export const DIRECTORY_MAX_RESULTS = 5_000;
 
 export const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
+const VALID_FEDERATIONS = new Set(COUNTRY_OPTIONS.map(({ code }) => code));
+const SORT_COLUMNS = ['name', 'email', 'type', 'federation', 'region'] as const;
+type SortColumn = typeof SORT_COLUMNS[number];
+export type DirectorySort = { id: SortColumn; desc: boolean };
 
-// Next.js searchParams values are string | string[] | undefined at runtime (a repeated query key
-// like ?country=DE&country=FR becomes an array) regardless of a narrower page-level annotation, so
-// every filter accepts that real shape and normalized() below explicitly resolves it rather than
-// calling string methods on a value that might actually be an array.
 type RawFilterValue = string | string[] | undefined;
 export type MemberDirectoryFilters = {
   federation?: RawFilterValue; membershipType?: RawFilterValue;
-  page?: number | RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
+  page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
+  q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
 };
 
 export type DirectoryRoleDetail = { officialStatuses: string[] | null; roleType: string };
-
-/** Contact email is intentionally available only to entitled members in this re-authorized
- * directory so members can contact one another. Exact addresses, coordinates, and all internal
- * identifiers remain excluded; the public map never returns contact details. */
 export type DirectoryMemberRow = {
-  country: string; email: string; federation: string | null; firstName: string;
+  email: string; federation: string | null; firstName: string;
   lastName: string; membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
+type RawDirectoryRow = DirectoryMemberRow;
 
-type RawDirectoryRow = {
-  country: string; email: string; federation: string | null; firstName: string; lastName: string;
-  membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
-};
-
-// An array-valued (repeated-key) filter is treated as absent rather than guessing which value the
-// caller meant -- see the RawFilterValue comment above.
-function firstString(value: RawFilterValue): string | undefined {
-  return Array.isArray(value) ? undefined : value;
+function values(value: RawFilterValue, limit: number): string[] {
+  const raw = Array.isArray(value) ? value : value?.split(',') ?? [];
+  return [...new Set(raw.flatMap((entry) => entry.split(',')).map((entry) => entry.trim()).filter(Boolean))].slice(0, limit);
 }
-function pageNumber(value: number | RawFilterValue): number {
-  return Number(typeof value === 'number' ? value : firstString(value));
+function pageNumber(value: number | RawFilterValue, fallback: number): number {
+  const raw = Array.isArray(value) ? undefined : value;
+  const parsed = Number(typeof raw === 'number' ? raw : raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
-
+function parseSort(value: RawFilterValue): DirectorySort[] {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return [{ id: 'name', desc: false }];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [{ id: 'name', desc: false }];
+    const result = parsed.flatMap((entry): DirectorySort[] => {
+      if (!entry || typeof entry !== 'object') return [];
+      const { id, desc } = entry as { id?: unknown; desc?: unknown };
+      return typeof id === 'string' && SORT_COLUMNS.includes(id as SortColumn) && typeof desc === 'boolean'
+        ? [{ id: id as SortColumn, desc }]
+        : [];
+    }).slice(0, SORT_COLUMNS.length);
+    return result.length ? result : [{ id: 'name', desc: false }];
+  } catch {
+    return [{ id: 'name', desc: false }];
+  }
+}
 function normalized(input: MemberDirectoryFilters) {
-  const page = pageNumber(input.page);
-  const membershipType = firstString(input.membershipType);
+  const pageSizeInput = pageNumber(input.pageSize, DIRECTORY_PAGE_SIZE);
+  const pageSize = DIRECTORY_PAGE_SIZE_OPTIONS.includes(pageSizeInput as typeof DIRECTORY_PAGE_SIZE_OPTIONS[number])
+    ? pageSizeInput : DIRECTORY_PAGE_SIZE;
+  const federation = values(input.federation, 250).filter((code) => VALID_FEDERATIONS.has(code.toUpperCase())).map((code) => code.toUpperCase());
+  const membershipType = values(input.membershipType, MEMBERSHIP_TYPE_FILTERS.length).filter((type): type is MembershipTypeFilter => MEMBERSHIP_TYPE_FILTERS.includes(type as MembershipTypeFilter));
+  const region = values(input.region, 20).filter((item) => item.length <= 40);
+  const page = pageNumber(input.page, 1);
   return {
-    federation: firstString(input.federation)?.trim().toUpperCase().slice(0, 2) || undefined,
-    membershipType: membershipType && MEMBERSHIP_TYPE_FILTERS.includes(membershipType as MembershipTypeFilter) ? membershipType as MembershipTypeFilter : undefined,
-    page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, DIRECTORY_MAX_PAGE) : 1,
-    q: firstString(input.q)?.trim().slice(0, 100) || undefined,
-    region: firstString(input.region)?.trim().slice(0, 40) || undefined,
-    sort: ['country', 'region'].includes(firstString(input.sort) ?? '') ? firstString(input.sort) as 'country' | 'region' : 'name' as const,
+    federation, membershipType,
+    page: Math.min(page, Math.max(1, Math.ceil(DIRECTORY_MAX_RESULTS / pageSize))),
+    pageSize,
+    q: (Array.isArray(input.q) ? undefined : input.q)?.trim().slice(0, 100) || undefined,
+    region,
+    sort: parseSort(input.sort),
   };
 }
 
 function queryParts(raw: MemberDirectoryFilters) {
   const filters = normalized(raw);
   const conditions = [
-    // Scope to currently-entitled members only -- the same test as lib/membership/entitlement.ts's
-    // isEntitled -- so the directory reflects current members, not every account ever created.
     sql`((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];
   if (filters.q) {
-    const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\')`);
+    const pattern = `%${filters.q.replaceAll('%', '\\\\%').replaceAll('_', '\\\\_')}%`;
+    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\\\' or p.last_name ilike ${pattern} escape '\\\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\\\')`);
   }
-  if (filters.federation) conditions.push(sql`roles.federation = ${filters.federation}`);
-  if (filters.region) conditions.push(sql`roles.region = ${filters.region}`);
-  if (filters.membershipType) conditions.push(filters.membershipType === 'combo'
-    ? sql`roles.has_judge and roles.has_steward`
-    : sql`roles.role_types @> array[${filters.membershipType}]::text[]`);
+  if (filters.federation.length) conditions.push(sql`roles.federation = any(${filters.federation})`);
+  if (filters.region.length) conditions.push(sql`roles.region = any(${filters.region})`);
+  if (filters.membershipType.length) {
+    conditions.push(sql.join(filters.membershipType.map((type) => type === 'combo'
+      ? sql`(roles.has_judge and roles.has_steward)`
+      : sql`roles.role_types @> array[${type}]::text[]`), sql` or `));
+  }
   return { filters, where: sql.join(conditions, sql` and `) };
 }
 
@@ -98,34 +112,39 @@ const from = sql`from idoc.profiles p
       jsonb_agg(jsonb_build_object('roleType', role_type, 'officialStatuses', official_statuses) order by role_type) role_details
     from idoc.professional_roles where profile_id = p.id and effective_to is null
   ) roles on true`;
-// A stable order independent of insertion timing: name first, then the non-exposed internal id as a
-// pure tiebreaker (never selected/returned) so pagination never skips or repeats a row across pages.
-function directoryOrder(sort: 'country' | 'name' | 'region') {
-  if (sort === 'country') return sql`p.country_code asc, p.last_name asc, p.first_name asc, p.id asc`;
-  if (sort === 'region') return sql`roles.region asc nulls last, p.last_name asc, p.first_name asc, p.id asc`;
-  return sql`p.last_name asc, p.first_name asc, p.id asc`;
+
+function directoryOrder(sorting: DirectorySort[]) {
+  const expressions = sorting.map(({ id, desc }) => {
+    const column = id === 'name' ? sql`p.last_name`
+      : id === 'email' ? sql`coalesce(u.email_display, u.email)`
+      : id === 'type' ? sql`roles.role_types[1]`
+      : id === 'federation' ? sql`roles.federation`
+      : sql`roles.region`;
+    return sql`${column} ${desc ? sql`desc` : sql`asc`} nulls last`;
+  });
+  expressions.push(sql`p.last_name asc nulls last`, sql`p.first_name asc nulls last`, sql`p.id asc`);
+  return sql.join(expressions, sql`, `);
 }
 
-/** Server-side searchable/filterable paid-member directory. Re-authorizes independently of any
- * caller (the same defense-in-depth convention as lib/membership/admin-memberships.ts) -- entitled
- * members and privileged administrators only, matching every other member-facing surface's
- * paid/grace/expired/suspended/unpaid access rule (mayAccessAccountFunction's 'member' operation). */
+/** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
+ * non-archived, non-administrator member records. */
 export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
   const actor = await requireAccountAccess('member');
   const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
   if (!allowed) throw new DirectoryRateLimitedError();
   const { filters, where } = queryParts(input);
   const order = directoryOrder(filters.sort);
-  const offset = (filters.page - 1) * DIRECTORY_PAGE_SIZE;
+  const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", coalesce(u.email_display, u.email) email, p.country_code country, roles.federation, roles.region,
+    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", coalesce(u.email_display, u.email) email, roles.federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
-      roles.role_details "roles" ${from} where ${where} order by ${order} limit ${DIRECTORY_PAGE_SIZE} offset ${offset}`),
+      roles.role_details "roles" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return {
-    filters, maxPage: DIRECTORY_MAX_PAGE, pageSize: DIRECTORY_PAGE_SIZE,
+    filters, maxPage: Math.max(1, Math.ceil(DIRECTORY_MAX_RESULTS / filters.pageSize)),
+    pageSize: filters.pageSize,
     rows: rows.map((row): DirectoryMemberRow => ({ ...row })),
-    total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_PAGE * DIRECTORY_PAGE_SIZE),
+    total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_RESULTS),
   };
 }
