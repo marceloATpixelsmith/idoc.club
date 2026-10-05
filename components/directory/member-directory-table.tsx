@@ -60,7 +60,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   function navigate(state: DataTableLiveState, query = search) {
     const params = new URLSearchParams({ tab: 'directory' });
     if (query.trim()) params.set('q', query.trim());
-    const membershipType = filterToken(state.columnFilters, 'membershipType');
+    const membershipType = filterToken(state.columnFilters, 'type');
     const federation = filterToken(state.columnFilters, 'federation');
     const region = filterToken(state.columnFilters, 'region');
     if (membershipType) params.set('membershipType', membershipType);
