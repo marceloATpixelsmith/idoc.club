@@ -99,9 +99,11 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   }
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
-  const destination = migrated
+  const destination = verifiedUser.legacyProfileReviewRequired
     ? '/dashboard/profile?confirmDetails=1'
-    : verifiedUser.accountState === 'onboarding' ? '/dashboard' : '/';
+    : migrated
+      ? '/dashboard/profile?confirmDetails=1'
+      : verifiedUser.accountState === 'onboarding' ? '/dashboard' : '/';
   const role = await authoritativeMfaRole(verifiedUser.id);
   if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');
