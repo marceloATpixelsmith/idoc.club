@@ -116,7 +116,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     initialState: {
       columnFilters: initialFilterState(filters),
       pagination: { pageIndex: filters.page - 1, pageSize },
-      sorting: filters.sort,
+      sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],
     },
     getRowId: (row) => row.email,
     onLiveStateChange: (state) => navigate(state),
@@ -129,7 +129,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     setSearch((current) => current === nextSearch ? current : nextSearch);
     const nextFilters = initialFilterState(filters);
     if (JSON.stringify(table.getState().columnFilters) !== JSON.stringify(nextFilters)) table.setColumnFilters(nextFilters);
-    if (JSON.stringify(table.getState().sorting) !== JSON.stringify(filters.sort)) table.setSorting(filters.sort);
+    if (JSON.stringify(table.getState().sorting) !== JSON.stringify(filters.sort)) table.setSorting(filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[]);
     if (table.getState().pagination.pageIndex !== filters.page - 1 || table.getState().pagination.pageSize !== pageSize) {
       table.setPagination({ pageIndex: filters.page - 1, pageSize });
     }
