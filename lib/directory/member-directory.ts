@@ -96,9 +96,9 @@ function queryParts(raw: MemberDirectoryFilters) {
   if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
   if (filters.membershipType.length) {
-    conditions.push(sql.join(filters.membershipType.map((type) => type === 'combo'
+    conditions.push(sql`(${sql.join(filters.membershipType.map((type) => type === 'combo'
       ? sql`(roles.has_judge and roles.has_steward)`
-      : sql`roles.role_types @> array[${type}]::text[]`), sql` or `));
+      : sql`roles.role_types @> array[${type}]::text[]`), sql` or `)})`);
   }
   return { filters, where: sql.join(conditions, sql` and `) };
 }
@@ -116,13 +116,17 @@ const from = sql`from idoc.profiles p
   ) roles on true`;
 
 function directoryOrder(sorting: DirectorySort[]) {
-  const expressions = sorting.map(({ id, desc }) => {
+  const expressions = sorting.flatMap(({ id, desc }) => {
+    const direction = desc ? sql`desc` : sql`asc`;
     const column = id === 'name' ? sql`p.last_name`
       : id === 'email' ? sql`coalesce(u.email_display, u.email)`
       : id === 'type' ? sql`roles.membership_type`
       : id === 'federation' ? sql`roles.federation`
       : sql`roles.region`;
-    return sql`${column} ${desc ? sql`desc` : sql`asc`} nulls last`;
+    return [
+      sql`${column} ${direction} nulls last`,
+      ...(id === 'name' ? [sql`p.first_name ${direction} nulls last`] : []),
+    ];
   });
   expressions.push(sql`p.last_name asc nulls last`, sql`p.first_name asc nulls last`, sql`p.id asc`);
   return sql.join(expressions, sql`, `);
