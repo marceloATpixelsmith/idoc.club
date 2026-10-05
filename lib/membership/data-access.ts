@@ -51,8 +51,10 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
     .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
   const actor = { id: userId, roles: grants.map(({ role }) => role) };
   if (account.legacyProfileReviewRequired && !isPrivilegedActor(actor)) {
-    if (['account', 'onboarding', 'profile_review'].includes(operation)) return actor;
-    throw new AuthorizationError();
+    if (account.accountState !== 'active' || !['account', 'profile_review'].includes(operation)) {
+      throw new AuthorizationError();
+    }
+    return actor;
   }
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
   const latest = profile
