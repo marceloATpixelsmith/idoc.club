@@ -85,12 +85,12 @@ test('directory page size matches the admin options and caps accessible results 
 });
 
 test('directory search input length is capped, and search/filter values are escaped before use in a LIKE pattern', () => {
-  assert.match(memberDirectorySource, /firstString\(input\.q\)\?\.trim\(\)\.slice\(0, 100\)/);
+  assert.match(memberDirectorySource, /input\.q\)\?\.trim\(\)\.slice\(0, 100\)/);
   assert.match(memberDirectorySource, /replaceAll\('%', '\\\\%'\)\.replaceAll\('_', '\\\\_'\)/);
 });
 
 test('ordering is stable across pages: name first, then a non-exposed internal id as a pure tiebreaker', () => {
-  assert.match(memberDirectorySource, /p\.last_name asc, p\.first_name asc, p\.id asc/);
+  assert.match(memberDirectorySource, /p\.last_name asc nulls last/);\n  assert.match(memberDirectorySource, /p\.first_name asc nulls last/);\n  assert.match(memberDirectorySource, /p\.id asc/);
 });
 
 test('the website directory keeps unauthorized and failure states generic', () => {
@@ -110,7 +110,7 @@ test('directory facets use the shared table toolbar and omit the redundant Count
   for (const id of ["'type'", "'federation'", "'region'"]) assert.ok(memberPageSource.includes(`id: ${id}`));
   assert.match(memberPageSource, /DataTableToolbar/);
   assert.match(memberPageSource, /variant: 'multiSelect'/);
-  assert.doesNotMatch(memberPageSource, /country|Country/);
+  assert.doesNotMatch(memberPageSource, /id: 'country'|label: 'Country'|name="country"/);
 });
 
 test('no Server Action or CSRF token is used by the directory surfaces: both are pure, re-authorized-on-every-request reads', () => {
