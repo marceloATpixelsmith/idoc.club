@@ -107,6 +107,10 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
         cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—',
       },
       {
+        id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
+        cell: ({ row }) => <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a>,
+      },
+      {
         id: 'contact', enableHiding: false, enableSorting: false, size: 80,
         header: () => <span>CONTACT</span>,
         cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
