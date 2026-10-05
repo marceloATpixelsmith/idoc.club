@@ -129,7 +129,7 @@ test('paid directory: returns member email for contact while excluding addresses
   const listing = await asMember(user.id, () => listMemberDirectory({ q: 'Lovelace' }));
   assert.equal(listing.rows.length, 1);
   assert.equal(listing.rows[0].email, user.email);
-  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
+  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
 test('paid directory: only active, non-admin member accounts appear in directory results', async () => {
@@ -157,7 +157,7 @@ test('paid directory: entitled members can search by another member email withou
   assert.equal(listing.rows.length, 1);
   assert.equal(listing.rows[0].firstName, 'Ada');
   assert.equal(listing.rows[0].email, listedUser.email);
-  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['country', 'email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
+  assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
 test('paid directory: filters by federation, region, and membership type without a country filter', async () => {
@@ -222,14 +222,17 @@ test('paid directory: sustained searching from one origin is rate-limited using 
 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
   await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
-  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
-  // Repeated filter keys are resolved to "absent" rather than passed into string methods.
+  await entitledMemberIn('FR', [judgeRole], { firstName: 'Judge', lastName: 'Two' });
+  const { user: searcher } = await entitledMemberIn('IT', [stewardRole], { firstName: 'Steward', lastName: 'Searcher' });
+  // Repeated filter keys must be parsed safely and preserve supported multi-value facets.
   const listing = await asMember(searcher.id, () => listMemberDirectory({
-    federation: ['DE', 'PL'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
+    federation: ['DE', 'FR'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'],
   }));
-  // Every array-valued filter fell back to "unset" rather than throwing, so this behaves like an
-  // unfiltered browse (both fixtures visible) rather than a 500.
+  // Repeated-key arrays are supported for facets. Repeated page values fall back safely, and
+  // repeated search text is ignored rather than accidentally searching a serialized array.
   assert.equal(listing.filters.page, 1);
-  assert.ok(listing.rows.some((row) => row.lastName === 'One'));
-  assert.ok(listing.rows.some((row) => row.lastName === 'Two'));
+  assert.equal(listing.filters.federation.length, 2);
+  assert.equal(listing.filters.membershipType.length, 2);
+  assert.equal(listing.filters.q, undefined);
+  assert.deepEqual(listing.rows.map((row) => row.lastName).sort(), ['One', 'Two']);
 });
