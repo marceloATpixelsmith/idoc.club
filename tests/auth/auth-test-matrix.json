@@ -1767,10 +1767,12 @@
       "ci": {
         "coverage": "mapped",
         "tests": [
-          "tests/password-hash.test.ts",
-          "tests/password-hash-migration.integration.ts",
+          "tests/account-profile.integration.ts",
           "tests/legacy-first-login.test.ts",
-          "tests/legacy-import.test.ts"
+          "tests/legacy-import.test.ts",
+          "tests/password-hash-migration.integration.ts",
+          "tests/password-hash.test.ts",
+          "tests/unified-migrated-login.test.ts"
         ],
         "rationale": ""
       },
