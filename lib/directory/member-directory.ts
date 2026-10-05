@@ -86,14 +86,14 @@ function normalized(input: MemberDirectoryFilters) {
 function queryParts(raw: MemberDirectoryFilters) {
   const filters = normalized(raw);
   const conditions = [
-    sql`((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
+    sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\\\%').replaceAll('_', '\\\\_')}%`;
     conditions.push(sql`(p.first_name ilike ${pattern} escape '\\\\' or p.last_name ilike ${pattern} escape '\\\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\\\')`);
   }
-  if (filters.federation.length) conditions.push(sql`roles.federation = any(${filters.federation})`);
-  if (filters.region.length) conditions.push(sql`roles.region = any(${filters.region})`);
+  if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
+  if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
   if (filters.membershipType.length) {
     conditions.push(sql.join(filters.membershipType.map((type) => type === 'combo'
       ? sql`(roles.has_judge and roles.has_steward)`
@@ -109,6 +109,7 @@ const from = sql`from idoc.profiles p
   left join lateral (
     select array_agg(distinct role_type)::text[] role_types, bool_or(role_type = 'judge') has_judge, bool_or(role_type = 'steward') has_steward,
       min(national_federation_country_code) federation, min(idoc_region) region,
+      case when bool_or(role_type = 'judge') and bool_or(role_type = 'steward') then 'combo' when count(distinct role_type) = 1 then min(role_type) else null end membership_type,
       jsonb_agg(jsonb_build_object('roleType', role_type, 'officialStatuses', official_statuses) order by role_type) role_details
     from idoc.professional_roles where profile_id = p.id and effective_to is null
   ) roles on true`;
@@ -117,7 +118,7 @@ function directoryOrder(sorting: DirectorySort[]) {
   const expressions = sorting.map(({ id, desc }) => {
     const column = id === 'name' ? sql`p.last_name`
       : id === 'email' ? sql`coalesce(u.email_display, u.email)`
-      : id === 'type' ? sql`roles.role_types[1]`
+      : id === 'type' ? sql`roles.membership_type`
       : id === 'federation' ? sql`roles.federation`
       : sql`roles.region`;
     return sql`${column} ${desc ? sql`desc` : sql`asc`} nulls last`;
