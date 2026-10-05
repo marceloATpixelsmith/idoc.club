@@ -50,6 +50,11 @@ test('legacy profile review grants only its official-profile projection and upda
   await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => requireAccountAccess('profile')));
   await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => requireAccountAccess('profile_mutation')));
 
+  const suspended = await createUser('suspended');
+  await createProfile(suspended.id);
+  await sql`update idoc.users set legacy_profile_review_required=true where id=${suspended.id}`;
+  await assert.rejects(withTestMembershipBoundary({ actor: { id: suspended.id, roles: [] } }, () => getOwnLegacyProfileReviewData()));
+
   await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
     updateMemberProfile(profile.id, profileInput(), { legacyProfileReview: true }));
   const [updated] = await sql<{ legacy_profile_review_required: boolean; legacy_profile_reviewed_at: Date | null }>`
