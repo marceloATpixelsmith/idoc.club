@@ -81,7 +81,7 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
       if (seminar) seminar.dataset.authoritativeValue = seminar.value;
     });
     await button.dblclick();
-    await page.waitForURL(/checkout\.stripe\.com/);
+    await page.waitForURL(/checkout\.stripe\.com/, { waitUntil: 'domcontentloaded' });
     sessionUrl = page.url();
     const local = await registration();
     sessionId = local.stripe_checkout_session_id;

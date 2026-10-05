@@ -22,6 +22,8 @@ export default defineConfig({
   testDir: './tests/stripe-e2e',
   fullyParallel: false,
   workers: 1,
+  // These specs drive real Stripe Checkout, webhooks and refunds; the default 30 s is shorter than their own 60 s waits.
+  timeout: 120_000,
   globalSetup: './tests/stripe-e2e/global-setup.ts',
   outputDir: 'test-results/stripe-e2e',
   reporter: process.env.CI ? [['dot'], ['html', { open: 'never' }]] : [['list'], ['html', { open: 'never' }]],

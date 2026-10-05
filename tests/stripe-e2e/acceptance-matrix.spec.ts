@@ -101,7 +101,7 @@ test.describe('Stripe acceptance matrix beyond hosted Checkout', () => {
 test('BROWSER-DOUBLE-CLICK double-click creates one seminar registration and one provider Checkout Session', async ({ page }) => {
   const firstRegister = await openSeminarRegistration(page, 'Stripe E2E Seminar B');
   await firstRegister.dblclick();
-  await page.waitForURL(/checkout\.stripe\.com/);
+  await page.waitForURL(/checkout\.stripe\.com/, { waitUntil: 'domcontentloaded' });
   expect(page.url()).toContain('checkout.stripe.com');
   const rows = await sql`select id,checkout_status,expected_amount_cents,stripe_checkout_session_id from idoc.seminar_registrations order by id desc limit 1`;
   expect(rows).toHaveLength(1);

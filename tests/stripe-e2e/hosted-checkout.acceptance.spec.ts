@@ -69,7 +69,7 @@ async function completeHostedCheckout(page: import('@playwright/test').Page, aut
   await expect(renewal).toBeVisible();
   if (await renewal.isChecked() !== autoRenew) await renewal.click();
   await page.locator('form').filter({ has: renewal }).getByRole('button').click();
-  await page.waitForURL(/checkout\.stripe\.com/);
+  await page.waitForURL(/checkout\.stripe\.com/, { waitUntil: 'domcontentloaded' });
   const checkoutSessionId = page.url().match(/cs_[A-Za-z0-9_]+/)?.[0];
   expect(checkoutSessionId).toBeTruthy();
   await payWithTestCard(page);
