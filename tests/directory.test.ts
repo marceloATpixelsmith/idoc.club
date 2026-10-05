@@ -90,7 +90,9 @@ test('directory search input length is capped, and search/filter values are esca
 });
 
 test('ordering is stable across pages: name first, then a non-exposed internal id as a pure tiebreaker', () => {
-  assert.match(memberDirectorySource, /p\.last_name asc nulls last/);\n  assert.match(memberDirectorySource, /p\.first_name asc nulls last/);\n  assert.match(memberDirectorySource, /p\.id asc/);
+  assert.match(memberDirectorySource, /p\.last_name asc nulls last/);
+  assert.match(memberDirectorySource, /p\.first_name asc nulls last/);
+  assert.match(memberDirectorySource, /p\.id asc/);
 });
 
 test('the website directory keeps unauthorized and failure states generic', () => {
@@ -139,11 +141,11 @@ test('signed-out visitors see only the map, with no tabs and no directory even t
   assert.match(memberRouteSource, /\{user \? <nav aria-label="Members directory views"/);
 });
 
-test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
-  assert.match(memberDirectorySource, /function firstString\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
-  // Every filter field normalized() reads goes through firstString first, not a bare `.trim()`.
-  for (const field of ['federation', 'membershipType', 'q', 'region']) {
-    assert.match(memberDirectorySource, new RegExp(`firstString\\(input\\.${field}\\)`));
+test('directory facets accept multi-value query parameters safely', () => {
+  assert.match(memberDirectorySource, /function values\(value: RawFilterValue, limit: number\): string\[\]/);
+  assert.match(memberDirectorySource, /flatMap\(\(entry\) => entry\.split\(','\)\)/);
+  for (const field of ['federation', 'membershipType', 'region']) {
+    assert.match(memberDirectorySource, new RegExp(`values\\(input\\.${field}`));
   }
 });
 
