@@ -165,7 +165,7 @@ test('multiple membership-type facets stay grouped with the other access and sea
 });
 
 test('descending name sorting applies the same direction to last and first names', () => {
-  assert.match(memberDirectorySource, /id === 'name' \? \[sql`\$\{column\} \$\{direction\} nulls last`, \.\.\.\(id === 'name' \? \[sql`p\.first_name \$\{direction\} nulls last`\]/);
+  assert.ok(memberDirectorySource.includes("...(id === 'name' ? [sql`p.first_name ${direction} nulls last`] : [])"));
 });
 
 test('Reset appears for search-only state and cancels a pending debounced search', () => {
