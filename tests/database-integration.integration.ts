@@ -306,6 +306,12 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
 
+  // Migration 0056 made imported official-profile fields nullable so missing legacy source values
+  // remain null until the member completes the full first-login review.
+  for (const column of ['first_name', 'last_name', 'address_1', 'city', 'state_province', 'postal_code', 'country_code']) {
+    expectedSchema['idoc.profiles'].columns[column].notNull = false;
+  }
+
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
     where table_schema='idoc' and table_type='BASE TABLE' and table_name<>'__drizzle_migrations'
@@ -467,7 +473,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 56);
+  assert.equal(count, 57);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {
