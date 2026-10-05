@@ -53,7 +53,7 @@ function parseSort(value: RawFilterValue): DirectorySort[] {
   if (!raw) return [{ id: 'lastName', desc: false }];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [{ id: 'name', desc: false }];
+    if (!Array.isArray(parsed)) return [{ id: 'lastName', desc: false }];
     const result = parsed.flatMap((entry): DirectorySort[] => {
       if (!entry || typeof entry !== 'object') return [];
       const { id, desc } = entry as { id?: unknown; desc?: unknown };
@@ -61,9 +61,9 @@ function parseSort(value: RawFilterValue): DirectorySort[] {
         ? [{ id: id as SortColumn, desc }]
         : [];
     }).slice(0, SORT_COLUMNS.length);
-    return result.length ? result : [{ id: 'name', desc: false }];
+    return result.length ? result : [{ id: 'lastName', desc: false }];
   } catch {
-    return [{ id: 'name', desc: false }];
+    return [{ id: 'lastName', desc: false }];
   }
 }
 function normalized(input: MemberDirectoryFilters) {
