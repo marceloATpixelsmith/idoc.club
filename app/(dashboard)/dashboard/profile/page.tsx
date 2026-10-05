@@ -15,14 +15,14 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   // status or pushed into onboarding for lacking a member profile -- they just see the account
   // email field alone, no profile section.
   if (!member && !privileged) redirect('/dashboard');
-  if (member && !privileged && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
+  if (member && !privileged && !user.legacyProfileReviewRequired && !isEntitled(member.entitlement, new Date().toISOString().slice(0, 10))) redirect('/dashboard');
   const { confirmDetails } = await searchParams;
   return (
     <section className="py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-medium">My Profile</h1>
-      {confirmDetails ? (
+      {user.legacyProfileReviewRequired || confirmDetails ? (
         <p className="mt-6 rounded-md border border-gold/30 bg-gold/10 p-4 text-sm text-gold">
-          Welcome back! Please confirm your details below are still correct before continuing.
+          Before continuing, review every official profile field below, correct anything out of date, fill in missing information, and save once to confirm your details.
         </p>
       ) : null}
       <ProfileForm email={user.emailDisplay ?? user.email} member={member} />

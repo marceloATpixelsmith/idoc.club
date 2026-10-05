@@ -14,7 +14,7 @@ import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancell
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
-import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
+import { isPrivilegedActor, mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
@@ -44,7 +44,7 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const session = injectedActor ? null : await getSession();
   const userId = injectedActor?.id ?? session?.user.id;
   if (!userId) throw new AuthorizationError();
-  const [account] = await db.select({ accountState: users.accountState })
+  const [account] = await db.select({ accountState: users.accountState, legacyProfileReviewRequired: users.legacyProfileReviewRequired })
     .from(users).where(eq(users.id, userId)).limit(1);
   if (!account) throw new AuthorizationError();
   const [grants, profile] = await Promise.all([
@@ -53,6 +53,10 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
     db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
   ]);
   const actor = { id: userId, roles: grants.map(({ role }) => role) };
+  if (account.legacyProfileReviewRequired && !isPrivilegedActor(actor) &&
+    !['account', 'onboarding', 'profile', 'profile_mutation'].includes(operation)) {
+    throw new AuthorizationError();
+  }
   const latest = profile[0]
     ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
       .from(memberships).where(eq(memberships.profileId, profile[0].id))
@@ -61,6 +65,8 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const entitled = latest[0]
     ? isEntitled(latest[0], new Date().toISOString().slice(0, 10))
     : false;
+  if (account.legacyProfileReviewRequired && !isPrivilegedActor(actor) &&
+    ['account', 'onboarding', 'profile', 'profile_mutation'].includes(operation)) return actor;
   if (!mayAccessAccountFunction({
     accountState: account.accountState as AccountState,
     actor,
@@ -186,10 +192,32 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     });
     injectProfileTransactionFailure('audit-insertion');
     if (!isAdminEdit) {
+      await tx.update(users).set({ legacyProfileReviewRequired: false, legacyProfileReviewedAt: now, updatedAt: now })
+        .where(and(eq(users.id, actor.id), eq(users.legacyProfileReviewRequired, true)));
       await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
     injectProfileTransactionFailure('notification-insertion');
     return updated;
+  });
+}
+
+/** Explicit administrator-only reset; normal profile edits can never silently re-open review. */
+export async function resetLegacyProfileReview(userId: number, reason: string) {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) throw new Error('An administrative reason is required.');
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(users).set({
+      legacyProfileReviewRequired: true,
+      legacyProfileReviewedAt: null,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId)).returning({ id: users.id });
+    if (!updated) throw new Error('Member not found.');
+    await tx.insert(auditLog).values({
+      action: 'admin.legacy_profile_review.reset', actorId: actor.id,
+      entityId: String(userId), entityType: 'user', reason: normalizedReason,
+    });
   });
 }
 

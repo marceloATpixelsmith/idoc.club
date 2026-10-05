@@ -41,8 +41,10 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
   const judge = member?.roles.find((role) => role.roleType === 'judge');
   const steward = member?.roles.find((role) => role.roleType === 'steward');
   const official = judge ?? steward;
-  const initialClassification: Classification = judge && steward ? 'judge_steward' : ((judge?.roleType ?? steward?.roleType) as Classification | undefined) ?? 'veterinarian';
-  const [classification, setClassification] = useState<Classification>(initialClassification);
+  const veterinarian = member?.roles.find((role) => role.roleType === 'veterinarian');
+  const initialClassification: Classification | '' = judge && steward ? 'judge_steward'
+    : ((judge?.roleType ?? steward?.roleType ?? veterinarian?.roleType) as Classification | undefined) ?? '';
+  const [classification, setClassification] = useState<Classification | ''>(initialClassification);
 
   const [countryCode, setCountryCode] = useState(str(member?.profile.countryCode));
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState(official?.nationalFederationCountryCode ?? '');
@@ -274,8 +276,10 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
                 id="classification"
                 name="classification"
                 onChange={(event) => setClassification(event.target.value as Classification)}
+                required
                 value={classification}
               >
+                <option value="">Select</option>
                 <option value="judge">Judge</option>
                 <option value="steward">Steward</option>
                 <option value="judge_steward">Judge + Steward</option>
@@ -284,7 +288,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
             </div>
           </fieldset>
 
-          {classification !== 'veterinarian' ? (
+          {classification && classification !== 'veterinarian' ? (
             <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
               <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Official information</legend>
               <div className="grid gap-4 sm:grid-cols-2">

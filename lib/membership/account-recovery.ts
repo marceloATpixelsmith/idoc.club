@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
-import { memberProfileSchema, normalizeEmail } from './validation';
+import { normalizeEmail } from './validation';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { checkRateLimit } from '@/lib/security/rate-limit';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
@@ -42,7 +42,9 @@ export async function requestAccountLink(
     const now = new Date();
     const allowed = await checkRateLimit(purpose, email, origin, now);
     const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-    const eligible = allowed && user && (purpose === 'password_reset' ? ['active', 'onboarding'].includes(user.accountState) : user.accountState === 'migrated_pending');
+    const eligible = allowed && user && (purpose === 'password_reset'
+      ? ['active', 'onboarding', 'migrated_pending'].includes(user.accountState)
+      : user.accountState === 'migrated_pending');
     if (eligible) {
       const rawToken = randomBytes(32).toString('base64url');
       const deliveryPayload = encryptDeliveryPayload({ email, token: rawToken });
@@ -83,22 +85,10 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
     tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
     tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
   ]);
-  const importedProfile = memberProfileSchema.safeParse({
-    address1: profile.address1, address2: profile.address2 ?? undefined, city: profile.city,
-    countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
-    postalCode: profile.postalCode, stateProvince: profile.stateProvince,
-    roles: roles.map((role) => ({
-      ...(role.roleType === 'veterinarian' ? {} : {
-        feiId: role.feiId, idocRegion: role.idocRegion,
-        nationalFederationCountryCode: role.nationalFederationCountryCode,
-        officialStatuses: role.officialStatuses,
-      }),
-      ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
-      roleType: role.roleType,
-    })),
-  });
   const entitlement = entitlements.find(({ source }) => source === 'migration');
-  const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
+  // Imported values may legitimately be absent. Completeness is enforced by the official profile
+  // form; activation proves only traceability and preserved entitlement, never fabricated data.
+  const foundationValid = mappings.length === 1 && Boolean(entitlement)
     && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
     && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
   if (!foundationValid) {
