@@ -222,10 +222,11 @@ test('paid directory: sustained searching from one origin is rate-limited using 
 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
   await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
-  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
+  await entitledMemberIn('FR', [judgeRole], { firstName: 'Judge', lastName: 'Two' });
+  const { user: searcher } = await entitledMemberIn('IT', [stewardRole], { firstName: 'Steward', lastName: 'Searcher' });
   // Repeated filter keys must be parsed safely and preserve supported multi-value facets.
   const listing = await asMember(searcher.id, () => listMemberDirectory({
-    federation: ['DE', 'FR'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
+    federation: ['DE', 'FR'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'],
   }));
   // Repeated-key arrays are supported for facets. Repeated page values fall back safely, and
   // repeated search text is ignored rather than accidentally searching a serialized array.
