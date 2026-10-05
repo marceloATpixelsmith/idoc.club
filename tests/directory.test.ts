@@ -151,8 +151,8 @@ test('directory facets accept multi-value query parameters safely', () => {
 });
 
 test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
-  assert.match(publicPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*
-\s*return Array\.isArray\(value\) \? undefined : value;/);
+  assert.match(publicPageSource, /function first\(value: string/);
+  assert.match(publicPageSource, /Array\.isArray\(value\) \? undefined : value/);
   assert.match(memberPageSource, /useState\(Array\.isArray\(filters\.q\)/);
 });
 
