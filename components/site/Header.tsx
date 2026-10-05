@@ -36,6 +36,10 @@ function isActive(pathname: string, href: string) {
   return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isAboutItemActive(pathname: string, href: string) {
+  return href === '/about' ? pathname === href : isActive(pathname, href);
+}
+
 function navClassName(active: boolean) {
   return `text-[0.8rem] font-medium uppercase tracking-[0.14em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
 }
@@ -137,7 +141,7 @@ export function Header({
                 Home
               </Link>
 
-              <NavDropdown href="/about" items={aboutLinks} label="About IDOC" pathname={pathname} />
+              <NavDropdown href="/about" isItemActive={isAboutItemActive} items={aboutLinks} label="About IDOC" pathname={pathname} />
 
               {topNavItems(signedIn).map((item) => (
                 <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
