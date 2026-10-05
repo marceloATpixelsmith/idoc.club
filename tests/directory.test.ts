@@ -10,6 +10,7 @@ const publicPageSource = readFileSync('app/(marketing)/about/members-directory/p
 const memberPageSource = readFileSync('components/directory/member-directory-table.tsx', 'utf8');
 const memberRouteSource = publicPageSource;
 const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
+const securityDoc = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
   const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
@@ -150,10 +151,30 @@ test('directory facets accept multi-value query parameters safely', () => {
 });
 
 test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
-  assert.match(publicPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
+  assert.match(publicPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*
+\s*return Array\.isArray\(value\) \? undefined : value;/);
   assert.match(memberPageSource, /useState\(Array\.isArray\(filters\.q\)/);
 });
 
 test('the public map page forces per-request dynamic rendering so it cannot be frozen as a static build-time snapshot', () => {
   assert.match(publicPageSource, /export const dynamic = 'force-dynamic';/);
+});
+
+test('multiple membership-type facets stay grouped with the other access and search predicates', () => {
+  assert.match(memberDirectorySource, /conditions\.push\(sql`\(\$\{sql\.join\(filters\.membershipType/);
+});
+
+test('descending name sorting applies the same direction to last and first names', () => {
+  assert.match(memberDirectorySource, /id === 'name' \? \[sql`\$\{column\} \$\{direction\} nulls last`, \.\.\.\(id === 'name' \? \[sql`p\.first_name \$\{direction\} nulls last`\]/);
+});
+
+test('Reset appears for search-only state and cancels a pending debounced search', () => {
+  assert.match(memberPageSource, /isFiltered=\{hasFilters \|\| hasSearch\}/);
+  assert.match(memberPageSource, /debouncedSearch\.cancel\(\)/);
+  assert.match(memberPageSource, /searchRef\.current = ''/);
+});
+
+test('security documentation describes the bounded page-size choices and reachable-record cap', () => {
+  assert.match(securityDoc, /10, 25, 50, or 100 rows per page/);
+  assert.match(securityDoc, /total reachable depth is capped at 5,000 records/);
 });
