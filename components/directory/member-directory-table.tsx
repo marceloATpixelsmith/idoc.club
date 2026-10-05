@@ -107,7 +107,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       {
         id: 'actions', enableHiding: false, enableSorting: false, size: 56,
         header: () => <span>Actions</span>,
-        cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon-sm">
+        cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
           <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
         </Button>,
       },
