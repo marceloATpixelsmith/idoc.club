@@ -1,10 +1,10 @@
 'use server';
 
 import { updateAccount } from '@/app/(login)/actions';
-import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
-import { memberProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
+import { getOwnLegacyProfileReviewData, getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
+import { memberProfileSchema, normalizeEmail, parseMemberProfileFormData } from '@/lib/membership/validation';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
-import { requireCsrfToken } from '@/lib/security/csrf';
+import { requireCsrfToken } from '@/lib/security/csrf';\nimport { getUser } from '@/lib/db/queries';
 import type { StepUpActionState } from '@/components/auth/fresh-step-up-action';
 
 // Must match app/(login)/actions.ts's own private copy exactly -- see that file's comment on why
@@ -41,17 +41,37 @@ export async function saveOwnAccountAndProfileForm(_state: StepUpActionState, fo
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
   }
-  const member = await getOwnPrivateMember();
+  const user = await getUser();
+  if (!user) return { error: 'Your session expired. Sign in again.' };
+  const legacyReviewRequired = user.legacyProfileReviewRequired;
+  const member = legacyReviewRequired
+    ? await getOwnLegacyProfileReviewData()
+    : await getOwnPrivateMember();
+  const profileInput = parseMemberProfileFormData(formData);
   // Validate the profile fields before any account-side effect runs (step-up authority consumed,
   // a real verification email sent) -- an invalid profile must never leave a pending email change
   // the member believes already succeeded, or force them through MFA again just to retry.
-  if (member && !memberProfileSchema.safeParse(parseMemberProfileFormData(formData)).success) {
+  if (member && !memberProfileSchema.safeParse(profileInput).success) {
     return { error: 'Review the highlighted profile fields.' };
+  }
+  if (legacyReviewRequired) {
+    if (!member) return { error: 'The imported profile could not be loaded. Contact IDOC support.' };
+    const submittedEmail = formData.get('email');
+    if (typeof submittedEmail !== 'string' || normalizeEmail(submittedEmail) !== normalizeEmail(user.email)) {
+      return { error: 'Confirm your current email while reviewing your profile. You can change it after this review is complete.' };
+    }
+    try {
+      await updateMemberProfile(member.profile.id, profileInput, { legacyProfileReview: true });
+      return { success: 'Your profile was reviewed and saved. Your account is ready to use.' };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'ZodError') return { error: 'Review the highlighted profile fields.' };
+      return { error: 'The profile could not be updated safely.' };
+    }
   }
   const accountResult = await updateAccount({}, formData) as StepUpActionState;
   if (accountResult.stepUpRequired || accountResult.error) return accountResult;
   if (!member) return accountResult;
-  const profileResult = await saveOwnMemberProfile(parseMemberProfileFormData(formData));
+  const profileResult = await saveOwnMemberProfile(profileInput);
   if (profileResult.error) return profileResult;
   // The login email itself does not change until the member follows that link -- never replace
   // this instruction with a generic "updated" message that could read as already complete.
