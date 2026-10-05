@@ -111,7 +111,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
         cell: ({ row }) => <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a>,
       },
       {
-        id: 'contact', enableHiding: false, enableSorting: false, size: 80,
+        id: 'actions', enableHiding: false, enableSorting: false, size: 80,
         header: () => <span>CONTACT</span>,
         cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
           <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
@@ -120,6 +120,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     ], []),
     data: rows,
     initialState: {
+      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'],
       columnFilters: initialFilterState(filters),
       pagination: { pageIndex: filters.page - 1, pageSize },
       sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],
