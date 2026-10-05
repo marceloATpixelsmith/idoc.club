@@ -168,6 +168,7 @@ test('directory defaults to the requested separate name, member detail, email, a
   const columnBlock = memberPageSource.slice(memberPageSource.indexOf('id: \'firstName\''), memberPageSource.indexOf('], []),'));
   const ids = [...columnBlock.matchAll(/id: \'([^\']+)\'/g)].map((match) => match[1]);
   assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions']);
+  assert.match(memberPageSource, /columnOrder: \['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'\]/);
   assert.match(columnBlock, /header: header\('Member Type'\)/);
   assert.match(columnBlock, /header: \(\) => <span>CONTACT<\/span>/);
 });
