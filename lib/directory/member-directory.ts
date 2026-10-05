@@ -89,8 +89,8 @@ function queryParts(raw: MemberDirectoryFilters) {
     sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];
   if (filters.q) {
-    const pattern = `%${filters.q.replaceAll('%', '\\\\%').replaceAll('_', '\\\\_')}%`;
-    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\\\' or p.last_name ilike ${pattern} escape '\\\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\\\')`);
+    const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\')`);
   }
   if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
