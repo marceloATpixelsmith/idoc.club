@@ -8,7 +8,9 @@ test('legacy review is a durable server-side gate completed only by the canonica
   const data = read('lib/membership/data-access.ts');
   const page = read('app/(dashboard)/dashboard/page.tsx');
   const form = read('app/(dashboard)/dashboard/profile/profile-form.tsx');
-  assert.match(data, /account\.legacyProfileReviewRequired[\s\S]*profile_review/);\n  assert.match(data, /getOwnLegacyProfileReviewData[\s\S]*profile_review/);\n  assert.match(data, /legacyProfileReviewRequired && !isPrivilegedActor\(actor\)[\s\S]*\['account', 'onboarding', 'profile_review'\]/);
+  assert.match(data, /account\.legacyProfileReviewRequired[\s\S]*profile_review/);
+  assert.match(data, /getOwnLegacyProfileReviewData[\s\S]*profile_review/);
+  assert.match(data, /legacyProfileReviewRequired && !isPrivilegedActor\(actor\)[\s\S]*\['account', 'onboarding', 'profile_review'\]/);
   assert.match(data, /legacyProfileReviewRequired: false, legacyProfileReviewedAt: now/);
   assert.match(data, /resetLegacyProfileReview[\s\S]*requireAdministrator/);
   assert.match(page, /legacyProfileReviewRequired[\s\S]*dashboard\/profile\?confirmDetails=1/);
