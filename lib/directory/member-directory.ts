@@ -16,6 +16,7 @@ export class DirectoryRateLimitedError extends Error {
 export const DIRECTORY_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DIRECTORY_PAGE_SIZE = 25;
 export const DIRECTORY_MAX_RESULTS = 5_000;
+export const DIRECTORY_MAX_PAGE = DIRECTORY_MAX_RESULTS / DIRECTORY_PAGE_SIZE;
 
 export const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
