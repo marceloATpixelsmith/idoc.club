@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
+import { getOwnLegacyProfileReviewData, getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { ProfileForm } from './profile-form';
@@ -8,9 +8,9 @@ import { getUser } from '@/lib/db/queries';
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ confirmDetails?: string }> }) {
   const user = await getUser();
   if (!user || user.accountState === 'onboarding') redirect('/dashboard');
-  const actor = await requireAccountAccess('profile');
+  const actor = await requireAccountAccess(user.legacyProfileReviewRequired ? 'profile_review' : 'profile');
   const privileged = isPrivilegedActor(actor);
-  const member = await getOwnPrivateMember();
+  const member = user.legacyProfileReviewRequired ? await getOwnLegacyProfileReviewData() : await getOwnPrivateMember();
   // An administrator/super_admin is never a member and must never be gated by membership payment
   // status or pushed into onboarding for lacking a member profile -- they just see the account
   // email field alone, no profile section.
