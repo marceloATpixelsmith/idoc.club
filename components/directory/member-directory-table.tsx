@@ -3,7 +3,7 @@
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
 import { Mail } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
@@ -123,7 +123,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     startTransition,
   });
 
-  const debouncedSearch = useDebouncedCallback((value: string) => {
+  useEffect(() => {\n    const nextSearch = filters.q ?? '';\n    setSearch((current) => current === nextSearch ? current : nextSearch);\n    const nextFilters = initialFilterState(filters);\n    if (JSON.stringify(table.getState().columnFilters) !== JSON.stringify(nextFilters)) table.setColumnFilters(nextFilters);\n    if (JSON.stringify(table.getState().sorting) !== JSON.stringify(filters.sort)) table.setSorting(filters.sort);\n    if (table.getState().pagination.pageIndex !== filters.page - 1 || table.getState().pagination.pageSize !== pageSize) {\n      table.setPagination({ pageIndex: filters.page - 1, pageSize });\n    }\n  }, [filters, pageSize, table]);\n\n  const debouncedSearch = useDebouncedCallback((value: string) => {
     const state = table.getState();
     navigate({
       pagination: { ...state.pagination, pageIndex: 0 },
