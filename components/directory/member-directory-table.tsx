@@ -3,7 +3,7 @@
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
 import { Mail } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
@@ -56,9 +56,10 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const pathname = usePathname();
   const router = useRouter();
   const [search, setSearch] = useState(Array.isArray(filters.q) ? '' : filters.q ?? '');
+  const searchRef = useRef(search);
   const [isPending, startTransition] = useTransition();
 
-  function navigate(state: DataTableLiveState, query = search) {
+  function navigate(state: DataTableLiveState, query = searchRef.current) {
     const params = new URLSearchParams({ tab: 'directory' });
     if (query.trim()) params.set('q', query.trim());
     const membershipType = filterToken(state.columnFilters, 'type');
@@ -145,8 +146,9 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   }, 300);
 
   function resetAll() {
+    debouncedSearch.cancel();
+    searchRef.current = '';
     setSearch('');
-    table.resetColumnFilters(true);
     const state = table.getState();
     navigate({
       pagination: { ...state.pagination, pageIndex: 0 },
@@ -161,13 +163,13 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     <DataTableToolbar
       className="mt-5 rounded-xl border bg-background p-3"
       table={table}
-      isFiltered={hasFilters}
+      isFiltered={hasFilters || hasSearch}
       pending={isPending}
       onReset={resetAll}
       leading={<Input
         aria-label="Search member name or email"
         className="h-8 w-40 lg:w-56"
-        onChange={(event) => { const value = event.target.value; setSearch(value); debouncedSearch(value); }}
+        onChange={(event) => { const value = event.target.value; searchRef.current = value; setSearch(value); debouncedSearch(value); }}
         placeholder="Search name or email…"
         type="search"
         value={search}
