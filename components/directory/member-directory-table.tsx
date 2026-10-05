@@ -123,7 +123,18 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     startTransition,
   });
 
-  useEffect(() => {\n    const nextSearch = filters.q ?? '';\n    setSearch((current) => current === nextSearch ? current : nextSearch);\n    const nextFilters = initialFilterState(filters);\n    if (JSON.stringify(table.getState().columnFilters) !== JSON.stringify(nextFilters)) table.setColumnFilters(nextFilters);\n    if (JSON.stringify(table.getState().sorting) !== JSON.stringify(filters.sort)) table.setSorting(filters.sort);\n    if (table.getState().pagination.pageIndex !== filters.page - 1 || table.getState().pagination.pageSize !== pageSize) {\n      table.setPagination({ pageIndex: filters.page - 1, pageSize });\n    }\n  }, [filters, pageSize, table]);\n\n  const debouncedSearch = useDebouncedCallback((value: string) => {
+  useEffect(() => {
+    const nextSearch = filters.q ?? '';
+    setSearch((current) => current === nextSearch ? current : nextSearch);
+    const nextFilters = initialFilterState(filters);
+    if (JSON.stringify(table.getState().columnFilters) !== JSON.stringify(nextFilters)) table.setColumnFilters(nextFilters);
+    if (JSON.stringify(table.getState().sorting) !== JSON.stringify(filters.sort)) table.setSorting(filters.sort);
+    if (table.getState().pagination.pageIndex !== filters.page - 1 || table.getState().pagination.pageSize !== pageSize) {
+      table.setPagination({ pageIndex: filters.page - 1, pageSize });
+    }
+  }, [filters, pageSize, table]);
+
+  const debouncedSearch = useDebouncedCallback((value: string) => {
     const state = table.getState();
     navigate({
       pagination: { ...state.pagination, pageIndex: 0 },
