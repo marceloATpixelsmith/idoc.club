@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef, ColumnFiltersState } from '@tanstack/react-table';
+import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
 import { Mail } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
@@ -15,7 +15,7 @@ import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { countryNameForCode, COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGIONS } from '@/lib/membership/validation';
-import { MEMBERSHIP_TYPE_FILTERS, type DirectoryMemberRow, type MemberDirectoryFilters } from '@/lib/directory/member-directory';
+import { MEMBERSHIP_TYPE_FILTERS, type DirectoryMemberRow, type DirectorySort } from '@/lib/directory/member-directory';
 
 const PAGE_SIZES = [10, 25, 50, 100];
 const TYPE_LABELS: Record<string, string> = {
@@ -25,21 +25,21 @@ const TYPE_OPTIONS = MEMBERSHIP_TYPE_FILTERS.map((value) => ({ value, label: TYP
 const FEDERATION_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ value: code, label: name }));
 const REGION_OPTIONS = IDOC_REGIONS.map((value) => ({ value, label: value }));
 
-type ListingFilters = Omit<MemberDirectoryFilters, 'page' | 'pageSize' | 'sort'> & {
-  page: number;
-  sort: { id: string; desc: boolean }[];
+type ListingFilters = {
+  federation: string[]; membershipType: string[]; region: string[];
+  page: number; q?: string; sort: DirectorySort[];
 };
 
-function header(id: string, label: string) {
-  return ({ column }: { column: Parameters<typeof DataTableColumnHeader>[0]['column'] }) =>
+function header(label: string) {
+  return ({ column }: HeaderContext<DirectoryMemberRow, unknown>) =>
     <DataTableColumnHeader column={column} label={label} />;
 }
 function initialFilterState(filters: ListingFilters): ColumnFiltersState {
-  return [
-    ['membershipType', filters.membershipType],
-    ['federation', filters.federation],
-    ['region', filters.region],
-  ].flatMap(([id, value]) => Array.isArray(value) && value.length ? [{ id: id as string, value }] : []);
+  const result: ColumnFiltersState = [];
+  if (filters.membershipType.length) result.push({ id: 'type', value: filters.membershipType });
+  if (filters.federation.length) result.push({ id: 'federation', value: filters.federation });
+  if (filters.region.length) result.push({ id: 'region', value: filters.region });
+  return result;
 }
 function filterToken(filters: ColumnFiltersState, id: string) {
   const value = filters.find((filter) => filter.id === id)?.value;
@@ -76,16 +76,16 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
     columns: useMemo<ColumnDef<DirectoryMemberRow>[]>(() => [
       {
         id: 'name', accessorFn: (row) => `${row.lastName}, ${row.firstName}`,
-        header: header('name', 'Name'), meta: { label: 'Name' },
+        header: header('Name'), meta: { label: 'Name' },
         cell: ({ row }) => <span className="font-medium uppercase">{row.original.lastName}, {row.original.firstName}</span>,
       },
       {
-        id: 'email', accessorKey: 'email', header: header('email', 'Email'), meta: { label: 'Email' },
+        id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
         cell: ({ row }) => <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a>,
       },
       {
         id: 'type', accessorKey: 'membershipType', enableColumnFilter: true,
-        header: header('type', 'Membership Type'),
+        header: header('Membership Type'),
         meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' },
         cell: ({ row }) => row.original.roles?.length
           ? row.original.roles.map((role) => TYPE_LABELS[role.roleType] ?? role.roleType).join('; ')
@@ -93,13 +93,13 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       },
       {
         id: 'federation', accessorKey: 'federation', enableColumnFilter: true,
-        header: header('federation', 'National Federation'),
+        header: header('National Federation'),
         meta: { label: 'National Federation', options: FEDERATION_OPTIONS, variant: 'multiSelect' },
         cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—',
       },
       {
         id: 'region', accessorKey: 'region', enableColumnFilter: true,
-        header: header('region', 'IDOC Region'),
+        header: header('IDOC Region'),
         meta: { label: 'IDOC Region', options: REGION_OPTIONS, variant: 'multiSelect' },
         cell: ({ row }) => row.original.region ?? '—',
       },
