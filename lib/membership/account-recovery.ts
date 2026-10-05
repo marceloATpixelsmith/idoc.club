@@ -88,7 +88,7 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
   const entitlement = entitlements.find(({ source }) => source === 'migration');
   // Imported values may legitimately be absent. Completeness is enforced by the official profile
   // form; activation proves only traceability and preserved entitlement, never fabricated data.
-  const foundationValid = mappings.length === 1 && Boolean(entitlement)
+  const foundationValid = mappings.length === 1 && roles.length > 0 && Boolean(entitlement)
     && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
     && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
   if (!foundationValid) {
