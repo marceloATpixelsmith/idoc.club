@@ -7,7 +7,8 @@ const memberDirectorySource = readFileSync('lib/directory/member-directory.ts', 
 const rateLimitSource = readFileSync('lib/security/rate-limit.ts', 'utf8');
 const concentrationMapSource = readFileSync('components/directory/concentration-map.tsx', 'utf8');
 const publicPageSource = readFileSync('app/(marketing)/about/members-directory/page.tsx', 'utf8');
-const memberPageSource = publicPageSource;
+const memberPageSource = readFileSync('components/directory/member-directory-table.tsx', 'utf8');
+const memberRouteSource = publicPageSource;
 const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
@@ -75,12 +76,12 @@ test('the paid member directory returns email only for the re-authorized member 
   assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
 });
 
-test('directory pagination uses a fixed, server-controlled page size and a bounded maximum page, never a client-supplied page size', () => {
-  assert.match(memberDirectorySource, /export const DIRECTORY_PAGE_SIZE = 25/);
-  assert.match(memberDirectorySource, /export const DIRECTORY_MAX_PAGE = 200/);
-  assert.doesNotMatch(memberDirectorySource, /pageSize.*=.*input\.|input\.pageSize/);
-  assert.match(memberDirectorySource, /Math\.min\(page, DIRECTORY_MAX_PAGE\)/);
-  assert.match(memberDirectorySource, /Math\.min\(counts\[0\]\?\.count \?\? 0, DIRECTORY_MAX_PAGE \* DIRECTORY_PAGE_SIZE\)/);
+test('directory page size matches the admin options and caps accessible results at 5,000 records', () => {
+  assert.match(memberDirectorySource, /DIRECTORY_PAGE_SIZE_OPTIONS = \[10, 25, 50, 100\]/);
+  assert.match(memberDirectorySource, /DIRECTORY_MAX_RESULTS = 5_000/);
+  assert.match(memberDirectorySource, /input\.pageSize/);
+  assert.match(memberDirectorySource, /Math\.min\(counts\[0\]\?\.count \?\? 0, DIRECTORY_MAX_RESULTS\)/);
+  assert.match(memberPageSource, /pageSizeOptions=\{PAGE_SIZES\}/);
 });
 
 test('directory search input length is capped, and search/filter values are escaped before use in a LIKE pattern', () => {
@@ -93,30 +94,30 @@ test('ordering is stable across pages: name first, then a non-exposed internal i
 });
 
 test('the website directory keeps unauthorized and failure states generic', () => {
-  assert.match(memberPageSource, /Active membership required/);
-  assert.match(memberPageSource, /DirectoryRateLimitedError/);
-  assert.match(memberPageSource, /directory could not be loaded/i);
+  assert.match(memberRouteSource, /Active membership required/);
+  assert.match(memberRouteSource, /DirectoryRateLimitedError/);
+  assert.match(memberRouteSource, /directory could not be loaded/i);
 });
 
 test('the paid directory page offers email links and actions without rendering a database identifier', () => {
-  assert.doesNotMatch(memberPageSource, /row\.id\b|row\.profileId|row\.userId/);
-  assert.match(memberPageSource, /href=\{`mailto:\$\{row\.email\}`\}/);
-  assert.match(memberPageSource, /aria-label=\{`Email \$\{row\.firstName\} \$\{row\.lastName\}`\}/);
-  assert.match(memberPageSource, /key=\{index\}/);
+  assert.doesNotMatch(memberPageSource, /row\.original\.(id|profileId|userId)\b/);
+  assert.match(memberPageSource, /href=\{`mailto:\$\{row\.original\.email\}`\}/);
+  assert.match(memberPageSource, /aria-label=\{`Email \$\{row\.original\.firstName\} \$\{row\.original\.lastName\}`\}/);
+  assert.match(memberPageSource, /id: 'actions'/);
 });
 
-test('the directory offers search, membership type, federation, and region controls, without a redundant country filter', () => {
-  for (const name of ['q', 'membershipType', 'federation', 'region']) {
-    assert.match(memberPageSource, new RegExp(`name="${name}"`));
-  }
-  assert.doesNotMatch(memberPageSource, /name="country"/);
+test('directory facets use the shared table toolbar and omit the redundant Country column and filter', () => {
+  for (const id of ["'type'", "'federation'", "'region'"]) assert.ok(memberPageSource.includes(`id: ${id}`));
+  assert.match(memberPageSource, /DataTableToolbar/);
+  assert.match(memberPageSource, /variant: 'multiSelect'/);
+  assert.doesNotMatch(memberPageSource, /country|Country/);
 });
 
 test('no Server Action or CSRF token is used by the directory surfaces: both are pure, re-authorized-on-every-request reads', () => {
   for (const source of [aggregateSource, memberDirectorySource, memberPageSource, publicPageSource]) {
     assert.doesNotMatch(source, /'use server'|requireCsrfToken/);
   }
-  assert.match(memberPageSource, /form method="get"/);
+  assert.doesNotMatch(memberPageSource, /form method="get"|type="submit"|>Search</);
 });
 
 test('the dashboard navigation omits Directory while the public website retains it', () => {
@@ -125,17 +126,17 @@ test('the dashboard navigation omits Directory while the public website retains 
 });
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
-  assert.match(memberPageSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
-  assert.match(memberPageSource, /Map \/ Infographic/);
-  assert.match(memberPageSource, /Search Directory/);
-  assert.match(memberPageSource, /if \(activeTab === 'directory' && user\)/);
-  assert.match(memberPageSource, /getPublicMemberConcentration/);
+  assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberRouteSource, /Map \/ Infographic/);
+  assert.match(memberRouteSource, /Search Directory/);
+  assert.match(memberRouteSource, /if \(activeTab === 'directory' && user\)/);
+  assert.match(memberRouteSource, /getPublicMemberConcentration/);
 });
 
 test('signed-out visitors see only the map, with no tabs and no directory even through a direct tab URL', () => {
-  assert.match(memberPageSource, /const user = await getPublicUser\(\)/);
-  assert.match(memberPageSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
-  assert.match(memberPageSource, /\{user \? <nav aria-label="Members directory views"/);
+  assert.match(memberRouteSource, /const user = await getPublicUser\(\)/);
+  assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberRouteSource, /\{user \? <nav aria-label="Members directory views"/);
 });
 
 test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
@@ -147,10 +148,8 @@ test('directory filters resolve an array-valued (repeated-key) search parameter 
 });
 
 test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
-  assert.match(memberPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
-  for (const field of ['q', 'membershipType', 'federation', 'region']) {
-    assert.match(memberPageSource, new RegExp(`first\\(params\\.${field}\\)`));
-  }
+  assert.match(publicPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
+  assert.match(memberPageSource, /useState\(Array\.isArray\(filters\.q\)/);
 });
 
 test('the public map page forces per-request dynamic rendering so it cannot be frozen as a static build-time snapshot', () => {
