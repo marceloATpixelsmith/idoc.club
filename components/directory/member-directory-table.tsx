@@ -18,7 +18,8 @@ import { IDOC_REGIONS } from '@/lib/membership/validation';
 import type { DirectoryMemberRow, DirectorySort } from '@/lib/directory/member-directory';
 
 const PAGE_SIZES = [10, 25, 50, 100];
-const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;\nconst TYPE_LABELS: Record<string, string> = {
+const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
+const TYPE_LABELS: Record<string, string> = {
   combo: 'Judge + Steward', judge: 'Judge', steward: 'Steward', veterinarian: 'Veterinarian',
 };
 const TYPE_OPTIONS = MEMBERSHIP_TYPE_FILTERS.map((value) => ({ value, label: TYPE_LABELS[value] }));
