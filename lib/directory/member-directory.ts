@@ -21,7 +21,7 @@ export const DIRECTORY_MAX_PAGE = DIRECTORY_MAX_RESULTS / DIRECTORY_PAGE_SIZE;
 export const MEMBERSHIP_TYPE_FILTERS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 export type MembershipTypeFilter = typeof MEMBERSHIP_TYPE_FILTERS[number];
 const VALID_FEDERATIONS = new Set(COUNTRY_OPTIONS.map(({ code }) => code));
-const SORT_COLUMNS = ['name', 'email', 'type', 'federation', 'region'] as const;
+const SORT_COLUMNS = ['name', 'firstName', 'lastName', 'email', 'type', 'region', 'federation'] as const;
 type SortColumn = typeof SORT_COLUMNS[number];
 export type DirectorySort = { id: SortColumn; desc: boolean };
 
@@ -50,7 +50,7 @@ function pageNumber(value: number | RawFilterValue, fallback: number): number {
 }
 function parseSort(value: RawFilterValue): DirectorySort[] {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return [{ id: 'name', desc: false }];
+  if (!raw) return [{ id: 'lastName', desc: false }];
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [{ id: 'name', desc: false }];
@@ -118,14 +118,15 @@ const from = sql`from idoc.profiles p
 function directoryOrder(sorting: DirectorySort[]) {
   const expressions = sorting.flatMap(({ id, desc }) => {
     const direction = desc ? sql`desc` : sql`asc`;
-    const column = id === 'name' ? sql`p.last_name`
+    const column = id === 'name' || id === 'lastName' ? sql`p.last_name`
+      : id === 'firstName' ? sql`p.first_name`
       : id === 'email' ? sql`coalesce(u.email_display, u.email)`
       : id === 'type' ? sql`roles.membership_type`
       : id === 'federation' ? sql`roles.federation`
       : sql`roles.region`;
     return [
       sql`${column} ${direction} nulls last`,
-      ...(id === 'name' ? [sql`p.first_name ${direction} nulls last`] : []),
+      ...(id === 'name' || id === 'lastName' ? [sql`p.first_name ${direction} nulls last`] : []),
     ];
   });
   expressions.push(sql`p.last_name asc nulls last`, sql`p.first_name asc nulls last`, sql`p.id asc`);
