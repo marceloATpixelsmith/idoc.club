@@ -4,7 +4,8 @@ import { updateAccount } from '@/app/(login)/actions';
 import { getOwnLegacyProfileReviewData, getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
 import { memberProfileSchema, normalizeEmail, parseMemberProfileFormData } from '@/lib/membership/validation';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
-import { requireCsrfToken } from '@/lib/security/csrf';\nimport { getUser } from '@/lib/db/queries';
+import { requireCsrfToken } from '@/lib/security/csrf';
+import { getUser } from '@/lib/db/queries';
 import type { StepUpActionState } from '@/components/auth/fresh-step-up-action';
 
 // Must match app/(login)/actions.ts's own private copy exactly -- see that file's comment on why
