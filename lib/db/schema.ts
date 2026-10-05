@@ -51,6 +51,7 @@ export const users = idocSchema.table('users', {
 }, (table) => [
   uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
+  check('users_legacy_profile_review_state_check', sql`NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL`),
 ]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
