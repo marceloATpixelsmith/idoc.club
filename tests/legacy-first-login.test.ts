@@ -10,7 +10,7 @@ test('legacy review is a durable server-side gate completed only by the canonica
   const form = read('app/(dashboard)/dashboard/profile/profile-form.tsx');
   assert.match(data, /account\.legacyProfileReviewRequired[\s\S]*profile_review/);
   assert.match(data, /getOwnLegacyProfileReviewData[\s\S]*profile_review/);
-  assert.match(data, /legacyProfileReviewRequired && !isPrivilegedActor\(actor\)[\s\S]*\['account', 'onboarding', 'profile_review'\]/);
+  assert.match(data, /account\.legacyProfileReviewRequired && !isPrivilegedActor\(actor\)[\s\S]*account\.accountState !== 'active'[\s\S]*!\['account', 'profile_review'\]\.includes\(operation\)/);
   assert.match(data, /account\.accountState !== 'active'/);
   assert.match(data, /legacyProfileReviewRequired: false, legacyProfileReviewedAt: now/);
   assert.match(data, /resetLegacyProfileReview[\s\S]*requireAdministrator/);
