@@ -158,3 +158,43 @@ Article `content_html` is passed through the same tag allowlist as `lib/news/san
 **Idempotency and reconciliation.** `idoc.news_articles` inserts use `ON CONFLICT (slug) DO NOTHING`; `idoc.seminars` inserts use a `NOT EXISTS` guard on `(title, start_date)`, since that table has no natural unique key. Re-running the script is safe and a no-op on rows already imported. Every row the script actually inserts also gets one `idoc.audit_log` row (`admin.news_article.created` / `admin.seminar.created`, matching the shape `lib/news/articles.ts` / `lib/seminars/seminars.ts` themselves write on creation), attributed to an administrator resolved at run time -- so `select count(*) from idoc.audit_log where action in ('admin.news_article.created','admin.seminar.created') and after_json->>'title' is not null` after a run is the reconciliation count against the mapping table above.
 
 **Rollback.** This import only creates rows (no update/delete of existing data), so rollback is deleting the specific imported rows by slug/title if needed; it never touches Stripe or membership data and carries none of the billing-continuity risk in [Rollback rule](#9-rollback-rule) above.
+
+# 11. Migrated WordPress credentials and password security
+
+The importer must preserve existing member credentials wherever their WordPress password hash is supported and can be verified safely. A migrated member with a supported hash should be able to sign in with their existing email and password without re-registering or repeating profile setup.
+
+## Import and storage requirements
+
+- Import the WordPress `user_pass` hash exactly as exported into the application's dedicated credential representation. Preserve the format/version needed to select the verifier. Do not place it in a profile field or overwrite it with a fabricated credential.
+- The supplied users snapshot contains two formats: WordPress portable phpass hashes (`$P$...`) and WordPress bcrypt hashes using the `$wp$2y$` prefix. The importer must validate these formats against the actual source WordPress implementation and must recount the final cutover export; unsupported or malformed hashes go to an exception report and use the normal secure password-reset path.
+- Do not import `user_activation_key`, WordPress reset/activation tokens, sessions, cookies, or other authentication artifacts.
+- Treat password hashes as sensitive credential material. Restrict access, keep them out of logs, analytics, error reports, and reconciliation output, and delete temporary source copies according to the migration retention policy. Never attempt to recover or crack plaintext passwords.
+
+## First-login verification and upgrade
+
+1. Verify `$P$` hashes with a tested WordPress-compatible portable phpass verifier and `$wp$2y$` hashes with a verifier tested against the actual WordPress bcrypt implementation/version. Do not assume prefix manipulation alone is sufficient.
+2. Apply existing login rate limits and the normal account-state, email-verification, MFA, and authorization gates. Successful password verification must not bypass any of them. Use enumeration-safe outward errors.
+3. After successful verification, check the entered password against the Have I Been Pwned Pwned Passwords corpus using its range-query protocol. Compute the SHA-1 digest locally, send only its first five hexadecimal characters over HTTPS, and compare returned suffixes locally. Never transmit the plaintext or full digest, and never log or persist either value or the returned suffixes.
+4. If the password is reported as breached, do not create a normal authenticated session. Require a password reset through the existing secure recovery flow before normal access, then apply the regular email-verification and MFA requirements.
+5. If the breach service is unavailable or times out, do not lock all migrated members out because of the outage. Complete normal authentication and credential upgrade, record only that the breach check is pending, and retry without retaining the plaintext. Monitor service failures without credentials or unnecessary personal data. A no-match means only that the password was not found in that corpus; it does not prove that it is strong or unique.
+6. For a successful, non-breached login, atomically replace the imported hash with the current IDOC password hash (Argon2id per the authentication requirements). Clear the legacy hash only after the new hash is durably saved. Handle concurrent login/upgrade attempts so an older value cannot overwrite the new credential.
+7. If a legacy password fails verification because its hash is unsupported or malformed, offer the standard secure password-reset flow. Do not disclose account existence on public login or recovery surfaces.
+
+## Password policy for migrated accounts
+
+- New accounts, password changes, and password resets must continue to enforce the current IDOC password policy and reject passwords found in the breached-password corpus. The authoritative authentication requirements define the numeric minimum; this migration plan does not set a different threshold.
+- Do not force a member to change a successfully verified legacy password solely because it is shorter than the current minimum or fails a composition rule. Upgrade its hash after successful verification and let the member keep using it unless there is evidence of compromise, such as a confirmed breach-corpus match, or another separately documented security trigger.
+- Password hashes cannot reveal password length or composition. Do not infer compliance from hash prefix, hash length, algorithm, salt, or age, and do not claim that a whole-population percentage is known from the export.
+- If IDOC wants an aggregate estimate after its numeric minimum is confirmed, the application may measure length transiently when members successfully log in. It must not store or log passwords. Retain only aggregate counts and policy version, and label the result as a sample of successful logins, not a census of all imported accounts. Do not force a reset solely from a partial sample unless that policy is explicitly approved after review.
+- Do not impose periodic password rotation absent evidence of compromise or another documented risk.
+
+## Required pre-cutover verification
+
+- Test valid and invalid phpass and WordPress bcrypt hashes generated by, or verified against, the source WordPress implementation.
+- Test successful legacy verification, atomic upgrade, removal of the old hash only after durable persistence, and concurrent upgrades.
+- Test wrong passwords, malformed/unsupported formats, reset fallback, enumeration-safe responses, rate limits, and all required email-verification/MFA/account-state gates.
+- Test that breach-range requests send only the permitted hash prefix, compare suffixes locally, and never log or persist the plaintext, full digest, or returned suffixes.
+- Test that a breach match blocks normal login pending reset, a non-match follows normal authentication, and service unavailability does not create a system-wide lockout.
+- Test new-password and password-change policy enforcement, including rejection of passwords found in the breach corpus.
+- Keep reconciliation limited to aggregate counts by hash format and unsupported/malformed status. Never include hash values, plaintext passwords, or unnecessary personal data.
+- Complete a repeatable staging rehearsal against a fresh export, verify all reconciliation exceptions, and document rollback/recovery before cutover.
