@@ -301,6 +301,18 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // taken (null means the account has never had a real, member-known password -- see lib/db/schema.ts).
   expectedSchema['idoc.users'].columns.password_set_at = { name: 'password_set_at', type: 'timestamp', primaryKey: false, notNull: false };
 
+  // Migration 0056 added the durable legacy profile-review state and its invariant.
+  expectedSchema['idoc.users'].columns.legacy_profile_review_required = {
+    name: 'legacy_profile_review_required', type: 'boolean', primaryKey: false, notNull: true, default: false,
+  };
+  expectedSchema['idoc.users'].columns.legacy_profile_reviewed_at = {
+    name: 'legacy_profile_reviewed_at', type: 'timestamp with time zone', primaryKey: false, notNull: false,
+  };
+  expectedSchema['idoc.users'].checkConstraints.users_legacy_profile_review_state_check = {
+    name: 'users_legacy_profile_review_state_check',
+    value: 'NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL',
+  };
+
   // Migration 0054 widened email_otp_codes_purpose_check to add the google_disconnect_verification
   // purpose (lib/auth/email-otp.ts) after this frozen snapshot was taken.
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
