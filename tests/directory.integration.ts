@@ -223,7 +223,7 @@ test('paid directory: sustained searching from one origin is rate-limited using 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
   await entitledMemberIn('DE', [judgeRole], { firstName: 'Judge', lastName: 'One' });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Steward', lastName: 'Two' });
-  // Repeated filter keys are resolved to "absent" rather than passed into string methods.
+  // Repeated filter keys must be parsed safely and preserve supported multi-value facets.
   const listing = await asMember(searcher.id, () => listMemberDirectory({
     federation: ['DE', 'FR'], membershipType: ['judge', 'steward'], page: ['1', '2'], q: ['One', 'Two'], region: ['Western Europe & Africa'],
   }));
