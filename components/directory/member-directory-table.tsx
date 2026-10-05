@@ -127,6 +127,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
 
   useEffect(() => {
     const nextSearch = filters.q ?? '';
+    searchRef.current = nextSearch;
     setSearch((current) => current === nextSearch ? current : nextSearch);
     const nextFilters = initialFilterState(filters);
     if (JSON.stringify(table.getState().columnFilters) !== JSON.stringify(nextFilters)) table.setColumnFilters(nextFilters);
