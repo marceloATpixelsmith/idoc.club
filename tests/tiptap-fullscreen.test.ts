@@ -5,13 +5,18 @@ import test from 'node:test';
 const source = readFileSync('components/tiptap/simple-editor-field.tsx', 'utf8');
 
 test('shared Tiptap editor exposes icon-only fullscreen and editable HTML source controls', () => {
-  assert.match(source, /<span>\{isFullscreen \? 'Exit full screen' : 'Full screen'\}<\/span>/);
+  assert.match(source, /label=\{isFullscreen \? 'Exit full screen' : 'Open full screen'\}/);
+  assert.match(source, /<ToolbarButton[\s\S]*?active=\{isFullscreen\}[\s\S]*?<Maximize2 \/>/);
+  assert.doesNotMatch(source, /<span>\{isFullscreen/);
   assert.match(source, /onKeyDownCapture=\{\(event\) => \{/);
   assert.match(source, /event\.stopPropagation\(\)/);
   assert.match(source, /fixed inset-0 z-\[100\] flex h-dvh flex-col/);
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /document\.body\.style\.overflow = 'hidden'/);
-  assert.match(source, /aria-label=\{isSourceMode \? 'Return to visual editor' : 'View HTML source'\}/);
+  assert.match(source, /label=\{isSourceMode \? 'Return to visual editor' : 'View HTML source'\}/);
+  assert.match(source, /active=\{isSourceMode\}/);
+  assert.doesNotMatch(source, /<span>\{isSourceMode/);
+  assert.match(source, /text-primary data-\[active=true\]:bg-accent data-\[active=true\]:text-primary/);
   assert.match(source, /<textarea/);
   assert.match(source, /value=\{html\}/);
   assert.match(source, /onChange=\{\(event\) => setHtml\(event\.target\.value\)\}/);
