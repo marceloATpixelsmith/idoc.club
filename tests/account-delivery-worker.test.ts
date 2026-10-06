@@ -30,7 +30,7 @@ test('bounded batches process multiple records, continue after retry, and stop o
   const results = ['delivered', 'ineligible', 'retryable', 'delivered', 'empty'] as const;
   let calls = 0;
   const summary = await processDeliveryBatch(async () => ({ status: results[calls++] ?? 'empty' }));
-  assert.deepEqual(summary, { deadLettered: 0, delivered: 2, ineligible: 1, leaseLost: 0, retryable: 1 });
+  assert.deepEqual(summary, { blocked: 0, deadLettered: 0, delivered: 2, ineligible: 1, leaseLost: 0, retryable: 1 });
   assert.equal(calls, 5);
   calls = 0;
   const bounded = await processDeliveryBatch(async () => { calls += 1; return { status: 'ineligible' }; });

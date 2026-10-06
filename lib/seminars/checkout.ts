@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import type Stripe from 'stripe';
 import { client } from '@/lib/db/drizzle';
@@ -24,6 +25,7 @@ export type SeminarCheckoutStripeClient = {
  * Anonymous online guests use createGuestSeminarCheckoutSession instead: Stripe collects their
  * contact details first and the verified webhook creates the registration only after payment. */
 export async function createSeminarCheckoutSession(registrationIdValue: unknown, testStripeClient?: SeminarCheckoutStripeClient): Promise<string> {
+  assertLiveBillingAllowed('billing.createSeminarCheckoutSession');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const registrationId = Number(registrationIdValue);
   if (!Number.isInteger(registrationId) || registrationId <= 0) throw new SeminarRegistrationError('Registration not found.');
@@ -88,6 +90,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
  * last name are required Stripe custom fields. The webhook revalidates price, seminar state and
  * capacity before creating the paid guest registration. */
 export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown, testStripeClient?: SeminarCheckoutStripeClient): Promise<string> {
+  assertLiveBillingAllowed('billing.createGuestSeminarCheckoutSession');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const seminarId = Number(seminarIdValue);
   if (!Number.isInteger(seminarId) || seminarId <= 0) throw new SeminarRegistrationError('Seminar not found.');

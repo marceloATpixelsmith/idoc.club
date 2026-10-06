@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await processStripeEvent(event, stripe);
+  const status = await processStripeEvent(event, stripe);
 
   // Staging and production share Postgres, but only production runs the scheduled notification cron.
   // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after
@@ -45,5 +45,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({ received: true });
+  return Response.json({ received: true, status });
 }

@@ -178,3 +178,7 @@ authoritative database price, expected amount, EUR currency, paid status, and a 
 mismatch creates reconciliation evidence and never credits the registration. Seminar payments and
 refunds never alter membership entitlement. Stripe E2E fixtures add an unmistakable per-run tag to
 PaymentIntent and Refund metadata; ordinary member objects do not receive test metadata.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting overrides outgoing communications and live billing initiation: only exact `false` releases it. Missing, empty and invalid values block. Validated Stripe test-mode mutations remain available, while all email remains held. Existing local accounting/entitlement rules and read-only reconciliation continue. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for webhook/queue handling, staging isolation, migration verification and explicit operator release.

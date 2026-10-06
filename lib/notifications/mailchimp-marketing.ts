@@ -1,4 +1,5 @@
 import 'server-only';
+import { logMemberLaunchHold, memberCommunicationsDisabled } from '../runtime/member-launch-hold.ts';
 
 import { createHash } from 'node:crypto';
 
@@ -8,7 +9,11 @@ const REQUEST_TIMEOUT_MS = 5000;
  * Best-effort onboarding subscription. Provider/configuration failures must not
  * roll back or otherwise affect the already-committed member profile.
  */
-export async function subscribeToMarketingAudience(email: string): Promise<void> {
+export async function subscribeToMarketingAudience(email: string): Promise<void | { status: 'blocked' }> {
+  if (memberCommunicationsDisabled()) {
+    logMemberLaunchHold('email.marketing_audience');
+    return { status: 'blocked' };
+  }
   const apiKey = process.env.MAILCHIMP_MARKETING_API_KEY?.trim();
   const audienceId = process.env.MAILCHIMP_MARKETING_AUDIENCE_ID?.trim();
   const serverPrefix = process.env.MAILCHIMP_MARKETING_SERVER_PREFIX?.trim();
@@ -41,7 +46,11 @@ export async function subscribeToMarketingAudience(email: string): Promise<void>
  * unsubscribed record for if the member was never on the list, so a member with no Mailchimp
  * history stays absent rather than gaining a stray row.
  */
-export async function unsubscribeFromMarketingAudience(email: string): Promise<void> {
+export async function unsubscribeFromMarketingAudience(email: string): Promise<void | { status: 'blocked' }> {
+  if (memberCommunicationsDisabled()) {
+    logMemberLaunchHold('email.marketing_audience');
+    return { status: 'blocked' };
+  }
   const apiKey = process.env.MAILCHIMP_MARKETING_API_KEY?.trim();
   const audienceId = process.env.MAILCHIMP_MARKETING_AUDIENCE_ID?.trim();
   const serverPrefix = process.env.MAILCHIMP_MARKETING_SERVER_PREFIX?.trim();

@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { client } from '@/lib/db/drizzle';
 import type { RecoveryCodeRecord } from './types';
@@ -69,8 +70,8 @@ export async function finalizeInitialAuthenticatorEnrollment(input: {
 
     await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${input.userId},'auth.mfa.authenticator.enrolled','user',${String(input.userId)},'totp')`;
-    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${input.userId},'authenticator_enrolled',${String(user.email)},${`authenticator-enrolled:${input.transactionId}`})
+    await tx`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'authenticator_enrolled',${String(user.email)},${`authenticator-enrolled:${input.transactionId}`})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`;
 
     return { status: 'activated' as const };

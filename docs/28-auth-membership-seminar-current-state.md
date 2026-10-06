@@ -88,3 +88,7 @@ Changes to any of these flows must update the applicable governing document in t
 - this alignment document whenever a change crosses more than one of those domains.
 
 The code paths used for this alignment include `lib/auth/session-tokens.ts`, `lib/auth/login-device-trust.ts`, `lib/auth/mfa/*`, `lib/payments/checkout.ts`, `lib/payments/renewal-preferences.ts`, `lib/payments/webhook-handlers.ts`, `lib/seminars/registrations.ts`, `lib/seminars/checkout.ts`, `lib/seminars/cancellation-worker.ts`, and the member/public seminar Server Actions.
+
+## Member communications and billing launch hold
+
+These communication and live-provider billing flows are conditional on the server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting. Only exact `false` releases the hold; missing, empty or invalid values block. Validated Stripe sandbox mutations remain usable, but outbound email remains held. Existing authorization, accounting and entitlement rules still apply. Follow [the launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for queue/webhook handling, separate staging/Production configuration and operator release checks.

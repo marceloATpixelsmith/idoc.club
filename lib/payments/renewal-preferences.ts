@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
@@ -33,6 +34,7 @@ export async function getOwnRenewalPreference() {
 }
 
 export async function beginAutomaticRenewalSetup(testStripeClient?: RenewalStripeClient): Promise<string> {
+  assertLiveBillingAllowed('billing.beginAutomaticRenewalSetup');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
   const { actor, profileId, validUntil } = await ownedState();
@@ -58,6 +60,7 @@ export async function beginAutomaticRenewalSetup(testStripeClient?: RenewalStrip
 }
 
 export async function disableAutomaticRenewal(testStripeClient?: RenewalStripeClient): Promise<void> {
+  assertLiveBillingAllowed('billing.disableAutomaticRenewal');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
   const { actor, profileId, validUntil } = await ownedState();
@@ -77,6 +80,7 @@ export async function disableAutomaticRenewal(testStripeClient?: RenewalStripeCl
 }
 
 export async function cancelPendingRenewalChange(testStripeClient?: RenewalStripeClient): Promise<void> {
+  assertLiveBillingAllowed('billing.cancelPendingRenewalChange');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
   const { actor, profileId } = await ownedState();

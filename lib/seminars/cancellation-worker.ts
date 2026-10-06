@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
@@ -22,7 +23,8 @@ const BATCH_SIZE = 25;
  * Registration/payment state is the durable queue: canceled online registrations remain
  * eligible until their refund succeeds or their open Checkout Session is expired.
  */
-export async function processCanceledSeminarPayments(testStripe?: CancellationStripeClient): Promise<{ processed: number }> {
+export async function processCanceledSeminarPayments(testStripe?: CancellationStripeClient): Promise<{ blocked: number; processed: number }> {
+  if (outboxDeliveryHeld(true)) return { blocked: 1, processed: 0 };
   if (testStripe && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripe ?? (getStripeServerClient() as CancellationStripeClient);
   const rows = await client<Array<{
@@ -75,5 +77,5 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
       // Continue with the rest of the bounded batch. The registration remains eligible for a later run.
     }
   }
-  return { processed: rows.length };
+  return { blocked: 0, processed: rows.length };
 }

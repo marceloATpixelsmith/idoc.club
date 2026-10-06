@@ -53,6 +53,7 @@ Start with document 08 when planning the next development phase, then consult th
 | Actionable authentication/security gap and evidence-closure backlog | 23 |
 | Reopened membership billing/access implementation and acceptance backlog | 25 |
 | Cross-domain current-state alignment for auth, membership billing/access, and seminar registration | 28 |
+| Member communications and live billing launch hold, release and rollback runbook | 27 |
 
 ## Maintenance rule
 

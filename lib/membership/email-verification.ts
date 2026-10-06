@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -74,7 +75,7 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
       updatedAt: now,
     }).where(eq(users.id, record.userId));
     if (billing?.externalCustomerId && profile) {
-      await tx.insert(notificationOutbox).values({
+      await tx.insert(notificationOutbox).values({ ...communicationHoldFields(true),
         kind: 'stripe.customer_email_sync',
         payload: { customerId: billing.externalCustomerId, email: record.pendingEmail },
         profileId: profile.id,
@@ -84,8 +85,8 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
     if (currentUser && currentUser.email !== record.pendingEmail) {
       for (const recipient of [record.pendingEmail, currentUser.email]) {
         const dedupeKey = `email-changed:${record.id}:${recipientDiscriminator(recipient)}`;
-        await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-          values(${record.userId},'verified_email_changed',${recipient},${dedupeKey})
+        await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+          values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${record.userId},'verified_email_changed',${recipient},${dedupeKey})
           on conflict (dedupe_key) where dedupe_key is not null do nothing`);
       }
     }

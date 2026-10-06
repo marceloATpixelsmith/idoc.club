@@ -1,3 +1,5 @@
+// Existing lifecycle fixtures exercise an explicitly released deployment; launch-hold tests override this.
+process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
 import assert from 'node:assert/strict';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';

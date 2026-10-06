@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { eq } from 'drizzle-orm';
 import type Stripe from 'stripe';
@@ -79,6 +80,7 @@ async function resolvedConfigurationId(stripe: PortalStripeClient): Promise<stri
  * for longer than the actual card-entry step.
  */
 export async function createMembershipPortalSession(testStripeClient?: PortalStripeClient): Promise<string> {
+  assertLiveBillingAllowed('billing.createMembershipPortalSession');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
   const actor = await requireAccountAccess('billing_boundary');
@@ -165,6 +167,7 @@ export type CancellationStripeClient = {
  * the app's rule that every Stripe-triggered local write goes through the webhook.
  */
 export async function cancelMemberSubscriptionAtPeriodEnd(subscriptionId: string, testStripeClient?: CancellationStripeClient): Promise<void> {
+  assertLiveBillingAllowed('billing.cancelMemberSubscriptionAtPeriodEnd');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripeClient ?? getStripeServerClient();
   await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });

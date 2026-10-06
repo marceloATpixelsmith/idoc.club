@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -24,8 +25,8 @@ export async function enqueueOperationalAlert(input: {
   subject: string;
 }): Promise<boolean> {
   const rows = await db.execute<{ id: number }>(sql`
-    insert into idoc.operational_alert_outbox(kind,subject,body_html,dedupe_key)
-    values (${input.kind},${input.subject},${input.bodyHtml},${input.dedupeKey})
+    insert into idoc.operational_alert_outbox(dead_lettered_at,last_error_code,kind,subject,body_html,dedupe_key)
+    values (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.kind},${input.subject},${input.bodyHtml},${input.dedupeKey})
     on conflict (dedupe_key) do nothing
     returning id
   `);

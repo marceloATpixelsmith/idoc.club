@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertLiveBillingAllowed, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
@@ -21,12 +22,14 @@ function refundStatus(value: string | null): 'canceled' | 'failed' | 'pending' |
 }
 
 export async function refundSeminarRegistration(registrationIdValue: unknown, reasonValue: unknown, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundSeminarRegistration');
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   return refundSeminarRegistrationCore(registrationIdValue, reasonValue, actor.id, testStripe);
 }
 
 /** Authorization-free financial core for trusted admin/cancellation/reconciliation boundaries. */
 export async function refundSeminarRegistrationCore(registrationIdValue: unknown, reasonValue: unknown, actorId: number | null, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundSeminarRegistrationCore');
   const registrationId = Number(registrationIdValue); if (!Number.isInteger(registrationId) || registrationId <= 0) throw new RefundError('Registration not found.');
   const explanation = reason(reasonValue);
   // The amount actually charged is the registration's own `expected_amount_cents` (set when the
@@ -61,8 +64,8 @@ export async function refundSeminarRegistrationCore(registrationIdValue: unknown
       await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
       await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actorId},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
-      if (status === 'succeeded' && row.profile_id !== null) await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-        values(${row.profile_id},'seminar.refund_confirmed',${JSON.stringify({ amountCents: row.price_cents, firstName: row.first_name, refundId: refund.id, registrationId, to: row.email })}::jsonb,${`seminar.refund_confirmed:${refund.id}`})
+      if (status === 'succeeded' && row.profile_id !== null) await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key)
+        values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${row.profile_id},'seminar.refund_confirmed',${JSON.stringify({ amountCents: row.price_cents, firstName: row.first_name, refundId: refund.id, registrationId, to: row.email })}::jsonb,${`seminar.refund_confirmed:${refund.id}`})
         on conflict(dedupe_key) do nothing`;
     });
     // A guest registration has no profile row, so notification_outbox (profile_id NOT NULL) can't
@@ -89,6 +92,7 @@ export async function refundSeminarRegistrationCore(registrationIdValue: unknown
 }
 
 export async function refundMembershipPayment(paymentIdValue: unknown, reasonValue: unknown, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundMembershipPayment');
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const paymentId = Number(paymentIdValue); if (!Number.isInteger(paymentId) || paymentId <= 0) throw new RefundError('Payment not found.');
   const explanation = reason(reasonValue);

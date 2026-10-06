@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
@@ -15,6 +16,7 @@ const MAX_ATTEMPTS = 6;
 const ALERT_DELIVERY_TIMEOUT_MS = 5_000;
 
 export async function deliverNextOperationalAlert(owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   const rows = await client<{
     id: number;
@@ -86,9 +88,10 @@ export async function deliverNextOperationalAlert(owner: string = randomUUID()) 
 }
 
 export async function processOperationalAlertBatch(limit = 25) {
-  const summary = { deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0, unconfigured: 0 };
+  const summary = { blocked: 0, deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0, unconfigured: 0 };
   for (let index = 0; index < limit; index += 1) {
     const result = await deliverNextOperationalAlert();
+    if (result.status === 'blocked') { summary.blocked += 1; break; }
     if (result.status === 'empty') break;
     if (result.status === 'unconfigured') { summary.unconfigured += 1; break; }
     if (result.status === 'dead_lettered') summary.deadLettered += 1;

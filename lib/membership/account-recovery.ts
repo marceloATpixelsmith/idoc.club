@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -50,9 +51,9 @@ export async function requestAccountLink(
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
         if (testFailureAt === 'after_token_insert') throw new Error('injected transaction failure');
-        await tx.insert(accountDeliveryOutbox).values({ ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        await tx.insert(accountDeliveryOutbox).values({ ...communicationHoldFields(), ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
         if (testFailureAt === 'after_outbox_insert') throw new Error('injected transaction failure');
-        await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_queued`, entityId: String(user.id), entityType: 'user' });
+        await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
     }
@@ -184,8 +185,8 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     await tx.update(users).set({ passwordHash: await hashPassword(password), passwordSetAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
     await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
     await tx.insert(auditLog).values({ actorId: record.userId, action: `account.${purpose}.completed`, entityId: String(record.userId), entityType: 'user' });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      select id,'password_reset_completed',email,${`password-reset-token:${record.id}`} from idoc.users where id=${record.userId}
+    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'password_reset_completed',email,${`password-reset-token:${record.id}`} from idoc.users where id=${record.userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { status: 'success' as const };
   });

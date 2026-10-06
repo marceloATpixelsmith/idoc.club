@@ -374,3 +374,7 @@ These rules apply to every existing and future administrator table that has row 
 - **Field labels are not section headers.** Individual field labels and legends use the normal foreground label treatment and should not be promoted to gold section-heading styling.
 
 The actionable admin tables currently covered are Members, News/Blog, Seminars, Seminar Registrations, and Support. Read-only tables with no row navigation have no skeleton-triggering row action to implement.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

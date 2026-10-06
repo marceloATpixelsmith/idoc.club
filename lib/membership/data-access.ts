@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields } from '@/lib/runtime/member-launch-hold';
 
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -186,7 +187,7 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     });
     injectProfileTransactionFailure('audit-insertion');
     if (!isAdminEdit) {
-      await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
+      await tx.insert(notificationOutbox).values({ ...communicationHoldFields(), kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
     injectProfileTransactionFailure('notification-insertion');
     return updated;

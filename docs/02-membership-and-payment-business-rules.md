@@ -348,3 +348,7 @@ returns an expired payment URL.
 ## Member phone requirement
 
 New member onboarding requires an international phone number selected with its country calling code. The application stores the normalized international value on the member profile. Existing profiles created before migration `0060` may remain without a phone value; this forward requirement must not invalidate or block unrelated edits to legacy profiles.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting overrides outgoing communications and live billing initiation: only exact `false` releases it. Missing, empty and invalid values block. Validated Stripe test-mode mutations remain available, while all email remains held. Existing local accounting/entitlement rules and read-only reconciliation continue. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for webhook/queue handling, staging isolation, migration verification and explicit operator release.
