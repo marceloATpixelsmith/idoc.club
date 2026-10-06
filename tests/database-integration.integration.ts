@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 61, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migration 0066, still apply once');
+    assert.equal(count, 62, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migration 0067, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
