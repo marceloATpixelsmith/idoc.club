@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync('components/tiptap/simple-editor-field.tsx', 'utf8');
 
-test('shared Tiptap editor exposes visible fullscreen and editable HTML source modes', () => {
+test('shared Tiptap editor exposes icon-only fullscreen and editable HTML source controls', () => {
   assert.match(source, /<span>\{isFullscreen \? 'Exit full screen' : 'Full screen'\}<\/span>/);
   assert.match(source, /onKeyDownCapture=\{\(event\) => \{/);
   assert.match(source, /event\.stopPropagation\(\)/);
