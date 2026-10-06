@@ -78,3 +78,18 @@ test('public news list reuses homepage cards and article detail has Back to News
   assert.match(detail, /backHref="\/news"/);
   assert.match(detail, /backLabel="Back to News"/);
 });
+
+
+test('News/Blog form sizes fields for their content and keeps long metadata on separate rows', () => {
+  const drawer = source('app/(dashboard)/admin/news/news-drawer.tsx');
+  assert.match(drawer, /className="max-w-sm space-y-1\.5"[\s\S]*publicationDate/);
+  assert.match(drawer, /<div className="space-y-4">[\s\S]*htmlFor="title"[\s\S]*htmlFor="subtitle"[\s\S]*htmlFor="slug"/);
+  assert.doesNotMatch(drawer, /htmlFor="subtitle"[\s\S]{0,300}md:grid-cols-2/);
+});
+
+test('legacy News/Blog thumbnails have a dedicated post-0064 backfill migration', () => {
+  const migration = source('lib/db/migrations/0067_news_legacy_thumbnail_backfill.sql');
+  assert.match(migration, /where thumbnail_url is null/);
+  assert.match(migration, /jacques-van-daele\.jpg/);
+  assert.match(migration, /stephen-clarke\.jpg/);
+});
