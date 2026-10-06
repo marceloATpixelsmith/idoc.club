@@ -13,6 +13,7 @@ const originalFetch = globalThis.fetch;
 let brevoResponseBody = '';
 let brevoStatus = 201;
 beforeEach(() => {
+  process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
   process.env.BREVO_API_KEY = 'test-only-provider-key';
   process.env.BREVO_FROM_EMAIL = 'accounts@idoc.club';
   brevoResponseBody = '{"messageId":"<test@smtp-relay.brevo.com>"}';

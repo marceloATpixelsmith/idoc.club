@@ -254,12 +254,12 @@ test('real Cron route authenticates before PostgreSQL access and returns only bo
     assert.equal((await sql`select count(*)::int count from idoc.account_delivery_outbox`)[0].count, 0);
     const empty = await GET(new Request('https://idoc.club/api/cron/account-delivery', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
     assert.equal(empty.status, 200);
-    assert.deepEqual(await empty.json(), { deadLettered: 0, delivered: 0, ineligible: 0, leaseLost: 0, retryable: 0 });
+    assert.deepEqual(await empty.json(), { blocked: 0, deadLettered: 0, delivered: 0, ineligible: 0, leaseLost: 0, retryable: 0 });
     for (let index = 0; index < 22; index += 1) await queue();
     const response = await GET(new Request('https://idoc.club/api/cron/account-delivery', { headers: { authorization: `Bearer ${RAW_SECRET}` } }));
     assert.equal(response.status, 200);
     const body = await response.text();
-    assert.deepEqual(JSON.parse(body), { deadLettered: 0, delivered: 20, ineligible: 0, leaseLost: 0, retryable: 0 });
+    assert.deepEqual(JSON.parse(body), { blocked: 0, deadLettered: 0, delivered: 20, ineligible: 0, leaseLost: 0, retryable: 0 });
     assert.equal(providerBodies.length, 20);
     assert.equal(body.includes('@'), false);
     assert.equal(body.includes(RAW_SECRET), false);

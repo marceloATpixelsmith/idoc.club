@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields, logMemberLaunchHold, memberCommunicationsDisabled, outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -138,7 +139,7 @@ async function transitionExpiredGraceMemberships(today: string): Promise<number>
     if (!expired) break;
     const [contact] = await db.select({ email: users.email, firstName: profiles.firstName })
       .from(profiles).innerJoin(users, eq(profiles.userId, users.id)).where(eq(profiles.id, expired.profileId)).limit(1);
-    await db.insert(notificationOutbox).values({
+    await db.insert(notificationOutbox).values({ ...communicationHoldFields(),
       dedupeKey: `membership.grace_expired:${expired.profileId}:${expired.validUntil}`,
       kind: 'membership.grace_expired',
       payload: { firstName: contact?.firstName, to: contact?.email },
@@ -166,13 +167,18 @@ async function transitionNonRecurringTerms(today: string): Promise<number> {
 
 export async function enqueueRenewalNotices(today: string = todayIso()) {
   const nonRecurringGrace = await transitionNonRecurringTerms(today);
+  if (memberCommunicationsDisabled()) {
+    logMemberLaunchHold('job.renewal_scan');
+    const graceExpired = await transitionExpiredGraceMemberships(today);
+    return { blocked: 1, expirationReminders: 0, graceExpired, graceReminders: 0, nonRecurringGrace, renewalReminders: 0 };
+  }
   const [renewalReminders, expirationReminders, graceReminders, graceExpired] = await Promise.all([
     enqueueRenewalReminders(today),
     enqueueExpirationReminders(today),
     enqueueGraceReminders(today),
     transitionExpiredGraceMemberships(today),
   ]);
-  return { expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
+  return { blocked: 0, expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
 export async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
@@ -358,6 +364,7 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
 }
 
 export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const kinds = sql.join(RENEWAL_NOTICE_KINDS.map((kind) => sql`${kind}`), sql`, `);
   const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
     with candidate as (select id from idoc.notification_outbox where kind in (${kinds})
@@ -394,6 +401,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
 }
 
 export async function deliverNextStagingSeminarConfirmation(owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
     with candidate as (
       select id from idoc.notification_outbox

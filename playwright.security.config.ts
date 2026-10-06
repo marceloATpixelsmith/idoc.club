@@ -36,6 +36,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
+      // Released only inside this isolated suite with intercepted provider requests.
+      DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false',
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes',
       BASE_URL: 'http://127.0.0.1:3100',
       POSTGRES_URL: 'postgres://security-e2e-production-placeholder.invalid/idoc_production',

@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
@@ -37,6 +38,7 @@ export const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; 
 };
 
 export async function deliverNextAuthSecurityNotification(owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const rows = await client<{
     id: number;
     user_id: number;
@@ -114,9 +116,10 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
 }
 
 export async function processAuthSecurityNotificationBatch(limit = 25) {
-  const summary = { deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0 };
+  const summary = { blocked: 0, deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0 };
   for (let index = 0; index < limit; index += 1) {
     const result = await deliverNextAuthSecurityNotification();
+    if (result.status === 'blocked') { summary.blocked += 1; break; }
     if (result.status === 'empty') break;
     if (result.status === 'dead_lettered') summary.deadLettered += 1;
     else if (result.status === 'delivered') summary.delivered += 1;

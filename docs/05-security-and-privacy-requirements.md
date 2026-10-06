@@ -309,3 +309,7 @@ Every authenticated Administrator or Super Admin action requiring fresh TOTP aut
 ## Member permanent deletion
 
 The Members bulk Delete action permanently removes member identity, profile, payment/refund, registration, profile-change, support, and account-security data. It refuses deletion while a Stripe membership subscription remains active; administrators must cancel the subscription first. Append-only audit events are retained. The database permits the audit row's `actor_id` to be set to null only during the guarded permanent-delete transaction, and no other audit fields may change. The profile-change and support-message immutability triggers likewise permit removal only while the same transaction-local deletion guard is enabled.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

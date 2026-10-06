@@ -1,5 +1,6 @@
 'use server';
 
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -184,8 +185,8 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
       .where(and(eq(authSessions.userId, user.id), isNull(authSessions.revokedAt)));
     await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${user.id},'account.password_reset.completed','user',${String(user.id)},${pending.verification})`);
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
+    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   });
   await clearPendingPasswordReset();

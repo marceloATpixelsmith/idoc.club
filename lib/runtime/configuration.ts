@@ -1,4 +1,5 @@
 import 'server-only';
+export { memberCommunicationsDisabled } from './member-launch-hold.ts';
 import {
   validateStripeKey,
   validateStripeMembershipProductId,

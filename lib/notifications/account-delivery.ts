@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
@@ -76,6 +77,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
 }
 
 export async function deliverNextAccountLink(owner: string = randomUUID(), testDependencies?: Partial<DeliveryDependencies>) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const dependencies = dependenciesForTest(testDependencies);
   const claimed = await claimAccountDelivery(owner, dependencies.now());
   if (!claimed) return { status: 'empty' as const };

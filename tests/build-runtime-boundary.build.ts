@@ -14,7 +14,7 @@ const preloader = path.join(root, 'tests/fixtures/deny-network.cjs');
 // GOOGLE_OAUTH_REDIRECT_URI are deliberately excluded: neither is a secret (the client ID is
 // unavoidably visible to Google and the redirect URI is a public callback URL), so scanning for
 // them would only produce false positives.
-const sensitiveNames = ['POSTGRES_URL', 'AUTH_SECRET', 'ACCOUNT_DELIVERY_ENCRYPTION_KEYS', 'ACCOUNT_DELIVERY_KEY_VERSION', 'RATE_LIMIT_HASH_KEY', 'CRON_SECRET', 'BREVO_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS'];
+const sensitiveNames = ['DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING', 'POSTGRES_URL', 'AUTH_SECRET', 'ACCOUNT_DELIVERY_ENCRYPTION_KEYS', 'ACCOUNT_DELIVERY_KEY_VERSION', 'RATE_LIMIT_HASH_KEY', 'CRON_SECRET', 'BREVO_API_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET_VERSIONS'];
 const sentinelValues = sensitiveNames.map((name, index) => `IDOC_SENTINEL_${index}_${'z'.repeat(40)}`);
 
 function filesBelow(directory: string): string[] {

@@ -1,4 +1,5 @@
 import 'server-only';
+import { MemberLaunchHoldError, communicationHoldFields, communicationHoldTimestamp, guardStripeMutations, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import type Stripe from 'stripe';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
@@ -164,7 +165,7 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
     .where(eq(memberships.id, membership.id));
   const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName })
     .from(profiles).innerJoin(users, eq(profiles.userId, users.id)).where(eq(profiles.id, profileId)).limit(1);
-  await tx.insert(notificationOutbox).values({
+  await tx.insert(notificationOutbox).values({ ...communicationHoldFields(),
     dedupeKey: `membership.payment_failed:${profileId}:${graceEnd}`,
     kind: 'membership.payment_failed',
     payload: { firstName: contact?.firstName, graceEndDate: graceEnd, to: contact?.email },
@@ -200,6 +201,7 @@ async function refundGuestCheckoutWithoutRegistration(tx: Transaction, session: 
       summary: 'A paid guest seminar Checkout was automatically refunded because no valid registration could be created.',
       details: { reason, sessionId: session.id, paymentIntentId, refundId: refund.id, refundStatus: refund.status } });
   } catch (error) {
+    if (error instanceof MemberLaunchHoldError) throw error;
     await tx.insert(reconciliationFindings).values({ kind: 'seminar_payment_conflict',
       summary: 'Automatic refund failed for a paid guest seminar Checkout that could not become a registration.',
       details: { reason, sessionId: session.id, paymentIntentId, message: error instanceof Error ? error.message : 'Stripe refund request failed.' } });
@@ -260,8 +262,8 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   const guestConfirmationKind = session.metadata?.deliveryOwner === 'staging'
     ? 'seminar.staging_registration_created'
     : 'seminar.registration_created';
-  await tx.execute(sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-    (null,${guestConfirmationKind},${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
+  await tx.execute(sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+    (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,null,${guestConfirmationKind},${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
       registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
     on conflict (dedupe_key) do nothing`);
 }
@@ -319,6 +321,7 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
       try {
         refund = await stripe.refunds.create({ amount: priceCents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId) }, payment_intent: paymentIntentId }, { idempotencyKey });
       } catch (error) {
+        if (error instanceof MemberLaunchHoldError) throw error;
         await tx.insert(paymentRefunds).values({ amountCents: priceCents, failureCode: 'stripe_request_failed',
           idempotencyKey, providerEvidence: { message: error instanceof Error ? error.message : 'Stripe refund request failed.' },
           reason: 'Automatic full refund after concurrent payment for a canceled seminar.',
@@ -367,7 +370,7 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
     const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
       .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
     if (contact?.email) {
-      await tx.insert(notificationOutbox).values({
+      await tx.insert(notificationOutbox).values({ ...communicationHoldFields(),
         dedupeKey: `seminar.registration_created:${registrationId}:stripe-paid`,
         kind: session.metadata?.deliveryOwner === 'staging' ? 'seminar.staging_registration_created' : 'seminar.registration_created',
         payload: { amountCents: priceCents, firstName: contact.firstName, paymentConfirmed: true,
@@ -432,7 +435,7 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
     if (registration.profileId !== null) {
       const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
         .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, registration.profileId)).limit(1);
-      await tx.insert(notificationOutbox).values({ dedupeKey: `seminar.refund_confirmed:${refund.id}`,
+      await tx.insert(notificationOutbox).values({ ...communicationHoldFields(), dedupeKey: `seminar.refund_confirmed:${refund.id}`,
         kind: 'seminar.refund_confirmed', payload: { amountCents: amount, firstName: contact?.firstName,
           refundId: refund.id, registrationId: registration.id, to: contact?.email }, profileId: registration.profileId })
         .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
@@ -517,7 +520,8 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
         end_behavior: 'release', metadata: { kind: 'idoc_membership', profileId: String(profileId) },
         phases: [{ items: [{ price: price.id, quantity: 1 }], metadata: { kind: 'idoc_membership', profileId: String(profileId) } }],
         start_date: startDate }, { idempotencyKey: `idoc-renewal-schedule-${profileId}-${preference.effectiveOn}` });
-    } catch {
+    } catch (error) {
+      if (error instanceof MemberLaunchHoldError) throw error;
       await tx.update(renewalPreferences).set({ externalPaymentMethodId: paymentMethodId,
         externalRecurringPriceId: price.id, externalSetupIntentId: setupIntent.id,
         transitionState: 'failed', updatedAt: new Date() }).where(eq(renewalPreferences.profileId, profileId));
@@ -607,7 +611,8 @@ const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event, st
   'refund.updated': handleRefundEvent,
 };
 
-export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'duplicate' | 'ignored' | 'processed'> {
+export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'blocked' | 'duplicate' | 'ignored' | 'processed'> {
+  stripe = guardStripeMutations(stripe, event.livemode);
   const checkoutSession = event.type === 'checkout.session.completed' ? event.data.object as Stripe.Checkout.Session : null;
   const stagingOwnedCheckout = checkoutSession?.metadata?.deliveryOwner === 'staging';
   const externalEventId = stagingOwnedCheckout ? `staging:${event.id}` : event.id;
@@ -616,8 +621,23 @@ export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStr
       .onConflictDoNothing({ target: stripeEvents.externalEventId }).returning({ id: stripeEvents.id });
     if (!inserted) return 'duplicate';
     const handler = handlers[event.type];
-    if (handler) await handler(tx, event, stripe);
+    let blocked = false;
+    try {
+      if (handler) await handler(tx, event, stripe);
+    } catch (error) {
+      if (!(error instanceof MemberLaunchHoldError)) throw error;
+      blocked = true;
+      // Keep provider-confirmed evidence already recorded above. Never replay the suppressed
+      // mutation automatically: the event remains consumed and reconciliation owns recovery.
+      await tx.insert(reconciliationFindings).values({ kind: 'status_conflict',
+        summary: 'Member launch hold blocked a webhook billing action. Explicit operator reconciliation is required.',
+        details: { eventId: event.id, eventType: event.type, reason: 'member_launch_hold' } });
+      if (checkoutSession?.mode === 'setup') {
+        await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
+          .where(eq(renewalPreferences.externalCheckoutSessionId, checkoutSession.id));
+      }
+    }
     await tx.update(stripeEvents).set({ processedAt: new Date() }).where(eq(stripeEvents.id, inserted.id));
-    return handler ? 'processed' : 'ignored';
+    return blocked ? 'blocked' : handler ? 'processed' : 'ignored';
   });
 }

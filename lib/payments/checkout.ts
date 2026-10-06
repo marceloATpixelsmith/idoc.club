@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
@@ -28,6 +29,7 @@ async function hasOpenSubscription(profileId: number): Promise<boolean> {
 // The stable Stripe idempotency key and local profile uniqueness jointly make concurrent first
 // checkout attempts converge on one Customer and one billing-account link.
 export async function resolveOrCreateBillingAccount(stripe: CheckoutStripeClient, userId: number, profileId: number): Promise<string> {
+  assertLiveBillingAllowed('billing.resolveOrCreateBillingAccount');
   const [existing] = await db.select({ externalCustomerId: billingAccounts.externalCustomerId })
     .from(billingAccounts).where(eq(billingAccounts.profileId, profileId)).limit(1);
   if (existing) return existing.externalCustomerId;
@@ -51,6 +53,7 @@ export async function resolveOrCreateBillingAccount(stripe: CheckoutStripeClient
  * PostgreSQL without a live Stripe API call.
  */
 export async function createMembershipCheckoutSession(mode: CheckoutMode, testStripeClient?: CheckoutStripeClient): Promise<string> {
+  assertLiveBillingAllowed('billing.createMembershipCheckoutSession');
   if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const productId = stripeMembershipProductIdForServer();
   const stripe = testStripeClient ?? getStripeServerClient();
