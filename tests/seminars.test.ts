@@ -237,8 +237,11 @@ test('registrationDisplayLabel prioritizes Canceled over any stale payment statu
   assert.equal(registrationDisplayLabel('registered', 'unpaid'), 'Unpaid');
 });
 
-test('the seminar fieldset uses date-only scheduling and the five structured rich-text fields', () => {
+test('the seminar fieldset uses date-only scheduling and re-sanitizes all five rich-text fields before loading the editor', () => {
   for (const label of ['Course Directors', 'Participant Profile', 'Course Venue Information', 'Application', 'Accommodation Information']) assert.match(seminarFieldset, new RegExp(label));
+  for (const field of ['course_directors', 'participant_profile', 'course_venue_information', 'application', 'accommodation_information']) {
+    assert.ok(seminarFieldset.includes(`initialHtml={sanitizeArticleContent(seminar?.${field} ?? '')}`), `${field} must be sanitized before loading the editor`);
+  }
   assert.doesNotMatch(seminarFieldset, /name="startTime"|name="endTime"|name="timezone"/);
   assert.match(seminarFieldset, /name="startDate"/);
   assert.match(seminarFieldset, /name="endDate"/);

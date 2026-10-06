@@ -106,8 +106,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
           </AdminFormSection>
           <AdminFormSection title="Image">
             <div className="space-y-3">
-              <ArticleThumbnailField id="thumbnail" initialImageUrl={article.thumbnail_url ? String(article.thumbnail_url) : null} label="Replace image" />
-              {article.thumbnail_url ? <label className="flex items-center gap-2 text-sm"><input name="removeThumbnail" type="checkbox" value="1" />Remove current image</label> : null}
+              <ArticleThumbnailField allowRemoval={Boolean(article.thumbnail_url)} id="thumbnail" initialImageUrl={article.thumbnail_url ? String(article.thumbnail_url) : null} label="Replace image" />
             </div>
           </AdminFormSection>
           <AdminFormSection title="Content">

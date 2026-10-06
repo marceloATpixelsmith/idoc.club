@@ -103,6 +103,8 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.doesNotMatch(clean, /<img/);
   assert.match(clean, /<strong>world<\/strong>/);
   assert.equal(sanitizeArticleContent('<h1>Heading</h1><p><u>under</u> <s>strike</s></p>'), '<h1>Heading</h1><p><u>under</u> <s>strike</s></p>');
+  assert.equal(sanitizeArticleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>'), '<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>');
+  assert.doesNotMatch(sanitizeArticleContent('<img src="https://evil.example/photo.jpg" alt="x">'), /<img/);
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
 });
 
@@ -112,10 +114,13 @@ test('sanitizeArticleContent is idempotent: re-sanitizing an already-sanitized h
   const twice = sanitizeArticleContent(once);
   assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
   assert.doesNotMatch(twice, /&amp;amp;/);
+  const withImage = '<img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="A &amp; B">';
+  assert.equal(sanitizeArticleContent(sanitizeArticleContent(withImage)), sanitizeArticleContent(withImage));
 });
 
 test('hasVisibleContent rejects markup that renders no visible text', () => {
   assert.equal(hasVisibleContent('<p>&nbsp;</p>'), false);
   assert.equal(hasVisibleContent('<p></p>'), false);
   assert.equal(hasVisibleContent('<p>Real content</p>'), true);
+  assert.equal(hasVisibleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="Horse"></p>'), true);
 });
