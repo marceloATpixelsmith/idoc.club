@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
-import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field';
 import { ArticleContentEditor } from '@/components/news/article-content-editor';
+import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field';
 import { NewsForm } from '@/components/news/news-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
