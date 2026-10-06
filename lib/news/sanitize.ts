@@ -46,8 +46,9 @@ const ENTITY_ENCODED_WHITESPACE = /&(?:nbsp|ensp|emsp|thinsp|hairsp|zwnj|zwj|lrm
 const UNICODE_WHITESPACE = /[\s\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]/g;
 
 export function hasVisibleContent(input: string): boolean {
-  return Boolean(input
+  const visibleText = input
     .replace(/<[^>]*>/g, '')
     .replace(ENTITY_ENCODED_WHITESPACE, ' ')
-    .replace(UNICODE_WHITESPACE, ''));
+    .replace(UNICODE_WHITESPACE, '');
+  return Boolean(visibleText || /<img\b/i.test(input));
 }

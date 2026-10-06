@@ -122,4 +122,5 @@ test('hasVisibleContent rejects markup that renders no visible text', () => {
   assert.equal(hasVisibleContent('<p>&nbsp;</p>'), false);
   assert.equal(hasVisibleContent('<p></p>'), false);
   assert.equal(hasVisibleContent('<p>Real content</p>'), true);
+  assert.equal(hasVisibleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="Horse"></p>'), true);
 });
