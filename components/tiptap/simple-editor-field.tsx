@@ -10,6 +10,8 @@ import {
   Link2,
   List,
   ListOrdered,
+  Maximize2,
+  Minimize2,
   Minus,
   Pilcrow,
   Quote,
@@ -91,6 +93,7 @@ export function SimpleEditorField({
   const [html, setHtml] = useState(initialHtml);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkHref, setLinkHref] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const editor = useEditor({
     content: initialHtml,
@@ -129,6 +132,23 @@ export function SimpleEditorField({
     };
   }, [editor]);
 
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsFullscreen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen]);
+
   if (!editor) {
     return (
       <div className="space-y-2">
@@ -160,17 +180,25 @@ export function SimpleEditorField({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={isFullscreen ? 'fixed inset-0 z-[100] flex h-dvh flex-col gap-2 overflow-hidden bg-background p-3 sm:p-6' : 'space-y-2'}>
       <p className="text-sm font-medium uppercase tracking-wide" id={editorId}>
         {label}
       </p>
 
-      <div className="overflow-hidden rounded-lg border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+      <div className={['overflow-hidden rounded-lg border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30', isFullscreen ? 'flex min-h-0 flex-1 flex-col' : ''].join(' ')}>
         <div
           aria-label={`${label} formatting controls`}
-          className="flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5"
+          className={['flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5', isFullscreen ? 'sticky top-0 z-10 shrink-0' : ''].join(' ')}
           role="toolbar"
         >
+          <ToolbarButton
+            label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+            onClick={() => setIsFullscreen((current) => !current)}
+          >
+            {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+          </ToolbarButton>
+          <ToolbarSeparator />
+
           <ToolbarButton
             disabled={!editor.can().undo()}
             label="Undo"
@@ -364,6 +392,7 @@ export function SimpleEditorField({
         <EditorContent
           className={[
             '[&_.tiptap]:min-h-40',
+            isFullscreen ? 'min-h-0 flex-1 overflow-y-auto [&_.tiptap]:h-full [&_.tiptap]:!min-h-full' : '',
             '[&_.tiptap_h1]:mb-3 [&_.tiptap_h1]:mt-5 [&_.tiptap_h1]:text-3xl [&_.tiptap_h1]:font-bold',
             '[&_.tiptap_h2]:mb-3 [&_.tiptap_h2]:mt-5 [&_.tiptap_h2]:text-2xl [&_.tiptap_h2]:font-bold',
             '[&_.tiptap_h3]:mb-2 [&_.tiptap_h3]:mt-4 [&_.tiptap_h3]:text-xl [&_.tiptap_h3]:font-semibold',
