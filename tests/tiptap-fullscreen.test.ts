@@ -11,6 +11,10 @@ test('shared Tiptap editor exposes visible fullscreen and editable HTML source m
   assert.match(source, /fixed inset-0 z-\[100\] flex h-dvh flex-col/);
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /document\.body\.style\.overflow = 'hidden'/);
-  assert.match(source, /window\.removeEventListener\('keydown', handleKeyDown\)/);
+  assert.match(source, /aria-label=\{isSourceMode \? 'Return to visual editor' : 'View HTML source'\}/);
+  assert.match(source, /<textarea/);
+  assert.match(source, /value=\{html\}/);
+  assert.match(source, /onChange=\{\(event\) => setHtml\(event\.target\.value\)\}/);
+  assert.match(source, /editor\.commands\.setContent\(html, \{ emitUpdate: false \}\)/);
   assert.match(source, /isFullscreen \? 'sticky top-0 z-10 shrink-0' : ''/);
 });
