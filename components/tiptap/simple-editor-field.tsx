@@ -64,7 +64,7 @@ function ToolbarButton({
     <Button
       aria-label={label}
       aria-pressed={active || undefined}
-      className="size-8 rounded-md p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
+      className="size-8 rounded-md p-0 text-primary data-[active=true]:bg-accent data-[active=true]:text-primary"
       data-active={active}
       disabled={disabled}
       onClick={onClick}
@@ -237,21 +237,16 @@ export function SimpleEditorField({
           className={['flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5', isFullscreen ? 'sticky top-0 z-10 shrink-0' : ''].join(' ')}
           role="toolbar"
         >
-          <Button
-            aria-label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
-            className="h-8 shrink-0 gap-2 rounded-md border-primary/30 px-3 font-medium text-primary"
+          <ToolbarButton
+            active={isFullscreen}
+            label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
             onClick={() => setIsFullscreen((current) => !current)}
-            size="sm"
-            title={isFullscreen ? 'Exit full screen' : 'Open full screen'}
-            type="button"
-            variant="outline"
           >
             {isFullscreen ? <Minimize2 /> : <Maximize2 />}
-            <span>{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
-          </Button>
-          <Button
-            aria-label={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
-            className="h-8 shrink-0 gap-2 rounded-md px-3"
+          </ToolbarButton>
+          <ToolbarButton
+            active={isSourceMode}
+            label={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
             onClick={() => {
               if (isSourceMode) {
                 editor.commands.setContent(html, { emitUpdate: false });
@@ -260,14 +255,9 @@ export function SimpleEditorField({
               }
               setIsSourceMode((current) => !current);
             }}
-            size="sm"
-            title={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
-            type="button"
-            variant="outline"
           >
             <Code2 />
-            <span>{isSourceMode ? 'Visual' : 'HTML'}</span>
-          </Button>
+          </ToolbarButton>
           <input
             accept="image/jpeg,image/png,image/webp,image/avif"
             aria-label="Choose an image to upload"
