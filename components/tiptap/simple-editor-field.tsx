@@ -311,13 +311,6 @@ export function SimpleEditorField({
             <Quote />
           </ToolbarButton>
           <ToolbarButton
-            active={editor.isActive('codeBlock')}
-            label="Code block"
-            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          >
-            <Code2 />
-          </ToolbarButton>
-          <ToolbarButton
             label="Horizontal rule"
             onClick={() => editor.chain().focus().setHorizontalRule().run()}
           >
@@ -353,13 +346,6 @@ export function SimpleEditorField({
             onClick={() => editor.chain().focus().toggleUnderline().run()}
           >
             <Underline />
-          </ToolbarButton>
-          <ToolbarButton
-            active={editor.isActive('code')}
-            label="Inline code"
-            onClick={() => editor.chain().focus().toggleCode().run()}
-          >
-            <Code2 />
           </ToolbarButton>
 
           <Popover onOpenChange={openLinkEditor} open={linkOpen}>
