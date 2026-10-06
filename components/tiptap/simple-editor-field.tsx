@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Code2,
   Italic,
+  ImagePlus,
   Link2,
   List,
   ListOrdered,
@@ -21,7 +22,9 @@ import {
   Underline,
   Unlink,
 } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
+import { ImageNode } from '@/components/tiptap/image-node';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -95,6 +98,9 @@ export function SimpleEditorField({
   const [linkHref, setLinkHref] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSourceMode, setIsSourceMode] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     content: initialHtml,
@@ -121,6 +127,7 @@ export function SimpleEditorField({
           protocols: ['http', 'https', 'mailto'],
         },
       }),
+      ImageNode,
     ],
     onUpdate: ({ editor: activeEditor }) => {
       setHtml(activeEditor.getHTML());
@@ -172,6 +179,36 @@ export function SimpleEditorField({
 
     if (open) {
       setLinkHref(String(editor.getAttributes('link').href ?? ''));
+    }
+  };
+
+  const uploadAndInsertImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setImageUploadError('');
+    setIsImageUploading(true);
+
+    try {
+      const body = new FormData();
+      body.set('image', file);
+      const response = await fetch('/api/admin/tiptap-image', {
+        body,
+        headers: { 'x-csrf-token': readCsrfTokenFromDocumentCookie() },
+        method: 'POST',
+      });
+      const result = await response.json() as { error?: string; url?: string };
+      if (!response.ok || !result.url) throw new Error(result.error || 'The image could not be uploaded.');
+
+      editor.chain().focus().insertContent({
+        attrs: { alt: file.name, src: result.url },
+        type: 'image',
+      }).run();
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : 'The image could not be uploaded.');
+    } finally {
+      setIsImageUploading(false);
     }
   };
 
@@ -227,6 +264,23 @@ export function SimpleEditorField({
             <Code2 />
             <span>{isSourceMode ? 'Visual' : 'HTML'}</span>
           </Button>
+          <input
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            aria-label="Choose an image to upload"
+            className="sr-only"
+            onChange={uploadAndInsertImage}
+            ref={imageInputRef}
+            tabIndex={-1}
+            type="file"
+          />
+          <ToolbarButton
+            disabled={isImageUploading}
+            label={isImageUploading ? 'Uploading image' : 'Insert image'}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            <ImagePlus />
+          </ToolbarButton>
+
           <ToolbarSeparator />
 
           <ToolbarButton
@@ -433,12 +487,14 @@ export function SimpleEditorField({
             '[&_.tiptap_code]:rounded [&_.tiptap_code]:bg-muted [&_.tiptap_code]:px-1 [&_.tiptap_code]:py-0.5 [&_.tiptap_code]:font-mono [&_.tiptap_code]:text-sm',
             '[&_.tiptap_hr]:my-5 [&_.tiptap_hr]:border-border',
             '[&_.tiptap_a]:text-primary [&_.tiptap_a]:underline [&_.tiptap_a]:underline-offset-2',
+            '[&_.tiptap_img]:my-4 [&_.tiptap_img]:h-auto [&_.tiptap_img]:max-w-full',
           ].join(' ')}
           editor={editor}
         />
         )}
       </div>
 
+      {imageUploadError ? <p className="text-sm text-destructive" role="alert">{imageUploadError}</p> : null}
       <input name={name} type="hidden" value={html} />
     </div>
   );

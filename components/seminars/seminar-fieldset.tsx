@@ -1,4 +1,5 @@
 import { SimpleEditorField } from '@/components/tiptap/simple-editor-field';
+import { sanitizeArticleContent } from '@/lib/news/sanitize';
 import { FormGrid, FormSection } from '@/components/forms/form-section';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,11 +41,11 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
     <FormSection title="Pricing"><FormGrid>{([['memberPrice', 'Member price (EUR)', seminar?.member_price_cents], ['nonMemberPrice', 'Non-member price (EUR)', seminar?.non_member_price_cents]] as const).map(([name, label, cents]) => <div className="max-w-48 space-y-1.5" key={name}><Label htmlFor={name}>{label}</Label><Input defaultValue={cents === undefined ? undefined : (cents / 100).toFixed(2)} disabled={lockPrices} id={name} min={0} name={name} required step="0.01" type="number" />{lockPrices && cents !== undefined ? <input name={name} type="hidden" value={(cents / 100).toFixed(2)} /> : null}</div>)}{lockPrices ? <p className="text-xs text-muted-foreground sm:col-span-2">Prices cannot change once this seminar has registrations.</p> : null}</FormGrid></FormSection>
     </div>
     <div className="xl:col-span-2"><FormSection title="Seminar information"><div className="grid gap-6 lg:grid-cols-2">
-      <SimpleEditorField initialHtml={seminar?.course_directors} label="Course Directors" name="courseDirectors" />
-      <SimpleEditorField initialHtml={seminar?.participant_profile} label="Participant Profile" name="participantProfile" />
-      <SimpleEditorField initialHtml={seminar?.course_venue_information} label="Course Venue Information" name="courseVenueInformation" />
-      <SimpleEditorField initialHtml={seminar?.application} label="Application" name="application" />
-      <SimpleEditorField initialHtml={seminar?.accommodation_information} label="Accommodation Information" name="accommodationInformation" />
+      <SimpleEditorField initialHtml={sanitizeArticleContent(seminar?.course_directors ?? '')} label="Course Directors" name="courseDirectors" />
+      <SimpleEditorField initialHtml={sanitizeArticleContent(seminar?.participant_profile ?? '')} label="Participant Profile" name="participantProfile" />
+      <SimpleEditorField initialHtml={sanitizeArticleContent(seminar?.course_venue_information ?? '')} label="Course Venue Information" name="courseVenueInformation" />
+      <SimpleEditorField initialHtml={sanitizeArticleContent(seminar?.application ?? '')} label="Application" name="application" />
+      <SimpleEditorField initialHtml={sanitizeArticleContent(seminar?.accommodation_information ?? '')} label="Accommodation Information" name="accommodationInformation" />
     </div></FormSection></div>
 
   </div>;

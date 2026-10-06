@@ -1,19 +1,24 @@
-/** Server-side allowlist sanitizer for News/Blog rich-text article bodies, following the same
- * regex-strip approach as lib/organization/format.ts's sanitizeBankInstructions but with the wider
- * tag set shared rich-text fields need (headings, emphasis, blockquote, code, links, lists). Active content (script,
- * style, iframe, object, embed, svg, math), event-handler attributes, and unsafe link schemes are
- * removed unconditionally; every other attribute is dropped except a safe href on <a>. */
+/** Server-side allowlist sanitizer for News/Blog and seminar rich-text HTML. Active content (script,
+ * style, iframe, object, embed, svg, math), event-handler attributes, unsafe links, and non-Cloudinary
+ * image sources are removed. */
 const ALLOWED_TAGS = new Set([
-  'a', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4', 'hr', 'li', 'ol', 'p', 'pre', 's', 'strong', 'u', 'ul',
+  'a', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4', 'hr', 'img', 'li', 'ol', 'p', 'pre', 's', 'strong', 'u', 'ul',
 ]);
 
-// A bare `&` is escaped, but one that already starts a real HTML entity (as in a previously-
-// sanitized href like "...?a=1&amp;b=2") is left alone -- otherwise re-sanitizing already-sanitized
-// content (the admin editor reloading a stored article) corrupts the URL on every pass by turning
-// `&amp;` into `&amp;amp;`. `"` is never re-escaped this way since a bare `"` cannot itself appear
-// inside an attribute value this regex already captured with quotes.
+// Preserve valid entities across repeated save/edit sanitization passes without allowing raw markup.
 function escapeAmpersand(value: string): string {
   return value.replace(/&(?!amp;|quot;|#39;|lt;|gt;|#\d+;|#x[0-9a-f]+;)/gi, '&amp;');
+}
+
+function safeCloudinaryImageUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.hostname !== 'res.cloudinary.com' || url.username || url.password) return null;
+    if (!/^\/[a-z0-9_-]+\/image\/upload\//i.test(url.pathname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function sanitizeArticleContent(input: string): string {
@@ -21,8 +26,16 @@ export function sanitizeArticleContent(input: string): string {
   return withoutActiveContent.replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi, (whole, rawTag: string, attributes: string) => {
     const tag = rawTag.toLowerCase();
     if (!ALLOWED_TAGS.has(tag)) return '';
-    if (whole.startsWith('</')) return tag === 'br' || tag === 'hr' ? '' : `</${tag}>`;
+    if (whole.startsWith('</')) return tag === 'br' || tag === 'hr' || tag === 'img' ? '' : `</${tag}>`;
     if (tag === 'br' || tag === 'hr') return `<${tag}>`;
+    if (tag === 'img') {
+      const rawSrc = attributes.match(/\bsrc\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim();
+      const safeSrc = rawSrc ? safeCloudinaryImageUrl(rawSrc) : null;
+      if (!safeSrc) return '';
+      const rawAlt = attributes.match(/\balt\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim() ?? '';
+      const alt = escapeAmpersand(rawAlt).replaceAll('"', '&quot;');
+      return `<img src="${escapeAmpersand(safeSrc).replaceAll('"', '&quot;')}" alt="${alt}">`;
+    }
     if (tag !== 'a') return `<${tag}>`;
     const href = attributes.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim();
     return href && /^(https?:|mailto:)/i.test(href) ? `<a href="${escapeAmpersand(href).replaceAll('"', '&quot;')}">` : '<a>';

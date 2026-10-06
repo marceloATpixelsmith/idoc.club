@@ -19,4 +19,9 @@ test('shared Tiptap editor exposes visible fullscreen and editable HTML source m
   assert.match(source, /isFullscreen \? 'sticky top-0 z-10 shrink-0' : ''/);
   assert.equal(source.split('<Code2 />').length - 1, 1);
   assert.doesNotMatch(source, /label="(?:Code block|Inline code)"/);
+  assert.match(source, /label=\{isImageUploading \? 'Uploading image' : 'Insert image'\}/);
+  assert.match(source, /fetch\('\/api\/admin\/tiptap-image'/);
+  assert.match(source, /insertContent\(\{[\s\S]*type: 'image'/);
+  assert.match(source, /readCsrfTokenFromDocumentCookie\(\)/);
+  assert.match(source, /ImageNode/);
 });
