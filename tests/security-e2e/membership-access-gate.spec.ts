@@ -121,8 +121,11 @@ test('a member cancels from My Membership, keeps access to the end of the cycle,
   await expect(page).toHaveURL(/\/seminars$/);
 
   await setMembershipInDatabase(email, 'canceled', YESTERDAY);
-  await page.goto('/seminars');
+  // The header's identity refresh may already clear the ended session. Check a protected
+  // destination: the public seminar catalog correctly remains open to signed-out visitors.
+  await page.goto('/dashboard/membership');
   await expect(page).toHaveURL(/\/sign-in$/);
+  expect(await hasSession(page)).toBe(false);
   await submitSignIn(page, email, STRONG_PASSWORD);
   await expect(authError(page)).toContainText('This membership has been canceled');
 });

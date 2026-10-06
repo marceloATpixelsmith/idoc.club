@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { signIn, updatePassword } from '../app/(login)/actions.ts';
 import { completeSignup } from '../app/(login)/sign-up/actions.ts';
 import { verifyStepUpTotp } from '../app/(login)/mfa/actions.ts';
-import { logOutSession } from '../app/(dashboard)/dashboard/security/actions.ts';
+import { createPasswordAndDisconnectGoogle, logOutSession } from '../app/(dashboard)/dashboard/security/actions.ts';
 import { getPendingSignup, markPendingSignupVerified, startPendingSignup } from '../lib/auth/pending-signup.ts';
 import { startPendingLogin } from '../lib/auth/pending-login.ts';
 import { getPendingStepUp, requireFreshStepUp } from '../lib/auth/mfa/step-up.ts';
@@ -25,6 +25,7 @@ import { eq } from 'drizzle-orm';
 import { stubPasswordBreachCheckAsClean } from './password-breach-check-stub.ts';
 import { issueTestCsrfToken } from './csrf-test-helper.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
+import { deliverNextAuthSecurityNotification } from '../lib/notifications/auth-security-delivery.ts';
 import { closeHarness, createMembership, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const password = 'Correct Horse Battery Staple 42!';
@@ -50,7 +51,7 @@ class TestCookies implements MutableCookieStore {
   set(name: string, value: string) { value ? this.values.set(name, value) : this.values.delete(name); }
 }
 
-beforeEach(resetIdoc);
+beforeEach(async () => { process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false'; await resetIdoc(); });
 after(() => { restoreFetch(); return closeHarness(); });
 
 async function realUser(accountState: 'active' | 'deleted' | 'suspended' = 'active', privileged = false) {
@@ -488,3 +489,33 @@ test('AUTH-API-004: getPrivateMember distinguishes a nonexistent profile (null, 
   const adminRead = await withTestMembershipBoundary({ actor: { id: admin.id, roles: [] } }, () => getPrivateMember(profile.id));
   assert.equal(adminRead?.profile.id, profile.id);
 });
+
+for (const operation of ['change', 'create'] as const) {
+  test(`held password ${operation} commits security state but cannot release its notification later`, async () => {
+    const user = await realUser('active');
+    await createMembership((await createProfile(user.id)).id);
+    if (operation === 'create') await sql`update idoc.users set password_set_at=null where id=${user.id}`;
+    const cookies = new TestCookies();
+    await withTestRequestCookies(cookies, () => setSession(user));
+    const code = '471829';
+    if (operation === 'create') {
+      await sql`insert into idoc.email_otp_codes(user_id,email,purpose,code_hash,expires_at)
+        values(${user.id},${user.email},'google_disconnect_verification',${createHash('sha256').update(code).digest('hex')},now()+interval '10 minutes')`;
+    }
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
+    const fields = { csrf_token: csrfTokenFrom(cookies), newPassword: 'Another Correct Battery 88!',
+      confirmPassword: 'Another Correct Battery 88!', currentPassword: password, otpCode: code };
+    await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
+      redirected(() => operation === 'change' ? updatePassword({}, form(fields)) : createPasswordAndDisconnectGoogle({}, form(fields)))));
+    const [saved] = await sql`select session_version from idoc.users where id=${user.id}`;
+    assert.equal(saved.session_version, user.sessionVersion + 1);
+    const [notification] = await sql`select sent_at,dead_lettered_at,last_error_code,attempt_count from idoc.auth_security_notification_outbox
+      where user_id=${user.id} and kind='password_changed'`;
+    assert.ok(notification.dead_lettered_at);
+    assert.equal(notification.last_error_code, 'member_launch_hold');
+    assert.equal(notification.sent_at, null);
+    assert.equal(notification.attempt_count, 0);
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
+    assert.deepEqual(await deliverNextAuthSecurityNotification(), { status: 'empty' });
+  });
+}
