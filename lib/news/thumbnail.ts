@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_IMAGE_UPLOAD_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 
 export class NewsThumbnailUploadError extends Error {
@@ -18,7 +18,7 @@ export async function uploadCloudinaryImage(file: File, folder: string): Promise
     throw new NewsThumbnailUploadError('Image must be a JPG, PNG, WEBP, or AVIF file.');
   }
   if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
-    throw new NewsThumbnailUploadError('Image must be 5 MB or smaller.');
+    throw new NewsThumbnailUploadError('Image must be 4 MB or smaller.');
   }
 
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'z6xv27qx';

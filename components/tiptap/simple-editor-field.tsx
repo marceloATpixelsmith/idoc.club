@@ -186,6 +186,10 @@ export function SimpleEditorField({
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setImageUploadError('Image must be 4 MB or smaller.');
+      return;
+    }
 
     setImageUploadError('');
     setIsImageUploading(true);

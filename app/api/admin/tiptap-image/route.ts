@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     const contentLength = Number(request.headers.get('content-length') ?? 0);
     if (contentLength > MAX_IMAGE_UPLOAD_BYTES + 64 * 1024) {
-      return NextResponse.json({ error: 'Image must be 5 MB or smaller.' }, { status: 413 });
+      return NextResponse.json({ error: 'Image must be 4 MB or smaller.' }, { status: 413 });
     }
     const formData = await request.formData();
     const image = formData.get('image');
