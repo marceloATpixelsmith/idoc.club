@@ -90,9 +90,13 @@ test('News/Blog form sizes fields for their content and keeps long metadata on s
 test('legacy News/Blog thumbnails remain visible in admin and have a dedicated post-0064 backfill migration', () => {
   const articles = source('lib/news/articles.ts');
   const migration = source('lib/db/migrations/0067_news_legacy_thumbnail_backfill.sql');
+  const journal = source('lib/db/migrations/meta/_journal.json');
+  const snapshot = source('lib/db/migrations/meta/0067_snapshot.json');
   assert.match(articles, /coalesce\(thumbnail_url,\$\{legacyThumbnailSql\(\)\}\) as admin_thumbnail_url/);
   assert.match(articles, /thumbnail_url: row\.admin_thumbnail_url \?\? row\.thumbnail_url/);
   assert.match(migration, /where thumbnail_url is null/);
   assert.match(migration, /jacques-van-daele\.jpg/);
   assert.match(migration, /stephen-clarke\.jpg/);
+  assert.match(journal, /"idx": 67[\s\S]*"tag": "0067_news_legacy_thumbnail_backfill"/);
+  assert.match(snapshot, /"prevId": "d1608e44-2a96-4fd9-a066-006600000066"/);
 });
