@@ -17,6 +17,6 @@ test('shared Tiptap editor exposes visible fullscreen and editable HTML source m
   assert.match(source, /onChange=\{\(event\) => setHtml\(event\.target\.value\)\}/);
   assert.match(source, /editor\.commands\.setContent\(html, \{ emitUpdate: false \}\)/);
   assert.match(source, /isFullscreen \? 'sticky top-0 z-10 shrink-0' : ''/);
-  assert.equal((source.match(/<Code2 \\/>/g) ?? []).length, 1);
+  assert.equal(source.split('<Code2 />').length - 1, 1);
   assert.doesNotMatch(source, /label="(?:Code block|Inline code)"/);
 });
