@@ -53,3 +53,31 @@ test('membership suspension keeps the drawer open when Stripe cancellation needs
   assert.match(form, /state\.success && !state\.attentionRequired/);
   assert.match(form, /text-amber-600/);
 });
+
+
+test('shared table-backed admin drawers close immediately and refresh after successful saves', () => {
+  const drawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
+  assert.match(drawer, /const \[open, setOpen\] = useState\(true\)/);
+  assert.match(drawer, /setOpen\(false\); router\.push\(closeHref\); router\.refresh\(\)/);
+  assert.match(drawer, /<Dialog\.Root onOpenChange=\{\(nextOpen\) => \{ setOpen\(nextOpen\); if \(!nextOpen\) router\.push\(closeHref\); \}\} open=\{open\}>/);
+
+  for (const path of [
+    'components/news/news-form.tsx',
+    'components/seminars/seminar-form.tsx',
+    'components/support/support-form.tsx',
+  ]) {
+    const source = readFileSync(path, 'utf8');
+    assert.match(source, /useAdminFormDrawer/);
+    assert.match(source, /if \(state\.success && closeDrawer\) closeDrawer\(\)/);
+  }
+});
+
+test('News and Blog thumbnail preview follows a newly selected file and falls back to the saved image', () => {
+  const field = readFileSync('components/news/article-thumbnail-field.tsx', 'utf8');
+  const drawer = readFileSync('app/(dashboard)/admin/news/news-drawer.tsx', 'utf8');
+  assert.match(field, /URL\.createObjectURL\(file\)/);
+  assert.match(field, /URL\.revokeObjectURL\(previewUrl\)/);
+  assert.match(field, /setPreviewUrl\(file \? URL\.createObjectURL\(file\) : null\)/);
+  assert.match(field, /previewUrl \?\? initialImageUrl/);
+  assert.equal((drawer.match(/<ArticleThumbnailField /g) ?? []).length, 2);
+});
