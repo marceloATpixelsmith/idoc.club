@@ -20,7 +20,7 @@ export function ArticleView({ articleType, backHref, backLabel, contentHtml, pub
       {subtitle ? <p className="mt-4 text-xl leading-relaxed text-muted-foreground">{subtitle}</p> : null}
       {thumbnailUrl ? <img alt="" className="mt-8 aspect-[16/9] w-full max-w-3xl rounded-lg border object-cover" src={thumbnailUrl} /> : null}
       {/* eslint-disable-next-line react/no-danger -- rendering server-sanitized HTML only; see file header. */}
-      <div className="prose mt-8 max-w-none leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(contentHtml) }} />
+      <div className="idoc-rich-content mt-8 max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeArticleContent(contentHtml) }} />
     </article>
   );
 }
