@@ -5,7 +5,9 @@ import test from 'node:test';
 const source = readFileSync('components/tiptap/simple-editor-field.tsx', 'utf8');
 
 test('shared Tiptap editor exposes a full-viewport mode and accessible exit controls', () => {
-  assert.match(source, /label=\{isFullscreen \? 'Exit full screen' : 'Open full screen'\}/);
+  assert.match(source, /<span>\{isFullscreen \? 'Exit full screen' : 'Full screen'\}<\/span>/);
+  assert.match(source, /onKeyDownCapture=\{\(event\) => \{/);
+  assert.match(source, /event\.stopPropagation\(\)/);
   assert.match(source, /fixed inset-0 z-\[100\] flex h-dvh flex-col/);
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /document\.body\.style\.overflow = 'hidden'/);
