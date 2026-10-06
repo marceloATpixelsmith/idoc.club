@@ -100,3 +100,12 @@ test('legacy News/Blog thumbnails remain visible in admin and have a dedicated p
   assert.match(journal, /"idx": 67[\s\S]*"tag": "0067_news_legacy_thumbnail_backfill"/);
   assert.match(snapshot, /"prevId": "d1608e44-2a96-4fd9-a066-006600000066"/);
 });
+
+
+test('Tiptap image upload shows a visible loading state while the image is uploaded and inserted', () => {
+  const editor = source('components/tiptap/simple-editor-field.tsx');
+  assert.match(editor, /LoaderCircle className="animate-spin"/);
+  assert.match(editor, /role="status"/);
+  assert.match(editor, /Uploading image and inserting it into the editor\.\.\./);
+  assert.match(editor, /disabled=\{isImageUploading\}/);
+});
