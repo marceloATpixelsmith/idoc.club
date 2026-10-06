@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { sql } from 'drizzle-orm';
 import { client, db } from '@/lib/db/drizzle';
@@ -171,8 +172,8 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
       returning session_id`;
     await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${input.userId},'security.sessions.others_logged_out','user',${String(input.userId)},'member-security-page')`;
-    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${input.userId},'other_sessions_revoked',${input.recipientEmail},${input.dedupeKey})
+    await tx`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'other_sessions_revoked',${input.recipientEmail},${input.dedupeKey})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`;
     return revoked.length;
   });

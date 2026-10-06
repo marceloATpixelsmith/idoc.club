@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertMemberCommunicationsAllowed } from '@/lib/runtime/member-launch-hold';
 import { brevoApiKeyForServer, brevoFromEmailForServer } from '@/lib/runtime/configuration';
 
 export interface TransactionalEmail {
@@ -13,6 +14,7 @@ export interface TransactionalEmail {
  * (e.g. a best-effort operational alert fired from inside a route handler) can pass
  * `AbortSignal.timeout(ms)` to bound delivery. */
 export async function sendTransactionalEmail(message: TransactionalEmail, options: { signal?: AbortSignal } = {}) {
+  assertMemberCommunicationsAllowed('email.transactional');
   const apiKey = brevoApiKeyForServer();
   const fromEmail = brevoFromEmailForServer();
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {

@@ -3,13 +3,14 @@ import * as Sentry from '@sentry/nextjs';
 
 export const ACCOUNT_DELIVERY_BATCH_LIMIT = 20;
 export const ACCOUNT_DELIVERY_LEASE_MS = 5 * 60 * 1000;
-type DeliveryResult = { status: 'dead_lettered' | 'delivered' | 'empty' | 'ineligible' | 'lease_lost' | 'retryable' };
+type DeliveryResult = { status: 'blocked' | 'dead_lettered' | 'delivered' | 'empty' | 'ineligible' | 'lease_lost' | 'retryable' };
 
 export async function processDeliveryBatch(deliver: () => Promise<DeliveryResult>, limit = ACCOUNT_DELIVERY_BATCH_LIMIT) {
-  const summary = { deadLettered: 0, delivered: 0, ineligible: 0, leaseLost: 0, retryable: 0 };
+  const summary = { blocked: 0, deadLettered: 0, delivered: 0, ineligible: 0, leaseLost: 0, retryable: 0 };
   for (let processed = 0; processed < limit; processed += 1) {
     const result = await deliver();
     if (result.status === 'empty') break;
+    if (result.status === 'blocked') { summary.blocked += 1; break; }
     if (result.status === 'dead_lettered') summary.deadLettered += 1;
     else if (result.status === 'delivered') summary.delivered += 1;
     else if (result.status === 'ineligible') summary.ineligible += 1;

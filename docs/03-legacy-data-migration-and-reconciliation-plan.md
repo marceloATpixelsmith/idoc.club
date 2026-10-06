@@ -104,9 +104,11 @@ At import and cutover, derive access from that preserved date under docs/02: cur
 
 All known members should be represented in the target database before launch. Authentication accounts should be created/imported in advance so the member's first interaction is account access, not membership registration.
 
-- If compatible password hashes can be safely migrated using a supported path for the application's authentication system, this may reduce friction, but it must be validated against the actual WordPress password hash format and the application's supported credential-import mechanism.
+- The required default is to import and preserve every valid WordPress password hash that the application has verified it can safely support. This applies to the confirmed WordPress portable phpass and WordPress bcrypt formats described in section 11. Hash preservation is a migration requirement, not an optional convenience or a risk-based choice to discard supported credentials.
 
-- If password migration is not supported or not worth the risk, create the auth identities and require a one-time secure password-set/magic-link activation.
+- Use the one-time secure activation/password-set flow only for accounts whose credential is missing, malformed, or in a format the verified importer cannot support. Report those accounts as explicit migration exceptions. A supported hash that fails verification for an entered password is an ordinary failed login; it must not be silently replaced or treated as an import exception.
+
+- A supported password found in the breached-password corpus must not receive a normal authenticated session; require the standard secure password-reset flow. Do not use blanket activation as a substitute for the breach check.
 
 - Do not email activation links until the target data and membership entitlement for that person are already present.
 
@@ -128,6 +130,13 @@ All known members should be represented in the target database before launch. Au
 # 9. Rollback rule
 
 The final migration must avoid destructive changes to existing Stripe subscriptions. Preserve an archival legacy export/backup during the stabilization period so application routing can be reverted if necessary while the new database remains preserved for diagnosis. Any post-cutover writes that affect billing must be separately audited so they can be reconciled if rollback occurs.
+
+## Credential-bearing export retention
+
+- Keep the original export containing WordPress `user_pass` hashes encrypted in approved, access-controlled migration storage. Limit access to the migration operators who need it; never copy it into email, tickets, logs, analytics, or reconciliation reports.
+- Retain that credential-bearing export only through import reconciliation and the 30-calendar-day production rollback window, measured from cutover. At the end of that window, securely delete the export and its working copies. If an encrypted backup replica cannot be selectively deleted, use an archive-specific encryption key and destroy that key at the deadline so the replica is no longer recoverable.
+- Any archive retained after the rollback window must exclude `user_pass` entirely and must also omit `user_activation_key`, reset tokens, sessions, cookies, and other authentication artifacts. Do not keep a masked or partial password-hash column.
+- The imported credential in IDOC's authentication store is separate from the source export: retain a supported legacy hash only until the member successfully signs in and the current IDOC hash is durably written, or until the member completes a secure password reset. Clear the legacy hash atomically at that point, as required in section 11.
 
 ## Imported-account activation foundation
 
@@ -151,6 +160,7 @@ Article `content_html` is passed through the same tag allowlist as `lib/news/san
 
 **Administrator review required before use:**
 
+- **Current execution limitation.** The full SQL currently has a seminar INSERT column/value count defect. The news portion has been verified independently, including idempotency and absence of email/live billing under the launch hold. Resolve and verify the seminar defect before using the full import; this content check does not verify a bulk member import. See [the launch checklist](27-member-communications-and-billing-launch-hold.md).
 - **Excluded content.** `ga-assembly2024`'s legacy page body is a MemberPress "you are unauthorized to view this page" placeholder -- the real member-gated content was never exposed to the public REST API. It is intentionally omitted rather than imported as a broken article; someone with legacy site admin/member access should retrieve and add its real content separately.
 - **Seminar structured fields.** The legacy site only ever published narrative course announcements, not a structured registration record, so several `NOT NULL` `idoc.seminars` columns have no legacy source value and are filled with a documented assumption (start/end time defaulted to 09:00-17:00; a missing registration deadline defaulted to 14 days before the seminar; `non_member_price_cents` imported equal to `member_price_cents`, since the legacy site never distinguished the two; a multi-day event's `end_date` holds only its first day, matching `start_date`, with the full range preserved in `description`). Every such value is marked `ASSUMPTION` in the script and must be confirmed by an administrator before a seminar is relied on for real registrations. There is no legacy payment-method assumption to make: payment method is chosen per registration (migration `0055`), not set on the seminar.
 - **Currency mismatch.** Two Hartpury Para Dressage courses stated their legacy fee in GBP 150, not EUR. Since `idoc.seminars` has no currency column and both docs/07 and `lib/seminars/checkout.ts` treat every seminar price as EUR, importing that amount as `member_price_cents=15000` (and the same for `non_member_price_cents`) and publishing it would silently sell a GBP course at the wrong price and currency. Both rows are imported as `status='draft'` (never public) with the GBP amount preserved as-is, pending an administrator setting correct EUR-equivalent prices before publishing.
@@ -166,7 +176,7 @@ The importer must preserve existing member credentials wherever their WordPress 
 ## Import and storage requirements
 
 - Import the WordPress `user_pass` hash exactly as exported into the application's dedicated credential representation. Preserve the format/version needed to select the verifier. Do not place it in a profile field or overwrite it with a fabricated credential.
-- The supplied users snapshot contains two formats: WordPress portable phpass hashes (`$P$...`) and WordPress bcrypt hashes using the `$wp$2y$` prefix. The importer must validate these formats against the actual source WordPress implementation and must recount the final cutover export; unsupported or malformed hashes go to an exception report and use the normal secure password-reset path.
+- The supplied users snapshot contains two formats: WordPress portable phpass hashes (`$P$...`) and WordPress bcrypt hashes using the `$wp$2y$` prefix. The importer must validate these formats against the actual source WordPress implementation and must recount the final cutover export; unsupported or malformed hashes go to an exception report and use the one-time secure activation/password-set flow in section 7.
 - Do not import `user_activation_key`, WordPress reset/activation tokens, sessions, cookies, or other authentication artifacts.
 - Treat password hashes as sensitive credential material. Restrict access, keep them out of logs, analytics, error reports, and reconciliation output, and delete temporary source copies according to the migration retention policy. Never attempt to recover or crack plaintext passwords.
 
@@ -178,7 +188,7 @@ The importer must preserve existing member credentials wherever their WordPress 
 4. If the password is reported as breached, do not create a normal authenticated session. Require a password reset through the existing secure recovery flow before normal access, then apply the regular email-verification and MFA requirements.
 5. If the breach service is unavailable or times out, do not lock all migrated members out because of the outage. Complete normal authentication and credential upgrade, record only that the breach check is pending, and retry without retaining the plaintext. Monitor service failures without credentials or unnecessary personal data. A no-match means only that the password was not found in that corpus; it does not prove that it is strong or unique.
 6. For a successful, non-breached login, atomically replace the imported hash with the current IDOC password hash (Argon2id per the authentication requirements). Clear the legacy hash only after the new hash is durably saved. Handle concurrent login/upgrade attempts so an older value cannot overwrite the new credential.
-7. If a legacy password fails verification because its hash is unsupported or malformed, offer the standard secure password-reset flow. Do not disclose account existence on public login or recovery surfaces.
+7. For an unsupported or malformed hash, offer the one-time secure activation/password-set flow in section 7. A password that fails verification against a supported hash is an ordinary failed login. Do not disclose account existence on public login or recovery surfaces.
 
 ## Password policy for migrated accounts
 
@@ -198,3 +208,7 @@ The importer must preserve existing member credentials wherever their WordPress 
 - Test new-password and password-change policy enforcement, including rejection of passwords found in the breach corpus.
 - Keep reconciliation limited to aggregate counts by hash format and unsupported/malformed status. Never include hash values, plaintext passwords, or unnecessary personal data.
 - Complete a repeatable staging rehearsal against a fresh export, verify all reconciliation exceptions, and document rollback/recovery before cutover.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

@@ -7,9 +7,12 @@ import {
   ChevronDown,
   Code2,
   Italic,
+  ImagePlus,
   Link2,
   List,
   ListOrdered,
+  Maximize2,
+  Minimize2,
   Minus,
   Pilcrow,
   Quote,
@@ -19,7 +22,9 @@ import {
   Underline,
   Unlink,
 } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
+import { ImageNode } from '@/components/tiptap/image-node';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -91,6 +96,11 @@ export function SimpleEditorField({
   const [html, setHtml] = useState(initialHtml);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkHref, setLinkHref] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSourceMode, setIsSourceMode] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     content: initialHtml,
@@ -117,6 +127,7 @@ export function SimpleEditorField({
           protocols: ['http', 'https', 'mailto'],
         },
       }),
+      ImageNode,
     ],
     onUpdate: ({ editor: activeEditor }) => {
       setHtml(activeEditor.getHTML());
@@ -128,6 +139,18 @@ export function SimpleEditorField({
       editor?.destroy();
     };
   }, [editor]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const previousOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
 
   if (!editor) {
     return (
@@ -159,18 +182,111 @@ export function SimpleEditorField({
     }
   };
 
+  const uploadAndInsertImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setImageUploadError('Image must be 4 MB or smaller.');
+      return;
+    }
+
+    setImageUploadError('');
+    setIsImageUploading(true);
+
+    try {
+      const body = new FormData();
+      body.set('image', file);
+      const response = await fetch('/api/admin/tiptap-image', {
+        body,
+        headers: { 'x-csrf-token': readCsrfTokenFromDocumentCookie() },
+        method: 'POST',
+      });
+      const result = await response.json() as { error?: string; url?: string };
+      if (!response.ok || !result.url) throw new Error(result.error || 'The image could not be uploaded.');
+
+      editor.chain().focus().insertContent({
+        attrs: { alt: file.name, src: result.url },
+        type: 'image',
+      }).run();
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : 'The image could not be uploaded.');
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
+
   return (
-    <div className="space-y-2">
+    <div
+      className={isFullscreen ? 'fixed inset-0 z-[100] flex h-dvh flex-col gap-2 overflow-hidden bg-background p-3 sm:p-6' : 'space-y-2'}
+      onKeyDownCapture={(event) => {
+        if (isFullscreen && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsFullscreen(false);
+        }
+      }}
+    >
       <p className="text-sm font-medium uppercase tracking-wide" id={editorId}>
         {label}
       </p>
 
-      <div className="overflow-hidden rounded-lg border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+      <div className={['overflow-hidden rounded-lg border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30', isFullscreen ? 'flex min-h-0 flex-1 flex-col' : ''].join(' ')}>
         <div
           aria-label={`${label} formatting controls`}
-          className="flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5"
+          className={['flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5', isFullscreen ? 'sticky top-0 z-10 shrink-0' : ''].join(' ')}
           role="toolbar"
         >
+          <Button
+            aria-label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+            className="h-8 shrink-0 gap-2 rounded-md border-primary/30 px-3 font-medium text-primary"
+            onClick={() => setIsFullscreen((current) => !current)}
+            size="sm"
+            title={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+            type="button"
+            variant="outline"
+          >
+            {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+            <span>{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
+          </Button>
+          <Button
+            aria-label={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
+            className="h-8 shrink-0 gap-2 rounded-md px-3"
+            onClick={() => {
+              if (isSourceMode) {
+                editor.commands.setContent(html, { emitUpdate: false });
+              } else {
+                setHtml(editor.getHTML());
+              }
+              setIsSourceMode((current) => !current);
+            }}
+            size="sm"
+            title={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
+            type="button"
+            variant="outline"
+          >
+            <Code2 />
+            <span>{isSourceMode ? 'Visual' : 'HTML'}</span>
+          </Button>
+          <input
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            aria-label="Choose an image to upload"
+            className="sr-only"
+            onChange={uploadAndInsertImage}
+            ref={imageInputRef}
+            tabIndex={-1}
+            type="file"
+          />
+          <ToolbarButton
+            disabled={isImageUploading}
+            label={isImageUploading ? 'Uploading image' : 'Insert image'}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            <ImagePlus />
+          </ToolbarButton>
+
+          <ToolbarSeparator />
+
           <ToolbarButton
             disabled={!editor.can().undo()}
             label="Undo"
@@ -253,13 +369,6 @@ export function SimpleEditorField({
             <Quote />
           </ToolbarButton>
           <ToolbarButton
-            active={editor.isActive('codeBlock')}
-            label="Code block"
-            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          >
-            <Code2 />
-          </ToolbarButton>
-          <ToolbarButton
             label="Horizontal rule"
             onClick={() => editor.chain().focus().setHorizontalRule().run()}
           >
@@ -295,13 +404,6 @@ export function SimpleEditorField({
             onClick={() => editor.chain().focus().toggleUnderline().run()}
           >
             <Underline />
-          </ToolbarButton>
-          <ToolbarButton
-            active={editor.isActive('code')}
-            label="Inline code"
-            onClick={() => editor.chain().focus().toggleCode().run()}
-          >
-            <Code2 />
           </ToolbarButton>
 
           <Popover onOpenChange={openLinkEditor} open={linkOpen}>
@@ -361,9 +463,22 @@ export function SimpleEditorField({
           </Popover>
         </div>
 
+        {isSourceMode ? (
+          <textarea
+            aria-label={`${label} HTML source`}
+            className={[
+              'w-full bg-background px-4 py-3 font-mono text-sm leading-6 outline-none',
+              isFullscreen ? 'min-h-0 flex-1 resize-none overflow-y-auto' : 'min-h-40 resize-y',
+            ].join(' ')}
+            onChange={(event) => setHtml(event.target.value)}
+            spellCheck={false}
+            value={html}
+          />
+        ) : (
         <EditorContent
           className={[
             '[&_.tiptap]:min-h-40',
+            isFullscreen ? 'min-h-0 flex-1 overflow-y-auto [&_.tiptap]:h-full [&_.tiptap]:!min-h-full' : '',
             '[&_.tiptap_h1]:mb-3 [&_.tiptap_h1]:mt-5 [&_.tiptap_h1]:text-3xl [&_.tiptap_h1]:font-bold',
             '[&_.tiptap_h2]:mb-3 [&_.tiptap_h2]:mt-5 [&_.tiptap_h2]:text-2xl [&_.tiptap_h2]:font-bold',
             '[&_.tiptap_h3]:mb-2 [&_.tiptap_h3]:mt-4 [&_.tiptap_h3]:text-xl [&_.tiptap_h3]:font-semibold',
@@ -376,11 +491,14 @@ export function SimpleEditorField({
             '[&_.tiptap_code]:rounded [&_.tiptap_code]:bg-muted [&_.tiptap_code]:px-1 [&_.tiptap_code]:py-0.5 [&_.tiptap_code]:font-mono [&_.tiptap_code]:text-sm',
             '[&_.tiptap_hr]:my-5 [&_.tiptap_hr]:border-border',
             '[&_.tiptap_a]:text-primary [&_.tiptap_a]:underline [&_.tiptap_a]:underline-offset-2',
+            '[&_.tiptap_img]:my-4 [&_.tiptap_img]:h-auto [&_.tiptap_img]:max-w-full',
           ].join(' ')}
           editor={editor}
         />
+        )}
       </div>
 
+      {imageUploadError ? <p className="text-sm text-destructive" role="alert">{imageUploadError}</p> : null}
       <input name={name} type="hidden" value={html} />
     </div>
   );

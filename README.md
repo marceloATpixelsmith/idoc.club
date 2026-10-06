@@ -123,3 +123,7 @@ While this template is intentionally minimal and to be used as a learning resour
 - `pnpm test:build-boundary` runs a real production build with deterministic external-network interception, route classification, browser-output secret scanning, server-only boundary checks, and fake-credential rejection.
 - `pnpm test:integration-db` requires isolated disposable PostgreSQL and fails rather than skipping if it cannot be provisioned.
 - `pnpm check:release1` is the required fail-fast aggregate of all checks, PostgreSQL evidence, the intercepted build suite, and the ordinary production build.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](docs/27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

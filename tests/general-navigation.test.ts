@@ -68,6 +68,12 @@ test('the shared menu drops My Dashboard, keeping only the conditional Admin Das
   assert.match(menu, /href="\/admin"/);
 });
 
+test('the About landing submenu item is active only on its exact route', () => {
+  assert.match(header, /function isAboutItemActive\(pathname: string, href: string\)/);
+  assert.match(header, /href === '\/about' \? pathname === href : isActive\(pathname, href\)/);
+  assert.match(header, /<NavDropdown href="\/about" isItemActive=\{isAboutItemActive\}/);
+});
+
 test('the header exposes My IDOC dashboard subpages, excluding Support, and falls back to My Membership before entitlement', () => {
   assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} pathname=\{pathname\} \/>/);
   assert.match(header, /label="My IDOC"/);

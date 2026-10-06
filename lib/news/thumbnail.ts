@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+export const MAX_IMAGE_UPLOAD_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 
 export class NewsThumbnailUploadError extends Error {
@@ -12,19 +12,13 @@ export class NewsThumbnailUploadError extends Error {
   }
 }
 
-export async function resolveNewsThumbnail(formData: FormData): Promise<string | null> {
-  const existing = typeof formData.get('existingThumbnailUrl') === 'string'
-    ? String(formData.get('existingThumbnailUrl')).trim()
-    : '';
-  if (formData.get('removeThumbnail') === '1') return null;
-
-  const file = formData.get('thumbnail');
-  if (!(file instanceof File) || file.size === 0) return existing || null;
+/** Uploads an allowed raster image to the existing Cloudinary account and returns its durable HTTPS URL. */
+export async function uploadCloudinaryImage(file: File, folder: string): Promise<string> {
   if (!ALLOWED_TYPES.has(file.type)) {
-    throw new NewsThumbnailUploadError('Thumbnail must be a JPG, PNG, WEBP, or AVIF image.');
+    throw new NewsThumbnailUploadError('Image must be a JPG, PNG, WEBP, or AVIF file.');
   }
-  if (file.size > MAX_THUMBNAIL_BYTES) {
-    throw new NewsThumbnailUploadError('Thumbnail must be 5 MB or smaller.');
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    throw new NewsThumbnailUploadError('Image must be 4 MB or smaller.');
   }
 
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'z6xv27qx';
@@ -35,7 +29,6 @@ export async function resolveNewsThumbnail(formData: FormData): Promise<string |
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const folder = 'idoc/news';
   const signature = createHash('sha1').update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`).digest('hex');
   const upload = new FormData();
   upload.set('file', file);
@@ -50,7 +43,18 @@ export async function resolveNewsThumbnail(formData: FormData): Promise<string |
   });
   const payload = await response.json() as { error?: { message?: string }; secure_url?: string };
   if (!response.ok || !payload.secure_url) {
-    throw new NewsThumbnailUploadError(payload.error?.message || 'The thumbnail could not be uploaded.');
+    throw new NewsThumbnailUploadError(payload.error?.message || 'The image could not be uploaded.');
   }
   return payload.secure_url;
+}
+
+export async function resolveNewsThumbnail(formData: FormData): Promise<string | null> {
+  const existing = typeof formData.get('existingThumbnailUrl') === 'string'
+    ? String(formData.get('existingThumbnailUrl')).trim()
+    : '';
+  if (formData.get('removeThumbnail') === '1') return null;
+
+  const file = formData.get('thumbnail');
+  if (!(file instanceof File) || file.size === 0) return existing || null;
+  return uploadCloudinaryImage(file, 'idoc/news');
 }

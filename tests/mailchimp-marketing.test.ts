@@ -12,6 +12,7 @@ test('Mailchimp add-or-update subscribes both new and existing audience members'
     return new Response(null, { status: 200 });
   };
   try {
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
     const { subscribeToMarketingAudience } = await import('../lib/notifications/mailchimp-marketing.ts');
     await subscribeToMarketingAudience(' MEMBER@Example.Test ');
     assert.deepEqual(JSON.parse(String(request?.body)), {

@@ -169,3 +169,7 @@ Migration `0049` completes durable payment lifecycle evidence. Seminar registrat
 ## Member and guest phone normalization
 
 Migration `0060` adds nullable `profiles.phone varchar(20)` for normalized international member phone values. New-member onboarding requires a country-aware phone entry and stores the submitted value in E.164 form; the column remains nullable so profiles created before this requirement remain valid until edited. Anonymous bank-transfer/cash seminar registrations continue to store guest phone separately in `seminar_registrations.guest_phone`. Client validation is convenience only: member onboarding and guest seminar registration both repeat phone/contact validation at the server boundary before persistence.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

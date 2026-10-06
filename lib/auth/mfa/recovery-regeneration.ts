@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { client } from '@/lib/db/drizzle';
 import type { RecoveryCodeRecord } from './types';
@@ -44,8 +45,8 @@ export async function regenerateRecoveryCodesWithEvidence(input: {
     }
     await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${input.userId},'auth.mfa.recovery_codes.regenerated','user',${String(input.userId)},'account-security')`;
-    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${input.userId},'recovery_codes_regenerated',${user.email},${`recovery-codes:${input.generationId}`})`;
+    await tx`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'recovery_codes_regenerated',${user.email},${`recovery-codes:${input.generationId}`})`;
     return 'regenerated' as const;
   });
 }

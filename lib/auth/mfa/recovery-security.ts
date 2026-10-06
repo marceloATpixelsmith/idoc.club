@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { client } from '@/lib/db/drizzle';
 import type { TotpEnrollmentRecord, TotpFactorRecord } from './types';
@@ -63,8 +64,8 @@ export async function consumeRecoveryCodeAndBeginReplacement(input: {
         ${timestamp(input.enrollment.createdAtMs)})`;
     await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${input.userId},'auth.mfa.recovery_code.used','user',${String(input.userId)},'authenticator-replacement')`;
-    await tx`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${input.userId},'recovery_code_used',${input.recipientEmail},${input.dedupeKey})
+    await tx`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'recovery_code_used',${input.recipientEmail},${input.dedupeKey})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`;
     return { factorId: input.factor.factorId, status: 'ready' as const,
       transactionId: input.enrollment.transactionId };

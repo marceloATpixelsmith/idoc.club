@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
@@ -136,8 +137,8 @@ export async function createAdminSeminarRegistration(fields: {
         registrationId = row.id;
       }
       const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
-      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-        (${member.id},${confirmationKind},
+      await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${member.id},${confirmationKind},
           jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
           ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
     } else {
@@ -162,8 +163,8 @@ export async function createAdminSeminarRegistration(fields: {
         registrationId = row.id;
       }
       const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
-      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-        (null,${confirmationKind},jsonb_build_object('amountCents',${priceCents}::int,'firstName',${firstName}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${email}::text),
+      await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,null,${confirmationKind},jsonb_build_object('amountCents',${priceCents}::int,'firstName',${firstName}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${email}::text),
           ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
     }
 
@@ -365,8 +366,8 @@ async function registerOwnProfileForSeminar(
     // thank the registrant for the completed Stripe payment.
     if (paymentMethod !== 'online_stripe') {
       const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
-      await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-        (${profileId},${confirmationKind},(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
+      await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${profileId},${confirmationKind},(select jsonb_build_object('registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'paymentMethod',${paymentMethod}::text,'amountCents',${priceCents}::int,'to',u.email::text,'firstName',p.first_name::text)
           from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_created:${registrationId}:${Date.now()}`})`;
     }
     return { paymentMethod, registrationId };
@@ -442,8 +443,8 @@ export async function registerAsGuestForSeminar(seminarIdValue: unknown, firstNa
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (null,'guest.seminar_registration.registered','seminar_registration',${String(registrationId)},${JSON.stringify({ guestEmail: email, seminarId: seminarId.data })}::jsonb)`;
     const confirmationKind = directDelivery ? 'seminar.staging_registration_created' : 'seminar.registration_created';
-    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (null,${confirmationKind},${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
+    await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+      (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,null,${confirmationKind},${JSON.stringify({ amountCents: seminar.non_member_price_cents, firstName, paymentMethod, registrationId: 0, seminarId: seminarId.data, to: email })}::jsonb || jsonb_build_object('registrationId',${registrationId}::int),${`seminar.registration_created:guest:${registrationId}`})
       on conflict (dedupe_key) do nothing`;
     return { registrationId };
   });
@@ -538,8 +539,8 @@ export async function cancelOwnRegistration(seminarIdValue: unknown): Promise<vo
     await sql`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where id=${existing.id}`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id) values
       (null,'member.seminar_registration.canceled','seminar_registration',${String(existing.id)})`;
-    await sql`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key) values
-      (${profileId},'seminar.registration_canceled',(select jsonb_build_object('registrationId',${existing.id}::int,'seminarId',${seminarId.data}::int,'to',u.email::text,'firstName',p.first_name::text)
+    await sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+      (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${profileId},'seminar.registration_canceled',(select jsonb_build_object('registrationId',${existing.id}::int,'seminarId',${seminarId.data}::int,'to',u.email::text,'firstName',p.first_name::text)
         from idoc.profiles p join idoc.users u on u.id=p.user_id where p.id=${profileId}),${`seminar.registration_canceled:${existing.id}:${Date.now()}`})`;
   });
 }
