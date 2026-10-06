@@ -87,8 +87,11 @@ test('News/Blog form sizes fields for their content and keeps long metadata on s
   assert.doesNotMatch(drawer, /htmlFor="subtitle"[\s\S]{0,300}md:grid-cols-2/);
 });
 
-test('legacy News/Blog thumbnails have a dedicated post-0064 backfill migration', () => {
+test('legacy News/Blog thumbnails remain visible in admin and have a dedicated post-0064 backfill migration', () => {
+  const articles = source('lib/news/articles.ts');
   const migration = source('lib/db/migrations/0067_news_legacy_thumbnail_backfill.sql');
+  assert.match(articles, /coalesce\(thumbnail_url,\$\{legacyThumbnailSql\(\)\}\) as admin_thumbnail_url/);
+  assert.match(articles, /thumbnail_url: row\.admin_thumbnail_url \?\? row\.thumbnail_url/);
   assert.match(migration, /where thumbnail_url is null/);
   assert.match(migration, /jacques-van-daele\.jpg/);
   assert.match(migration, /stephen-clarke\.jpg/);
