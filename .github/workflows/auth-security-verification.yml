@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main, staging]
     paths:
+      - '.github/workflows/auth-security-verification.yml'
       - 'app/(login)/**'
       - 'app/api/auth/**'
       - 'app/(dashboard)/dashboard/security/**'
