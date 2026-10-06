@@ -581,3 +581,12 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
 .idoc-rich-content--compact h3 {
   font-size: 1.125rem;
 }
+
+
+/* Images inserted into shared Tiptap rich text remain responsive in public article and seminar views. */
+.idoc-rich-content img {
+  display: block;
+  height: auto;
+  margin-block: 1rem;
+  max-width: 100%;
+}

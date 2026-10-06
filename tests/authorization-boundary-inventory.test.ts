@@ -107,6 +107,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/selected-reports/route.ts': 'requireAdministrator',
   'app/api/admin/table-preferences/[table]/route.ts': 'authenticated-admin-csrf-owner-boundary',
+  'app/api/admin/tiptap-image/route.ts': 'authenticated-admin-csrf-boundary',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',
   'app/api/auth/google/link/start/route.ts': 'authenticated-fresh-verification-oauth-boundary',
   'app/api/auth/google/link/status/route.ts': 'authenticated-account-boundary',
@@ -294,6 +295,21 @@ test('the address autocomplete Route Handler authenticates and rate-limits befor
   assert.ok(authenticate >= 0 && rateLimit > authenticate && providerKey > rateLimit && providerFetch > providerKey);
   assert.match(source, /status: 429/);
   assert.match(source, /Retry-After/);
+});
+
+test('the Tiptap image upload Route Handler checks CSRF and administrator access before accepting or uploading files', () => {
+  const source = readFileSync(path.join(root, 'app/api/admin/tiptap-image/route.ts'), 'utf8');
+  const csrf = source.indexOf('await requireCsrfTokenValue(');
+  const accountAccess = source.indexOf("await requireAccountAccess('administration')");
+  const administrator = source.indexOf('requireAdministrator(actor)');
+  const contentLength = source.indexOf("request.headers.get('content-length')");
+  const formData = source.indexOf('await request.formData()');
+  const upload = source.indexOf("uploadCloudinaryImage(image, 'idoc/rich-content')");
+  assert.ok(csrf >= 0 && accountAccess > csrf && administrator > accountAccess);
+  assert.ok(contentLength > administrator && formData > contentLength && upload > formData);
+  assert.match(source, /MAX_IMAGE_UPLOAD_BYTES \+ 64 \* 1024/);
+  assert.match(source, /error\.name === 'AuthorizationError'/);
+  assert.match(source, /error\.name === 'CsrfError'/);
 });
 
 test('the compatibility team Route Handler never touches the database', () => {
