@@ -230,7 +230,7 @@ export function SimpleEditorField({
           <ToolbarSeparator />
 
           <ToolbarButton
-            disabled={!editor.can().undo()
+            disabled={!editor.can().undo()}
             label="Undo"
             onClick={() => editor.chain().focus().undo().run()}
           >
