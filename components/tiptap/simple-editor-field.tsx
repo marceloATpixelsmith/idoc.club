@@ -135,17 +135,12 @@ export function SimpleEditorField({
   useEffect(() => {
     if (!isFullscreen) return;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsFullscreen(false);
-    };
     const previousOverflow = document.body.style.overflow;
 
     document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isFullscreen]);
 
@@ -180,7 +175,16 @@ export function SimpleEditorField({
   };
 
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-[100] flex h-dvh flex-col gap-2 overflow-hidden bg-background p-3 sm:p-6' : 'space-y-2'}>
+    <div
+      className={isFullscreen ? 'fixed inset-0 z-[100] flex h-dvh flex-col gap-2 overflow-hidden bg-background p-3 sm:p-6' : 'space-y-2'}
+      onKeyDownCapture={(event) => {
+        if (isFullscreen && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsFullscreen(false);
+        }
+      }}
+    >
       <p className="text-sm font-medium uppercase tracking-wide" id={editorId}>
         {label}
       </p>
@@ -191,12 +195,18 @@ export function SimpleEditorField({
           className={['flex min-h-11 items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1.5', isFullscreen ? 'sticky top-0 z-10 shrink-0' : ''].join(' ')}
           role="toolbar"
         >
-          <ToolbarButton
-            label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+          <Button
+            aria-label={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+            className="h-8 shrink-0 gap-2 rounded-md border-primary/30 px-3 font-medium text-primary"
             onClick={() => setIsFullscreen((current) => !current)}
+            size="sm"
+            title={isFullscreen ? 'Exit full screen' : 'Open full screen'}
+            type="button"
+            variant="outline"
           >
             {isFullscreen ? <Minimize2 /> : <Maximize2 />}
-          </ToolbarButton>
+            <span>{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
+          </Button>
           <ToolbarSeparator />
 
           <ToolbarButton
