@@ -104,16 +104,17 @@ test('ordinary gold and blue buttons share the canonical Member Login pill radiu
 
 
 test('the News Blog edit drawer shows the current image inside the picker section', () => {
-  assert.match(newsDrawer, /Current image/);
-  assert.match(newsDrawer, /Current article thumbnail/);
+  const thumbnailField = readFileSync('components/news/article-thumbnail-field.tsx', 'utf8');
+  assert.match(thumbnailField, /Current image/);
+  assert.match(thumbnailField, /Current article thumbnail/);
   assert.match(newsDrawer, /Replace image/);
-  assert.match(newsDrawer, /No image/);
-  assert.match(newsDrawer, /aspect-\[4\/3\] w-28/);
+  assert.match(thumbnailField, /No image/);
+  assert.match(thumbnailField, /aspect-\[4\/3\] w-28/);
 });
 
 
 test('route-backed admin drawers always reopen after being closed', () => {
-  assert.match(adminDrawer, /<Dialog\.Root open onOpenChange=/);
+  assert.match(adminDrawer, /<Dialog\.Root open=\{open\} onOpenChange=/);
   assert.doesNotMatch(adminDrawer, /defaultOpen/);
 });
 
