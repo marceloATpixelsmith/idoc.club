@@ -94,6 +94,7 @@ export function SimpleEditorField({
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkHref, setLinkHref] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSourceMode, setIsSourceMode] = useState(false);
 
   const editor = useEditor({
     content: initialHtml,
@@ -207,10 +208,29 @@ export function SimpleEditorField({
             {isFullscreen ? <Minimize2 /> : <Maximize2 />}
             <span>{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
           </Button>
+          <Button
+            aria-label={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
+            className="h-8 shrink-0 gap-2 rounded-md px-3"
+            onClick={() => {
+              if (isSourceMode) {
+                editor.commands.setContent(html, { emitUpdate: false });
+              } else {
+                setHtml(editor.getHTML());
+              }
+              setIsSourceMode((current) => !current);
+            }}
+            size="sm"
+            title={isSourceMode ? 'Return to visual editor' : 'View HTML source'}
+            type="button"
+            variant="outline"
+          >
+            <Code2 />
+            <span>{isSourceMode ? 'Visual' : 'HTML'}</span>
+          </Button>
           <ToolbarSeparator />
 
           <ToolbarButton
-            disabled={!editor.can().undo()}
+            disabled={!editor.can().undo()
             label="Undo"
             onClick={() => editor.chain().focus().undo().run()}
           >
@@ -399,6 +419,18 @@ export function SimpleEditorField({
           </Popover>
         </div>
 
+        {isSourceMode ? (
+          <textarea
+            aria-label={`${label} HTML source`}
+            className={[
+              'w-full bg-background px-4 py-3 font-mono text-sm leading-6 outline-none',
+              isFullscreen ? 'min-h-0 flex-1 resize-none overflow-y-auto' : 'min-h-40 resize-y',
+            ].join(' ')}
+            onChange={(event) => setHtml(event.target.value)}
+            spellCheck={false}
+            value={html}
+          />
+        ) : (
         <EditorContent
           className={[
             '[&_.tiptap]:min-h-40',
@@ -418,6 +450,7 @@ export function SimpleEditorField({
           ].join(' ')}
           editor={editor}
         />
+        )}
       </div>
 
       <input name={name} type="hidden" value={html} />
