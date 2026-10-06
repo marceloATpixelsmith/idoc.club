@@ -38,6 +38,9 @@ export const users = idocSchema.table('users', {
   // creating a first password while disconnecting Google (app/(dashboard)/dashboard/security/actions.ts).
   // Existing rows are backfilled by this column's own migration.
   passwordSetAt: timestamp('password_set_at'),
+  /** Set only by the trusted legacy importer. Completion is an auditable, one-time member action. */
+  legacyProfileReviewRequired: boolean('legacy_profile_review_required').notNull().default(false),
+  legacyProfileReviewedAt: timestamp('legacy_profile_reviewed_at', { withTimezone: true }),
   accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
   sessionVersion: integer('session_version').notNull().default(0),
   role: varchar('role', { length: 20 }).notNull().default('member'),
@@ -48,6 +51,7 @@ export const users = idocSchema.table('users', {
 }, (table) => [
   uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
+  check('users_legacy_profile_review_state_check', sql`NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL`),
 ]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
@@ -211,14 +215,16 @@ export const applicationRoles = idocSchema.table('application_roles', {
 export const profiles = idocSchema.table('profiles', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().unique().references(() => users.id),
-  firstName: varchar('first_name', { length: 100 }).notNull(),
-  lastName: varchar('last_name', { length: 100 }).notNull(),
-  address1: varchar('address_1', { length: 200 }).notNull(),
+  // Nullable only at the trusted legacy-import boundary. The official member form requires every
+  // applicable value before first-login review can be completed.
+  firstName: varchar('first_name', { length: 100 }),
+  lastName: varchar('last_name', { length: 100 }),
+  address1: varchar('address_1', { length: 200 }),
   address2: varchar('address_2', { length: 200 }),
-  city: varchar('city', { length: 100 }).notNull(),
-  stateProvince: varchar('state_province', { length: 100 }).notNull(),
-  postalCode: varchar('postal_code', { length: 30 }).notNull(),
-  countryCode: varchar('country_code', { length: 2 }).notNull(),
+  city: varchar('city', { length: 100 }),
+  stateProvince: varchar('state_province', { length: 100 }),
+  postalCode: varchar('postal_code', { length: 30 }),
+  countryCode: varchar('country_code', { length: 2 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

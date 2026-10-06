@@ -1746,6 +1746,65 @@
           "Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values."
         ]
       }
+    },
+    {
+      "id": "LIVE-AUTH-034",
+      "title": "Imported legacy members remediate credentials and complete a server-gated full profile review",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-STORAGE-005",
+        "AUTH-PASSWORD-006",
+        "AUTH-AUTHZ-001"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": true,
+        "browser": true,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/account-profile.integration.ts",
+          "tests/legacy-first-login.test.ts",
+          "tests/legacy-import.test.ts",
+          "tests/ordinary-login-device-trust.test.ts",
+          "tests/password-hash-migration.integration.ts",
+          "tests/password-hash.test.ts",
+          "tests/unified-migrated-login.test.ts"
+        ],
+        "rationale": ""
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": true,
+        "preconditions": [
+          "Use synthetic imported-member fixtures on staging only.",
+          "Give the fixture an existing migration entitlement and legacy profile-review flag."
+        ],
+        "steps": [
+          "Sign in with each supported legacy credential format and exercise policy-pass, policy-fail, breached, and provider-outage results.",
+          "Verify normal protected routes are denied until password remediation when required and until the full prefilled profile is saved.",
+          "Save corrected and missing official fields, sign out, and sign in again."
+        ],
+        "pass": [
+          "Supported credentials upgrade atomically; unsupported credentials use neutral verified-email recovery.",
+          "The full profile is prefilled without invented values, server-gated once, and existing entitlement reaches the account without checkout."
+        ],
+        "fail": [
+          "A normal session precedes remediation, a protected route bypasses review, profile data is fabricated, entitlement is lost, or review repeats after successful completion."
+        ],
+        "cleanup": [
+          "Delete only synthetic fixtures after evidence is captured."
+        ],
+        "evidence": [
+          "Record categorical outcomes, route/status, audit action identifiers, and screenshots without credentials, hashes, email addresses, subscription IDs, or breach-query material."
+        ]
+      }
     }
   ]
 }

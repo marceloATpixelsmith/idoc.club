@@ -967,3 +967,33 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values.
+
+## LIVE-AUTH-034 — Imported legacy members remediate credentials and complete a server-gated full profile review
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-STORAGE-005, AUTH-PASSWORD-006, AUTH-AUTHZ-001
+- **CI coverage:** mapped — `tests/account-profile.integration.ts`, `tests/legacy-first-login.test.ts`, `tests/legacy-import.test.ts`, `tests/ordinary-login-device-trust.test.ts`, `tests/password-hash-migration.integration.ts`, `tests/password-hash.test.ts`, `tests/unified-migrated-login.test.ts`
+- **Live:** required; email=yes; admin=yes; destructive=no
+
+### Preconditions
+- Use synthetic imported-member fixtures on staging only.
+- Give the fixture an existing migration entitlement and legacy profile-review flag.
+
+### Steps
+1. Sign in with each supported legacy credential format and exercise policy-pass, policy-fail, breached, and provider-outage results.
+2. Verify normal protected routes are denied until password remediation when required and until the full prefilled profile is saved.
+3. Save corrected and missing official fields, sign out, and sign in again.
+
+### PASS
+- Supported credentials upgrade atomically; unsupported credentials use neutral verified-email recovery.
+- The full profile is prefilled without invented values, server-gated once, and existing entitlement reaches the account without checkout.
+
+### FAIL
+- A normal session precedes remediation, a protected route bypasses review, profile data is fabricated, entitlement is lost, or review repeats after successful completion.
+
+### Cleanup
+- Delete only synthetic fixtures after evidence is captured.
+
+### Evidence
+- Record categorical outcomes, route/status, audit action identifiers, and screenshots without credentials, hashes, email addresses, subscription IDs, or breach-query material.

@@ -6,6 +6,8 @@ on:
       - 'app/(login)/**'
       - 'app/api/auth/**'
       - 'app/(dashboard)/dashboard/security/**'
+      - 'app/(dashboard)/dashboard/profile/**'
+      - 'app/(dashboard)/dashboard/page.tsx'
       - 'app/(dashboard)/admin/security/**'
       - 'components/security/**'
       - 'components/turnstile-widget.tsx'

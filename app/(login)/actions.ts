@@ -64,16 +64,28 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   if (passwordHashNeedsUpgrade(foundUser.passwordHash)) {
+    const policyAccepted = passwordSchema.safeParse(password).success;
+    const breach = await checkPasswordBreached(password);
+    if (!policyAccepted || breach.breached) {
+      if (breach.breached) {
+        await notifyWebmasterOfBreachedPasswordAttempt({ email: foundUser.email, source: 'legacy-login' });
+      }
+      return { error: 'For your security, reset your password before continuing. Use Forgot password below.', email };
+    }
     const upgradedHash = await hashPassword(password);
-    await db.update(users)
+    const [upgraded] = await db.update(users)
       .set({ passwordHash: upgradedHash, updatedAt: new Date() })
-      .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)));
+      .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)))
+      .returning({ id: users.id });
+    if (!upgraded) {
+      return { error: 'Your credentials changed during sign-in. Please try again.', email };
+    }
   }
 
   const role = await authoritativeMfaRole(foundUser.id);
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
-  const loginDestination = foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
+  const loginDestination = foundUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
 
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();
@@ -117,7 +129,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
         await clearPendingLogin();
         return { error: 'Your sign-in session expired. Start again.', email };
       }
-      if (await beginPrimaryMfa(currentUser, 'password', currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
+      if (await beginPrimaryMfa(currentUser, 'password', currentUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
         await clearPendingLogin();
         redirect('/mfa');
       }

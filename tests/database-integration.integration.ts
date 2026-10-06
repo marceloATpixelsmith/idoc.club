@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 56);
+  assert.equal(count, 57);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 56);
+    assert.equal(count, 57);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 50, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051');
+    assert.equal(count, 51, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and includes migration 0056');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -301,10 +301,28 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // taken (null means the account has never had a real, member-known password -- see lib/db/schema.ts).
   expectedSchema['idoc.users'].columns.password_set_at = { name: 'password_set_at', type: 'timestamp', primaryKey: false, notNull: false };
 
+  // Migration 0056 added the durable legacy profile-review state and its invariant.
+  expectedSchema['idoc.users'].columns.legacy_profile_review_required = {
+    name: 'legacy_profile_review_required', type: 'boolean', primaryKey: false, notNull: true, default: false,
+  };
+  expectedSchema['idoc.users'].columns.legacy_profile_reviewed_at = {
+    name: 'legacy_profile_reviewed_at', type: 'timestamp with time zone', primaryKey: false, notNull: false,
+  };
+  expectedSchema['idoc.users'].checkConstraints.users_legacy_profile_review_state_check = {
+    name: 'users_legacy_profile_review_state_check',
+    value: 'NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL',
+  };
+
   // Migration 0054 widened email_otp_codes_purpose_check to add the google_disconnect_verification
   // purpose (lib/auth/email-otp.ts) after this frozen snapshot was taken.
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
+
+  // Migration 0056 made imported official-profile fields nullable so missing legacy source values
+  // remain null until the member completes the full first-login review.
+  for (const column of ['first_name', 'last_name', 'address_1', 'city', 'state_province', 'postal_code', 'country_code']) {
+    expectedSchema['idoc.profiles'].columns[column].notNull = false;
+  }
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
@@ -467,7 +485,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 56);
+  assert.equal(count, 57);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

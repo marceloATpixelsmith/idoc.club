@@ -14,7 +14,7 @@ import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancell
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type MemberProfileInput } from './validation';
-import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
+import { isPrivilegedActor, mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
@@ -44,18 +44,22 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const session = injectedActor ? null : await getSession();
   const userId = injectedActor?.id ?? session?.user.id;
   if (!userId) throw new AuthorizationError();
-  const [account] = await db.select({ accountState: users.accountState })
+  const [account] = await db.select({ accountState: users.accountState, legacyProfileReviewRequired: users.legacyProfileReviewRequired })
     .from(users).where(eq(users.id, userId)).limit(1);
   if (!account) throw new AuthorizationError();
-  const [grants, profile] = await Promise.all([
-    db.select({ role: applicationRoles.role }).from(applicationRoles)
-      .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))),
-    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
-  ]);
+  const grants = await db.select({ role: applicationRoles.role }).from(applicationRoles)
+    .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
   const actor = { id: userId, roles: grants.map(({ role }) => role) };
-  const latest = profile[0]
+  if (account.legacyProfileReviewRequired && !isPrivilegedActor(actor)) {
+    if (account.accountState !== 'active' || !['account', 'profile_review'].includes(operation)) {
+      throw new AuthorizationError();
+    }
+    return actor;
+  }
+  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  const latest = profile
     ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
-      .from(memberships).where(eq(memberships.profileId, profile[0].id))
+      .from(memberships).where(eq(memberships.profileId, profile.id))
       .orderBy(desc(memberships.validUntil)).limit(1)
     : [];
   const entitled = latest[0]
@@ -92,6 +96,19 @@ export async function getOwnPrivateMember() {
   const actor = await authenticatedActor('profile');
   const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
   return profile ? getPrivateMember(profile.id) : null;
+}
+
+/** Minimal official-profile projection for the required legacy review screen. It deliberately
+ * excludes membership entitlement, billing, subscription, and payment-history data. */
+export async function getOwnLegacyProfileReviewData() {
+  const actor = await authenticatedActor('profile_review');
+  const [profile] = await db.select().from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+  if (!profile) return null;
+  const roles = await db.select().from(professionalRoles).where(and(
+    eq(professionalRoles.profileId, profile.id),
+    isNull(professionalRoles.effectiveTo),
+  ));
+  return { profile, roles };
 }
 
 export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsent?: OnboardingConsentInput) {
@@ -138,9 +155,9 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   return result.profile;
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { legacyProfileReview?: boolean; reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor('profile_mutation');
+  const actor = await authenticatedActor(options?.legacyProfileReview ? 'profile_review' : 'profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
@@ -186,10 +203,32 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     });
     injectProfileTransactionFailure('audit-insertion');
     if (!isAdminEdit) {
+      await tx.update(users).set({ legacyProfileReviewRequired: false, legacyProfileReviewedAt: now, updatedAt: now })
+        .where(and(eq(users.id, actor.id), eq(users.legacyProfileReviewRequired, true)));
       await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
     injectProfileTransactionFailure('notification-insertion');
     return updated;
+  });
+}
+
+/** Explicit administrator-only reset; normal profile edits can never silently re-open review. */
+export async function resetLegacyProfileReview(userId: number, reason: string) {
+  const actor = await authenticatedActor('administration');
+  requireAdministrator(actor);
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) throw new Error('An administrative reason is required.');
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(users).set({
+      legacyProfileReviewRequired: true,
+      legacyProfileReviewedAt: null,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId)).returning({ id: users.id });
+    if (!updated) throw new Error('Member not found.');
+    await tx.insert(auditLog).values({
+      action: 'admin.legacy_profile_review.reset', actorId: actor.id,
+      entityId: String(userId), entityType: 'user', reason: normalizedReason,
+    });
   });
 }
 

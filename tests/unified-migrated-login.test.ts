@@ -31,6 +31,13 @@ test('email verification is triggered only after successful password verificatio
   assert.ok(passwordCheck >= 0 && verificationBranch > passwordCheck && otpIssue > verificationBranch);
 });
 
+test('legacy profile review redirect survives password and OTP login paths', () => {
+  const passwordAction = read('app/(login)/actions.ts');
+  const otpAction = read('app/(login)/sign-in/actions.ts');
+  assert.match(passwordAction, /foundUser\.legacyProfileReviewRequired \? '\/dashboard\/profile\?confirmDetails=1'/);
+  assert.match(otpAction, /verifiedUser\.legacyProfileReviewRequired[\s\S]*'\/dashboard\/profile\?confirmDetails=1'/);
+});
+
 test('migrated members use the same password-first surface and validated activation boundary', () => {
   const page = read('app/(login)/sign-in/page.tsx');
   const actions = read('app/(login)/actions.ts');
