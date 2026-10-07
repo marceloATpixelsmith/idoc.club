@@ -263,10 +263,14 @@ export async function getAdminArticle(value: unknown) {
   const externalReady = await newsSchemaSupportsExternalUrl();
   const [row] = schemaReady
     ? externalReady
-      ? await client`select * from idoc.news_articles where id=${parsedId.data} limit 1`
-      : await client`select *,null::text as external_url from idoc.news_articles where id=${parsedId.data} limit 1`
+      ? await client`select *,coalesce(thumbnail_url,${legacyThumbnailSql()}) as admin_thumbnail_url from idoc.news_articles where id=${parsedId.data} limit 1`
+      : await client`select *,coalesce(thumbnail_url,${legacyThumbnailSql()}) as admin_thumbnail_url,null::text as external_url from idoc.news_articles where id=${parsedId.data} limit 1`
     : await client`select *,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url from idoc.news_articles where id=${parsedId.data} limit 1`;
-  return row ?? null;
+  if (!row) return null;
+  if (schemaReady) {
+    return { ...row, thumbnail_url: row.admin_thumbnail_url ?? row.thumbnail_url };
+  }
+  return row;
 }
 
 export async function createArticle(input: ArticleInput) {

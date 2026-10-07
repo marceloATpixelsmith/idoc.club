@@ -922,7 +922,11 @@ Seminar registration payment methods use the shared gold-branded icon mapping: c
 
 News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays title with slug beneath it, TYPE and STATUS as icon-backed uppercase values, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
 
-The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. Runtime upload requires `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`; `CLOUDINARY_CLOUD_NAME` defaults to the IDOC cloud `z6xv27qx` when omitted. Public `/news` and `/blog` listings are type-filtered server-side, include the thumbnail, and route to type-specific detail pages; the homepage uses the same typed database records rather than the legacy static President's Blog array.
+The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. The same server-side Cloudinary uploader powers the **Insert image** control in every administrator Tiptap field, which stores uploaded rich-content images under `idoc/rich-content`.
+
+Runtime upload requires all three Cloudinary variables in Vercel: `CLOUDINARY_CLOUD_NAME=z6xv27qx`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. The API key and API secret come from the IDOC Cloudinary product environment's API Keys page. The key is an identifier but the API secret is sensitive and must be stored as a Vercel Sensitive value; neither belongs in source control. Configure the variables for the staging branch Preview environment before testing `staging.idoc.club`, and configure Production separately before launch. After adding or changing them, redeploy the affected environment because existing deployments do not receive newly added values retroactively. A missing key or secret intentionally causes uploads to fail with **Image upload is not configured** instead of silently dropping media.
+
+Public `/news` and `/blog` listings are type-filtered server-side, include the thumbnail, and route to type-specific detail pages; the homepage uses the same typed database records rather than the legacy static President's Blog array.
 
 
 ### News/Blog pre-0064 rollout compatibility
@@ -931,7 +935,7 @@ If application code containing the News/Blog type and thumbnail features is depl
 
 This mode is read-compatible and now also self-heals the additive News/Blog schema on the first authorized administrator write. Before any thumbnail upload or article mutation, the server acquires a PostgreSQL advisory transaction lock and creates the missing 0064/0065 News columns, index, and checks idempotently. If the database user cannot perform that DDL, the save fails clearly and no upload/mutation proceeds.
 
-The normal migration runner must still record migrations 0064 and 0065 afterward. Both migration files are idempotent so they can run safely after the write-path repair has already created the additive objects. Verify the new columns and the `idoc.__drizzle_migrations` ledger, then retest `/admin/news`, `/news`, and `/blog`.
+The normal migration runner must still record migrations 0064 and 0065 afterward. Both migration files are idempotent so they can run safely after the write-path repair has already created the additive objects. Migration `0067_news_legacy_thumbnail_backfill.sql` is a separate idempotent data backfill for environments where migration 0064 had already been recorded before the legacy thumbnail assignments were added to that file. It populates only currently-null legacy thumbnail rows, so it does not overwrite administrator replacements. Verify the new columns and the `idoc.__drizzle_migrations` ledger, then retest `/admin/news`, `/news`, and `/blog`.
 
 
 ### External News/Blog link items

@@ -78,3 +78,34 @@ test('public news list reuses homepage cards and article detail has Back to News
   assert.match(detail, /backHref="\/news"/);
   assert.match(detail, /backLabel="Back to News"/);
 });
+
+
+test('News/Blog form sizes fields for their content and keeps long metadata on separate rows', () => {
+  const drawer = source('app/(dashboard)/admin/news/news-drawer.tsx');
+  assert.match(drawer, /className="max-w-sm space-y-1\.5"[\s\S]*publicationDate/);
+  assert.match(drawer, /<div className="space-y-4">[\s\S]*htmlFor="title"[\s\S]*htmlFor="subtitle"[\s\S]*htmlFor="slug"/);
+  assert.doesNotMatch(drawer, /htmlFor="subtitle"[\s\S]{0,300}md:grid-cols-2/);
+});
+
+test('legacy News/Blog thumbnails remain visible in admin and have a dedicated post-0064 backfill migration', () => {
+  const articles = source('lib/news/articles.ts');
+  const migration = source('lib/db/migrations/0067_news_legacy_thumbnail_backfill.sql');
+  const journal = source('lib/db/migrations/meta/_journal.json');
+  const snapshot = source('lib/db/migrations/meta/0067_snapshot.json');
+  assert.match(articles, /coalesce\(thumbnail_url,\$\{legacyThumbnailSql\(\)\}\) as admin_thumbnail_url/);
+  assert.match(articles, /thumbnail_url: row\.admin_thumbnail_url \?\? row\.thumbnail_url/);
+  assert.match(migration, /where thumbnail_url is null/);
+  assert.match(migration, /jacques-van-daele\.jpg/);
+  assert.match(migration, /stephen-clarke\.jpg/);
+  assert.match(journal, /"idx": 67[\s\S]*"tag": "0067_news_legacy_thumbnail_backfill"/);
+  assert.match(snapshot, /"prevId": "d1608e44-2a96-4fd9-a066-006600000066"/);
+});
+
+
+test('Tiptap image upload shows a visible loading state while the image is uploaded and inserted', () => {
+  const editor = source('components/tiptap/simple-editor-field.tsx');
+  assert.match(editor, /LoaderCircle className="animate-spin"/);
+  assert.match(editor, /role="status"/);
+  assert.match(editor, /Uploading image and inserting it into the editor\.\.\./);
+  assert.match(editor, /disabled=\{isImageUploading\}/);
+});

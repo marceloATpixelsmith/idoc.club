@@ -46,17 +46,17 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
           <NewsForm action={createNewsArticle} submitLabel="Create article">
             <AdminFormSection description="Choose where this item belongs and how it should be published." title="Publishing">
               <TypeStatusFields />
-              <div className="space-y-1.5">
+              <div className="max-w-sm space-y-1.5">
                 <Label htmlFor="publicationDate">Publication date (UTC)</Label>
                 <Input id="publicationDate" name="publicationDate" required type="datetime-local" />
               </div>
             </AdminFormSection>
             <AdminFormSection title="Article details">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5 md:col-span-2"><Label htmlFor="title">Title</Label><Input id="title" maxLength={200} name="title" required /></div>
+              <div className="space-y-4">
+                <div className="space-y-1.5"><Label htmlFor="title">Title</Label><Input id="title" maxLength={200} name="title" required /></div>
                 <div className="space-y-1.5"><Label htmlFor="subtitle">Subtitle (optional)</Label><Input id="subtitle" maxLength={300} name="subtitle" /></div>
                 <div className="space-y-1.5"><Label htmlFor="slug">Slug (optional)</Label><Input id="slug" maxLength={160} name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="spring-education-update" /></div>
-                <div className="space-y-1.5 md:col-span-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="externalUrl">External link (optional)</Label>
                   <Input id="externalUrl" maxLength={2000} name="externalUrl" placeholder="https://www.fei.org/..." type="url" />
                   <p className="text-sm text-muted-foreground">When present, public cards open this URL in a new tab. An internal article body is optional.</p>
@@ -87,17 +87,17 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
           <input name="existingThumbnailUrl" type="hidden" value={article.thumbnail_url ? String(article.thumbnail_url) : ''} />
           <AdminFormSection description="Type, publication status, and schedule are managed together." title="Publishing">
             <TypeStatusFields articleType={articleType} status={status} />
-            <div className="space-y-1.5">
+            <div className="max-w-sm space-y-1.5">
               <Label htmlFor="publicationDate">Publication date (UTC)</Label>
               <Input defaultValue={toDatetimeLocalUtc(article.publication_date)} id="publicationDate" name="publicationDate" required type="datetime-local" />
             </div>
           </AdminFormSection>
           <AdminFormSection title="Article details">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5 md:col-span-2"><Label htmlFor="title">Title</Label><Input defaultValue={String(article.title)} id="title" maxLength={200} name="title" required /></div>
+            <div className="space-y-4">
+              <div className="space-y-1.5"><Label htmlFor="title">Title</Label><Input defaultValue={String(article.title)} id="title" maxLength={200} name="title" required /></div>
               <div className="space-y-1.5"><Label htmlFor="subtitle">Subtitle (optional)</Label><Input defaultValue={article.subtitle ? String(article.subtitle) : ''} id="subtitle" maxLength={300} name="subtitle" /></div>
               <div className="space-y-1.5"><Label htmlFor="slug">Slug</Label><Input defaultValue={String(article.slug)} id="slug" maxLength={160} name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" required /></div>
-              <div className="space-y-1.5 md:col-span-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="externalUrl">External link (optional)</Label>
                 <Input defaultValue={article.external_url ? String(article.external_url) : ''} id="externalUrl" maxLength={2000} name="externalUrl" placeholder="https://www.fei.org/..." type="url" />
                 <p className="text-sm text-muted-foreground">When present, public cards open this URL in a new tab. An internal article body is optional.</p>

@@ -10,6 +10,7 @@ import {
   ImagePlus,
   Link2,
   List,
+  LoaderCircle,
   ListOrdered,
   Maximize2,
   Minimize2,
@@ -272,7 +273,7 @@ export function SimpleEditorField({
             label={isImageUploading ? 'Uploading image' : 'Insert image'}
             onClick={() => imageInputRef.current?.click()}
           >
-            <ImagePlus />
+            {isImageUploading ? <LoaderCircle className="animate-spin" /> : <ImagePlus />}
           </ToolbarButton>
 
           <ToolbarSeparator />
@@ -452,6 +453,17 @@ export function SimpleEditorField({
             </PopoverContent>
           </Popover>
         </div>
+
+        {isImageUploading ? (
+          <div
+            aria-live="polite"
+            className="flex items-center gap-2 border-b bg-muted/20 px-4 py-2 text-sm text-muted-foreground"
+            role="status"
+          >
+            <LoaderCircle className="size-4 animate-spin" />
+            Uploading image and inserting it into the editor...
+          </div>
+        ) : null}
 
         {isSourceMode ? (
           <textarea
