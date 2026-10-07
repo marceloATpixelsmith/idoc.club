@@ -9,7 +9,7 @@ import { requireAccountAccess } from './data-access';
 
 export const DEFAULT_ADMIN_MEMBER_PAGE_SIZE = 25;
 export const MEMBER_EXPORT_LIMIT = 25_000;
-export const MEMBERSHIP_STATUSES = ['active', 'expired', 'archived', 'without_active', 'administrator', 'super_admin', 'onboarding', 'test'] as const;
+export const MEMBERSHIP_STATUSES = ['active', 'expired', 'archived', 'without_active', 'board_member', 'administrator', 'super_admin', 'onboarding', 'test'] as const;
 export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 // Next.js searchParams values are string | string[] | undefined at runtime (a repeated query key
 // becomes an array) regardless of a narrower page-level annotation, so every filter accepts that
@@ -29,7 +29,7 @@ export type MemberFilters = {
 
 export type AdminMemberRow = {
   country: string | null; email: string; federation: string | null; firstName: string | null;
-  hasSupportHistory: boolean; isAdministrator: boolean; isSuperAdmin: boolean; lastName: string | null; lastPaymentAt: Date | null; membershipType: string | null; profileId: number | null; region: string | null;
+  hasSupportHistory: boolean; isAdministrator: boolean; isBoardMember: boolean; isSuperAdmin: boolean; lastName: string | null; lastPaymentAt: Date | null; membershipType: string | null; profileId: number | null; region: string | null;
   status: string; updatedAt: Date; userId: number; validUntil: string | null;
 };
 
@@ -128,6 +128,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
 }
 
 function statusCondition(value: MembershipStatusFilter, effectiveStatus: SQL): SQL {
+  if (value === 'board_member') return sql`coalesce(p.is_board_member,false)`;
   if (value === 'administrator') return sql`coalesce(app_roles.is_administrator,false)`;
   if (value === 'super_admin') return sql`coalesce(app_roles.is_super_admin,false)`;
   if (value === 'onboarding') return sql`u.account_state in ('unverified','onboarding','migrated_pending')`;
@@ -227,7 +228,7 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
+    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
