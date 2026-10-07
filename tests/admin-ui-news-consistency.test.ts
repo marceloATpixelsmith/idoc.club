@@ -119,10 +119,11 @@ test('Tiptap images can be selected and drag-resized with their width persisted 
   assert.match(imageNodeView, /aria-label="Resize image"/);
   assert.match(imageNodeView, /cursor-nwse-resize/);
   assert.match(imageNodeView, /editor\.commands\.setNodeSelection\(position\)/);
-  assert.match(imageNodeView, /window\.addEventListener\('pointermove', handlePointerMove/);
-  assert.match(imageNodeView, /window\.addEventListener\('pointercancel', handlePointerEnd\)/);
-  assert.match(imageNodeView, /window\.removeEventListener\('pointermove', handlePointerMove\)/);
-  assert.match(imageNodeView, /event\.pointerId !== active\.pointerId/);
+  assert.match(imageNodeView, /registeredHandlersRef = useRef<RegisteredResizeHandlers \| null>\(null\)/);
+  assert.match(imageNodeView, /window\.addEventListener\('pointermove', handlers\.pointerMove/);
+  assert.match(imageNodeView, /window\.addEventListener\('pointercancel', handlers\.pointerCancel\)/);
+  assert.match(imageNodeView, /window\.removeEventListener\('pointermove', handlers\.pointerMove\)/);
+  assert.match(imageNodeView, /moveEvent\.pointerId !== active\.pointerId/);
   assert.match(imageNodeView, /updateAttributes\(\{ width: Math\.round\(nextWidth\) \}\)/);
   assert.match(imageNodeView, /touchAction: 'none'/);
   assert.match(imageNodeView, /size-6 cursor-nwse-resize/);
