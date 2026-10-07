@@ -60,7 +60,7 @@ test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
   assert.match(professionalRoleIcons, /export function HorseshoeIcon/);
   assert.match(professionalRoleIcons, /<path d="M5 3v8a7 7 0 0 0 14 0V3h-4v8a3 3 0 0 1-6 0V3H5Z" \/>/);
   assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
-  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" \/>/);
+  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip="STEWARD" \/>/);
 });
 
 
