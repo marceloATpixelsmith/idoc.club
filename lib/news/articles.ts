@@ -2,8 +2,11 @@ import 'server-only';
 
 import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
+import { getAccountStateUser } from '@/lib/db/queries';
 import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { isEntitled } from '@/lib/membership/entitlement';
+import { testBoundaryActor } from '@/lib/membership/test-boundary';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
 
@@ -17,6 +20,8 @@ export type NewsStatus = (typeof NEWS_STATUSES)[number];
 export const NEWS_TYPES = ['news', 'blog'] as const;
 export type NewsType = (typeof NEWS_TYPES)[number];
 export const NEWS_TYPE_LABELS: Record<NewsType, string> = { news: 'NEWS', blog: 'BLOG' };
+export const NEWS_AUDIENCES = ['public', 'members', 'judge', 'steward', 'veterinarian'] as const;
+export type NewsAudience = (typeof NEWS_AUDIENCES)[number];
 
 export const STATUS_LABELS: Record<NewsStatus, string> = {
   archived: 'Archived', draft: 'Draft', published: 'Published', scheduled: 'Scheduled',
@@ -41,6 +46,7 @@ const contentSchema = z.string().max(NEWS_CONTENT_MAX_LENGTH);
 const slugSchema = z.string().trim().toLowerCase().min(1).max(NEWS_SLUG_MAX_LENGTH).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 const statusSchema = z.enum(NEWS_STATUSES);
 const typeSchema = z.enum(NEWS_TYPES);
+const audienceValueSchema = z.enum(NEWS_AUDIENCES);
 const thumbnailUrlSchema = z.string().trim().url().max(2000).nullable();
 const externalUrlSchema = z.string().trim().url().max(2000).refine((value) => ['http:', 'https:'].includes(new URL(value).protocol));
 const idSchema = z.coerce.number().int().positive();
@@ -94,6 +100,15 @@ async function newsSchemaSupportsTypeAndThumbnail(): Promise<boolean> {
   return Boolean(row?.ready);
 }
 
+async function newsSchemaSupportsAudience(): Promise<boolean> {
+  const [row] = await client<{ ready: boolean }[]>`
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='idoc' and table_name='news_articles' and column_name='audience'
+    ) as ready`;
+  return Boolean(row?.ready);
+}
+
 async function newsSchemaSupportsExternalUrl(): Promise<boolean> {
   const [row] = await client<{ ready: boolean }[]>`
     select exists(
@@ -104,7 +119,7 @@ async function newsSchemaSupportsExternalUrl(): Promise<boolean> {
 }
 
 export async function requireNewsArticleSchema() {
-  if ((await newsSchemaSupportsTypeAndThumbnail()) && (await newsSchemaSupportsExternalUrl())) return;
+  if ((await newsSchemaSupportsTypeAndThumbnail()) && (await newsSchemaSupportsExternalUrl()) && (await newsSchemaSupportsAudience())) return;
 
   try {
     await client.begin(async (sql) => {
@@ -137,6 +152,19 @@ export async function requireNewsArticleSchema() {
         )`;
 
       await sql`alter table idoc.news_articles add column if not exists external_url text`;
+      await sql`alter table idoc.news_articles
+        add column if not exists audience varchar(20)[] not null default array['public']::varchar[]`;
+      await sql`alter table idoc.news_articles drop constraint if exists news_articles_audience_check`;
+      await sql`alter table idoc.news_articles
+        add constraint news_articles_audience_check check (
+          cardinality(audience) between 1 and 3
+          and audience <@ array['public','members','judge','steward','veterinarian']::varchar[]
+          and (
+            (audience && array['public','members']::varchar[] and cardinality(audience)=1)
+            or
+            (not (audience && array['public','members']::varchar[]) and audience <@ array['judge','steward','veterinarian']::varchar[])
+          )
+        )`;
       await sql`alter table idoc.news_articles drop constraint if exists news_articles_external_url_check`;
       await sql`alter table idoc.news_articles
         add constraint news_articles_external_url_check
@@ -155,7 +183,7 @@ export async function requireNewsArticleSchema() {
     throw new NewsValidationError('News/Blog database preparation failed. Please retry the save or contact an administrator.');
   }
 
-  if (!(await newsSchemaSupportsTypeAndThumbnail()) || !(await newsSchemaSupportsExternalUrl())) {
+  if (!(await newsSchemaSupportsTypeAndThumbnail()) || !(await newsSchemaSupportsExternalUrl()) || !(await newsSchemaSupportsAudience())) {
     throw new NewsValidationError('News/Blog database preparation did not complete. Please retry the save or contact an administrator.');
   }
 }
@@ -195,11 +223,19 @@ async function requireNewsAdministrator() {
   return actor;
 }
 
-type ArticleInput = { articleType: unknown; contentHtml: unknown; externalUrl: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; thumbnailUrl: unknown; title: unknown };
+type ArticleInput = { articleType: unknown; audience: unknown; contentHtml: unknown; externalUrl: unknown; publicationDate: unknown; slug: unknown; status: unknown; subtitle: unknown; thumbnailUrl: unknown; title: unknown };
 
 function validateFields(input: ArticleInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
   const articleType = parse(typeSchema, input.articleType, 'Choose NEWS or BLOG.');
+  const audienceInput = Array.isArray(input.audience) ? input.audience : [input.audience];
+  const audience = [...new Set(audienceInput.map((value) => String(value)).filter(Boolean))]
+    .map((value) => parse(audienceValueSchema, value, 'Choose a valid member access option.'));
+  if (!audience.length) throw new NewsValidationError('Choose who can access this article.');
+  const broadAudience = audience.filter((value) => value === 'public' || value === 'members');
+  if ((broadAudience.length > 0 && audience.length !== 1) || audience.length > 3) {
+    throw new NewsValidationError('Public and All logged-in Members cannot be combined with other access options.');
+  }
   const subtitleRaw = typeof input.subtitle === 'string' ? input.subtitle.trim() : '';
   const subtitle = subtitleRaw ? parse(subtitleSchema, subtitleRaw, 'Subtitle must be 300 characters or fewer.') : null;
   const externalRaw = typeof input.externalUrl === 'string' ? input.externalUrl.trim() : '';
@@ -218,7 +254,7 @@ function validateFields(input: ArticleInput) {
   const slug = parse(slugSchema, slugInput || slugify(title), 'Slug must use lowercase letters, numbers, and hyphens only.');
   const thumbnailRaw = typeof input.thumbnailUrl === 'string' ? input.thumbnailUrl.trim() : '';
   const thumbnailUrl = thumbnailRaw ? parse(thumbnailUrlSchema, thumbnailRaw, 'Thumbnail URL is invalid.') : null;
-  return { articleType, contentHtml, externalUrl, publicationDate, slug, status, subtitle, thumbnailUrl, title };
+  return { articleType, audience, contentHtml, externalUrl, publicationDate, slug, status, subtitle, thumbnailUrl, title };
 }
 
 export async function listAdminArticles(input: Record<string, string | string[] | undefined>) {
@@ -282,11 +318,11 @@ export async function createArticle(input: ArticleInput) {
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? new Date() : null;
     const [row] = await sql<{ id: number }[]>`insert into idoc.news_articles
-      (slug,title,subtitle,article_type,thumbnail_url,external_url,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
-      values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.thumbnailUrl},${fields.externalUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
+      (slug,title,subtitle,article_type,audience,thumbnail_url,external_url,content_html,status,publication_date,published_at,created_by_user_id,updated_by_user_id)
+      values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.audience},${fields.thumbnailUrl},${fields.externalUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
-      (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
+      (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ audience: fields.audience, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
     return row.id;
   });
 }
@@ -298,22 +334,24 @@ export async function updateArticle(idValue: unknown, input: ArticleInput) {
   const fields = validateFields(input);
   await client.begin(async (sql) => {
     const [existing] = await sql<{
-      published_at: Date | string | null; slug: string; status: NewsStatus; title: string;
-    }[]>`select slug,status,title,published_at from idoc.news_articles where id=${id} for update`;
+      audience: string[]; published_at: Date | string | null; slug: string; status: NewsStatus; title: string;
+    }[]>`select audience,slug,status,title,published_at from idoc.news_articles where id=${id} for update`;
     if (!existing) throw new NewsValidationError('Article not found.');
     const slugTaken = await sql<{ id: number }[]>`select id from idoc.news_articles where slug=${fields.slug} and id<>${id} limit 1`;
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
     const publishedAt = fields.status === 'published' ? (existing.published_at ?? new Date()) : null;
     await sql`update idoc.news_articles set slug=${fields.slug},title=${fields.title},subtitle=${fields.subtitle},
-      article_type=${fields.articleType},thumbnail_url=${fields.thumbnailUrl},external_url=${fields.externalUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
+      article_type=${fields.articleType},audience=${fields.audience},thumbnail_url=${fields.thumbnailUrl},external_url=${fields.externalUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
       published_at=${iso(publishedAt)},updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
+    const audienceChanged = JSON.stringify(existing.audience) !== JSON.stringify(fields.audience);
     const changedFields = [
-      existing.slug !== fields.slug && 'slug', existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
+      audienceChanged && 'audience', existing.slug !== fields.slug && 'slug',
+      existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
     ].filter(Boolean);
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.news_article.edited','news_article',${String(id)},
-      ${JSON.stringify({ slug: existing.slug, status: existing.status, title: existing.title })}::jsonb,
-      ${JSON.stringify({ changedFields, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
+      ${JSON.stringify({ audience: existing.audience, slug: existing.slug, status: existing.status, title: existing.title })}::jsonb,
+      ${JSON.stringify({ audience: fields.audience, changedFields, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
   });
 }
 
@@ -435,6 +473,55 @@ export async function publishScheduledArticles(): Promise<{ published: number }>
   });
 }
 
+type ArticleViewer = { loggedInMember: boolean; roles: string[] };
+
+async function currentArticleViewer(): Promise<ArticleViewer> {
+  const injectedActor = testBoundaryActor();
+  // Direct integration-test calls have no Next.js request store. Treat them as anonymous unless
+  // the isolated membership test boundary explicitly injects an authenticated actor.
+  if (process.env.NODE_ENV === 'test' && !injectedActor) {
+    return { loggedInMember: false, roles: [] };
+  }
+  const user = injectedActor ?? await getAccountStateUser();
+  if (!user) return { loggedInMember: false, roles: [] };
+
+  const [profile] = await client<{ id: number }[]>`
+    select id from idoc.profiles where user_id=${user.id} limit 1`;
+  if (!profile) return { loggedInMember: false, roles: [] };
+
+  const [membership, roles] = await Promise.all([
+    client<{ grace_ends_on: string | null; status: string; valid_until: string }[]>`
+      select grace_ends_on,status,valid_until
+      from idoc.memberships
+      where profile_id=${profile.id}
+      order by valid_until desc,id desc
+      limit 1`,
+    client<{ role_type: string }[]>`
+      select role_type
+      from idoc.professional_roles
+      where profile_id=${profile.id} and effective_to is null`,
+  ]);
+  const loggedInMember = isEntitled(membership[0] ? {
+    graceEndsOn: membership[0].grace_ends_on,
+    status: membership[0].status,
+    validUntil: membership[0].valid_until,
+  } : null, new Date().toISOString().slice(0, 10));
+  return { loggedInMember, roles: loggedInMember ? roles.map(({ role_type }) => role_type) : [] };
+}
+
+function articleAudienceWhere(viewer: ArticleViewer) {
+  const judge = viewer.roles.includes('judge');
+  const steward = viewer.roles.includes('steward');
+  const veterinarian = viewer.roles.includes('veterinarian');
+  return client`(
+    'public'=any(audience)
+    or (${viewer.loggedInMember} and 'members'=any(audience))
+    or (${judge} and 'judge'=any(audience))
+    or (${steward} and 'steward'=any(audience))
+    or (${veterinarian} and 'veterinarian'=any(audience))
+  )`;
+}
+
 export async function listPublicArticles(pageValue: unknown, typeValue?: unknown) {
   const page = Math.max(1, Number.parseInt(typeof pageValue === 'string' ? pageValue : '1', 10) || 1);
   const parsedType = typeSchema.safeParse(typeValue);
@@ -443,11 +530,18 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   const offset = (page - 1) * limit;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
+  const audienceReady = await newsSchemaSupportsAudience();
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   const rows = schemaReady
-    ? await client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
-        where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
-        order by publication_date desc limit ${limit + 1} offset ${offset}`
-    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
+    ? audienceReady
+      ? await client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+          where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+          and (${articleAudienceWhere(viewer)})
+          order by publication_date desc limit ${limit + 1} offset ${offset}`
+      : await client`select slug,title,subtitle,article_type,array['public']::varchar[] as audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+          where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+          order by publication_date desc limit ${limit + 1} offset ${offset}`
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,array['public']::varchar[] as audience,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
         from idoc.news_articles
         where status='published' and publication_date<=now()
         and (${articleType}::text is null or ${legacyArticleTypeSql()}=${articleType})
@@ -460,11 +554,18 @@ export async function listAllPublicArticles(typeValue?: unknown) {
   const articleType = parsedType.success ? parsedType.data : null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
+  const audienceReady = await newsSchemaSupportsAudience();
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   return schemaReady
-    ? client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
-        where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
-        order by publication_date desc`
-    : client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
+    ? audienceReady
+      ? client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+          where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+          and (${articleAudienceWhere(viewer)})
+          order by publication_date desc`
+      : client`select slug,title,subtitle,article_type,array['public']::varchar[] as audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
+          where status='published' and publication_date<=now() and (${articleType}::text is null or article_type=${articleType})
+          order by publication_date desc`
+    : client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,array['public']::varchar[] as audience,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,publication_date
         from idoc.news_articles
         where status='published' and publication_date<=now()
         and (${articleType}::text is null or ${legacyArticleTypeSql()}=${articleType})
@@ -476,11 +577,18 @@ export async function getPublicArticleBySlug(value: unknown, expectedType?: News
   if (!parsedSlug.success) return null;
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
+  const audienceReady = await newsSchemaSupportsAudience();
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   const [row] = schemaReady
-    ? await client`select slug,title,subtitle,article_type,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
-        where slug=${parsedSlug.data} and status='published' and publication_date<=now()
-        and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`
-    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,content_html,publication_date
+    ? audienceReady
+      ? await client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
+          where slug=${parsedSlug.data} and status='published' and publication_date<=now()
+          and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null})
+          and (${articleAudienceWhere(viewer)}) limit 1`
+      : await client`select slug,title,subtitle,article_type,array['public']::varchar[] as audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
+          where slug=${parsedSlug.data} and status='published' and publication_date<=now()
+          and (${expectedType ?? null}::text is null or article_type=${expectedType ?? null}) limit 1`
+    : await client`select slug,title,subtitle,${legacyArticleTypeSql()} as article_type,array['public']::varchar[] as audience,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,content_html,publication_date
         from idoc.news_articles
         where slug=${parsedSlug.data} and status='published' and publication_date<=now()
         and (${expectedType ?? null}::text is null or ${legacyArticleTypeSql()}=${expectedType ?? null}) limit 1`;
