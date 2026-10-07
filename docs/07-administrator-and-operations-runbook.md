@@ -921,6 +921,10 @@ Column order is persisted per administrator and table. A saved administrator ord
 
 Seminar registration payment methods use the shared gold-branded icon mapping: card for Online / Stripe, bank for Bank Transfer, and cash for Cash at the Event. The registration search field is labeled simply “Search name or email”.
 
+All administrator date-range filters must permit selecting dates at least three calendar years into the future. This applies to the Members expiration filter and every shared admin date-range/table date filter, because memberships, seminars, publication schedules, registrations, and other administrator records may legitimately be future-dated.
+
+Meaningful icons shown anywhere in the application must expose a hover tooltip unless that icon already has an explicit tooltip. In the Members roster, the gold role icons immediately after a member name must identify Super Admin, Administrator, and Board Member individually; when more than one role applies, each icon keeps its own tooltip. Shared icon fallback logic may use an icon's explicit domain label, its associated interactive control's label, or its Lucide icon name, but it must not inherit labels from unrelated structural containers such as navigation regions. Custom SVG icons must provide their own domain label.
+
 
 ## News/Blog administration and media
 
