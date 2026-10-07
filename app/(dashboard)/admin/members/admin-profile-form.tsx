@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
-import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field';
+import { BoardPhotoField } from '@/components/members/board-photo-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -106,14 +106,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
               <Field label="Facebook URL (optional)" maxLength={500} name="boardFacebookUrl" value={String(member.profile.boardFacebookUrl ?? '')} />
             </div>
             <div className="md:col-span-2">
-              <ArticleThumbnailField
-                allowRemoval={Boolean(member.profile.boardPhotoUrl)}
-                id="boardPhoto"
-                initialImageUrl={member.profile.boardPhotoUrl ? String(member.profile.boardPhotoUrl) : null}
-                inputName="boardPhoto"
-                label="Board Photo"
-                removalName="removeBoardPhoto"
-              />
+              <BoardPhotoField initialImageUrl={member.profile.boardPhotoUrl ? String(member.profile.boardPhotoUrl) : null} />
             </div>
           </div>
         </CardContent>
