@@ -8,6 +8,9 @@ const registrations = readFileSync('app/(dashboard)/admin/seminars/registrations
 const registrationForm = readFileSync('app/(dashboard)/admin/seminars/registrations/registration-detail-sheet.tsx', 'utf8');
 const support = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
 const professionalRoleIcons = readFileSync('components/membership/professional-role-icons.tsx', 'utf8');
+const dateRangeFilter = readFileSync('components/admin/date-range-filter.tsx', 'utf8');
+const dataTableDateFilter = readFileSync('components/data-table/data-table-date-filter.tsx', 'utf8');
+const sitewideIconTooltips = readFileSync('components/site/sitewide-icon-tooltips.tsx', 'utf8');
 
 test('record text in admin tables is not used as the edit/open link', () => {
   assert.doesNotMatch(members, /className="font-medium uppercase underline"/);
@@ -43,8 +46,9 @@ test('Judge icon remains the sitewide bell in the admin members table', () => {
 
 test('active admin role icons appear in gold directly after the member name', () => {
   const memberQueries = readFileSync('lib/membership/admin-memberships.ts', 'utf8');
-  assert.match(members, /row\.original\.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" role="img"/);
-  assert.match(members, /row\.original\.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" role="img"/);
+  assert.match(members, /row\.original\.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" data-icon-tooltip="Super Admin" role="img"/);
+  assert.match(members, /row\.original\.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" data-icon-tooltip="Administrator" role="img"/);
+  assert.match(members, /row\.original\.isBoardMember && <UsersRound aria-label="Board Member" className="size-4 shrink-0 text-gold" data-icon-tooltip="Board Member" role="img"/);
   assert.match(memberQueries, /coalesce\(app_roles\.is_administrator,false\) "isAdministrator"/);
   assert.match(memberQueries, /coalesce\(app_roles\.is_super_admin,false\) "isSuperAdmin"/);
   assert.match(memberQueries, /where user_id=u\.id and revoked_at is null\) app_roles/);
@@ -54,7 +58,22 @@ test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
   assert.match(members, /steward: \{ icon: HorseshoeIcon, label: 'STEWARD' \}/);
   assert.match(members, /import \{ HorseshoeIcon \} from '@\/components\/membership\/professional-role-icons'/);
   assert.match(professionalRoleIcons, /export function HorseshoeIcon/);
+  assert.match(professionalRoleIcons, /data-icon-tooltip=\{props\['data-icon-tooltip'\] \?\? 'Steward'\}/);
   assert.match(professionalRoleIcons, /<path d="M5 3v8a7 7 0 0 0 14 0V3h-4v8a3 3 0 0 1-6 0V3H5Z" \/>/);
   assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
-  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" \/>/);
+  assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip="STEWARD" \/>/);
+});
+
+
+test('admin date filters allow future years', () => {
+  assert.match(dateRangeFilter, /endMonth=\{new Date\(new Date\(\)\.getFullYear\(\) \+ 3, 11\)\}/);
+  assert.match(dataTableDateFilter, /endMonth=\{new Date\(new Date\(\)\.getFullYear\(\) \+ 3, 11\)\}/);
+});
+
+test('sitewide SVG icons receive tooltips when they do not already provide one', () => {
+  assert.match(sitewideIconTooltips, /function tooltipFor\(svg: SVGSVGElement\)/);
+  assert.match(sitewideIconTooltips, /svg\.querySelector\(':scope > title'\)/);
+  assert.match(sitewideIconTooltips, /svg\.closest<HTMLElement>\('button, a, \[role="button"\], \[role="menuitem"\], \[role="tab"\], \[role="option"\]'\)/);
+  assert.doesNotMatch(sitewideIconTooltips, /closest<HTMLElement>\('\[title\], \[aria-label\]'\)/);
+  assert.match(sitewideIconTooltips, /new MutationObserver/);
 });
