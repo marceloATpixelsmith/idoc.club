@@ -26,6 +26,7 @@ export default async function AdminSeminarRegistrationsPage({ searchParams }: { 
     pageSize: typeof saved?.pageSize === 'number' ? String(saved.pageSize) : undefined,
     paymentStatus: typeof saved?.paymentStatus === 'string' ? saved.paymentStatus : undefined,
     q: typeof saved?.q === 'string' ? saved.q : undefined,
+    registrantType: typeof saved?.registrantType === 'string' ? saved.registrantType : undefined,
     seminarId: seminarIdParam || (typeof saved?.seminarId === 'string' ? saved.seminarId : undefined),
     sort: typeof saved?.sort === 'string' ? saved.sort : undefined,
     to: typeof saved?.to === 'string' ? saved.to : undefined,
@@ -41,7 +42,7 @@ export default async function AdminSeminarRegistrationsPage({ searchParams }: { 
   return <main className="space-y-6 px-5 py-8 lg:px-8">
     <header className="flex items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold text-gold">Registrations</h1><p className="text-muted-foreground">Every seminar registration, member and guest, across all seminars.</p></div><Button asChild><Link href="/admin/seminars/registrations?new=1">New Registration</Link></Button></header>
     <RegistrationsTable
-      filters={{ from: listQuery.from, page: listing.page, pageSize: listing.pageSize, paymentStatus: listQuery.paymentStatus, q: listQuery.q, seminarId: listQuery.seminarId, sort: listQuery.sort, to: listQuery.to }}
+      filters={{ from: listQuery.from, page: listing.page, pageSize: listing.pageSize, paymentStatus: listQuery.paymentStatus, q: listQuery.q, registrantType: listQuery.registrantType, seminarId: listQuery.seminarId, sort: listQuery.sort, to: listQuery.to }}
       initialColumnOrder={typeof saved?.columnOrder === 'string' ? saved.columnOrder : undefined}
       initialVisibleColumns={Array.isArray(saved?.columns) ? saved.columns : undefined}
       rows={listing.rows as never}
