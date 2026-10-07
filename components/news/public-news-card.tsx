@@ -9,9 +9,9 @@ export type PublicNewsCardItem = {
   title: unknown;
 };
 
-export function PublicNewsCard({ item }: { item: PublicNewsCardItem }) {
+export function PublicNewsCard({ item, basePath = '/news' }: { item: PublicNewsCardItem; basePath?: '/news' | '/blog' }) {
   const external = Boolean(item.external_url);
-  const href = external ? String(item.external_url) : `/news/${String(item.slug)}`;
+  const href = external ? String(item.external_url) : `${basePath}/${String(item.slug)}`;
   return (
     <Link href={href} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
       <article className="card-midnight overflow-hidden">

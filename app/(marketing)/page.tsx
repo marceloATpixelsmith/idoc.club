@@ -110,46 +110,31 @@ export default async function Home() {
                 FEI Course Calendar <ArrowUpRight className="size-4" />
               </a>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* President's blog */}
-      <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <p className="eyebrow">From the Director</p>
-            <h2 className="mt-3 text-4xl">President&apos;s Blog</h2>
-          </div>
-          <Link
-            href="/blog"
-            className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold hover:opacity-80 sm:flex"
-          >
-            All articles <ArrowUpRight className="size-4" />
-          </Link>
-        </div>
+            {/* President's blog */}
+            <div className="mt-16 border-t border-border pt-16">
+              <div className="flex items-end justify-between gap-6">
+                <div>
+                  <p className="eyebrow">From the Director</p>
+                  <h2 className="mt-3 text-4xl">President&apos;s Blog</h2>
+                </div>
+                <Link
+                  href="/blog"
+                  className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold hover:opacity-80 sm:flex"
+                >
+                  All articles <ArrowUpRight className="size-4" />
+                </Link>
+              </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {recentBlog.length === 0 ? (
-            <p className="text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
-          ) : recentBlog.map((post) => {
-            const external = Boolean(post.external_url);
-            const href = external ? String(post.external_url) : `/blog/${post.slug}`;
-            return (
-              <Link href={href} key={String(post.slug)} rel={external ? 'noopener noreferrer' : undefined} target={external ? '_blank' : undefined}>
-                <article className="card-midnight flex h-full flex-col overflow-hidden">
-                  {post.thumbnail_url ? <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(post.thumbnail_url)} /> : null}
-                  <div className="flex flex-1 flex-col p-7">
-                    <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                      {new Date(String(post.publication_date)).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                    <h3 className="mt-4 text-2xl leading-snug">{String(post.title)}</h3>
-                    {post.subtitle ? <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{String(post.subtitle)}</p> : null}
-                  </div>
-                </article>
-              </Link>
-            );
-          })}
+              <div className="mt-10 flex flex-col gap-6">
+                {recentBlog.length === 0 ? (
+                  <p className="text-muted-foreground">No blog articles have been published yet. Check back soon.</p>
+                ) : recentBlog.map((post) => (
+                  <PublicNewsCard basePath="/blog" item={post as never} key={String(post.slug)} />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
