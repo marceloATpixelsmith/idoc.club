@@ -88,6 +88,8 @@ administrator routes continue to authorize every direct request on the server. A
 
 **Administrator table-control casing:** filter, date-filter, Sort, View, Reset, and related table-popover controls use Title Case rather than the site's ordinary all-caps button casing. Their radius, font size, bold weight, light-blue surface, and dotted border remain consistent with the shared table-control treatment.
 
+**Administrator boolean controls:** persisted boolean fields use the shared toggle treatment throughout administrator forms instead of Yes/No selects or ordinary checkbox boxes. Current examples are Technical Delegate, Board Member, seminar FEI affiliation, Organization Settings Bank Transfer/Cash enablement, and Support Closed. Judge and Steward official-status fields remain multi-select checklists, shown on full-width horizontal rows in the member editor; Technical Delegate sits on its own row beneath Judge status.
+
 **Button radius consistency:** the public Member Login CTA defines the canonical ordinary-button corner radius. All ordinary gold/default and light-blue/secondary buttons, including administrator table filter controls and FEI calendar CTAs, use the same pill radius. Button color, border style, and icon treatment may vary by role, but ordinary button radius must not vary by feature area. Authentication-reference controls remain governed by their dedicated auth design system.
 
 ### Seminars cross-cutting capability
