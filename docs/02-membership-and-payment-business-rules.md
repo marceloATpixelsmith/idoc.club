@@ -71,7 +71,7 @@ All fields listed below are required unless marked optional. Email is also the m
   - Para Dressage Judge
   - Retired Official
   - Other
-- Are you a Technical Delegate: Yes or No
+- Technical Delegate: boolean Yes/No value. In editable forms this is presented as a toggle rather than a Yes/No select; off means No and on means Yes.
 
 ### Steward
 

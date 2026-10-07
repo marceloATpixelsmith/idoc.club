@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { FormToggle } from '@/components/ui/form-toggle';
 import { saveMemberProfileByAdminForm } from './actions';
 import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 
@@ -68,14 +69,18 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
             <Select id="idocRegion" initial={official?.idocRegion ?? ''} label="IDOC Region" name="idocRegion" required values={IDOC_REGIONS} />
             <Field className="col-span-2" label="FEI ID (optional)" name="feiId" value={official?.feiId ?? ''} />
             {(classification === 'judge' || classification === 'judge_steward') && (
-              <div className="col-span-2 grid grid-cols-2 gap-4">
-                <CheckboxGroup initial={judge?.officialStatuses ?? []} label="Official Status as Judge" name="judgeStatus" values={JUDGE_STATUSES} />
-                <Select id="isTechnicalDelegate" initial={judge?.isTechnicalDelegate ? 'yes' : 'no'} label="Technical Delegate" name="isTechnicalDelegate" required values={['yes', 'no']} />
-              </div>
+              <>
+                <div className="col-span-2">
+                  <CheckboxGroup horizontal initial={judge?.officialStatuses ?? []} label="Official Status as Judge" name="judgeStatus" values={JUDGE_STATUSES} />
+                </div>
+                <div className="col-span-2">
+                  <FormToggle defaultChecked={Boolean(judge?.isTechnicalDelegate)} id="isTechnicalDelegate" label="Technical Delegate" name="isTechnicalDelegate" value="yes" />
+                </div>
+              </>
             )}
             {(classification === 'steward' || classification === 'judge_steward') && (
               <div className="col-span-2">
-                <CheckboxGroup initial={steward?.officialStatuses ?? []} label="Official Status as Steward" name="stewardStatus" values={STEWARD_STATUSES} />
+                <CheckboxGroup horizontal initial={steward?.officialStatuses ?? []} label="Official Status as Steward" name="stewardStatus" values={STEWARD_STATUSES} />
               </div>
             )}
           </CardContent>
@@ -86,18 +91,14 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Board</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <label className="inline-flex items-center gap-3">
-            <input
-              checked={isBoardMember}
-              className="peer sr-only"
-              name="isBoardMember"
-              onChange={(event) => setIsBoardMember(event.currentTarget.checked)}
-              type="checkbox"
-              value="1"
-            />
-            <span className="relative h-6 w-11 rounded-full border border-input bg-muted transition-colors peer-checked:bg-gold after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-foreground after:transition-transform peer-checked:after:translate-x-5 peer-checked:after:bg-background" />
-            <span className="text-sm font-medium">Board Member</span>
-          </label>
+          <FormToggle
+            checked={isBoardMember}
+            id="isBoardMember"
+            label="Board Member"
+            name="isBoardMember"
+            onChange={(event) => setIsBoardMember(event.currentTarget.checked)}
+            value="1"
+          />
           <input name="existingBoardPhotoUrl" type="hidden" value={String(member.profile.boardPhotoUrl ?? '')} />
           <div className={isBoardMember ? 'grid gap-4 md:grid-cols-2' : 'hidden'}>
             <Field label="Board Title" maxLength={120} name="boardTitle" required={isBoardMember} value={String(member.profile.boardTitle ?? '')} />
@@ -143,14 +144,16 @@ function Select({ id, initial, label, name, required, values }: { id: string; in
   </div>;
 }
 
-function CheckboxGroup({ initial, label, name, values }: { initial: string[]; label: string; name: string; values: readonly string[] }) {
+function CheckboxGroup({ horizontal = false, initial, label, name, values }: { horizontal?: boolean; initial: string[]; label: string; name: string; values: readonly string[] }) {
   return <fieldset className="space-y-2">
     <legend className="text-sm font-medium text-foreground">{label}</legend>
-    {values.map((value) => (
-      <Label className="flex items-center gap-2 font-normal" key={value}>
-        <Checkbox defaultChecked={initial.includes(value)} name={name} value={value} />
-        {value}
-      </Label>
-    ))}
+    <div className={horizontal ? 'flex flex-wrap gap-x-5 gap-y-3' : 'space-y-2'}>
+      {values.map((value) => (
+        <Label className="flex items-center gap-2 font-normal" key={value}>
+          <Checkbox defaultChecked={initial.includes(value)} name={name} value={value} />
+          {value}
+        </Label>
+      ))}
+    </div>
   </fieldset>;
 }

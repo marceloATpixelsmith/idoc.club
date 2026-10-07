@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Bell, Flag, Stethoscope } from 'lucide-react';
+import { Bell, Stethoscope } from 'lucide-react';
 import { getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
@@ -15,6 +15,7 @@ import { CheckoutForm } from './checkout-form';
 import { FlashBanner, FlashConsumer } from '@/components/ui/flash-banner';
 import { readUiFlash } from '@/lib/ui/flash-state';
 import { formatDate } from '@/lib/format';
+import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -25,10 +26,10 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 function classificationDisplay(roles: { roleType: string }[]): { icon: React.ReactNode; label: string } {
   const types = new Set(roles.map(({ roleType }) => roleType));
   if (types.has('judge') && types.has('steward')) {
-    return { icon: <span className="inline-flex items-center gap-1"><Bell className="size-7" aria-hidden="true" /><Flag className="size-7" aria-hidden="true" /></span>, label: 'J&S Combo' };
+    return { icon: <span className="inline-flex items-center gap-1"><Bell className="size-7" aria-hidden="true" /><HorseshoeIcon className="size-7" aria-hidden="true" /></span>, label: 'J&S Combo' };
   }
   if (types.has('judge')) return { icon: <Bell className="size-7" aria-hidden="true" />, label: 'Judge' };
-  if (types.has('steward')) return { icon: <Flag className="size-7" aria-hidden="true" />, label: 'Steward' };
+  if (types.has('steward')) return { icon: <HorseshoeIcon className="size-7" aria-hidden="true" />, label: 'Steward' };
   return { icon: <Stethoscope className="size-7" aria-hidden="true" />, label: 'Veterinarian' };
 }
 

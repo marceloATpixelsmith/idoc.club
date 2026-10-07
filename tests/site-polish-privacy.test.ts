@@ -16,10 +16,12 @@ test('footer omits Facebook and exposes privacy and terms links', () => {
   assert.match(footer, /href="\/terms"/);
 });
 
-test('Judge membership uses the bell icon everywhere this shared membership display renders it', () => {
-  assert.match(membership, /import \{ Bell, Flag, Stethoscope \} from 'lucide-react'/);
-  assert.doesNotMatch(membership, /\bGavel\b/);
+test('Judge and Steward membership displays use the approved role icons', () => {
+  assert.match(membership, /import \{ Bell, Stethoscope \} from 'lucide-react'/);
+  assert.match(membership, /HorseshoeIcon/);
+  assert.doesNotMatch(membership, /\bGavel\b|\bFlag\b/);
   assert.match(membership, /types\.has\('judge'\)[\s\S]*?<Bell /);
+  assert.match(membership, /types\.has\('steward'\)[\s\S]*?<HorseshoeIcon /);
 });
 
 test('the smallest shared Tailwind type steps are raised sitewide', () => {
