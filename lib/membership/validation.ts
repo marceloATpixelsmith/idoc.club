@@ -75,6 +75,26 @@ export const memberProfileSchema = z.object({
 
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 
+export const adminBoardProfileSchema = z.object({
+  boardFacebookUrl: z.union([z.string().trim().url().max(500), z.literal(''), z.null(), z.undefined()])
+    .transform((value) => value || null),
+  boardPhotoUrl: z.union([z.string().trim().url().max(2000), z.literal(''), z.null(), z.undefined()])
+    .transform((value) => value || null),
+  boardSubtitle: z.union([z.string().trim().max(160), z.literal(''), z.null(), z.undefined()])
+    .transform((value) => value || null),
+  boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null(), z.undefined()])
+    .transform((value) => value || null),
+  isBoardMember: z.boolean(),
+}).superRefine((value, context) => {
+  if (value.isBoardMember && !value.boardTitle) {
+    context.addIssue({ code: 'custom', message: 'Board title is required for board members.', path: ['boardTitle'] });
+  }
+  if (value.isBoardMember && !value.boardPhotoUrl) {
+    context.addIssue({ code: 'custom', message: 'Board photo is required for board members.', path: ['boardPhotoUrl'] });
+  }
+});
+export type AdminBoardProfileInput = z.infer<typeof adminBoardProfileSchema>;
+
 /** Builds the untrusted memberProfileSchema input shape from a submitted profile-edit form. */
 export function parseMemberProfileFormData(formData: FormData): unknown {
   const classification = String(formData.get('classification') ?? '');
