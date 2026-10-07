@@ -4,11 +4,13 @@ import { useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-export function ArticleThumbnailField({ allowRemoval = false, id, initialImageUrl = null, label }: {
+export function ArticleThumbnailField({ allowRemoval = false, id, initialImageUrl = null, inputName = 'thumbnail', label, removalName = 'removeThumbnail' }: {
   allowRemoval?: boolean;
   id: string;
   initialImageUrl?: string | null;
+  inputName?: string;
   label: string;
+  removalName?: string;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeCurrent, setRemoveCurrent] = useState(false);
@@ -66,7 +68,7 @@ export function ArticleThumbnailField({ allowRemoval = false, id, initialImageUr
           <Input
             accept="image/avif,image/jpeg,image/png,image/webp"
             id={id}
-            name="thumbnail"
+            name={inputName}
             onChange={(event) => selectFile(event.currentTarget.files?.[0])}
             ref={fileInputRef}
             type="file"
@@ -77,7 +79,7 @@ export function ArticleThumbnailField({ allowRemoval = false, id, initialImageUr
           <label className="flex items-center gap-2 text-sm">
             <input
               checked={removeCurrent}
-              name="removeThumbnail"
+              name={removalName}
               onChange={(event) => {
                 const checked = event.currentTarget.checked;
                 setRemoveCurrent(checked);
