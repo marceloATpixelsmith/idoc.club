@@ -244,6 +244,15 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   color: var(--primary-foreground);
 }
 
+/* Administrator form-field labels and legends use one visual casing rule everywhere. This
+ * keeps native labels, Radix labels, radio legends, and checkbox labels consistent without forcing
+ * each feature form to duplicate presentation classes. Existing uppercase acronyms remain uppercase. */
+body:has([data-idoc-admin-root]) form label,
+body:has([data-idoc-admin-root]) form legend:not([class*='uppercase']),
+body:has([data-idoc-admin-root]) form [data-slot='label'] {
+  text-transform: capitalize;
+}
+
 /* Admin visual rule: interface icons use the IDOC brand gold consistently across navigation,
  * tables, forms, dialogs, and action controls. Checkbox/radio glyphs are excluded because those
  * controls use currentColor for their state indicator rather than acting as standalone icons. */

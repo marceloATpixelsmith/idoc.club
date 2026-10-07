@@ -17,6 +17,7 @@ import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,7 @@ import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/tab
 
 export type ResourceRow = {
   id: number;
+  access?: string[];
   title: string;
   status: string;
   subtitle?: string;
@@ -56,7 +58,7 @@ type ResourceConfig = {
 
 const CONFIG: Record<ResourceType, ResourceConfig> = {
   news: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'type', label: 'Type' }, { id: 'status', label: 'Status' }, { id: 'publication', label: 'Publication Date' }, { id: 'subtitle', label: 'Subtitle' }, { id: 'updated', label: 'Updated' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'type', label: 'Type' }, { id: 'status', label: 'Status' }, { id: 'access', label: 'Access' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
     dateFilter: true,
     path: '/admin/news',
     searchLabel: 'Search article title, subtitle, or slug',
@@ -70,6 +72,14 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     searchLabel: 'Search seminar title or location',
     statuses: [{ label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }, { label: 'Canceled', value: 'canceled' }],
   },
+};
+
+const ACCESS_LABELS: Record<string, string> = {
+  judge: 'Judge',
+  members: 'All Members',
+  public: 'Public',
+  steward: 'Steward',
+  veterinarian: 'Veterinarian',
 };
 
 function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'], type: ResourceType) {
@@ -144,7 +154,7 @@ export function ResourceDataTable({
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
-            ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-sm text-muted-foreground">{row.original.slug}</span></span>
+            ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-xs text-muted-foreground">{row.original.slug}</span>{row.original.subtitle ? <span className="mt-1 block text-sm text-muted-foreground">{row.original.subtitle}</span> : null}</span>
             : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
             ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
@@ -152,7 +162,9 @@ export function ResourceDataTable({
               ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'scheduled' ? Clock3 : row.original.status === 'archived' ? Archive : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
               : id === 'type' && tableType === 'news'
                 ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
-                : <span>{row.original[id] ?? '—'}</span>,
+                : id === 'access' && tableType === 'news'
+                  ? <div className="flex min-w-36 flex-wrap gap-1.5">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
+                  : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
         id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 90,
@@ -186,7 +198,7 @@ export function ResourceDataTable({
   const defaultColumnOrder = tableType === 'seminars'
     ? ['select', 'title', 'status', 'prices', 'start', 'end', 'deadline', 'registrations', 'actions']
     : tableType === 'news'
-      ? ['select', 'title', 'type', 'status', 'publication', 'subtitle', 'updated', 'actions']
+      ? ['select', 'title', 'type', 'status', 'access', 'publication', 'updated', 'actions']
       : ['select', ...config.columns.map(({ id }) => id), 'actions'];
   const defaultSortId = tableType === 'news' ? 'publication' : tableType === 'seminars' ? 'start' : 'updated';
   const initialSorting = useMemo(() => {
