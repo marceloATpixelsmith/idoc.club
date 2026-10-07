@@ -6,7 +6,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, isAdministrator, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 
-export const SUPPORT_CATEGORIES = ['billing_membership', 'seminars', 'technical_support'] as const;
+export const SUPPORT_CATEGORIES = ['billing_membership', 'seminars', 'technical_support', 'other'] as const;
 export const SUPPORT_STATUSES = ['open', 'admin_responded', 'member_replied', 'closed'] as const;
 export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
 type ConversationRow = { category: SupportCategory; public_id: string; status: string; subject: string; updated_at: Date };
@@ -20,6 +20,7 @@ export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing_membership: 'Billing/Membership',
   seminars: 'Seminars',
   technical_support: 'Technical Support',
+  other: 'Other',
 };
 export const STATUS_LABELS: Record<string, string> = {
   admin_responded: 'Responded to by admin', closed: 'Closed/Resolved', member_replied: 'Member Replied', open: 'Open',
