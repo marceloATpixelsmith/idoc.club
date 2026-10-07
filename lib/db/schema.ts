@@ -366,7 +366,7 @@ export const supportConversations = idocSchema.table('support_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`),
+  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`),
   check('support_conversations_status_check', sql`${table.status} in ('open', 'admin_responded', 'member_replied', 'closed')`),
   check('support_conversations_subject_length_check', sql`char_length(${table.subject}) between 1 and 160`),
   index('support_conversations_member_activity_idx').on(table.memberUserId, table.updatedAt),
@@ -411,7 +411,7 @@ export const supportCategoryDefaults = idocSchema.table('support_category_defaul
   administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
   updatedBy: integer('updated_by').notNull().references(() => users.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
+}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`)]);
 
 /** Administrator-authored News/Blog articles. `publicationDate` is the administrator-set target date
  * (also the displayed article date); `publishedAt` is the actual timestamp the article went live,
