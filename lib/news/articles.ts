@@ -5,6 +5,7 @@ import { client } from '@/lib/db/drizzle';
 import { getUser } from '@/lib/db/queries';
 import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { isEntitled } from '@/lib/membership/entitlement';
 import { testBoundaryActor } from '@/lib/membership/test-boundary';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
@@ -321,7 +322,7 @@ export async function createArticle(input: ArticleInput) {
       values (${fields.slug},${fields.title},${fields.subtitle},${fields.articleType},${fields.audience},${fields.thumbnailUrl},${fields.externalUrl},${fields.contentHtml},${fields.status},${iso(fields.publicationDate)},${iso(publishedAt)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
-      (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
+      (${actor.id},'admin.news_article.created','news_article',${String(row.id)},${JSON.stringify({ audience: fields.audience, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
     return row.id;
   });
 }
@@ -333,8 +334,8 @@ export async function updateArticle(idValue: unknown, input: ArticleInput) {
   const fields = validateFields(input);
   await client.begin(async (sql) => {
     const [existing] = await sql<{
-      published_at: Date | string | null; slug: string; status: NewsStatus; title: string;
-    }[]>`select slug,status,title,published_at from idoc.news_articles where id=${id} for update`;
+      audience: string[]; published_at: Date | string | null; slug: string; status: NewsStatus; title: string;
+    }[]>`select audience,slug,status,title,published_at from idoc.news_articles where id=${id} for update`;
     if (!existing) throw new NewsValidationError('Article not found.');
     const slugTaken = await sql<{ id: number }[]>`select id from idoc.news_articles where slug=${fields.slug} and id<>${id} limit 1`;
     if (slugTaken[0]) throw new NewsValidationError('That slug is already in use by another article.');
@@ -342,13 +343,15 @@ export async function updateArticle(idValue: unknown, input: ArticleInput) {
     await sql`update idoc.news_articles set slug=${fields.slug},title=${fields.title},subtitle=${fields.subtitle},
       article_type=${fields.articleType},audience=${fields.audience},thumbnail_url=${fields.thumbnailUrl},external_url=${fields.externalUrl},content_html=${fields.contentHtml},status=${fields.status},publication_date=${iso(fields.publicationDate)},
       published_at=${iso(publishedAt)},updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
+    const audienceChanged = JSON.stringify(existing.audience) !== JSON.stringify(fields.audience);
     const changedFields = [
-      existing.slug !== fields.slug && 'slug', existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
+      audienceChanged && 'audience', existing.slug !== fields.slug && 'slug',
+      existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
     ].filter(Boolean);
     await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.news_article.edited','news_article',${String(id)},
-      ${JSON.stringify({ slug: existing.slug, status: existing.status, title: existing.title })}::jsonb,
-      ${JSON.stringify({ changedFields, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
+      ${JSON.stringify({ audience: existing.audience, slug: existing.slug, status: existing.status, title: existing.title })}::jsonb,
+      ${JSON.stringify({ audience: fields.audience, changedFields, slug: fields.slug, status: fields.status, title: fields.title })}::jsonb)`;
   });
 }
 
@@ -470,31 +473,41 @@ export async function publishScheduledArticles(): Promise<{ published: number }>
   });
 }
 
-type ArticleViewer = { loggedInMember: boolean; membershipType: string | null };
+type ArticleViewer = { loggedInMember: boolean; roles: string[] };
 
 async function currentArticleViewer(): Promise<ArticleViewer> {
   const injectedActor = testBoundaryActor();
   const user = injectedActor ?? await getUser();
-  if (!user) return { loggedInMember: false, membershipType: null };
-  const [row] = await client<{ membership_type: string | null }[]>`
-    select membership.membership_type
-    from idoc.profiles profile
-    left join lateral (
-      select membership_type
+  if (!user) return { loggedInMember: false, roles: [] };
+
+  const [profile] = await client<{ id: number }[]>`
+    select id from idoc.profiles where user_id=${user.id} limit 1`;
+  if (!profile) return { loggedInMember: false, roles: [] };
+
+  const [membership, roles] = await Promise.all([
+    client<{ grace_ends_on: string | null; status: string; valid_until: string }[]>`
+      select grace_ends_on,status,valid_until
       from idoc.memberships
-      where profile_id=profile.id
+      where profile_id=${profile.id}
       order by valid_until desc,id desc
-      limit 1
-    ) membership on true
-    where profile.user_id=${user.id}
-    limit 1`;
-  return { loggedInMember: Boolean(row), membershipType: row?.membership_type ?? null };
+      limit 1`,
+    client<{ role_type: string }[]>`
+      select role_type
+      from idoc.professional_roles
+      where profile_id=${profile.id} and effective_to is null`,
+  ]);
+  const loggedInMember = isEntitled(membership[0] ? {
+    graceEndsOn: membership[0].grace_ends_on,
+    status: membership[0].status,
+    validUntil: membership[0].valid_until,
+  } : null, new Date().toISOString().slice(0, 10));
+  return { loggedInMember, roles: loggedInMember ? roles.map(({ role_type }) => role_type) : [] };
 }
 
 function articleAudienceWhere(viewer: ArticleViewer) {
-  const judge = viewer.membershipType === 'judge' || viewer.membershipType === 'combo';
-  const steward = viewer.membershipType === 'steward' || viewer.membershipType === 'combo';
-  const veterinarian = viewer.membershipType === 'veterinarian';
+  const judge = viewer.roles.includes('judge');
+  const steward = viewer.roles.includes('steward');
+  const veterinarian = viewer.roles.includes('veterinarian');
   return client`(
     'public'=any(audience)
     or (${viewer.loggedInMember} and 'members'=any(audience))
@@ -513,7 +526,7 @@ export async function listPublicArticles(pageValue: unknown, typeValue?: unknown
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
   const audienceReady = await newsSchemaSupportsAudience();
-  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, membershipType: null };
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   const rows = schemaReady
     ? audienceReady
       ? await client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
@@ -537,7 +550,7 @@ export async function listAllPublicArticles(typeValue?: unknown) {
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
   const audienceReady = await newsSchemaSupportsAudience();
-  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, membershipType: null };
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   return schemaReady
     ? audienceReady
       ? client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,publication_date from idoc.news_articles
@@ -560,7 +573,7 @@ export async function getPublicArticleBySlug(value: unknown, expectedType?: News
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
   const audienceReady = await newsSchemaSupportsAudience();
-  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, membershipType: null };
+  const viewer = audienceReady ? await currentArticleViewer() : { loggedInMember: false, roles: [] };
   const [row] = schemaReady
     ? audienceReady
       ? await client`select slug,title,subtitle,article_type,audience,coalesce(thumbnail_url,${legacyThumbnailSql()}) as thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,content_html,publication_date from idoc.news_articles
