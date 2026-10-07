@@ -154,7 +154,7 @@ export function ResourceDataTable({
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
-            ? <span><span className="block font-medium">{row.original.title}</span>{row.original.subtitle ? <span className="mt-1 block text-sm text-muted-foreground">{row.original.subtitle}</span> : null}<span className="mt-1 block text-xs text-muted-foreground">{row.original.slug}</span></span>
+            ? <span className="block w-80 max-w-80 whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span>{row.original.subtitle ? <span className="mt-1 block break-words text-sm text-muted-foreground">{row.original.subtitle}</span> : null}<span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
             : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
             ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
@@ -163,7 +163,7 @@ export function ResourceDataTable({
               : id === 'type' && tableType === 'news'
                 ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
                 : id === 'access' && tableType === 'news'
-                  ? <div className="flex min-w-36 flex-wrap gap-1.5">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
+                  ? <div className="flex w-40 max-w-40 flex-wrap gap-1.5 whitespace-normal">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
                   : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
