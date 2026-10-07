@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
+import { CountryFlag } from '@/components/ui/country-flag';
 import { PageHeader } from '@/components/site/PageHeader';
-import { boardMembers } from '@/lib/content/site';
-import { countryFlagIconPath } from '@/lib/format/country-flag';
+import { listPublicBoardMembers } from '@/lib/directory/board-members';
+import { countryNameForCode } from '@/lib/membership/countries';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'IDOC Board Members — Officers & Regional Representatives',
@@ -22,7 +25,8 @@ function FacebookIcon() {
   );
 }
 
-export default function BoardMembersPage() {
+export default async function BoardMembersPage() {
+  const boardMembers = await listPublicBoardMembers();
   return (
     <>
       <PageHeader
@@ -32,55 +36,52 @@ export default function BoardMembersPage() {
       />
 
       <section className="mx-auto max-w-7xl px-5 py-20 lg:px-8">
-        <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {boardMembers.map((m) => (
-            <article key={m.name} className="card-midnight overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element -- portrait grid, plain img matches the rest of the site */}
-              <img
-                src={m.photo}
-                alt={`Portrait of ${m.name}`}
-                loading="lazy"
-                className="aspect-[4/5] w-full object-cover object-top"
-              />
-              <div className="p-6">
-                <p className="text-xs uppercase tracking-[0.18em] text-gold">
-                  {m.role}
-                </p>
-                <h2 className="mt-3 font-display text-2xl leading-snug">
-                  {m.name} <span className="text-muted-foreground">({m.country})</span>
-                  {countryFlagIconPath(m.country) && (
-                    /* eslint-disable-next-line @next/next/no-img-element -- tiny static flag icon */
-                    <img
-                      src={countryFlagIconPath(m.country)!}
-                      alt=""
-                      aria-hidden="true"
-                      className="ml-2 inline-block h-4 w-4 rounded-full align-middle"
-                    />
-                  )}
-                </h2>
-                {m.detail.length > 0 && (
-                  <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
-                    {m.detail.map((d) => (
-                      <li key={d}>{d}</li>
-                    ))}
-                  </ul>
-                )}
-                {m.fb && (
-                  <a
-                    href={m.fb}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${m.name} on Facebook`}
-                    className="mt-5 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-gold/50 hover:text-gold"
-                  >
-                    <FacebookIcon />
-                    Facebook
-                  </a>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
+        {boardMembers.length === 0 ? (
+          <p className="text-muted-foreground">Board member information is being updated.</p>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {boardMembers.map((member) => (
+              <article key={`${member.firstName}-${member.lastName}`} className="card-midnight overflow-hidden">
+                <img
+                  src={member.boardPhotoUrl}
+                  alt={`Portrait of ${member.firstName} ${member.lastName}`}
+                  loading="lazy"
+                  className="aspect-[4/5] w-full object-cover object-top"
+                />
+                <div className="p-6">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gold">{member.boardTitle}</p>
+                  <h2 className="mt-3 font-display text-2xl leading-snug">
+                    {member.firstName} {member.lastName}
+                  </h2>
+                  {member.countryCode ? (
+                    <p className="mt-1 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                      {countryNameForCode(member.countryCode)}
+                      <CountryFlag code={member.countryCode} className="size-4" />
+                    </p>
+                  ) : null}
+                  {member.boardSubtitle ? <p className="mt-3 text-sm text-muted-foreground">{member.boardSubtitle}</p> : null}
+                  {member.officialDetails.length > 0 ? (
+                    <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
+                      {member.officialDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                    </ul>
+                  ) : null}
+                  {member.boardFacebookUrl ? (
+                    <a
+                      href={member.boardFacebookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${member.firstName} ${member.lastName} on Facebook`}
+                      className="mt-5 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-gold/50 hover:text-gold"
+                    >
+                      <FacebookIcon />
+                      Facebook
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </>
   );
