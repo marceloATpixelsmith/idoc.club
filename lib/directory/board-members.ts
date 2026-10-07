@@ -43,10 +43,10 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
     left join lateral (
       select
         min(national_federation_country_code) federation,
-        coalesce(array_agg(distinct status) filter (where status is not null), array[]::varchar[]) official_statuses,
+        coalesce(array_agg(distinct status.value) filter (where status.value is not null), array[]::varchar[]) official_statuses,
         bool_or(coalesce(is_technical_delegate, false)) is_technical_delegate
       from idoc.professional_roles pr
-      left join lateral unnest(pr.official_statuses) status on true
+      left join lateral unnest(pr.official_statuses) as status(value) on true
       where pr.profile_id = p.id and pr.effective_to is null
     ) roles on true
     where p.is_board_member = true
