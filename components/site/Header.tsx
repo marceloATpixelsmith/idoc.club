@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
+import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
@@ -129,6 +129,7 @@ export function Header({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const isAdminArea = pathname === '/admin' || pathname.startsWith('/admin/');
 
   return (
     <HeaderShell
@@ -136,38 +137,45 @@ export function Header({
       right={
         <>
           <div className="hidden items-center gap-10 lg:flex">
-            <nav className="flex items-center gap-7">
-              <Link href="/" className={navClassName(isActive(pathname, '/'))}>
-                Home
-              </Link>
-
-              <NavDropdown href="/about" isItemActive={isAboutItemActive} items={aboutLinks} label="About IDOC" pathname={pathname} />
-
-              {topNavItems(signedIn).map((item) => (
-                <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
-                  {item.label}
+            {isAdminArea ? (
+              <div className="flex items-center gap-2 text-[0.8rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <UserCog aria-hidden="true" className="size-4 text-gold" />
+                <span>Admin Mode</span>
+              </div>
+            ) : (
+              <nav className="flex items-center gap-7">
+                <Link href="/" className={navClassName(isActive(pathname, '/'))}>
+                  Home
                 </Link>
-              ))}
 
-              {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
+                <NavDropdown href="/about" isItemActive={isAboutItemActive} items={aboutLinks} label="About IDOC" pathname={pathname} />
 
-              <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
-                {contactLink.label}
-              </Link>
+                {topNavItems(signedIn).map((item) => (
+                  <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
+                    {item.label}
+                  </Link>
+                ))}
 
-              <span className="text-border" aria-hidden="true">
-                |
-              </span>
-              <a
-                href="https://www.facebook.com/groups/646981818825549/"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="IDOC on Facebook"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <Facebook className="size-4" />
-              </a>
-            </nav>
+                {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
+
+                <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
+                  {contactLink.label}
+                </Link>
+
+                <span className="text-border" aria-hidden="true">
+                  |
+                </span>
+                <a
+                  href="https://www.facebook.com/groups/646981818825549/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="IDOC on Facebook"
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Facebook className="size-4" />
+                </a>
+              </nav>
+            )}
 
             <Suspense fallback={<div className="h-9" />}>
               <AuthenticatedUserMenu
@@ -177,18 +185,33 @@ export function Header({
             </Suspense>
           </div>
 
-          <button
-            type="button"
-            aria-label="Toggle navigation"
-            onClick={() => setOpen((v) => !v)}
-            className="bg-transparent text-foreground lg:hidden"
-          >
-            {open ? <X className="size-6" /> : <Menu className="size-6" />}
-          </button>
+          {isAdminArea ? (
+            <div className="flex items-center gap-5 lg:hidden">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <UserCog aria-hidden="true" className="size-4 text-gold" />
+                <span>Admin Mode</span>
+              </div>
+              <Suspense fallback={<div className="h-9" />}>
+                <AuthenticatedUserMenu
+                  showAdminDashboard={showAdminDashboard}
+                  loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+                />
+              </Suspense>
+            </div>
+          ) : (
+            <button
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setOpen((v) => !v)}
+              className="bg-transparent text-foreground lg:hidden"
+            >
+              {open ? <X className="size-6" /> : <Menu className="size-6" />}
+            </button>
+          )}
         </>
       }
       below={
-        open && (
+        open && !isAdminArea && (
           <nav className="border-t border-border bg-background px-5 py-4 lg:hidden">
             <ul className="flex flex-col gap-1">
               <li>
