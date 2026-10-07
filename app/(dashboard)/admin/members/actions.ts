@@ -3,7 +3,8 @@
 import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
-import { parseMemberProfileFormData } from '@/lib/membership/validation';
+import { adminBoardProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
+import { uploadCloudinaryImage } from '@/lib/news/thumbnail';
 import { correctEntitlement, extendMembershipExpiration, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
@@ -49,7 +50,20 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
   const profileId = Number(formData.get('profileId'));
   const reason = String(formData.get('reason') ?? '');
   try {
-    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { reason });
+    const existingBoardPhotoUrl = String(formData.get('existingBoardPhotoUrl') ?? '').trim();
+    const boardPhoto = formData.get('boardPhoto');
+    let boardPhotoUrl = formData.get('removeBoardPhoto') === '1' ? null : existingBoardPhotoUrl || null;
+    if (boardPhoto instanceof File && boardPhoto.size > 0) {
+      boardPhotoUrl = await uploadCloudinaryImage(boardPhoto, 'idoc/board');
+    }
+    const board = adminBoardProfileSchema.parse({
+      boardFacebookUrl: formData.get('boardFacebookUrl'),
+      boardPhotoUrl,
+      boardSubtitle: formData.get('boardSubtitle'),
+      boardTitle: formData.get('boardTitle'),
+      isBoardMember: formData.get('isBoardMember') === '1',
+    });
+    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, reason });
     return { success: 'Profile updated and audit entry recorded.' };
   } catch (error) {
     if (error instanceof Error && error.message === 'An administrative reason is required for this correction.') return { error: error.message };
