@@ -4,6 +4,7 @@ import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
 import { SupportForm } from '@/components/support/support-form';
 import { Label } from '@/components/ui/label';
+import { FormToggle } from '@/components/ui/form-toggle';
 import { CATEGORY_LABELS, getAdminConversation, listEligibleAdministrators, STATUS_LABELS } from '@/lib/support/inbox';
 import { assignSupportConversation, changeSupportConversationStatus, replyToSupportAsAdmin } from './actions';
 
@@ -59,10 +60,16 @@ export async function SupportDetailDrawer({ publicId }: { publicId: string }) {
           <AdminFormSection description="Use this toggle to resolve or reopen the ticket." title="Workflow">
             <SupportForm action={changeSupportConversationStatus} submitLabel="Save workflow">
               <input name="publicId" type="hidden" value={publicId} />
-              <label className="flex items-center justify-between gap-4 rounded-md border border-input p-3">
-                <span><span className="block font-medium">Closed</span><span className="block text-sm text-muted-foreground">Mark this support ticket resolved.</span></span>
-                <input defaultChecked={conversation.status === 'closed'} className="size-5" name="closed" type="checkbox" value="1" />
-              </label>
+              <div className="rounded-md border border-input p-3">
+                <FormToggle
+                  defaultChecked={conversation.status === 'closed'}
+                  description="Mark this support ticket resolved."
+                  id="closed"
+                  label="Closed"
+                  name="closed"
+                  value="1"
+                />
+              </div>
             </SupportForm>
           </AdminFormSection>
         </div>
