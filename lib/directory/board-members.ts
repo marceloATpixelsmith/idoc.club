@@ -65,7 +65,7 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
     firstName: row.firstName,
     lastName: row.lastName,
     officialDetails: [
-      ...(row.officialStatuses ?? []),
+      ...(row.officialStatuses ?? []).filter((status) => status.trim().toLowerCase() !== 'other'),
       ...(row.isTechnicalDelegate ? ['Technical Delegate'] : []),
     ],
   }));
