@@ -154,7 +154,7 @@ export function ResourceDataTable({
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
-            ? <span><span className="block font-medium">{row.original.title}</span><span className="block text-xs text-muted-foreground">{row.original.slug}</span>{row.original.subtitle ? <span className="mt-1 block text-sm text-muted-foreground">{row.original.subtitle}</span> : null}</span>
+            ? <span><span className="block font-medium">{row.original.title}</span>{row.original.subtitle ? <span className="mt-1 block text-sm text-muted-foreground">{row.original.subtitle}</span> : null}<span className="mt-1 block text-xs text-muted-foreground">{row.original.slug}</span></span>
             : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
             ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()

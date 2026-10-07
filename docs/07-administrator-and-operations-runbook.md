@@ -929,7 +929,7 @@ Meaningful icons shown anywhere in the application must expose a hover tooltip u
 
 ## News/Blog administration and media
 
-News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays the title with the slug beneath it and the optional subtitle directly beneath the slug, TYPE and STATUS as icon-backed uppercase values, a compact ACCESS column using audience badges, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
+News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays the title with the optional subtitle directly beneath it and the slug beneath the subtitle, TYPE and STATUS as icon-backed uppercase values, a compact ACCESS column using audience badges, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
 
 The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. The same server-side Cloudinary uploader powers the **Insert image** control in every administrator Tiptap field, which stores uploaded rich-content images under `idoc/rich-content`.
 
