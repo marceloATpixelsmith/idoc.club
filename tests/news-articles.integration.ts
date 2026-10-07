@@ -7,7 +7,7 @@ import {
   listAdminArticles, listPublicArticles, NewsValidationError, publishArticle, publishScheduledArticles,
   scheduleArticle, unpublishArticle, updateArticle,
 } from '../lib/news/articles.ts';
-import { adminUser, asAdmin, closeHarness, createMembership, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, asAdmin, closeHarness, createMembership, createProfile, createUser, judgeRole, resetIdoc, sql, stewardRole, veterinarianRole } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -56,7 +56,7 @@ test('a draft article is never publicly visible; publishing it makes it visible 
   assert.ok(rows.some((row) => row.slug === 'draft-then-published'));
 });
 
-test('member-only and role-specific audiences are enforced for listings and direct article URLs', async () => {
+test('member-only and role-specific audiences require entitlement and active professional roles', async () => {
   const admin = await adminUser();
   await asAdmin(admin.id, () => createArticle(article({ audience: ['members'], slug: 'members-only', status: 'published' })));
   await asAdmin(admin.id, () => createArticle(article({ audience: ['judge'], slug: 'judge-only', status: 'published' })));
@@ -67,9 +67,8 @@ test('member-only and role-specific audiences are enforced for listings and dire
   assert.equal(await getPublicArticleBySlug('judge-only'), null);
 
   const judgeUser = await createUser();
-  const judgeProfile = await createProfile(judgeUser.id);
+  const judgeProfile = await createProfile(judgeUser.id, [judgeRole]);
   await createMembership(judgeProfile.id);
-  await sql`update idoc.memberships set membership_type='judge' where profile_id=${judgeProfile.id}`;
   await withTestMembershipBoundary({ actor: { id: judgeUser.id, roles: [] } }, async () => {
     assert.ok(await getPublicArticleBySlug('members-only'));
     assert.ok(await getPublicArticleBySlug('judge-only'));
@@ -78,9 +77,8 @@ test('member-only and role-specific audiences are enforced for listings and dire
   });
 
   const comboUser = await createUser();
-  const comboProfile = await createProfile(comboUser.id);
+  const comboProfile = await createProfile(comboUser.id, [judgeRole, stewardRole]);
   await createMembership(comboProfile.id);
-  await sql`update idoc.memberships set membership_type='combo' where profile_id=${comboProfile.id}`;
   await withTestMembershipBoundary({ actor: { id: comboUser.id, roles: [] } }, async () => {
     assert.ok(await getPublicArticleBySlug('judge-only'));
     assert.ok(await getPublicArticleBySlug('steward-only'));
@@ -91,11 +89,18 @@ test('member-only and role-specific audiences are enforced for listings and dire
   });
 
   const vetUser = await createUser();
-  const vetProfile = await createProfile(vetUser.id);
+  const vetProfile = await createProfile(vetUser.id, [veterinarianRole]);
   await createMembership(vetProfile.id);
-  await sql`update idoc.memberships set membership_type='veterinarian' where profile_id=${vetProfile.id}`;
   await withTestMembershipBoundary({ actor: { id: vetUser.id, roles: [] } }, async () => {
     assert.ok(await getPublicArticleBySlug('vet-only'));
+    assert.equal(await getPublicArticleBySlug('judge-only'), null);
+  });
+
+  const expiredJudge = await createUser();
+  const expiredJudgeProfile = await createProfile(expiredJudge.id, [judgeRole]);
+  await createMembership(expiredJudgeProfile.id, false);
+  await withTestMembershipBoundary({ actor: { id: expiredJudge.id, roles: [] } }, async () => {
+    assert.equal(await getPublicArticleBySlug('members-only'), null);
     assert.equal(await getPublicArticleBySlug('judge-only'), null);
   });
 });
@@ -201,6 +206,24 @@ test('editing an article to change its own slug succeeds and the new slug resolv
   assert.equal(await getPublicArticleBySlug('old-slug'), null);
   const renamed = await getPublicArticleBySlug('new-slug');
   assert.equal(renamed?.title, 'Renamed');
+});
+
+test('editing article audience records the old and new access boundary in the audit trail', async () => {
+  const admin = await adminUser();
+  const id = await asAdmin(admin.id, () => createArticle(article({ audience: ['public'], slug: 'audit-audience' })));
+  await asAdmin(admin.id, () => updateArticle(id, article({ audience: ['judge', 'steward'], slug: 'audit-audience' })));
+  const [auditRow] = await sql<{
+    after_json: { audience: string[]; changedFields: string[] };
+    before_json: { audience: string[] };
+  }[]>`
+    select before_json,after_json
+    from idoc.audit_log
+    where entity_type='news_article' and entity_id=${String(id)} and action='admin.news_article.edited'
+    order by id desc
+    limit 1`;
+  assert.deepEqual(auditRow.before_json.audience, ['public']);
+  assert.deepEqual(auditRow.after_json.audience, ['judge', 'steward']);
+  assert.ok(auditRow.after_json.changedFields.includes('audience'));
 });
 
 test('rich-text content is sanitized before storage: a script tag and event-handler attribute never reach the database', async () => {
