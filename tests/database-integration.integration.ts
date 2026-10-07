@@ -352,7 +352,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // Migrations 0055/0056/0057/0058/0061/0063/0064/0069 reshaped these tables after this frozen snapshot was taken
   // (payment method moved from the seminar to each registration; multi-day dates; dual
   // member/non-member prices; guest registration; the FEI-affiliation flag; the levels field).
-  // Rather than hand-patching every column/constraint/index delta here, this substitutes the two
+  // Rather than hand-patching every column/constraint/index delta here, this substitutes the
   // affected tables' definitions straight from the current 0069 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
@@ -364,6 +364,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.news_articles'] = currentSnapshot.tables['idoc.news_articles'];
   expectedSchema['idoc.administrator_table_preferences'] = currentSnapshot.tables['idoc.administrator_table_preferences'];
   expectedSchema['idoc.audit_log'] = currentSnapshot.tables['idoc.audit_log'];
+  expectedSchema['idoc.support_category_defaults'] = currentSnapshot.tables['idoc.support_category_defaults'];
+  expectedSchema['idoc.support_conversations'] = currentSnapshot.tables['idoc.support_conversations'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
