@@ -118,6 +118,10 @@ test('Tiptap images can be selected and drag-resized with their width persisted 
   assert.match(imageNode, /renderHTML: \(attributes\) => attributes\.width \? \{ width: attributes\.width \} : \{\}/);
   assert.match(imageNodeView, /aria-label="Resize image"/);
   assert.match(imageNodeView, /cursor-nwse-resize/);
-  assert.match(imageNodeView, /window\.addEventListener\('pointermove'/);
+  assert.match(imageNodeView, /setPointerCapture\(event\.pointerId\)/);
+  assert.match(imageNodeView, /onPointerCancel=\{endResize\}/);
+  assert.match(imageNodeView, /onPointerMove=\{resize\}/);
+  assert.match(imageNodeView, /onLostPointerCapture/);
   assert.match(imageNodeView, /updateAttributes\(\{ width: Math\.round\(nextWidth\) \}\)/);
+  assert.match(imageNodeView, /className="block h-auto w-full max-w-full"/);
 });
