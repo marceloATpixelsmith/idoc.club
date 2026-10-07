@@ -78,8 +78,11 @@ export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 export const adminBoardProfileSchema = z.object({
   boardFacebookUrl: z.union([z.string().trim().url().max(500), z.literal(''), z.null(), z.undefined()])
     .transform((value) => value || null),
-  boardPhotoUrl: z.union([z.string().trim().url().max(2000), z.literal(''), z.null(), z.undefined()])
-    .transform((value) => value || null),
+  boardPhotoUrl: z.union([
+    z.string().trim().url().max(2000),
+    z.string().trim().regex(/^\/[^\s]*$/, 'Board photo must be a valid image URL.').max(2000),
+    z.literal(''), z.null(), z.undefined(),
+  ]).transform((value) => value || null),
   boardSubtitle: z.union([z.string().trim().max(160), z.literal(''), z.null(), z.undefined()])
     .transform((value) => value || null),
   boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null(), z.undefined()])
