@@ -14,7 +14,7 @@ import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
-import { memberProfileSchema, type MemberProfileInput } from './validation';
+import { memberProfileSchema, type AdminBoardProfileInput, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { lockLatestMembership } from './locking';
@@ -139,13 +139,14 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   return result.profile;
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { reason?: string }) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { board?: AdminBoardProfileInput; reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
   const actor = await authenticatedActor('profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
-  const isAdminEdit = actor.id !== existing.userId;
+  const isAdminEdit = actor.id !== existing.userId || options?.board !== undefined;
+  if (options?.board !== undefined) requireAdministrator(actor);
   const reason = options?.reason?.trim() ?? '';
   if (isAdminEdit && reason.length === 0) throw new Error('An administrative reason is required for this correction.');
 
@@ -154,7 +155,8 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
       .where(and(eq(professionalRoles.profileId, profileId), isNull(professionalRoles.effectiveTo)));
     const now = new Date();
     const profileValues = profileColumns(input);
-    const [updated] = await tx.update(profiles).set({ ...profileValues, updatedAt: now })
+    const boardValues = options?.board ?? {};
+    const [updated] = await tx.update(profiles).set({ ...profileValues, ...boardValues, updatedAt: now })
       .where(eq(profiles.id, profileId)).returning();
     injectProfileTransactionFailure('profile-write');
     const desiredByType = new Map(input.roles.map((role) => [role.roleType, role]));
