@@ -2,7 +2,7 @@
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
 import { forwardRef, type MouseEvent } from 'react';
-import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X, type LucideIcon, type LucideProps } from 'lucide-react';
+import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Landmark, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X, type LucideIcon, type LucideProps } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -18,6 +18,7 @@ import { persistTablePreferences, TablePreferenceSync } from '@/components/admin
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { CountryFlag } from '@/components/ui/country-flag';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
@@ -39,7 +40,7 @@ const MULTI_SELECT_FILTERS = ['status', 'type', 'federation', 'country', 'region
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
-  { label: 'Archived Members', value: 'archived' },
+  { label: 'Archived Members', value: 'archived' }, { label: 'Board Members', value: 'board_member' },
   { label: 'Administrators', value: 'administrator' }, { label: 'Superadmins', value: 'super_admin' },
   { label: 'Onboarding Users', value: 'onboarding' }, { label: 'Test Members', value: 'test' },
 ];
@@ -99,12 +100,12 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
 
   const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => <span className="inline-flex items-center gap-2 font-medium uppercase">{row.original.profileId ? <>{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</> : <span className="text-muted-foreground">Profile not completed</span>}{row.original.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" role="img" />}{row.original.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" role="img" />}</span> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => <span className="inline-flex items-center gap-2 font-medium uppercase">{row.original.profileId ? <>{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</> : <span className="text-muted-foreground">Profile not completed</span>}{row.original.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" role="img" />}{row.original.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" role="img" />}{row.original.isBoardMember && <Landmark aria-label="Board Member" className="size-4 shrink-0 text-gold" role="img" />}</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
     { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
-    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—' },
-    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? countryNameForCode(row.original.country) : '—' },
+    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.federation)}<CountryFlag code={row.original.federation} /></span> : '—' },
+    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.country)}<CountryFlag code={row.original.country} /></span> : '—' },
     { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.region ?? '—' },
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
