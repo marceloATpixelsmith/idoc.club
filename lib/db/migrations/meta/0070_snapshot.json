@@ -3025,7 +3025,7 @@
           "type": "varchar(20)[]",
           "primaryKey": false,
           "notNull": true,
-          "default": "ARRAY['public'::character varying]"
+          "default": "array['public']::varchar[]"
         }
       },
       "indexes": {
