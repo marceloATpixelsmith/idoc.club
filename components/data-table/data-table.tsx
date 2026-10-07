@@ -30,6 +30,8 @@ export function useDataTableMutation() {
 interface DataTableProps<TData> extends React.ComponentProps<"div"> {
   table: TanstackTable<TData>;
   actionBar?: React.ReactNode;
+  columnStyles?: Record<string, React.CSSProperties>;
+  tableClassName?: string;
   emptyState?: React.ReactNode;
   pageSizeOptions?: number[];
   /** True while a search/filter/sort/column-visibility/pagination change is being applied. */
@@ -39,6 +41,8 @@ interface DataTableProps<TData> extends React.ComponentProps<"div"> {
 export function DataTable<TData>({
   table,
   actionBar,
+  columnStyles,
+  tableClassName,
   emptyState,
   pageSizeOptions,
   loading,
@@ -69,7 +73,7 @@ export function DataTable<TData>({
         aria-busy={isLoading || undefined}
         className="relative overflow-hidden rounded-md border"
       >
-        <Table>
+        <Table className={tableClassName}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -80,6 +84,7 @@ export function DataTable<TData>({
                     data-pinned={header.column.getIsPinned() || undefined}
                     style={{
                       ...getColumnPinningStyle({ column: header.column, withBorder: true }),
+                      ...columnStyles?.[header.column.id],
                     }}
                   >
                     {header.isPlaceholder
@@ -102,7 +107,7 @@ export function DataTable<TData>({
               Array.from({ length: Math.max(1, table.getRowModel().rows?.length || table.getState().pagination.pageSize) }).map((_, rowIndex) => (
                 <TableRow key={`skeleton-${rowIndex}`}>
                   {table.getVisibleLeafColumns().map((column) => (
-                    <TableCell key={column.id} data-pinned={column.getIsPinned() || undefined} style={{ ...getColumnPinningStyle({ column, withBorder: true }) }}>
+                    <TableCell key={column.id} data-pinned={column.getIsPinned() || undefined} style={{ ...getColumnPinningStyle({ column, withBorder: true }), ...columnStyles?.[column.id] }}>
                       <Skeleton className="h-5 w-full" />
                     </TableCell>
                   ))}
@@ -120,6 +125,7 @@ export function DataTable<TData>({
                       data-pinned={cell.column.getIsPinned() || undefined}
                       style={{
                         ...getColumnPinningStyle({ column: cell.column, withBorder: true }),
+                        ...columnStyles?.[cell.column.id],
                       }}
                     >
                       {flexRender(

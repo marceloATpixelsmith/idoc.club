@@ -154,7 +154,7 @@ export function ResourceDataTable({
             : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
-            ? <span className="block w-80 max-w-80 whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span>{row.original.subtitle ? <span className="mt-1 block break-words text-sm text-muted-foreground">{row.original.subtitle}</span> : null}<span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
+            ? <span className="block w-full whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span>{row.original.subtitle ? <span className="mt-1 block break-words text-sm text-muted-foreground">{row.original.subtitle}</span> : null}<span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
             : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && tableType === 'seminars'
             ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
@@ -163,7 +163,7 @@ export function ResourceDataTable({
               : id === 'type' && tableType === 'news'
                 ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
                 : id === 'access' && tableType === 'news'
-                  ? <div className="flex w-40 max-w-40 flex-wrap gap-1.5 whitespace-normal">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
+                  ? <div className="flex w-full flex-wrap gap-1.5 whitespace-normal">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
                   : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
@@ -295,9 +295,20 @@ export function ResourceDataTable({
   const [dateResetSignal, setDateResetSignal] = useState(0);
   const manuallyFiltered = Boolean(from || to) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
+  const newsColumnStyles = tableType === 'news'
+    ? {
+      select: { width: '44px' },
+      type: { width: '105px' },
+      status: { width: '125px' },
+      access: { width: '180px' },
+      publication: { width: '155px' },
+      updated: { width: '105px' },
+      actions: { width: '92px' },
+    }
+    : undefined;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} tableClassName={tableType === 'news' ? 'table-fixed' : undefined} columnStyles={newsColumnStyles} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
