@@ -21,6 +21,7 @@ async function articleFields(formData: FormData) {
   await requireNewsArticleSchema();
   return {
     articleType: formData.get('articleType'),
+    audience: formData.getAll('audience'),
     contentHtml: formData.get('contentHtml'),
     externalUrl: formData.get('externalUrl'),
     publicationDate: formData.get('publicationDate'),
