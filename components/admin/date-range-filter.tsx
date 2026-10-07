@@ -124,7 +124,7 @@ export function DateRangeFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent data-idoc-table-panel className="w-auto p-0" align="start" onPointerDownOutside={onPointerDownOutside}>
-        <Calendar autoFocus captionLayout="dropdown" mode="range" onSelect={(next) => setDraft(next ?? { from: undefined, to: undefined })} selected={draft} />
+        <Calendar autoFocus captionLayout="dropdown" endMonth={new Date(new Date().getFullYear() + 3, 11)} mode="range" onSelect={(next) => setDraft(next ?? { from: undefined, to: undefined })} selected={draft} />
       </PopoverContent>
     </Popover>
   );
