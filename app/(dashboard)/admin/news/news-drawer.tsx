@@ -3,6 +3,7 @@ import { Eye } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
+import { ArticleAccessField } from '@/components/news/article-access-field';
 import { ArticleContentEditor } from '@/components/news/article-content-editor';
 import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field';
 import { NewsForm } from '@/components/news/news-form';
@@ -49,6 +50,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
           <NewsForm action={createNewsArticle} submitLabel="Create article">
             <AdminFormSection description="Choose where this item belongs and how it should be published." title="Publishing">
               <TypeStatusFields />
+              <ArticleAccessField />
               <div className="max-w-sm space-y-1.5">
                 <Label htmlFor="publicationDate">Publication date (UTC)</Label>
                 <Input id="publicationDate" name="publicationDate" required type="datetime-local" />
@@ -95,6 +97,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
           <input name="existingThumbnailUrl" type="hidden" value={article.thumbnail_url ? String(article.thumbnail_url) : ''} />
           <AdminFormSection description="Type, publication status, and schedule are managed together." title="Publishing">
             <TypeStatusFields articleType={articleType} status={status} />
+            <ArticleAccessField initialAudience={Array.isArray(article.audience) ? article.audience.map(String) : ['public']} />
             <div className="max-w-sm space-y-1.5">
               <Label htmlFor="publicationDate">Publication date (UTC)</Label>
               <Input defaultValue={toDatetimeLocalUtc(article.publication_date)} id="publicationDate" name="publicationDate" required type="datetime-local" />
