@@ -45,6 +45,14 @@ test('a multi-select facet filter\'s selected values are read from react-table\'
   for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
 });
 
+test('legacy News column preferences migrate from Subtitle to Access without hiding the new column', () => {
+  assert.match(preferences, /columns\(\['title', 'type', 'status', 'access', 'publication', 'subtitle', 'updated'\]\)/);
+  assert.match(preferences, /function normalizeLegacyNewsPreferences/);
+  assert.match(preferences, /order\.includes\('subtitle'\)/);
+  assert.match(preferences, /item !== 'subtitle'/);
+  assert.match(preferences, /normalizedOrder\.splice\(statusIndex >= 0 \? statusIndex \+ 1 : normalizedOrder\.length, 0, 'access'\)/);
+});
+
 test('the active-by-default Status view applies only when no table preference has ever been saved, so Reset can genuinely clear it', () => {
   assert.match(membershipPage, /savedPreferences === null \? 'active' : undefined/);
 });
