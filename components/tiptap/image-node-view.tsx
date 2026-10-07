@@ -13,38 +13,32 @@ type ResizeState = {
   startX: number;
 };
 
+type RegisteredResizeHandlers = {
+  blur: () => void;
+  pointerCancel: (event: PointerEvent) => void;
+  pointerMove: (event: PointerEvent) => void;
+  pointerUp: (event: PointerEvent) => void;
+};
+
 export function ImageNodeView({ editor, getPos, node, selected, updateAttributes }: NodeViewProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const resizeRef = useRef<ResizeState | null>(null);
+  const registeredHandlersRef = useRef<RegisteredResizeHandlers | null>(null);
 
   const removeResizeListeners = () => {
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', handlePointerEnd);
-    window.removeEventListener('pointercancel', handlePointerEnd);
-    window.removeEventListener('blur', cancelResize);
+    const handlers = registeredHandlersRef.current;
+    if (!handlers) return;
+
+    window.removeEventListener('pointermove', handlers.pointerMove);
+    window.removeEventListener('pointerup', handlers.pointerUp);
+    window.removeEventListener('pointercancel', handlers.pointerCancel);
+    window.removeEventListener('blur', handlers.blur);
+    registeredHandlersRef.current = null;
   };
 
   const cancelResize = () => {
     resizeRef.current = null;
     removeResizeListeners();
-  };
-
-  const handlePointerMove = (event: PointerEvent) => {
-    const active = resizeRef.current;
-    if (!active || event.pointerId !== active.pointerId) return;
-
-    event.preventDefault();
-    const nextWidth = Math.min(
-      Math.max(MIN_IMAGE_WIDTH, active.startWidth + (event.clientX - active.startX)),
-      active.editorWidth,
-    );
-    updateAttributes({ width: Math.round(nextWidth) });
-  };
-
-  const handlePointerEnd = (event: PointerEvent) => {
-    const active = resizeRef.current;
-    if (!active || event.pointerId !== active.pointerId) return;
-    cancelResize();
   };
 
   useEffect(() => cancelResize, []);
@@ -64,6 +58,8 @@ export function ImageNodeView({ editor, getPos, node, selected, updateAttributes
     const image = imageRef.current;
     if (!image) return;
 
+    removeResizeListeners();
+
     const startWidth = image.getBoundingClientRect().width;
     resizeRef.current = {
       editorWidth: image.closest('.tiptap')?.getBoundingClientRect().width ?? startWidth,
@@ -72,10 +68,40 @@ export function ImageNodeView({ editor, getPos, node, selected, updateAttributes
       startX: event.clientX,
     };
 
-    window.addEventListener('pointermove', handlePointerMove, { passive: false });
-    window.addEventListener('pointerup', handlePointerEnd);
-    window.addEventListener('pointercancel', handlePointerEnd);
-    window.addEventListener('blur', cancelResize);
+    const pointerMove = (moveEvent: PointerEvent) => {
+      const active = resizeRef.current;
+      if (!active || moveEvent.pointerId !== active.pointerId) return;
+
+      moveEvent.preventDefault();
+      const nextWidth = Math.min(
+        Math.max(MIN_IMAGE_WIDTH, active.startWidth + (moveEvent.clientX - active.startX)),
+        active.editorWidth,
+      );
+      updateAttributes({ width: Math.round(nextWidth) });
+    };
+
+    const pointerEnd = (endEvent: PointerEvent) => {
+      const active = resizeRef.current;
+      if (!active || endEvent.pointerId !== active.pointerId) return;
+      cancelResize();
+    };
+
+    const blur = () => {
+      cancelResize();
+    };
+
+    const handlers: RegisteredResizeHandlers = {
+      blur,
+      pointerCancel: pointerEnd,
+      pointerMove,
+      pointerUp: pointerEnd,
+    };
+    registeredHandlersRef.current = handlers;
+
+    window.addEventListener('pointermove', handlers.pointerMove, { passive: false });
+    window.addEventListener('pointerup', handlers.pointerUp);
+    window.addEventListener('pointercancel', handlers.pointerCancel);
+    window.addEventListener('blur', handlers.blur);
   };
 
   const width = typeof node.attrs.width === 'number' ? node.attrs.width : undefined;
