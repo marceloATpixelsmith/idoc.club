@@ -118,10 +118,13 @@ test('Tiptap images can be selected and drag-resized with their width persisted 
   assert.match(imageNode, /renderHTML: \(attributes\) => attributes\.width \? \{ width: attributes\.width \} : \{\}/);
   assert.match(imageNodeView, /aria-label="Resize image"/);
   assert.match(imageNodeView, /cursor-nwse-resize/);
-  assert.match(imageNodeView, /setPointerCapture\(event\.pointerId\)/);
-  assert.match(imageNodeView, /onPointerCancel=\{endResize\}/);
-  assert.match(imageNodeView, /onPointerMove=\{resize\}/);
-  assert.match(imageNodeView, /onLostPointerCapture/);
+  assert.match(imageNodeView, /editor\.commands\.setNodeSelection\(position\)/);
+  assert.match(imageNodeView, /window\.addEventListener\('pointermove', handlePointerMove/);
+  assert.match(imageNodeView, /window\.addEventListener\('pointercancel', handlePointerEnd\)/);
+  assert.match(imageNodeView, /window\.removeEventListener\('pointermove', handlePointerMove\)/);
+  assert.match(imageNodeView, /event\.pointerId !== active\.pointerId/);
   assert.match(imageNodeView, /updateAttributes\(\{ width: Math\.round\(nextWidth\) \}\)/);
-  assert.match(imageNodeView, /className="block h-auto w-full max-w-full"/);
+  assert.match(imageNodeView, /touchAction: 'none'/);
+  assert.match(imageNodeView, /size-6 cursor-nwse-resize/);
+  assert.match(imageNodeView, /className="block h-auto w-full max-w-full cursor-pointer"/);
 });
