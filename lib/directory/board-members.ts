@@ -23,7 +23,8 @@ type RawBoardMember = {
   firstName: string;
   isTechnicalDelegate: boolean | null;
   lastName: string;
-  officialStatuses: string[] | null;
+  judgeOfficialStatuses: string[] | null;
+  stewardOfficialStatuses: string[] | null;
 };
 
 export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
@@ -36,14 +37,16 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
       p.board_facebook_url "boardFacebookUrl",
       p.board_photo_url "boardPhotoUrl",
       coalesce(roles.federation, p.country_code) "countryCode",
-      roles.official_statuses "officialStatuses",
+      roles.judge_official_statuses "judgeOfficialStatuses",
+      roles.steward_official_statuses "stewardOfficialStatuses",
       roles.is_technical_delegate "isTechnicalDelegate"
     from idoc.profiles p
     join idoc.users u on u.id = p.user_id
     left join lateral (
       select
         min(national_federation_country_code) federation,
-        coalesce(array_agg(distinct status.value) filter (where status.value is not null), array[]::varchar[]) official_statuses,
+        coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'judge' and status.value is not null and lower(trim(status.value)) <> 'other'), array[]::varchar[]) judge_official_statuses,
+        coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'steward' and status.value is not null), array[]::varchar[]) steward_official_statuses,
         bool_or(coalesce(is_technical_delegate, false)) is_technical_delegate
       from idoc.professional_roles pr
       left join lateral unnest(pr.official_statuses) as status(value) on true
@@ -65,7 +68,8 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
     firstName: row.firstName,
     lastName: row.lastName,
     officialDetails: [
-      ...(row.officialStatuses ?? []).filter((status) => status.trim().toLowerCase() !== 'other'),
+      ...(row.judgeOfficialStatuses ?? []),
+      ...(row.stewardOfficialStatuses ?? []),
       ...(row.isTechnicalDelegate ? ['Technical Delegate'] : []),
     ],
   }));
