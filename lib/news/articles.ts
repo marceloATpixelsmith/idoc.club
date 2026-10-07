@@ -5,6 +5,7 @@ import { client } from '@/lib/db/drizzle';
 import { getUser } from '@/lib/db/queries';
 import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { testBoundaryActor } from '@/lib/membership/test-boundary';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { hasVisibleContent, sanitizeArticleContent } from '@/lib/news/sanitize';
 
@@ -472,7 +473,8 @@ export async function publishScheduledArticles(): Promise<{ published: number }>
 type ArticleViewer = { loggedInMember: boolean; membershipType: string | null };
 
 async function currentArticleViewer(): Promise<ArticleViewer> {
-  const user = await getUser();
+  const injectedActor = testBoundaryActor();
+  const user = injectedActor ?? await getUser();
   if (!user) return { loggedInMember: false, membershipType: null };
   const [row] = await client<{ membership_type: string | null }[]>`
     select membership.membership_type
