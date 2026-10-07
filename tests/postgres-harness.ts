@@ -60,7 +60,10 @@ export function profileInput(roles: Array<typeof judgeRole | typeof stewardRole 
     firstName: 'Test', lastName: 'Member', postalCode: '10115', roles, stateProvince: 'Berlin' };
 }
 
-export async function createProfile(userId: number, roles = [judgeRole]) {
+export async function createProfile(
+  userId: number,
+  roles: Array<typeof judgeRole | typeof stewardRole | typeof veterinarianRole> = [judgeRole],
+) {
   const input = profileInput(roles);
   const [profile] = await sql<{ id: number }[]>`
     insert into idoc.profiles(user_id,first_name,last_name,address_1,address_2,city,state_province,postal_code,country_code)
