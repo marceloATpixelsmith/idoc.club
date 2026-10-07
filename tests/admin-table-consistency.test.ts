@@ -58,6 +58,7 @@ test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
   assert.match(members, /steward: \{ icon: HorseshoeIcon, label: 'STEWARD' \}/);
   assert.match(members, /import \{ HorseshoeIcon \} from '@\/components\/membership\/professional-role-icons'/);
   assert.match(professionalRoleIcons, /export function HorseshoeIcon/);
+  assert.match(professionalRoleIcons, /data-icon-tooltip=\{props\['data-icon-tooltip'\] \?\? 'Steward'\}/);
   assert.match(professionalRoleIcons, /<path d="M5 3v8a7 7 0 0 0 14 0V3h-4v8a3 3 0 0 1-6 0V3H5Z" \/>/);
   assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
   assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip="STEWARD" \/>/);
@@ -72,5 +73,7 @@ test('admin date filters allow future years', () => {
 test('sitewide SVG icons receive tooltips when they do not already provide one', () => {
   assert.match(sitewideIconTooltips, /function tooltipFor\(svg: SVGSVGElement\)/);
   assert.match(sitewideIconTooltips, /svg\.querySelector\(':scope > title'\)/);
+  assert.match(sitewideIconTooltips, /svg\.closest<HTMLElement>\('button, a, \[role="button"\], \[role="menuitem"\], \[role="tab"\], \[role="option"\]'\)/);
+  assert.doesNotMatch(sitewideIconTooltips, /closest<HTMLElement>\('\[title\], \[aria-label\]'\)/);
   assert.match(sitewideIconTooltips, /new MutationObserver/);
 });
