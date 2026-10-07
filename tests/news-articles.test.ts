@@ -104,6 +104,14 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.match(clean, /<strong>world<\/strong>/);
   assert.equal(sanitizeArticleContent('<h1>Heading</h1><p><u>under</u> <s>strike</s></p>'), '<h1>Heading</h1><p><u>under</u> <s>strike</s></p>');
   assert.equal(sanitizeArticleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>'), '<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>');
+  assert.equal(
+    sanitizeArticleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="Horse" width="640"></p>'),
+    '<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="Horse" width="640"></p>',
+  );
+  assert.doesNotMatch(
+    sanitizeArticleContent('<img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="Horse" width="99999">'),
+    /width=/,
+  );
   assert.doesNotMatch(sanitizeArticleContent('<img src="https://evil.example/photo.jpg" alt="x">'), /<img/);
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
 });

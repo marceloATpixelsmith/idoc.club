@@ -4,10 +4,18 @@
 const ALLOWED_TAGS = new Set([
   'a', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4', 'hr', 'img', 'li', 'ol', 'p', 'pre', 's', 'strong', 'u', 'ul',
 ]);
+const MIN_IMAGE_WIDTH = 120;
+const MAX_IMAGE_WIDTH = 2000;
 
 // Preserve valid entities across repeated save/edit sanitization passes without allowing raw markup.
 function escapeAmpersand(value: string): string {
   return value.replace(/&(?!amp;|quot;|#39;|lt;|gt;|#\d+;|#x[0-9a-f]+;)/gi, '&amp;');
+}
+
+function safeImageWidth(value: string | undefined): number | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const width = Number.parseInt(value, 10);
+  return width >= MIN_IMAGE_WIDTH && width <= MAX_IMAGE_WIDTH ? width : null;
 }
 
 function safeCloudinaryImageUrl(value: string): string | null {
@@ -34,7 +42,9 @@ export function sanitizeArticleContent(input: string): string {
       if (!safeSrc) return '';
       const rawAlt = attributes.match(/\balt\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim() ?? '';
       const alt = escapeAmpersand(rawAlt).replaceAll('"', '&quot;');
-      return `<img src="${escapeAmpersand(safeSrc).replaceAll('"', '&quot;')}" alt="${alt}">`;
+      const width = safeImageWidth(attributes.match(/\bwidth\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim());
+      const widthAttribute = width ? ` width="${width}"` : '';
+      return `<img src="${escapeAmpersand(safeSrc).replaceAll('"', '&quot;')}" alt="${alt}"${widthAttribute}>`;
     }
     if (tag !== 'a') return `<${tag}>`;
     const href = attributes.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2]?.trim();

@@ -96,6 +96,10 @@ Day-to-day procedures after the IDOC membership platform goes live
 
 Working project document. Update this document when project decisions change.
 
+## Shared rich-text image sizing
+
+News/Blog and seminar rich-text fields use the shared Tiptap editor. Administrators may select an inserted Cloudinary image and drag its lower-right resize handle. The editor persists the chosen width as a numeric HTML `width` attribute. Server sanitization accepts that attribute only for otherwise-approved Cloudinary image URLs and only when the width is between 120 and 2000 pixels; invalid or out-of-range widths are removed. The public rendering path re-sanitizes the saved HTML and preserves the same validated width, while responsive styling prevents an image from overflowing its content container.
+
 ## Codex pull-request review request
 
 Codex automated review is advisory. When a pull request is opened or updated, the workflow requests a Codex review and exits promptly without polling. The `codex/review-complete` status is informational only and is not required by either branch ruleset; it does not certify review completion. Any Codex comments or inline findings remain visible for the author to address, while fast and risk-classified full CI workflows determine test readiness.
