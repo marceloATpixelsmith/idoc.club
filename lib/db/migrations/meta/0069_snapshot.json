@@ -5440,7 +5440,7 @@
       "checkConstraints": {
         "support_category_defaults_category_check": {
           "name": "support_category_defaults_category_check",
-          "value": "\"idoc\".\"support_category_defaults\".\"category\" in ('billing_membership', 'seminars', 'technical_support')"
+          "value": "\"idoc\".\"support_category_defaults\".\"category\" in ('billing_membership', 'seminars', 'technical_support', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -5725,7 +5725,7 @@
       "checkConstraints": {
         "support_conversations_category_check": {
           "name": "support_conversations_category_check",
-          "value": "\"idoc\".\"support_conversations\".\"category\" in ('billing_membership', 'seminars', 'technical_support')"
+          "value": "\"idoc\".\"support_conversations\".\"category\" in ('billing_membership', 'seminars', 'technical_support', 'other')"
         },
         "support_conversations_status_check": {
           "name": "support_conversations_status_check",
