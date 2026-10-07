@@ -41,6 +41,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
     ({ page, pageSize, total } = listing);
     rows = listing.rows.map((row) => ({
       id: Number(row.id), title: String(row.title),
+      access: Array.isArray(row.audience) ? row.audience.map(String) : ['public'],
       subtitle: row.subtitle ? String(row.subtitle) : '', slug: String(row.slug),
       status: String(row.status), type: String(row.article_type ?? 'news'),
       thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : undefined,

@@ -8,7 +8,7 @@ export function AdminFormSection({ children, description, title }: { children: R
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
+      <CardContent className="space-y-6 [&>div.grid]:gap-6" data-idoc-admin-form-section>{children}</CardContent>
     </Card>
   );
 }

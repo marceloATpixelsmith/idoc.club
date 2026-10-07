@@ -929,7 +929,7 @@ Meaningful icons shown anywhere in the application must expose a hover tooltip u
 
 ## News/Blog administration and media
 
-News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays title with slug beneath it, TYPE and STATUS as icon-backed uppercase values, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
+News and Blog are one durable article system with an explicit `article_type` of `news` or `blog`. Existing articles default to NEWS unless migration 0064 identifies a legacy President's Blog item. The admin table displays the title with the slug beneath it and the optional subtitle directly beneath the slug, TYPE and STATUS as icon-backed uppercase values, a compact ACCESS column using audience badges, and Publication Date as `dd/mm/yyyy`; both TYPE and STATUS are filterable and table preferences remain per administrator.
 
 The authoring form requires a NEWS/BLOG choice and accepts an optional JPG, PNG, WEBP, or AVIF thumbnail up to 5 MB. Thumbnail files are uploaded server-side to the IDOC Cloudinary account and only the durable HTTPS URL is persisted. The same server-side Cloudinary uploader powers the **Insert image** control in every administrator Tiptap field, which stores uploaded rich-content images under `idoc/rich-content`.
 
@@ -1007,7 +1007,7 @@ These rules apply to every existing and future administrator table that has row 
 - **Every internal table action shows loading feedback.** Clicking an internal row action (Edit, Payment, Support, Preview, Registrations, or another internal admin destination) must start the same transition used by the Members table and set the table's existing `loading` state, producing the pulsing row skeleton until navigation resolves. Modifier-click behavior remains native. Pure downloads and `mailto:` actions are excluded because they do not navigate/refetch the table.
 - **Drawer/form titles match table-page headings.** The main record/drawer heading uses the same `text-3xl font-semibold text-gold` treatment as the corresponding administrator table-page heading. It is Title Case and uses the singular form of the table-page entity name (for example Members → Member, Seminars → Seminar, Registrations → Registration).
 - **Form section headers follow the Members hierarchy.** Semantic card/section titles are `text-xs font-bold uppercase tracking-wider text-gold`. All admin forms use the shared section treatment rather than hand-styled white/gold headings of different sizes.
-- **Field labels are not section headers.** Individual field labels and legends use the normal foreground label treatment and should not be promoted to gold section-heading styling.
+- **Field labels are not section headers.** Individual field labels and legends use the normal foreground label treatment, display in Title Case throughout administrator forms, and should not be promoted to gold section-heading styling. Shared form sections provide deliberate vertical separation between adjacent field groups and wider gaps between direct side-by-side field groups.
 
 The actionable admin tables currently covered are Members, News/Blog, Seminars, Seminar Registrations, and Support. Read-only tables with no row navigation have no skeleton-triggering row action to implement.
 

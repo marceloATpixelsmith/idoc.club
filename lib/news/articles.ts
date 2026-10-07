@@ -266,6 +266,7 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const types = many(input.type).filter((value): value is NewsType => NEWS_TYPES.includes(value as NewsType));
   const schemaReady = await newsSchemaSupportsTypeAndThumbnail();
   const externalReady = await newsSchemaSupportsExternalUrl();
+  const audienceReady = await newsSchemaSupportsAudience();
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
@@ -276,12 +277,12 @@ export async function listAdminArticles(input: Record<string, string | string[] 
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = schemaReady
-    ? await client`select id,slug,title,subtitle,article_type,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
+    ? await client`select id,slug,title,subtitle,article_type,${audienceReady ? client`audience` : client`array['public']::varchar[]`} as audience,thumbnail_url,${externalReady ? client`external_url` : client`null::text`} as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count from idoc.news_articles
         where (${statusWhere}) and (${types.length ? client`article_type in ${client(types)}` : client`true`})
         and (${search}='' or title ilike ${`%${search}%`} or subtitle ilike ${`%${search}%`} or slug ilike ${`%${search}%`})
         and (${from}::date is null or publication_date>=${from}::date) and (${to}::date is null or publication_date<(${to}::date + interval '1 day')) and (${advancedWhere})
         order by ${order} limit ${limit + 1} offset ${offset}`
-    : await client`select id,slug,title,subtitle,${legacyArticleTypeSql()} as article_type,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count
+    : await client`select id,slug,title,subtitle,${legacyArticleTypeSql()} as article_type,array['public']::varchar[] as audience,${legacyThumbnailSql()} as thumbnail_url,null::text as external_url,status,publication_date,published_at,updated_at,count(*) over()::int total_count
         from idoc.news_articles
         where (${statusWhere})
         and (${types.length ? client`${legacyArticleTypeSql()} in ${client(types)}` : client`true`})
