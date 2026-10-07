@@ -3,6 +3,7 @@ import type { SVGProps } from 'react';
 export function HorseshoeIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
+      data-icon-tooltip={props['data-icon-tooltip'] ?? 'Steward'}
       fill="none"
       stroke="currentColor"
       strokeLinecap="round"
