@@ -16,7 +16,7 @@ export function CountryFlag({ code, className = '' }: { code: string; className?
       role="img"
       title={countryNameForCode(code)}
     >
-      <span className="scale-125">{emoji}</span>
+      <span className="scale-[1.8]">{emoji}</span>
     </span>
   );
 }
