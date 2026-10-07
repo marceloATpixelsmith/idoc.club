@@ -31,7 +31,7 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
                 >
                   <article className="card-midnight overflow-hidden">
                     {item.thumbnail_url ? (
-                      <img alt="" className="aspect-[16/9] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
+                      <img alt="" className="aspect-[5/3] w-full object-cover" loading="lazy" src={String(item.thumbnail_url)} />
                     ) : null}
                     <div className="p-6">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">

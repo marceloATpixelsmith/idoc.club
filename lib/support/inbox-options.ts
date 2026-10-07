@@ -1,10 +1,11 @@
-export const SUPPORT_CATEGORIES = ['billing_membership', 'seminars', 'technical_support'] as const;
+export const SUPPORT_CATEGORIES = ['billing_membership', 'seminars', 'technical_support', 'other'] as const;
 export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
 
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing_membership: 'Billing/Membership',
   seminars: 'Seminars',
   technical_support: 'Technical Support',
+  other: 'Other',
 };
 
 export const STATUS_LABELS: Record<string, string> = {

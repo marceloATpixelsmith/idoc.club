@@ -4,12 +4,15 @@ import test from 'node:test';
 
 const source = readFileSync('lib/support/inbox.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0039_support_inbox.sql', 'utf8');
+const otherCategoryMigration = readFileSync('lib/db/migrations/0068_support_other_category.sql', 'utf8');
 const memberThread = readFileSync('components/support/member-support-thread.tsx', 'utf8');
 
 test('support categories, states, body lengths, and opaque identifiers are constrained in both layers', () => {
   for (const value of ['billing_membership', 'seminars', 'technical_support', 'admin_responded', 'member_replied', 'closed']) {
     assert.match(source, new RegExp(value)); assert.match(migration, new RegExp(value));
   }
+  assert.match(source, /'other'/);
+  assert.match(otherCategoryMigration, /'other'/);
   assert.match(migration, /char_length\("body"\) between 1 and 10000/);
   assert.match(migration, /char_length\("subject"\) between 1 and 160/);
   assert.match(migration, /"public_id" uuid DEFAULT gen_random_uuid/);
@@ -17,7 +20,7 @@ test('support categories, states, body lengths, and opaque identifiers are const
 });
 
 test('member-facing support labels match the approved categories and workflow statuses', () => {
-  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
+  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Other', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
     assert.match(source, new RegExp(label.replace('/', '\\/')));
   }
 });
