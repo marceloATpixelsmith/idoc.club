@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import { client } from '@/lib/db/drizzle';
-import { getUser } from '@/lib/db/queries';
+import { getAccountStateUser } from '@/lib/db/queries';
 import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
@@ -477,7 +477,12 @@ type ArticleViewer = { loggedInMember: boolean; roles: string[] };
 
 async function currentArticleViewer(): Promise<ArticleViewer> {
   const injectedActor = testBoundaryActor();
-  const user = injectedActor ?? await getUser();
+  // Direct integration-test calls have no Next.js request store. Treat them as anonymous unless
+  // the isolated membership test boundary explicitly injects an authenticated actor.
+  if (process.env.NODE_ENV === 'test' && !injectedActor) {
+    return { loggedInMember: false, roles: [] };
+  }
+  const user = injectedActor ?? await getAccountStateUser();
   if (!user) return { loggedInMember: false, roles: [] };
 
   const [profile] = await client<{ id: number }[]>`
