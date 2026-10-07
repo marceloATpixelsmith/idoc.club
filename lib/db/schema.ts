@@ -425,6 +425,7 @@ export const newsArticles = idocSchema.table('news_articles', {
   subtitle: varchar('subtitle', { length: 300 }),
   contentHtml: text('content_html').notNull(),
   articleType: varchar('article_type', { length: 10 }).notNull().default('news'),
+  audience: varchar('audience', { length: 20 }).array().notNull().default(sql`array['public']::varchar[]`),
   thumbnailUrl: text('thumbnail_url'),
   externalUrl: text('external_url'),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
@@ -438,6 +439,7 @@ export const newsArticles = idocSchema.table('news_articles', {
 }, (table) => [
   check('news_articles_status_check', sql`${table.status} in ('draft', 'scheduled', 'published', 'archived')`),
   check('news_articles_type_check', sql`${table.articleType} in ('news', 'blog')`),
+  check('news_articles_audience_check', sql`cardinality(${table.audience}) between 1 and 3 and ${table.audience} <@ array['public','members','judge','steward','veterinarian']::varchar[] and ((${table.audience} && array['public','members']::varchar[] and cardinality(${table.audience}) = 1) or (not (${table.audience} && array['public','members']::varchar[]) and ${table.audience} <@ array['judge','steward','veterinarian']::varchar[]))`),
   check('news_articles_slug_format_check', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
   check('news_articles_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
   check('news_articles_subtitle_length_check', sql`${table.subtitle} is null or char_length(${table.subtitle}) between 1 and 300`),
