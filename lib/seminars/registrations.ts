@@ -709,12 +709,13 @@ function registrationsWhere(input: Record<string, string | string[] | undefined>
   const firstValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
   const seminarIds = many(input.seminarId).map(Number).filter((value) => Number.isInteger(value) && value > 0);
   const paymentStatuses = many(input.paymentStatus).filter((value) => (PAYMENT_STATUSES as readonly string[]).includes(value));
+  const registrantTypes = many(input.registrantType).filter((value) => value === 'member' || value === 'guest');
   const search = (firstValue(input.q) ?? '').trim().slice(0, 100);
   const fromValue = firstValue(input.from) ?? '';
   const toValue = firstValue(input.to) ?? '';
   const from = listDate(fromValue);
   const to = listDate(toValue);
-  return { from, paymentStatuses, search, seminarIds, to };
+  return { from, paymentStatuses, registrantTypes, search, seminarIds, to };
 }
 
 /** The cross-seminar registrations roster (Admin Dashboard > Registrations): every registration,
@@ -726,20 +727,22 @@ export async function listAdminAllSeminarRegistrations(input: Record<string, str
   const page = listPage(input);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
-  const { from, paymentStatuses, search, seminarIds, to } = registrationsWhere(input);
+  const { from, paymentStatuses, registrantTypes, search, seminarIds, to } = registrationsWhere(input);
   const order = listOrder(input, {
     registered: 'r.registered_at', registrant: 'registrant_name', seminar: 's.title', status: 'r.payment_status',
   }, 'registered', 'r.id');
   const seminarWhere = seminarIds.length ? client`r.seminar_id in ${client(seminarIds)}` : client`true`;
   const paymentStatusWhere = paymentStatuses.length ? client`r.payment_status in ${client(paymentStatuses)}` : client`true`;
   const advancedWhere = advancedListWhere(input, { status: 'r.payment_status' }, PAYMENT_STATUSES);
+  const registrantTypeWhere = registrantTypes.length === 0 || registrantTypes.length === 2 ? client`true`
+    : registrantTypes[0] === 'guest' ? client`r.profile_id is null` : client`r.profile_id is not null`;
   const rows = await client`select r.id,r.registration_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at,s.id seminar_id,s.title seminar_title,
     coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,coalesce(u.email_display,u.email,r.guest_email) registrant_email,
     (r.profile_id is null) is_guest,count(*) over()::int total_count
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
     left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
-    where (${seminarWhere}) and (${paymentStatusWhere})
+    where (${seminarWhere}) and (${paymentStatusWhere}) and (${registrantTypeWhere})
     and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
     and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
     and (${advancedWhere})
@@ -749,10 +752,12 @@ export async function listAdminAllSeminarRegistrations(input: Record<string, str
 
 export async function exportAllSeminarRegistrationsCsvRows(input: Record<string, string | string[] | undefined>) {
   const actor = await requireSeminarAdministrator();
-  const { from, paymentStatuses, search, seminarIds, to } = registrationsWhere(input);
+  const { from, paymentStatuses, registrantTypes, search, seminarIds, to } = registrationsWhere(input);
   const seminarWhere = seminarIds.length ? client`r.seminar_id in ${client(seminarIds)}` : client`true`;
   const paymentStatusWhere = paymentStatuses.length ? client`r.payment_status in ${client(paymentStatuses)}` : client`true`;
   const advancedWhere = advancedListWhere(input, { status: 'r.payment_status' }, PAYMENT_STATUSES);
+  const registrantTypeWhere = registrantTypes.length === 0 || registrantTypes.length === 2 ? client`true`
+    : registrantTypes[0] === 'guest' ? client`r.profile_id is null` : client`r.profile_id is not null`;
   const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,
     coalesce(u.email_display,u.email,r.guest_email) registrant_email,(r.profile_id is null) is_guest,
     r.registration_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
@@ -761,7 +766,7 @@ export async function exportAllSeminarRegistrationsCsvRows(input: Record<string,
     (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from idoc.payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
     left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
-    where (${seminarWhere}) and (${paymentStatusWhere})
+    where (${seminarWhere}) and (${paymentStatusWhere}) and (${registrantTypeWhere})
     and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
     and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
     and (${advancedWhere})
