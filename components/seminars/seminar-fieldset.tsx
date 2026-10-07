@@ -4,6 +4,7 @@ import { FormGrid, FormSection } from '@/components/forms/form-section';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { FormToggle } from '@/components/ui/form-toggle';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { LANGUAGE_OPTIONS } from '@/lib/seminars/language';
 
@@ -26,7 +27,7 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
       <div className="space-y-1.5"><Label htmlFor="organizingNationalFederation">Organizing Federation</Label><select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" defaultValue={seminar?.organizing_national_federation ?? ''} id="organizingNationalFederation" name="organizingNationalFederation" required><option disabled value="">Select federation</option>{COUNTRY_OPTIONS.map(({ code, name }) => <option key={code} value={code}>{name}</option>)}</select></div>
       <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="location">Location or online meeting link</Label><Textarea defaultValue={seminar?.location} id="location" maxLength={2000} name="location" required /></div>
       <div className="max-w-48 space-y-1.5"><Label className="whitespace-nowrap" htmlFor="capacity">Number of participants</Label><Input defaultValue={seminar?.capacity} id="capacity" min={1} name="capacity" required type="number" /></div>
-      <div className="flex items-end pb-1"><div className="flex items-center gap-3"><label className="relative inline-flex h-6 w-11 cursor-pointer items-center"><input className="peer sr-only" defaultChecked={seminar?.is_fei ?? false} id="isFei" name="isFei" type="checkbox" /><span className="absolute inset-0 rounded-full bg-muted transition peer-checked:bg-primary" /><span className="relative ml-1 h-4 w-4 rounded-full bg-background transition-transform peer-checked:translate-x-5" /></label><Label className="font-normal" htmlFor="isFei">FEI seminar</Label></div></div>
+      <div className="flex items-end pb-1"><FormToggle defaultChecked={seminar?.is_fei ?? false} id="isFei" label="FEI seminar" name="isFei" /></div>
       <fieldset className="space-y-2 sm:col-span-2"><legend className="text-sm font-medium">Levels</legend><div className="flex flex-wrap gap-x-5 gap-y-3">{LEVEL_OPTIONS.map(({ label, value }) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar?.levels?.includes(value) ?? false} name="levels" type="checkbox" value={value} />{label}</Label>)}</div></fieldset>
     </FormGrid></FormSection>
 
