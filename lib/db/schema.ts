@@ -220,6 +220,11 @@ export const profiles = idocSchema.table('profiles', {
   stateProvince: varchar('state_province', { length: 100 }).notNull(),
   postalCode: varchar('postal_code', { length: 30 }).notNull(),
   countryCode: varchar('country_code', { length: 2 }).notNull(),
+  isBoardMember: boolean('is_board_member').notNull().default(false),
+  boardTitle: varchar('board_title', { length: 120 }),
+  boardSubtitle: varchar('board_subtitle', { length: 160 }),
+  boardFacebookUrl: varchar('board_facebook_url', { length: 500 }),
+  boardPhotoUrl: text('board_photo_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
