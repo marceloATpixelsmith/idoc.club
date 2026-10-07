@@ -298,7 +298,6 @@ export function ResourceDataTable({
   const newsColumnStyles = tableType === 'news'
     ? {
       select: { width: '42px' },
-      title: { width: '48%' },
       type: { width: '90px' },
       status: { width: '122px' },
       access: { width: '130px' },
