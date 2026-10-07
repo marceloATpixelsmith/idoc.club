@@ -109,3 +109,15 @@ test('Tiptap image upload shows a visible loading state while the image is uploa
   assert.match(editor, /Uploading image and inserting it into the editor\.\.\./);
   assert.match(editor, /disabled=\{isImageUploading\}/);
 });
+
+
+test('Tiptap images can be selected and drag-resized with their width persisted into HTML', () => {
+  const imageNode = source('components/tiptap/image-node.ts');
+  const imageNodeView = source('components/tiptap/image-node-view.tsx');
+  assert.match(imageNode, /ReactNodeViewRenderer\(ImageNodeView\)/);
+  assert.match(imageNode, /renderHTML: \(attributes\) => attributes\.width \? \{ width: attributes\.width \} : \{\}/);
+  assert.match(imageNodeView, /aria-label="Resize image"/);
+  assert.match(imageNodeView, /cursor-nwse-resize/);
+  assert.match(imageNodeView, /window\.addEventListener\('pointermove'/);
+  assert.match(imageNodeView, /updateAttributes\(\{ width: Math\.round\(nextWidth\) \}\)/);
+});
