@@ -19,7 +19,7 @@ export async function MemberSupportHome() {
     <section className="rounded-lg border p-5"><h2 className="mb-4 text-lg font-bold uppercase tracking-wider text-gold">New conversation</h2>
       <SupportForm action={createSupportConversation} pendingLabel="Sending" submitLabel="Start conversation">
         <input name="idempotencyKey" type="hidden" value={randomUUID()} />
-        <label className="block">Category<select className="mt-1 block w-full rounded border p-2" name="category" required>{SUPPORT_CATEGORIES.map((category) => <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}</select></label>
+        <label className="block">Category<select className="mt-1 block w-auto min-w-56 max-w-full rounded border p-2" name="category" required>{SUPPORT_CATEGORIES.map((category) => <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}</select></label>
         <label className="block">Subject<input className="mt-1 block w-full rounded border p-2" maxLength={160} name="subject" required /></label>
         <label className="block">Message<textarea className="mt-1 block min-h-32 w-full rounded border p-2" maxLength={10000} name="body" required /></label>
       </SupportForm>
