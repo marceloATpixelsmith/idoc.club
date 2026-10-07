@@ -6,8 +6,16 @@ import { useRef } from 'react';
 
 const MIN_IMAGE_WIDTH = 120;
 
+type ResizeState = {
+  editorWidth: number;
+  pointerId: number;
+  startWidth: number;
+  startX: number;
+};
+
 export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProps) {
   const imageRef = useRef<HTMLImageElement>(null);
+  const resizeRef = useRef<ResizeState | null>(null);
 
   const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -16,25 +24,36 @@ export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProp
     const image = imageRef.current;
     if (!image) return;
 
-    const startX = event.clientX;
     const startWidth = image.getBoundingClientRect().width;
-    const editorWidth = image.closest('.tiptap')?.getBoundingClientRect().width ?? startWidth;
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const nextWidth = Math.min(
-        Math.max(MIN_IMAGE_WIDTH, startWidth + (moveEvent.clientX - startX)),
-        editorWidth,
-      );
-      updateAttributes({ width: Math.round(nextWidth) });
+    resizeRef.current = {
+      editorWidth: image.closest('.tiptap')?.getBoundingClientRect().width ?? startWidth,
+      pointerId: event.pointerId,
+      startWidth,
+      startX: event.clientX,
     };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
+  const resize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const active = resizeRef.current;
+    if (!active || event.pointerId !== active.pointerId) return;
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp, { once: true });
+    event.preventDefault();
+    const nextWidth = Math.min(
+      Math.max(MIN_IMAGE_WIDTH, active.startWidth + (event.clientX - active.startX)),
+      active.editorWidth,
+    );
+    updateAttributes({ width: Math.round(nextWidth) });
+  };
+
+  const endResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const active = resizeRef.current;
+    if (!active || event.pointerId !== active.pointerId) return;
+
+    resizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const width = typeof node.attrs.width === 'number' ? node.attrs.width : undefined;
@@ -48,7 +67,7 @@ export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProp
     >
       <img
         alt={node.attrs.alt ?? ''}
-        className="block h-auto max-w-full"
+        className="block h-auto w-full max-w-full"
         draggable={false}
         ref={imageRef}
         src={node.attrs.src}
@@ -59,7 +78,13 @@ export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProp
           aria-label="Resize image"
           className="absolute -bottom-1.5 -right-1.5 size-4 cursor-nwse-resize rounded-sm border border-primary bg-background shadow"
           contentEditable={false}
+          onLostPointerCapture={() => {
+            resizeRef.current = null;
+          }}
+          onPointerCancel={endResize}
           onPointerDown={beginResize}
+          onPointerMove={resize}
+          onPointerUp={endResize}
           title="Drag to resize image"
           type="button"
         />
