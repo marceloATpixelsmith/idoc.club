@@ -201,6 +201,7 @@ export function DataTableDateFilter<TData>({
           <Calendar
             autoFocus
             captionLayout="dropdown"
+            endMonth={new Date(new Date().getFullYear() + 3, 11)}
             mode="range"
             selected={
               getIsDateRange(selectedDates)
@@ -212,6 +213,7 @@ export function DataTableDateFilter<TData>({
         ) : (
           <Calendar
             captionLayout="dropdown"
+            endMonth={new Date(new Date().getFullYear() + 3, 11)}
             mode="single"
             selected={
               !getIsDateRange(selectedDates) ? selectedDates[0] : undefined
