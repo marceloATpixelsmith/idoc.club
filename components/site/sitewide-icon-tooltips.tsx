@@ -16,9 +16,9 @@ function tooltipFor(svg: SVGSVGElement): string | undefined {
   const explicit = svg.getAttribute('data-icon-tooltip') ?? svg.getAttribute('aria-label');
   if (explicit) return explicit;
 
-  const labelledParent = svg.closest<HTMLElement>('[title], [aria-label]');
-  const parentTitle = labelledParent?.getAttribute('title') ?? labelledParent?.getAttribute('aria-label');
-  if (parentTitle) return parentTitle;
+  const control = svg.closest<HTMLElement>('button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"]');
+  const controlTitle = control?.getAttribute('title') ?? control?.getAttribute('aria-label');
+  if (controlTitle) return controlTitle;
 
   const lucideClass = [...svg.classList].find((name) => name.startsWith('lucide-') && name !== 'lucide');
   if (lucideClass) return humanizeIconName(lucideClass);
@@ -39,8 +39,9 @@ function ensureTooltip(svg: SVGSVGElement) {
 
 /**
  * Adds a native hover tooltip to rendered SVG icons that do not already provide one.
- * Explicit domain labels win; otherwise the nearest labelled control or Lucide icon name
- * provides the fallback text. This keeps icon-only UI understandable across the site.
+ * Explicit domain labels win; otherwise the associated interactive control or Lucide icon name
+ * provides the fallback text. Structural container labels are deliberately ignored so an icon
+ * cannot inherit an unrelated nav/region label.
  */
 export function SitewideIconTooltips() {
   useEffect(() => {
