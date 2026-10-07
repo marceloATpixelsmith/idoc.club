@@ -7,6 +7,7 @@ const resources = readFileSync('components/admin/resource-data-table.tsx', 'utf8
 const registrations = readFileSync('app/(dashboard)/admin/seminars/registrations/registrations-table.tsx', 'utf8');
 const registrationForm = readFileSync('app/(dashboard)/admin/seminars/registrations/registration-detail-sheet.tsx', 'utf8');
 const support = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
+const professionalRoleIcons = readFileSync('components/membership/professional-role-icons.tsx', 'utf8');
 
 test('record text in admin tables is not used as the edit/open link', () => {
   assert.doesNotMatch(members, /className="font-medium uppercase underline"/);
@@ -51,8 +52,9 @@ test('active admin role icons appear in gold directly after the member name', ()
 
 test('Steward uses a horseshoe icon rather than the Super Admin shield', () => {
   assert.match(members, /steward: \{ icon: HorseshoeIcon, label: 'STEWARD' \}/);
-  assert.match(members, /const HorseshoeIcon: LucideIcon = forwardRef/);
-  assert.match(members, /<path d="M6 3v8a6 6 0 0 0 12 0V3" \/>/);
+  assert.match(members, /import \{ HorseshoeIcon \} from '@\/components\/membership\/professional-role-icons'/);
+  assert.match(professionalRoleIcons, /export function HorseshoeIcon/);
+  assert.match(professionalRoleIcons, /<path d="M5 3v8a7 7 0 0 0 14 0V3h-4v8a3 3 0 0 1-6 0V3H5Z" \/>/);
   assert.match(members, /super_admin: \{ icon: Shield, label: 'SUPERADMIN' \}/);
   assert.match(members, /row\.original\.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" \/>/);
 });
