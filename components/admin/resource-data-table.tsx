@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Eye, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
@@ -171,9 +171,6 @@ export function ResourceDataTable({
               }}
             ><Pencil aria-hidden="true" /></Link>
           </Button>
-          {tableType !== 'seminars' && <Button asChild aria-label="Preview" size="icon-sm" title="Preview" variant="ghost">
-            <Link href={`${config.path}/${row.original.id}/preview`} onClick={(event) => openTableAction(event, `${config.path}/${row.original.id}/preview`)}><Eye aria-hidden="true" /></Link>
-          </Button>}
           {tableType === 'seminars' && <>
             <Button asChild aria-label="Registrations" size="icon-sm" title="View registrations" variant="ghost">
               <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`} onClick={(event) => openTableAction(event, `/admin/seminars/registrations?seminarId=${row.original.id}`)}><ClipboardList aria-hidden="true" /></Link>

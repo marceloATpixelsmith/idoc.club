@@ -11,6 +11,7 @@ import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CountryFlag } from '@/components/ui/country-flag';
 import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { countryNameForCode, COUNTRY_OPTIONS } from '@/lib/membership/countries';
@@ -102,9 +103,9 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       },
       {
         id: 'federation', accessorKey: 'federation', enableColumnFilter: true,
-        header: header('Federation'),
-        meta: { label: 'Federation', options: FEDERATION_OPTIONS, variant: 'multiSelect' },
-        cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—',
+        header: header('National Federation'),
+        meta: { label: 'National Federation', options: FEDERATION_OPTIONS, variant: 'multiSelect' },
+        cell: ({ row }) => row.original.federation ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.federation)}<CountryFlag code={row.original.federation} /></span> : '—',
       },
       {
         id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },

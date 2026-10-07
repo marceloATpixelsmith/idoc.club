@@ -1,9 +1,12 @@
+import Link from 'next/link';
+import { Eye } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
 import { ArticleContentEditor } from '@/components/news/article-content-editor';
 import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field';
 import { NewsForm } from '@/components/news/news-form';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getAdminArticle, STATUS_LABELS } from '@/lib/news/articles';
@@ -82,6 +85,11 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
   return (
     <AdminFormDrawer closeHref="/admin/news" title="News / Blog">
       <div className="space-y-4 px-5 py-6 lg:px-8">
+        <div className="flex justify-end">
+          <Button asChild variant="secondary">
+            <Link href={`/admin/news/${articleId}/preview`}><Eye aria-hidden="true" />Preview</Link>
+          </Button>
+        </div>
         <NewsForm action={updateNewsArticle} submitLabel="Save changes">
           <input name="id" type="hidden" value={articleId} />
           <input name="existingThumbnailUrl" type="hidden" value={article.thumbnail_url ? String(article.thumbnail_url) : ''} />

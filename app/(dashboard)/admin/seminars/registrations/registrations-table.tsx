@@ -33,6 +33,7 @@ type AdminRegistrationRow = {
 const OPTIONAL_COLUMNS = ['registrant', 'seminar', 'status', 'registered'] as const;
 const LABELS: Record<string, string> = { registered: 'Registered', registrant: 'Registrant', seminar: 'Seminar', status: 'Payment Status' };
 const PAYMENT_STATUS_OPTIONS = PAYMENT_STATUSES.map((value) => ({ label: PAYMENT_STATUS_LABELS[value], value }));
+const REGISTRANT_TYPE_OPTIONS = [{ label: 'Members', value: 'member' }, { label: 'Guests', value: 'guest' }];
 function header(id: string) { return ({ column }: HeaderContext<AdminRegistrationRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 function filterToken(columnFilters: ColumnFiltersState, id: string): string | undefined {
   const value = columnFilters.find((filter) => filter.id === id)?.value;
@@ -43,7 +44,7 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 export function RegistrationsTable({
   filters, initialColumnOrder, initialVisibleColumns, rows, seminarOptions, total,
 }: {
-  filters: { from?: string; page: number; pageSize: number; paymentStatus?: string; q?: string; seminarId?: string; sort?: string; to?: string };
+  filters: { from?: string; page: number; pageSize: number; paymentStatus?: string; q?: string; registrantType?: string; seminarId?: string; sort?: string; to?: string };
   initialColumnOrder?: string; initialVisibleColumns?: string[]; rows: AdminRegistrationRow[];
   seminarOptions: { label: string; value: string }[]; total: number;
 }) {
@@ -59,13 +60,15 @@ export function RegistrationsTable({
     startTransition(() => router.push(href));
   }, [router]);
   const initialVisibility = useMemo(() => {
-    if (!initialVisibleColumns) return {};
-    return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, initialVisibleColumns.includes(column)]));
+    const visibility: Record<string, boolean> = { registrantType: false };
+    if (!initialVisibleColumns) return visibility;
+    return { ...visibility, ...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, initialVisibleColumns.includes(column)])) };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
   const columns = useMemo<ColumnDef<AdminRegistrationRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all registrations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.registrant_name}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
     { id: 'registrant', accessorFn: (row) => `${row.registrant_name} ${row.registrant_email}`, header: header('registrant'), meta: { label: 'Registrant' }, cell: ({ row }) => <div>{row.original.registrant_name}{row.original.is_guest ? <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Guest</span> : null}<span className="block text-sm text-muted-foreground">{row.original.registrant_email}</span></div> },
+    { id: 'registrantType', accessorFn: (row) => row.is_guest ? 'guest' : 'member', enableColumnFilter: true, enableHiding: false, header: () => null, meta: { label: 'Registrant Type', options: REGISTRANT_TYPE_OPTIONS, variant: 'multiSelect' }, cell: () => null },
     { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
     { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <div><span className="inline-flex items-center gap-2 font-medium"><PaymentStatusIcon status={row.original.payment_status} />{registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus).toUpperCase()}</span><span className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><PaymentMethodIcon method={row.original.payment_method_canonical_id} />{paymentMethodLabel(row.original.payment_method_canonical_id)}</span></div> },
     { id: 'registered', accessorKey: 'registered_at', header: header('registered'), meta: { label: 'Registered' }, cell: ({ row }) => new Date(row.original.registered_at).toLocaleString() },
@@ -92,6 +95,7 @@ export function RegistrationsTable({
   const initialColumnFilters = useMemo(() => [
     { id: 'seminar', value: filters.seminarId ? filters.seminarId.split(',') : [] },
     { id: 'status', value: filters.paymentStatus ? filters.paymentStatus.split(',') : [] },
+    { id: 'registrantType', value: filters.registrantType ? filters.registrantType.split(',') : [] },
   ].filter((filter) => filter.value.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
@@ -108,6 +112,7 @@ export function RegistrationsTable({
       pageSize: state.pagination.pageSize,
       paymentStatus: filterToken(state.columnFilters, 'status'),
       q: effectiveSearch || undefined,
+      registrantType: filterToken(state.columnFilters, 'registrantType'),
       seminarId: filterToken(state.columnFilters, 'seminar'),
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       to: effectiveTo,
@@ -162,6 +167,8 @@ export function RegistrationsTable({
     if (seminarId) params.set('seminarId', seminarId);
     const paymentStatus = filterToken(table.getState().columnFilters, 'status');
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
+    const registrantType = filterToken(table.getState().columnFilters, 'registrantType');
+    if (registrantType) params.set('registrantType', registrantType);
     return params;
   }
   const exportParams = currentExportParams();

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
+import { BoardPhotoField } from '@/components/members/board-photo-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -25,6 +26,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
   const steward = member.roles.find((role) => role.roleType === 'steward');
   const initial = judge && steward ? 'judge_steward' : (judge?.roleType ?? steward?.roleType ?? 'veterinarian');
   const [classification, setClassification] = useState(initial);
+  const [isBoardMember, setIsBoardMember] = useState(Boolean(member.profile.isBoardMember));
   const [state, action, pending] = useActionState(saveMemberProfileByAdminForm, {} as { error?: string; success?: string });
   const official = judge ?? steward;
   useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
@@ -79,6 +81,36 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           </CardContent>
         </Card>
       )}
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Board</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="inline-flex items-center gap-3">
+            <input
+              checked={isBoardMember}
+              className="peer sr-only"
+              name="isBoardMember"
+              onChange={(event) => setIsBoardMember(event.currentTarget.checked)}
+              type="checkbox"
+              value="1"
+            />
+            <span className="relative h-6 w-11 rounded-full border border-input bg-muted transition-colors peer-checked:bg-gold after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-foreground after:transition-transform peer-checked:after:translate-x-5 peer-checked:after:bg-background" />
+            <span className="text-sm font-medium">Board Member</span>
+          </label>
+          <input name="existingBoardPhotoUrl" type="hidden" value={String(member.profile.boardPhotoUrl ?? '')} />
+          <div className={isBoardMember ? 'grid gap-4 md:grid-cols-2' : 'hidden'}>
+            <Field label="Board Title" maxLength={120} name="boardTitle" required={isBoardMember} value={String(member.profile.boardTitle ?? '')} />
+            <Field label="Board Subtitle (optional)" maxLength={160} name="boardSubtitle" value={String(member.profile.boardSubtitle ?? '')} />
+            <div className="md:col-span-2">
+              <Field label="Facebook URL (optional)" maxLength={500} name="boardFacebookUrl" value={String(member.profile.boardFacebookUrl ?? '')} />
+            </div>
+            <div className="md:col-span-2">
+              <BoardPhotoField initialImageUrl={member.profile.boardPhotoUrl ? String(member.profile.boardPhotoUrl) : null} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
     <div className="space-y-1.5">
       <Label htmlFor="admin-profile-reason">Administrative reason (required)</Label>

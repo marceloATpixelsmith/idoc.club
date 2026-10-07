@@ -477,6 +477,20 @@
       "when": 1791327600000,
       "tag": "0067_news_legacy_thumbnail_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791378000000,
+      "tag": "0068_support_other_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1791378600000,
+      "tag": "0069_board_member_profile_fields",
+      "breakpoints": true
     }
   ]
 }
