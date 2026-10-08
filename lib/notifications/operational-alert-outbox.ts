@@ -3,6 +3,8 @@ import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/
 
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { dispatchQueuedEmailAfterResponse } from './immediate-dispatch';
+import { processOperationalAlertBatch } from './operational-alert-delivery';
 
 // AUTH-OPERATIONS-006: a Codex review caught that the rate-limit correlation alert's email send was
 // awaited directly inside checkRateLimit -- the authentication-adjacent hot path every sign-in,
@@ -30,5 +32,6 @@ export async function enqueueOperationalAlert(input: {
     on conflict (dedupe_key) do nothing
     returning id
   `);
+  if (rows[0]) dispatchQueuedEmailAfterResponse(() => processOperationalAlertBatch(1));
   return Boolean(rows[0]);
 }
