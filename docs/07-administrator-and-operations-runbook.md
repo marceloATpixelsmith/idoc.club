@@ -1018,3 +1018,11 @@ The actionable admin tables currently covered are Members, News/Blog, Seminars, 
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.
+
+## PostgreSQL connection capacity on Vercel
+
+The shared Drizzle/Postgres.js client in `lib/db/drizzle.ts` is used by both SQL templates and ORM queries. Each active Vercel instance now caps its direct PostgreSQL pool to two connections, closes idle connections after 20 seconds, rotates connections after five minutes, and uses a 10-second connection-establishment timeout. Connections carry the PostgreSQL `application_name=idoc-club` label for attribution in Render logs and `pg_stat_activity`. No new environment variables are required.
+
+These are per-instance limits, **not** a global concurrency limit: preview deployments and Vercel cron invocations may each allocate their own pool. The application has scheduled cron jobs even when no one is browsing staging. Check total connections by `application_name` and source address before attributing them to one app. This change limits connection pressure but does not replace an adequate database memory allocation, Render incident analysis, or a global external connection pool.
+
+Render incidents on October 6 and 8, 2026 showed recurring unclean PostgreSQL shutdowns and recovery coinciding with Vercel `CONNECTION_CLOSED` errors. The shared Render database was on a 256 MB plan, with 100 configured max connections and approximately 72 active connections near one shutdown. Render metrics showed memory close to the 256 MB limit. Host-level out-of-memory termination remains to be confirmed by Render Support. Do not blindly retry non-idempotent writes after a lost connection because their commit status may be unknown.
