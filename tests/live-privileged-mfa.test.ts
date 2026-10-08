@@ -50,7 +50,7 @@ test('recovery authorizes only purpose-bound replacement and acknowledgement pre
   const finalization = source('lib/auth/mfa/replacement-finalization.ts');
   assert.match(actions, /consumeRecoveryCodeAndBeginReplacement\(/);
   assert.match(recoverySecurity, /client\.begin\(/);
-  assert.match(recoverySecurity, /update idoc\.mfa_recovery_codes set consumed_at=/);
+  assert.match(recoverySecurity, /update mfa_recovery_codes set consumed_at=/);
   assert.match(recoverySecurity, /auth\.mfa\.recovery_code\.used/);
   assert.match(recoverySecurity, /auth_security_notification_outbox/);
   assert.match(actions, /purpose: 'authenticator-replacement'/);
@@ -64,9 +64,9 @@ test('recovery authorizes only purpose-bound replacement and acknowledgement pre
   assert.ok(actions.indexOf("stage: 'recovery-ack'") < actions.indexOf('await finalizeAuthenticatorReplacement('));
   assert.match(finalization, /client\.begin\(/);
   assert.match(finalization, /status='replaced'/);
-  assert.match(finalization, /delete from idoc\.mfa_recovery_codes/);
+  assert.match(finalization, /delete from mfa_recovery_codes/);
   assert.match(finalization, /session_version=session_version\+1/);
-  assert.match(finalization, /update idoc\.auth_sessions/);
+  assert.match(finalization, /update auth_sessions/);
 });
 
 test('recovery continuation is authenticated, short-lived, and contains no factor plaintext', () => {
