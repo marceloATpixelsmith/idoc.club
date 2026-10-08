@@ -30,6 +30,20 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
   const registrationId = Number(registrationIdValue);
   if (!Number.isInteger(registrationId) || registrationId <= 0) throw new SeminarRegistrationError('Registration not found.');
   const stripe = (testStripeClient ?? getStripeServerClient()) as SeminarCheckoutStripeClient;
+  //RESOLVE AUTHORIZATION AND STRIPE CUSTOMER OUTSIDE THE ROW-LOCKING TRANSACTION.
+  //THESE HELPERS USE THE SHARED DATABASE CLIENT AND MUST NOT WAIT FOR A SECOND
+  //CONNECTION WHILE THE TRANSACTION IS HOLDING A POOL CONNECTION.
+  const [identity] = await client<{ profile_id: number | null; user_id: number | null }[]>`select r.profile_id,p.user_id
+    from idoc.seminar_registrations r left join idoc.profiles p on p.id=r.profile_id
+    where r.id=${registrationId}`;
+  if (!identity) throw new SeminarRegistrationError('Registration not found.');
+  let memberCustomer: { customerId: string; profileId: number; userId: number } | null = null;
+  if (identity.profile_id !== null) {
+    const actor = await requireAccountAccess('member');
+    if (identity.user_id !== actor.id) throw new SeminarRegistrationError('Registration not found.');
+    const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, identity.profile_id);
+    memberCustomer = { customerId, profileId: identity.profile_id, userId: actor.id };
+  }
   return client.begin(async (sql) => {
     const [row] = await sql<{
       checkout_status: string | null; email: string | null; guest_email: string | null; payment_method_canonical_id: string; payment_status: string;
@@ -44,10 +58,14 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
     let customerId: string | undefined;
     let email: string | null = row.guest_email;
     if (row.profile_id !== null) {
-      const actor = await requireAccountAccess('member');
-      if (row.user_id !== actor.id) throw new SeminarRegistrationError('Registration not found.');
+      //RECHECK THE LOCKED ROW IN CASE IT CHANGED AFTER PREFLIGHT AUTHORIZATION.
+      if (!memberCustomer || row.user_id !== memberCustomer.userId || row.profile_id !== memberCustomer.profileId) {
+        throw new SeminarRegistrationError('Registration not found.');
+      }
       email = row.email;
-      customerId = await resolveOrCreateBillingAccount(stripe, actor.id, row.profile_id);
+      customerId = memberCustomer.customerId;
+    } else if (memberCustomer) {
+      throw new SeminarRegistrationError('Registration not found.');
     }
     if (row.registration_status !== 'registered') throw new SeminarRegistrationError('This registration is not active.');
     if (row.payment_method_canonical_id !== 'online_stripe') throw new SeminarRegistrationError('This registration is not payable through Stripe.');
