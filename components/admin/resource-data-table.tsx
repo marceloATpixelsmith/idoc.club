@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, LoaderCircle, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
@@ -95,13 +95,19 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
   const router = useRouter();
   const [value, setValue] = useState(status);
   const [pending, startTransition] = useTransition();
+  const [savingTarget, setSavingTarget] = useState<string | null>(null);
+  const saving = pending || savingTarget !== null;
+  useEffect(() => {
+    if (savingTarget !== null && status === savingTarget) setSavingTarget(null);
+  }, [savingTarget, status]);
   const Icon = statusIcon(tableType, value);
   const options = CONFIG[tableType].statuses;
 
   function changeStatus(next: string) {
-    if (next === value || pending) return;
+    if (next === value || saving) return;
     const previous = value;
     setValue(next);
+    setSavingTarget(next);
     startTransition(async () => {
       const formData = new FormData();
       formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
@@ -113,26 +119,28 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
         const result = await updateAdminTableInlineField({}, formData);
         if (result.error) {
           setValue(previous);
+          setSavingTarget(null);
           window.alert(result.error);
           return;
         }
         router.refresh();
       } catch {
         setValue(previous);
+        setSavingTarget(null);
         window.alert('Unable to save this status change. Please try again.');
       }
     });
   }
 
   return (
-    <div className="relative inline-flex h-8 items-center gap-2 font-medium">
+    <div aria-busy={saving || undefined} className="relative inline-flex h-8 items-center gap-2 font-medium">
       <span className="flex size-4 shrink-0 items-center justify-center self-center">
-        <Icon aria-hidden className="size-4" />
+        {saving ? <LoaderCircle aria-label="Updating status" className="size-4 animate-spin text-gold" /> : <Icon aria-hidden className="size-4" />}
       </span>
       <select
         aria-label={`Change ${tableType === 'seminars' ? 'seminar' : 'News/Blog'} status`}
         className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-0 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
-        disabled={pending}
+        disabled={saving}
         onChange={(event) => changeStatus(event.target.value)}
         value={value}
       >
@@ -155,6 +163,14 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   const initial = access?.length ? access : ['public'];
   const [selected, setSelected] = useState<string[]>(initial);
   const [pending, startTransition] = useTransition();
+  const [savingTarget, setSavingTarget] = useState<string[] | null>(null);
+  const saving = pending || savingTarget !== null;
+  const actualAccess = access?.length ? access : ['public'];
+  useEffect(() => {
+    if (savingTarget !== null && savingTarget.length === actualAccess.length && savingTarget.every((item) => actualAccess.includes(item))) {
+      setSavingTarget(null);
+    }
+  }, [access, savingTarget]);
 
   function nextAudience(value: string, checked: boolean): string[] {
     if (value === 'public' || value === 'members') return checked ? [value] : ['public'];
@@ -164,10 +180,11 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   }
 
   function updateAudience(value: string, checked: boolean) {
-    if (pending) return;
+    if (saving) return;
     const previous = selected;
     const next = nextAudience(value, checked);
     setSelected(next);
+    setSavingTarget(next);
     startTransition(async () => {
       const formData = new FormData();
       formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
@@ -179,12 +196,14 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
         const result = await updateAdminTableInlineField({}, formData);
         if (result.error) {
           setSelected(previous);
+          setSavingTarget(null);
           window.alert(result.error);
           return;
         }
         router.refresh();
       } catch {
         setSelected(previous);
+        setSavingTarget(null);
         window.alert('Unable to save this access change. Please try again.');
       }
     });
@@ -193,10 +212,11 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button aria-label="Edit News/Blog access" className="h-auto min-h-0 w-full justify-start p-0 hover:bg-transparent" disabled={pending} variant="ghost">
+        <Button aria-busy={saving || undefined} aria-label="Edit News/Blog access" className="h-auto min-h-0 w-full justify-start gap-2 p-0 hover:bg-transparent" disabled={saving} variant="ghost">
           <span className="flex w-full flex-col items-start gap-1.5 whitespace-normal">
             {selected.map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}
           </span>
+          {saving && <LoaderCircle aria-label="Updating access" className="size-4 shrink-0 animate-spin text-gold" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-3">
@@ -205,7 +225,7 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
             <Label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 font-normal hover:bg-accent" key={option.value}>
               <Checkbox
                 checked={selected.includes(option.value)}
-                disabled={pending}
+                disabled={saving}
                 onCheckedChange={(checked) => updateAudience(option.value, checked === true)}
               />
               {option.label}
