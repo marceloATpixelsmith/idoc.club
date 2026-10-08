@@ -30,8 +30,8 @@ export async function consumeRecoveryCodeAndBeginReplacement(input: {
     const [existing] = await tx<Record<string, unknown>[]>`
       select e.transaction_id,e.factor_id,e.user_id,e.application_id,e.purpose,e.expires_at,e.consumed_at,
         f.status as factor_status
-      from idoc.mfa_enrollment_transactions e
-      join idoc.mfa_factors f on f.factor_id=e.factor_id and f.user_id=e.user_id and f.application_id=e.application_id
+      from mfa_enrollment_transactions e
+      join mfa_factors f on f.factor_id=e.factor_id and f.user_id=e.user_id and f.application_id=e.application_id
       where e.transaction_id=${input.enrollment.transactionId}
       for update of e,f`;
     if (existing) {
@@ -44,29 +44,29 @@ export async function consumeRecoveryCodeAndBeginReplacement(input: {
         transactionId: String(existing.transaction_id) };
     }
     const rows = await tx<{ recovery_code_id: string }[]>`
-      update idoc.mfa_recovery_codes set consumed_at=${timestamp(nowMs)}
-      where recovery_code_id=(select recovery_code_id from idoc.mfa_recovery_codes
+      update mfa_recovery_codes set consumed_at=${timestamp(nowMs)}
+      where recovery_code_id=(select recovery_code_id from mfa_recovery_codes
         where user_id=${input.userId} and application_id=${input.applicationId}
           and digest in ${tx(input.digests)} and consumed_at is null
         limit 1 for update skip locked)
       returning recovery_code_id`;
     if (rows.length !== 1) return { status: 'invalid' as const };
-    await tx`insert into idoc.mfa_factors
+    await tx`insert into mfa_factors
       (factor_id,user_id,application_id,status,encrypted_secret,encryption_key_id,last_accepted_counter,
        activated_at,replaced_by_factor_id,created_at,updated_at)
       values (${input.factor.factorId},${input.userId},${input.factor.applicationId},${input.factor.status},
         ${input.factor.encryptedSecret},${input.factor.keyId},${input.factor.lastAcceptedCounter},
         ${input.factor.activatedAtMs === null ? null : timestamp(input.factor.activatedAtMs)},
         ${input.factor.replacedByFactorId},${timestamp(input.factor.createdAtMs)},${timestamp(input.factor.createdAtMs)})`;
-    await tx`insert into idoc.mfa_enrollment_transactions
+    await tx`insert into mfa_enrollment_transactions
       (transaction_id,user_id,application_id,factor_id,purpose,expires_at,consumed_at,created_at)
       values (${input.enrollment.transactionId},${input.userId},${input.enrollment.applicationId},
         ${input.enrollment.factorId},${input.enrollment.purpose},${timestamp(input.enrollment.expiresAtMs)},
         ${input.enrollment.consumedAtMs === null ? null : timestamp(input.enrollment.consumedAtMs)},
         ${timestamp(input.enrollment.createdAtMs)})`;
-    await tx`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+    await tx`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${input.userId},'auth.mfa.recovery_code.used','user',${String(input.userId)},'authenticator-replacement')`;
-    await tx`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+    await tx`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
       values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'recovery_code_used',${input.recipientEmail},${input.dedupeKey})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`;
     return { factorId: input.factor.factorId, status: 'ready' as const,
