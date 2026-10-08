@@ -13,7 +13,7 @@ import { processOperationalAlertBatch } from './operational-alert-delivery';
 // that decouples "detect the sustained pattern and durably record that an alert is owed" (fast: one
 // indexed insert, still on the hot path but bounded and already-paid-for by the same database this
 // path already talks to) from "actually deliver the email" (moved off the hot path entirely, onto
-// the same lease-and-retry worker pattern already proven for idoc.auth_security_notification_outbox
+// the same lease-and-retry worker pattern already proven for auth_security_notification_outbox
 // -- see operational-alert-delivery.ts).
 
 export type OperationalAlertKind = 'incident_response_action_taken' | 'rate_limit_correlation_alert';
@@ -27,7 +27,7 @@ export async function enqueueOperationalAlert(input: {
   subject: string;
 }): Promise<boolean> {
   const rows = await db.execute<{ id: number }>(sql`
-    insert into idoc.operational_alert_outbox(dead_lettered_at,last_error_code,kind,subject,body_html,dedupe_key)
+    insert into operational_alert_outbox(dead_lettered_at,last_error_code,kind,subject,body_html,dedupe_key)
     values (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.kind},${input.subject},${input.bodyHtml},${input.dedupeKey})
     on conflict (dedupe_key) do nothing
     returning id
