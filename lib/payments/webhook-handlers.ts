@@ -262,14 +262,14 @@ async function handleGuestSeminarCheckoutSessionCompleted(tx: Transaction, deliv
   const guestConfirmationKind = session.metadata?.deliveryOwner === 'staging'
     ? 'seminar.staging_registration_created'
     : 'seminar.registration_created';
-  await tx.execute(sql`insert into idoc.notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+  await tx.execute(sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
     (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,null,${guestConfirmationKind},${JSON.stringify({ amountCents: expectedAmount, firstName, paymentConfirmed: true, paymentMethod: 'online_stripe',
       registrationId: created.id, seminarId, to: email })}::jsonb,${`seminar.registration_created:guest:${created.id}:stripe-paid`})
     on conflict (dedupe_key) do nothing`);
 }
 
 // Seminar payments are classified separately from membership billing and never touch membership
-// entitlement (docs/02 §12) -- this only ever updates idoc.seminar_registrations, distinguished
+// entitlement (docs/02 §12) -- this only ever updates seminar_registrations, distinguished
 // from a membership checkout entirely by the `kind` metadata createSeminarCheckoutSession sets, so
 // it can never be confused with the membership one-time-fee path below even if amounts coincide.
 async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredSession: Stripe.Checkout.Session, stripe: WebhookStripeClient) {
