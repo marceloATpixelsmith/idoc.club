@@ -1026,3 +1026,12 @@ The shared Drizzle/Postgres.js client in `lib/db/drizzle.ts` is used by both SQL
 These are per-instance limits, **not** a global concurrency limit: preview deployments and Vercel cron invocations may each allocate their own pool. The application has scheduled cron jobs even when no one is browsing staging. Check total connections by `application_name` and source address before attributing them to one app. This change limits connection pressure but does not replace an adequate database memory allocation, Render incident analysis, or a global external connection pool.
 
 Render incidents on October 6 and 8, 2026 showed recurring unclean PostgreSQL shutdowns and recovery coinciding with Vercel `CONNECTION_CLOSED` errors. The shared Render database was on a 256 MB plan, with 100 configured max connections and approximately 72 active connections near one shutdown. Render metrics showed memory close to the 256 MB limit. Host-level out-of-memory termination remains to be confirmed by Render Support. Do not blindly retry non-idempotent writes after a lost connection because their commit status may be unknown.
+
+
+## Event-triggered account email delivery
+
+Password reset and migration activation links are inserted into their durable outbox in the same database transaction as their token. Immediately after commit, a Next.js `after()` callback attempts delivery outside the request response critical path. Security notices and operational alerts similarly trigger their existing leased workers after their outbox insert commits. Six-digit signup, sign-in, and password-reset verification codes continue to be delivered synchronously because they are short-lived.
+
+The account-delivery cron runs hourly as a **durability and retry safety net** rather than polling every five minutes. It also continues to process Stripe customer-email synchronization. Workers preserve claim leases, deduplication, retry/backoff, communication holds, and dead-lettering. A Vercel function termination or provider failure before/while an after-response callback executes can delay delivery until an hourly sweep; do not claim unconditional instant email delivery. The schedule is UTC. No new environment variables are required.
+
+Diagnose delayed messages by checking the applicable outbox row's availability time, lease, attempt count and error code, then review Sentry for worker exceptions. Do not bypass the communication-and-billing launch hold in staging or during legacy member import.
