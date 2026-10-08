@@ -1,36 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/account-delivery",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/renewal-notice-scan",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/renewal-notice-delivery",
-      "schedule": "15 6,14,22 * * *"
-    },
-    {
-      "path": "/api/cron/reconciliation-scan",
-      "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/seminar-cancellation-resolution",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/data-retention-purge",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/clock-skew-check",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/news-scheduled-publish",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "crons": []
 }
