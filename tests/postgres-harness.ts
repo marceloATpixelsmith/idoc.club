@@ -9,7 +9,7 @@ import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 
 export const testUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
-export const sql = postgres(testUrl, { max: 10, onnotice: () => {} });
+export const sql = postgres(testUrl, { max: 10, onnotice: () => {}, connection: { search_path: 'idoc' } });
 export const database = drizzle(sql);
 const migrationsFolder = new URL('../lib/db/migrations', import.meta.url).pathname;
 
