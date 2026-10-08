@@ -49,7 +49,7 @@ export default async function AdminReconciliationPage() {
         dateColumn="detected"
         empty="No findings from the last run."
         rows={findings.map((finding) => ({
-          id: String(finding.id), category: finding.kind === 'seminar_payment_conflict' || (['refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) && (finding.details as { seminarRegistrationId?: unknown } | null)?.seminarRegistrationId) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
+          id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
           summary: finding.summary, member: finding.profileId ? 'View member' : '—',
           link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
           detected: finding.createdAt.toISOString(),
