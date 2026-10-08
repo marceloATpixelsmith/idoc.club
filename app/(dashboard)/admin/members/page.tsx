@@ -95,8 +95,8 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   // tab instead of a separate route (see components/admin-navigation.tsx: that nav item just told
   // admins to go back to Members and search, so it's gone).
   const stripePayments = selected ? await client<{ amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string }[]>`select p.id,p.source,p.amount_cents,p.currency,p.paid_at,
-    (select status from idoc.payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
-    from idoc.payments p where p.profile_id=${selected.profile.id} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : [];
+    (select status from payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
+    from payments p where p.profile_id=${selected.profile.id} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : [];
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-3xl font-semibold text-gold">Members</h1>
