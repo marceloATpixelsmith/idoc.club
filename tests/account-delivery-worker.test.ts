@@ -54,7 +54,7 @@ test('failure evidence and public responses contain no sensitive values', async 
 test('Vercel Cron configuration matches the protected route and its outbox lease duration', () => {
   const configuration = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const accountDelivery = configuration.crons.find(({ path }: { path: string }) => path === '/api/cron/account-delivery');
-  assert.deepEqual(accountDelivery, { path: '/api/cron/account-delivery', schedule: '*/15 * * * *' });
+  assert.equal(accountDelivery, undefined, 'QStash replaces the Vercel polling schedule');
   assert.ok(readFileSync(new URL('../app/api/cron/account-delivery/route.ts', import.meta.url), 'utf8').includes('handleAccountDeliveryCron'));
 
   const minutes = Number(/^\*\/(\d+) \* \* \* \*$/.exec(accountDelivery.schedule)?.[1]);
