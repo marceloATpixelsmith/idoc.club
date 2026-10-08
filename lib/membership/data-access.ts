@@ -101,7 +101,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   const actor = await authenticatedActor('onboarding');
   const result = await db.transaction(async (tx) => {
     const [account] = await tx.execute<{ account_state: string; email: string }>(sql`
-      select account_state, email from idoc.users where id = ${actor.id} for update
+      select account_state, email from users where id = ${actor.id} for update
     `);
     if (!account || account.account_state !== 'onboarding') {
       throw new Error('This account is not eligible for onboarding.');
