@@ -59,21 +59,32 @@ export type TablePreferenceState = Record<string, string | string[] | number | u
 
 function normalizeLegacyNewsPreferences(value: Record<string, unknown>): Record<string, unknown> {
   const order = typeof value.columnOrder === 'string' ? value.columnOrder.split(',') : [];
-  if (!order.includes('subtitle')) return value;
-
-  const normalizedOrder = order.filter((id) => id !== 'subtitle' && id !== 'access');
-  const statusIndex = normalizedOrder.indexOf('status');
-  normalizedOrder.splice(statusIndex >= 0 ? statusIndex + 1 : normalizedOrder.length, 0, 'access');
-
   const savedColumns = Array.isArray(value.columns)
     ? value.columns.filter((item): item is string => typeof item === 'string' && item !== 'subtitle')
     : undefined;
-  const normalizedColumns = savedColumns && !savedColumns.includes('access') ? [...savedColumns, 'access'] : savedColumns;
+
+  // Keep Article Type visible even for saved News/Blog views created before the column existed.
+  // Saved column order can also omit Type entirely; insert it immediately before Status without
+  // reordering the administrator's remaining columns.
+  const normalizedOrder = order.filter((id) => id !== 'subtitle' && id !== 'type');
+  if (order.length > 0) {
+    const statusIndex = normalizedOrder.indexOf('status');
+    normalizedOrder.splice(statusIndex >= 0 ? statusIndex : normalizedOrder.length, 0, 'type');
+  }
+
+  // Preserve the original migration of Subtitle to Access when an older view still has Subtitle.
+  if (order.includes('subtitle') && !normalizedOrder.includes('access')) {
+    const statusIndex = normalizedOrder.indexOf('status');
+    normalizedOrder.splice(statusIndex >= 0 ? statusIndex + 1 : normalizedOrder.length, 0, 'access');
+  }
+  const normalizedColumns = savedColumns
+    ? [...new Set([...savedColumns, 'type', ...(order.includes('subtitle') ? ['access'] : [])])]
+    : undefined;
 
   return {
     ...value,
     ...(normalizedColumns ? { columns: normalizedColumns } : {}),
-    columnOrder: normalizedOrder.join(','),
+    ...(order.length > 0 ? { columnOrder: normalizedOrder.join(',') } : {}),
   };
 }
 
