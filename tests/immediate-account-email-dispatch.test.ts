@@ -11,7 +11,7 @@ test('verification codes remain synchronously delivered', () => {
 test('durable account links dispatch only after the transaction commits', () => {
   const source = read('lib/membership/account-recovery.ts');
   const commit = source.indexOf("if (testFailureAt === 'before_commit')");
-  const dispatch = source.indexOf('dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1))');
+  const dispatch = source.indexOf("dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1), 'account-delivery')");
   assert.ok(commit > 0 && dispatch > commit);
 });
 
