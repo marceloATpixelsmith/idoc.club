@@ -139,7 +139,7 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
       </span>
       <select
         aria-label={`Change ${tableType === 'seminars' ? 'seminar' : 'News/Blog'} status`}
-        className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-0 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
+        className="idoc-inline-status-select h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-0 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
         disabled={saving}
         onChange={(event) => changeStatus(event.target.value)}
         value={value}
