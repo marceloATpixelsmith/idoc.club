@@ -109,13 +109,18 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
       formData.set('id', String(id));
       formData.set('field', 'status');
       formData.set('status', next);
-      const result = await updateAdminTableInlineField({}, formData);
-      if (result.error) {
+      try {
+        const result = await updateAdminTableInlineField({}, formData);
+        if (result.error) {
+          setValue(previous);
+          window.alert(result.error);
+          return;
+        }
+        router.refresh();
+      } catch {
         setValue(previous);
-        window.alert(result.error);
-        return;
+        window.alert('Unable to save this status change. Please try again.');
       }
-      router.refresh();
     });
   }
 
@@ -171,13 +176,18 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
       formData.set('id', String(id));
       formData.set('field', 'access');
       next.forEach((item) => formData.append('audience', item));
-      const result = await updateAdminTableInlineField({}, formData);
-      if (result.error) {
+      try {
+        const result = await updateAdminTableInlineField({}, formData);
+        if (result.error) {
+          setSelected(previous);
+          window.alert(result.error);
+          return;
+        }
+        router.refresh();
+      } catch {
         setSelected(previous);
-        window.alert(result.error);
-        return;
+        window.alert('Unable to save this access change. Please try again.');
       }
-      router.refresh();
     });
   }
 
