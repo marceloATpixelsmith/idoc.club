@@ -8,7 +8,7 @@ export default {
   dialect: 'postgresql',
   schemaFilter: [getDatabaseSchemaName()],
   migrations: {
-    schema: process.env.DB_SCHEMA || 'idoc',
+    schema: getDatabaseSchemaName(),
     table: '__drizzle_migrations',
   },
   dbCredentials: {
