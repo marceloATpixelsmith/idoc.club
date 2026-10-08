@@ -114,6 +114,117 @@ export async function bulkArchiveMembers(_state: BulkDeleteState, formData: Form
   }
 }
 export type BulkUpdateState = { error?: string; success?: string };
+export type InlineAdminUpdateState = { error?: string; success?: string };
+
+const INLINE_NEWS_AUDIENCES = ['public', 'members', 'judge', 'steward', 'veterinarian'] as const;
+const INLINE_SEMINAR_STATUSES = ['draft', 'published', 'canceled'] as const;
+
+function normalizeInlineAudience(values: FormDataEntryValue[]): string[] {
+  const audience = [...new Set(values.map(String).map((value) => value.trim()).filter(Boolean))];
+  if (!audience.length || audience.some((value) => !(INLINE_NEWS_AUDIENCES as readonly string[]).includes(value))) {
+    throw new Error('Choose a valid News/Blog access setting.');
+  }
+  if (audience.includes('public')) {
+    if (audience.length !== 1) throw new Error('Public cannot be combined with member-only access.');
+    return ['public'];
+  }
+  if (audience.includes('members')) {
+    if (audience.length !== 1) throw new Error('All logged-in Members cannot be combined with role-specific access.');
+    return ['members'];
+  }
+  return audience;
+}
+
+async function updateInlineNewsRow(formData: FormData, actorId: number) {
+  const id = Number(String(formData.get('id') ?? ''));
+  if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid News/Blog record.');
+  const field = String(formData.get('field') ?? '');
+  if (field !== 'status' && field !== 'access') throw new Error('Unsupported News/Blog inline field.');
+
+  await client.begin(async (sql) => {
+    const [row] = await sql<{ audience: string[]; id: number; publication_date: Date | string; status: string }[]>`select id,status,audience,publication_date from idoc.news_articles where id=${id} for update`;
+    if (!row) throw new Error('News/Blog record not found.');
+
+    if (field === 'access') {
+      const audience = normalizeInlineAudience(formData.getAll('audience'));
+      await sql`update idoc.news_articles set audience=${audience},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+        values(${actorId},'admin.news_article.inline_access_changed','news_article',${String(id)},
+        ${JSON.stringify({ audience: row.audience })}::jsonb,${JSON.stringify({ audience })}::jsonb)`;
+      return;
+    }
+
+    const status = String(formData.get('status') ?? '') as (typeof BULK_NEWS_STATUSES)[number];
+    if (!BULK_NEWS_STATUSES.includes(status)) throw new Error('Choose a valid News/Blog status.');
+    if (status === 'scheduled' && new Date(row.publication_date).getTime() <= Date.now()) {
+      throw new Error('Set a future publication date before scheduling this item.');
+    }
+
+    if (status === 'published') {
+      const publicationDate = new Date(row.publication_date).getTime() > Date.now() ? new Date().toISOString() : new Date(row.publication_date).toISOString();
+      await sql`update idoc.news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+    } else if (status === 'scheduled') {
+      await sql`update idoc.news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+    } else if (status === 'archived') {
+      await sql`update idoc.news_articles set status='archived',archived_at=now(),updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+    } else {
+      await sql`update idoc.news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+    }
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+      values(${actorId},'admin.news_article.inline_status_changed','news_article',${String(id)},
+      ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status })}::jsonb)`;
+  });
+}
+
+async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
+  const id = Number(String(formData.get('id') ?? ''));
+  if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid seminar record.');
+  const status = String(formData.get('status') ?? '') as (typeof INLINE_SEMINAR_STATUSES)[number];
+  if (!INLINE_SEMINAR_STATUSES.includes(status)) throw new Error('Choose a valid seminar status.');
+
+  await client.begin(async (sql) => {
+    const [row] = await sql<{ id: number; status: string }[]>`select id,status from idoc.seminars where id=${id} for update`;
+    if (!row) throw new Error('Seminar not found.');
+    await sql`update idoc.seminars set status=${status},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+
+    let canceledRegistrations = 0;
+    if (row.status !== 'canceled' && status === 'canceled') {
+      const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where seminar_id=${id} and registration_status='registered' returning id`;
+      canceledRegistrations = canceled.length;
+      if (canceledRegistrations) {
+        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actorId},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((entry) => entry.id) })}::jsonb)`;
+      }
+    }
+
+    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+      values(${actorId},'admin.seminar.inline_status_changed','seminar',${String(id)},
+      ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ canceledRegistrations, status })}::jsonb)`;
+  });
+}
+
+export async function updateAdminTableInlineField(_state: InlineAdminUpdateState, formData: FormData): Promise<InlineAdminUpdateState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const table = String(formData.get('table') ?? '');
+    if (table === 'news') {
+      await updateInlineNewsRow(formData, actor.id);
+      for (const refreshPath of ['/admin/news','/news','/blog','/']) revalidatePath(refreshPath);
+      return { success: 'News/Blog row updated.' };
+    }
+    if (table === 'seminars') {
+      if (String(formData.get('field') ?? '') !== 'status') throw new Error('Unsupported seminar inline field.');
+      await updateInlineSeminarStatus(formData, actor.id);
+      revalidatePath('/admin/seminars');
+      revalidatePath('/seminars');
+      return { success: 'Seminar row updated.' };
+    }
+    throw new Error('Unsupported admin table.');
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The row could not be updated.' };
+  }
+}
 
 function selectedIds(formData: FormData, table: 'news' | 'support'): string[] {
   const ids = [...new Set(formData.getAll('id').map(String).map((value) => value.trim()).filter(Boolean))];
