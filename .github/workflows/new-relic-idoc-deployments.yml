@@ -13,7 +13,8 @@ jobs:
     if: >-
       github.event.deployment_status.state == 'success' &&
       (github.event.deployment.environment == 'Production' ||
-       github.event.deployment.environment == 'Preview')
+       github.event.deployment.environment == 'Preview') &&
+      github.event.deployment.ref == 'staging'
     runs-on: ubuntu-latest
     steps:
       - name: Record IDOC change in New Relic
@@ -24,7 +25,7 @@ jobs:
           region: US
           category: Deployment
           type: Basic
-          entitySearch: "name = 'idoc.club' AND type = 'SERVICE'"
+          entitySearch: "name = 'idoc.club' AND type = 'SERVICE' AND accountId = '8600002'"
           version: ${{ github.event.deployment.sha }}
           commit: ${{ github.event.deployment.sha }}
           deeplink: ${{ github.event.deployment_status.target_url }}
