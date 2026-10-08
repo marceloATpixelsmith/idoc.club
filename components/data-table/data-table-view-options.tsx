@@ -60,6 +60,14 @@ export function DataTableViewOptions<TData>({
     const fixed = currentOrder.filter((id) => !movable.includes(id) && id !== 'actions');
     const trailing = currentOrder.includes('actions') && !movable.includes('actions') ? ['actions'] : [];
     const nextOrder = [...fixed, ...movable, ...trailing];
+    // Preserve required adjacency for non-movable columns when another column is dragged.
+    // These constraints are declared by the column, not hard-coded to a specific table.
+    for (const column of table.getAllColumns()) {
+      const before = column.columnDef.meta?.lockedBefore;
+      if (!before || !nextOrder.includes(before) || !nextOrder.includes(column.id)) continue;
+      nextOrder.splice(nextOrder.indexOf(column.id), 1);
+      nextOrder.splice(nextOrder.indexOf(before), 0, column.id);
+    }
     table.setColumnOrder(nextOrder);
   }
 
