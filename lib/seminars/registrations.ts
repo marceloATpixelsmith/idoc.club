@@ -23,7 +23,7 @@ const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
 
 export function isStagingSeminarDirectDelivery(): boolean {
   try {
-    return new URL(baseUrlForServer()).hostname === 'staging.club';
+    return new URL(baseUrlForServer()).hostname === 'staging.idoc.club';
   } catch {
     return false;
   }
