@@ -7,6 +7,7 @@ test('historical migration SQL is rewritten only for quoted database schema iden
     const source = [
         'CREATE SCHEMA IF NOT EXISTS "idoc";',
         'CREATE TABLE "idoc"."users" ("id" serial primary key);',
+        'alter table idoc.news_articles add column example integer;',
         'select \'https://idoc.club/dashboard\';',
         "select set_config('idoc.allow_member_permanent_delete','on',true);",
     ].join('\n');
@@ -15,9 +16,11 @@ test('historical migration SQL is rewritten only for quoted database schema iden
 
     assert.match(rewritten, /CREATE SCHEMA IF NOT EXISTS "idoc_staging"/);
     assert.match(rewritten, /CREATE TABLE "idoc_staging"\."users"/);
+    assert.match(rewritten, /alter table idoc_staging\.news_articles/);
     assert.match(rewritten, /https:\/\/idoc\.club\/dashboard/);
     assert.match(rewritten, /idoc\.allow_member_permanent_delete/);
     assert.doesNotMatch(rewritten, /"idoc"\s*\./);
+    assert.doesNotMatch(rewritten, /alter table idoc\.news_articles/);
 });
 
 test('migration SQL rewriter rejects arbitrary schemas', () =>
