@@ -156,7 +156,7 @@ const ACCESS_OPTIONS = [
   { label: 'Judge', value: 'judge' },
   { label: 'Steward', value: 'steward' },
   { label: 'Veterinarian', value: 'veterinarian' },
-] as const;
+];
 
 function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   const router = useRouter();
