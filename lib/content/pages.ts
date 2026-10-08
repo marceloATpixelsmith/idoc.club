@@ -17,32 +17,32 @@ export async function getVisibleContentPage(value: unknown) {
   const [row] = await client`with actor as(select ${userId}::int user_id),
     facts as(
       select
-        exists(select 1 from idoc.application_roles r,actor where r.user_id=actor.user_id and r.revoked_at is null and r.role in ('administrator','super_admin')) admin,
+        exists(select 1 from application_roles r,actor where r.user_id=actor.user_id and r.revoked_at is null and r.role in ('administrator','super_admin')) admin,
         exists(select 1 from (
           select m.status,m.valid_until,m.grace_ends_on
-          from idoc.profiles pr join idoc.memberships m on m.profile_id=pr.id,actor
+          from profiles pr join memberships m on m.profile_id=pr.id,actor
           where pr.user_id=actor.user_id order by m.valid_until desc limit 1
         ) latest where (
           (latest.status in ('active','complimentary','canceled') and latest.valid_until>=current_date)
           or (latest.status='grace' and coalesce(latest.grace_ends_on,latest.valid_until)>=current_date)
         )) member,
-        array(select distinct role_type from idoc.professional_roles r join idoc.profiles pr on pr.id=r.profile_id,actor
+        array(select distinct role_type from professional_roles r join profiles pr on pr.id=r.profile_id,actor
           where pr.user_id=actor.user_id and r.effective_to is null) roles
     )
     select p.*,
       (select case when p.audience_mode='any' then bool_or(audience='public') else bool_and(audience='public') end
-        from idoc.content_page_audiences where page_id=p.id) is_public
-    from idoc.content_pages p,facts f
+        from content_page_audiences where page_id=p.id) is_public
+    from content_pages p,facts f
     where p.slug=${slug.data} and p.status='published' and (p.publish_at is null or p.publish_at<=now())
       and (
         f.admin
         or (p.audience_mode='any' and exists(
-          select 1 from idoc.content_page_audiences a where a.page_id=p.id and (
+          select 1 from content_page_audiences a where a.page_id=p.id and (
             a.audience='public' or (a.audience='member' and f.member) or (a.audience=any(f.roles) and f.member)
           )
         ))
         or (p.audience_mode='all' and not exists(
-          select 1 from idoc.content_page_audiences a where a.page_id=p.id and not (
+          select 1 from content_page_audiences a where a.page_id=p.id and not (
             a.audience='public' or (a.audience='member' and f.member) or (a.audience=any(f.roles) and f.member)
           )
         ))
