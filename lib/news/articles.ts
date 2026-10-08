@@ -460,13 +460,13 @@ export async function deleteArticles(idValues: unknown[]) {
 }
 
 /** Vercel Cron entry point (see app/api/cron/news-scheduled-publish/route.ts): transitions every
- * 'scheduled' article whose publicationDate has passed to 'published'. Comparisons happen entirely
- * in PostgreSQL via `now()`, the documented single evaluation clock for scheduled publication. */
+ * 'scheduled' article whose UTC publication calendar date has arrived to 'published'.
+ * Any legacy time-of-day is normalized to midnight UTC during the transition. */
 export async function publishScheduledArticles(): Promise<{ published: number }> {
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number }[]>`select id from idoc.news_articles where status='scheduled' and publication_date<=now() for update skip locked`;
+    const rows = await sql<{ id: number }[]>`select id from idoc.news_articles where status='scheduled' and (publication_date at time zone 'UTC')::date <= (now() at time zone 'UTC')::date for update skip locked`;
     for (const row of rows) {
-      await sql`update idoc.news_articles set status='published',published_at=now(),updated_at=now() where id=${row.id}`;
+      await sql`update idoc.news_articles set status='published',publication_date=((publication_date at time zone 'UTC')::date::timestamp at time zone 'UTC'),published_at=now(),updated_at=now() where id=${row.id}`;
       await sql`insert into idoc.audit_log(action,entity_type,entity_id,after_json) values
         ('admin.news_article.published','news_article',${String(row.id)},${JSON.stringify({ trigger: 'scheduled_publish_cron' })}::jsonb)`;
     }
