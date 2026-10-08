@@ -1,0 +1,34 @@
+name: New Relic IDOC deployment tracking
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  record-deployment:
+    # Record successful Vercel deployments only. GitHub deployment events are
+    # emitted by Vercel; a git push is not evidence of a successful deployment.
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      (github.event.deployment.environment == 'Production' ||
+       github.event.deployment.environment == 'Preview')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record IDOC change in New Relic
+        uses: newrelic/deployment-marker-action@v2.6.2
+        with:
+          commandType: changeTrackingCreateEvent
+          apiKey: ${{ secrets.NEW_RELIC_API_KEY }}
+          region: US
+          category: Deployment
+          type: Basic
+          entitySearch: "name = 'idoc.club' AND type = 'SERVICE'"
+          version: ${{ github.event.deployment.sha }}
+          commit: ${{ github.event.deployment.sha }}
+          deeplink: ${{ github.event.deployment_status.target_url }}
+          user: ${{ github.actor }}
+          shortDescription: IDOC Vercel deployment
+          description: "Successful IDOC Vercel deployment (${{ github.event.deployment.environment }})"
+          customAttributes: '{application: "idoc.club", vercelProjectId: "prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4", githubRepository: "marceloATpixelsmith/idoc.club"}'
