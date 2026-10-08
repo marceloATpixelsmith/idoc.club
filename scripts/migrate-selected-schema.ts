@@ -34,32 +34,42 @@ async function rewriteSqlFiles(directory: string, targetSchema: string): Promise
     }
 }
 
-const schemaName = getDatabaseSchemaName();
-const sourceDirectory = path.resolve('lib/db/migrations');
-const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'idoc-drizzle-migrations-'));
-const migrationDirectory = path.join(temporaryRoot, 'migrations');
-const connection = postgres(getPostgresConnectionUrl(), {
-    max: 1,
-    connection: {
-        application_name: 'idoc-club-migrator',
-        search_path: schemaName,
-    },
-});
-
-try
+async function main(): Promise<void>
 {
-    await cp(sourceDirectory, migrationDirectory, { recursive: true });
-    await rewriteSqlFiles(migrationDirectory, schemaName);
-
-    const db = drizzle(connection);
-    await migrate(db, {
-        migrationsFolder: migrationDirectory,
-        migrationsSchema: schemaName,
-        migrationsTable: '__drizzle_migrations',
+    const schemaName = getDatabaseSchemaName();
+    const sourceDirectory = path.resolve('lib/db/migrations');
+    const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'idoc-drizzle-migrations-'));
+    const migrationDirectory = path.join(temporaryRoot, 'migrations');
+    const connection = postgres(getPostgresConnectionUrl(), {
+        max: 1,
+        connection: {
+            application_name: 'idoc-club-migrator',
+            search_path: schemaName,
+        },
     });
+
+    try
+    {
+        await cp(sourceDirectory, migrationDirectory, { recursive: true });
+        await rewriteSqlFiles(migrationDirectory, schemaName);
+
+        const db = drizzle(connection);
+        await migrate(db, {
+            migrationsFolder: migrationDirectory,
+            migrationsSchema: schemaName,
+            migrationsTable: '__drizzle_migrations',
+        });
+    }
+    finally
+    {
+        await connection.end({ timeout: 5 });
+        await rm(temporaryRoot, { force: true, recursive: true });
+    }
+
 }
-finally
+
+main().catch((error: unknown) =>
 {
-    await connection.end({ timeout: 5 });
-    await rm(temporaryRoot, { force: true, recursive: true });
-}
+    console.error(error);
+    process.exitCode = 1;
+});
