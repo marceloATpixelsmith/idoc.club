@@ -50,10 +50,10 @@ const audienceValueSchema = z.enum(NEWS_AUDIENCES);
 const thumbnailUrlSchema = z.string().trim().url().max(2000).nullable();
 const externalUrlSchema = z.string().trim().url().max(2000).refine((value) => ['http:', 'https:'].includes(new URL(value).protocol));
 const idSchema = z.coerce.number().int().positive();
-const isoDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date');
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a publication date in YYYY-MM-DD format.').refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value, 'Invalid date');
 
-/** The admin publication-date field is an HTML `datetime-local` input (labeled "UTC" in the form),
- * which submits a bare `YYYY-MM-DDTHH:mm` string carrying no timezone designator at all. Treating
+/** The admin publication-date field is a date-only input (YYYY-MM-DD) in UTC,
+ * which is normalized to midnight UTC. Treating
  * that string as UTC -- rather than letting `Date.parse` fall back to the server process's local
  * timezone, which is unspecified and must never silently vary the scheduled-publication clock -- is
  * the "one documented timezone" this module evaluates every scheduled transition in. A value that
@@ -246,7 +246,7 @@ function validateFields(input: ArticleInput) {
   const contentHtml = parse(contentSchema, sanitizedContent, 'Article content must be 20,000 characters or fewer.');
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const publicationDateIso = parse(isoDateSchema, input.publicationDate, 'Enter a valid publication date.');
-  const publicationDate = parseAsUtc(publicationDateIso);
+  const publicationDate = parseAsUtc(`${publicationDateIso}T00:00:00.000`);
   if (status === 'scheduled' && publicationDate.getTime() <= Date.now()) {
     throw new NewsValidationError('Scheduled articles require a publication date in the future.');
   }
@@ -388,7 +388,7 @@ export async function scheduleArticle(idValue: unknown, publicationDateValue: un
   const actor = await requireNewsAdministrator();
   const id = parse(idSchema, idValue, 'Article not found.');
   const publicationDateIso = parse(isoDateSchema, publicationDateValue, 'Enter a valid publication date.');
-  const publicationDate = parseAsUtc(publicationDateIso);
+  const publicationDate = parseAsUtc(`${publicationDateIso}T00:00:00.000`);
   if (publicationDate.getTime() <= Date.now()) throw new NewsValidationError('Scheduled articles require a publication date in the future.');
   await client.begin(async (sql) => {
     const [existing] = await sql<{ status: NewsStatus }[]>`select status from idoc.news_articles where id=${id} for update`;
@@ -460,13 +460,13 @@ export async function deleteArticles(idValues: unknown[]) {
 }
 
 /** Vercel Cron entry point (see app/api/cron/news-scheduled-publish/route.ts): transitions every
- * 'scheduled' article whose publicationDate has passed to 'published'. Comparisons happen entirely
- * in PostgreSQL via `now()`, the documented single evaluation clock for scheduled publication. */
+ * 'scheduled' article whose UTC publication calendar date has arrived to 'published'.
+ * Any legacy time-of-day is normalized to midnight UTC during the transition. */
 export async function publishScheduledArticles(): Promise<{ published: number }> {
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number }[]>`select id from idoc.news_articles where status='scheduled' and publication_date<=now() for update skip locked`;
+    const rows = await sql<{ id: number }[]>`select id from idoc.news_articles where status='scheduled' and (publication_date at time zone 'UTC')::date <= (now() at time zone 'UTC')::date for update skip locked`;
     for (const row of rows) {
-      await sql`update idoc.news_articles set status='published',published_at=now(),updated_at=now() where id=${row.id}`;
+      await sql`update idoc.news_articles set status='published',publication_date=((publication_date at time zone 'UTC')::date::timestamp at time zone 'UTC'),published_at=now(),updated_at=now() where id=${row.id}`;
       await sql`insert into idoc.audit_log(action,entity_type,entity_id,after_json) values
         ('admin.news_article.published','news_article',${String(row.id)},${JSON.stringify({ trigger: 'scheduled_publish_cron' })}::jsonb)`;
     }

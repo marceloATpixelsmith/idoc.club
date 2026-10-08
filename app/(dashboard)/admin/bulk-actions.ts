@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { client } from '@/lib/db/drizzle';
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processCanceledSeminarPayments } from '@/lib/seminars/cancellation-worker';
 import { archiveMembers, deleteMembers } from '@/lib/admin/member-lifecycle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
@@ -165,7 +167,7 @@ async function updateInlineNewsRow(formData: FormData, actorId: number) {
 
     const status = String(formData.get('status') ?? '') as (typeof BULK_NEWS_STATUSES)[number];
     if (!BULK_NEWS_STATUSES.includes(status)) throw new InlineAdminValidationError('Choose a valid News/Blog status.');
-    if (status === 'scheduled' && new Date(row.publication_date).getTime() <= Date.now()) {
+    if (status === 'scheduled' && new Date(row.publication_date).toISOString().slice(0, 10) <= new Date().toISOString().slice(0, 10)) {
       throw new InlineAdminValidationError('Set a future publication date before scheduling this item.');
     }
 
@@ -191,6 +193,7 @@ async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
   const status = String(formData.get('status') ?? '') as (typeof INLINE_SEMINAR_STATUSES)[number];
   if (!INLINE_SEMINAR_STATUSES.includes(status)) throw new InlineAdminValidationError('Choose a valid seminar status.');
 
+  let needsCancellationResolution = false;
   await client.begin(async (sql) => {
     const [row] = await sql<{ id: number; status: string }[]>`select id,status from idoc.seminars where id=${id} for update`;
     if (!row) throw new InlineAdminValidationError('Seminar not found.');
@@ -198,6 +201,7 @@ async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
 
     let canceledRegistrations = 0;
     if (row.status !== 'canceled' && status === 'canceled') {
+      needsCancellationResolution = true;
       const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where seminar_id=${id} and registration_status='registered' returning id`;
       canceledRegistrations = canceled.length;
       if (canceledRegistrations) {
@@ -209,6 +213,7 @@ async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
       values(${actorId},'admin.seminar.inline_status_changed','seminar',${String(id)},
       ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ canceledRegistrations, status })}::jsonb)`;
   });
+  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments());
 }
 
 export async function updateAdminTableInlineField(_state: InlineAdminUpdateState, formData: FormData): Promise<InlineAdminUpdateState> {
@@ -294,7 +299,7 @@ export async function bulkSetNewsStatus(_state: BulkUpdateState, formData: FormD
       const rows = await sql<{ id: number; publication_date: Date | string; status: string }[]>`
         select id,status,publication_date from idoc.news_articles where id in ${sql(ids)} for update`;
       if (rows.length !== ids.length) throw new Error('One or more selected News/Blog records no longer exist.');
-      if (status === 'scheduled' && rows.some((row) => new Date(row.publication_date).getTime() <= Date.now())) {
+      if (status === 'scheduled' && rows.some((row) => new Date(row.publication_date).toISOString().slice(0, 10) <= new Date().toISOString().slice(0, 10))) {
         throw new Error('Every selected item needs a future publication date before it can be scheduled.');
       }
       for (const row of rows) {

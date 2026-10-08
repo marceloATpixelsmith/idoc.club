@@ -1026,3 +1026,19 @@ The shared Drizzle/Postgres.js client in `lib/db/drizzle.ts` is used by both SQL
 These are per-instance limits, **not** a global concurrency limit: preview deployments and Vercel cron invocations may each allocate their own pool. The application has scheduled cron jobs even when no one is browsing staging. Check total connections by `application_name` and source address before attributing them to one app. This change limits connection pressure but does not replace an adequate database memory allocation, Render incident analysis, or a global external connection pool.
 
 Render incidents on October 6 and 8, 2026 showed recurring unclean PostgreSQL shutdowns and recovery coinciding with Vercel `CONNECTION_CLOSED` errors. The shared Render database was on a 256 MB plan, with 100 configured max connections and approximately 72 active connections near one shutdown. Render metrics showed memory close to the 256 MB limit. Host-level out-of-memory termination remains to be confirmed by Render Support. Do not blindly retry non-idempotent writes after a lost connection because their commit status may be unknown.
+
+
+## Event-triggered account email delivery
+
+Password reset and migration activation links are inserted into their durable outbox in the same database transaction as their token. Immediately after commit, a Next.js `after()` callback attempts delivery outside the request response critical path. Security notices and operational alerts similarly trigger their existing leased workers after their outbox insert commits. Six-digit signup, sign-in, and password-reset verification codes continue to be delivered synchronously because they are short-lived.
+
+The account-delivery cron runs every 15 minutes as a **durability and retry safety net** rather than polling every five minutes. It also continues to process Stripe customer-email synchronization. Workers preserve claim leases, deduplication, retry/backoff, communication holds, and dead-lettering. A Vercel function termination or provider failure before/while an after-response callback executes can delay delivery until the next 15-minute sweep; do not claim unconditional instant email delivery. The schedule is UTC. No new environment variables are required.
+
+Diagnose delayed messages by checking the applicable outbox row's availability time, lease, attempt count and error code, then review Sentry for worker exceptions. Do not bypass the communication-and-billing launch hold in staging or during legacy member import.
+
+
+## Seminar cancellations and date-only news publishing
+
+When an administrator cancels a seminar in the form or via inline Status editing, the status change and registration cancellation commit together. The application immediately dispatches the existing cancellation resolution worker after the response, so online payments are refunded or outstanding Checkout Sessions expired promptly. The hourly cancellation cron is retained as a durable recovery sweep for provider failures, interrupted requests, or any canceled registration not processed in the first batch. The existing billing/communication hold remains enforced by the worker.
+
+The News/Blog admin form accepts a publication **calendar date only** (YYYY-MM-DD). Publication dates are normalized to 00:00 UTC. The scheduled-publishing cron runs daily at 00:00 UTC; it publishes due articles and logs the transition. The admin News/Blog table shows only the calendar date. No timezone or time-of-day selection is exposed. The daily publishing job may run shortly after midnight depending on scheduler execution timing. Existing historical timestamps remain in storage; editing an article converts its publication date to midnight UTC.

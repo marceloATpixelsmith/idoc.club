@@ -3,6 +3,8 @@ import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/
 
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { dispatchQueuedEmailAfterResponse } from './immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from './auth-security-delivery';
 
 export const AUTH_SECURITY_KINDS = [
   'google_identity_linked', 'google_identity_unlinked', 'password_changed',
@@ -28,5 +30,6 @@ export async function enqueueAuthSecurityNotification(input: {
     : await db.execute<{ id: number }>(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
         select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,${input.kind},email,${input.dedupeKey} from idoc.users where id=${input.userId}
         on conflict (dedupe_key) where dedupe_key is not null do nothing returning id`);
+  if (rows[0]) dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1));
   return Boolean(rows[0]);
 }

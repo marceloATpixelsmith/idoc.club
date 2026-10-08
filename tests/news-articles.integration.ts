@@ -12,8 +12,8 @@ import { adminUser, asAdmin, closeHarness, createMembership, createProfile, crea
 beforeEach(resetIdoc);
 after(closeHarness);
 
-function future(days: number) { return new Date(Date.now() + days * 86_400_000).toISOString(); }
-function past(days: number) { return new Date(Date.now() - days * 86_400_000).toISOString(); }
+function future(days: number) { return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10); }
+function past(days: number) { return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10); }
 
 function article(overrides: Partial<{ articleType: string; audience: string[]; contentHtml: string; externalUrl: string | null; publicationDate: string; slug: string; status: string; subtitle: string | null; thumbnailUrl: string | null; title: string }> = {}) {
   return {
