@@ -1,4 +1,6 @@
 import 'server-only';
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processCanceledSeminarPayments } from './cancellation-worker';
 import { advancedListWhere, listDate, listOrder, listPage, listPageSize, many } from '@/lib/admin/resource-list-query';
 
 import { z } from 'zod';
@@ -168,6 +170,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   const actor = await requireSeminarAdministrator();
   const id = parse(idSchema, idValue, 'Seminar not found.');
   const fields = validateFields(input);
+  let needsCancellationResolution = false;
   await client.begin(async (sql) => {
     const [existing] = await sql<{
       capacity: number; member_price_cents: number; non_member_price_cents: number; status: SeminarStatus; title: string;
@@ -195,6 +198,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
       const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
         where seminar_id=${id} and registration_status='registered' returning id`;
       canceledRegistrations = canceled.length;
+      needsCancellationResolution = true;
       if (canceledRegistrations) {
         await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
           (${actor.id},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((row) => row.id) })}::jsonb)`;
@@ -210,6 +214,9 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
       ${JSON.stringify({ capacity: existing.capacity, memberPriceCents: existing.member_price_cents, nonMemberPriceCents: existing.non_member_price_cents, status: existing.status, title: existing.title })}::jsonb,
       ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
   });
+  // Start refunds and payment-session expiry immediately after the cancellation commits.
+  // The durable canceled registration state remains eligible for scheduled recovery.
+  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments());
 }
 
 export { seminarEndsAtUtc };
