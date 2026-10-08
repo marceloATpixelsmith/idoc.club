@@ -3,7 +3,7 @@ import { registerOTel } from '@vercel/otel';
 
 export async function register() {
   // Vercel exports these application spans through the existing team trace drain.
-  registerOTel({
+  if (process.env.VERCEL === '1') registerOTel({
     serviceName: 'idoc.club',
     // Outbound URLs may contain address data, coordinates, or provider API keys.
     // Never export these full URLs as OpenTelemetry fetch spans.
