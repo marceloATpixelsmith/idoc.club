@@ -114,6 +114,8 @@ try {
           (n.nspname <> 'idoc_staging' AND
             (position('idoc_staging.' in pg_get_functiondef(p.oid)) > 0 OR
              position('"idoc_staging".' in pg_get_functiondef(p.oid)) > 0))
+          OR
+          (n.nspname <> 'idoc' AND position('"idoc".' in pg_get_functiondef(p.oid)) > 0)
         )
       ORDER BY n.nspname, p.proname
     `;
