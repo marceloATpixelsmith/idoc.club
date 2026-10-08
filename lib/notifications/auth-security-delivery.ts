@@ -55,14 +55,14 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   }[]>`
     with candidate as (
       select o.id
-      from idoc.auth_security_notification_outbox o
+      from auth_security_notification_outbox o
       where o.sent_at is null and o.dead_lettered_at is null and o.available_at <= now()
         and (o.lease_expires_at is null or o.lease_expires_at < now())
       order by o.available_at, o.id
       for update skip locked
       limit 1
     )
-    update idoc.auth_security_notification_outbox o
+    update auth_security_notification_outbox o
     set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
     from candidate
     where o.id=candidate.id
@@ -86,7 +86,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
       to: record.recipient_email,
     });
     const done = await client`
-      update idoc.auth_security_notification_outbox
+      update auth_security_notification_outbox
       set sent_at=now(), attempt_count=attempt_count+1, last_attempt_at=now(), last_error_code=null,
           lease_owner=null, lease_expires_at=null
       where id=${record.id} and lease_owner=${owner} and sent_at is null
@@ -104,7 +104,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     // values itself before they reach the driver; raw `client` calls have to do the same
     // conversion explicitly.
     await client`
-      update idoc.auth_security_notification_outbox
+      update auth_security_notification_outbox
       set attempt_count=${attempt}, last_attempt_at=now(), last_error_code='temporary_delivery_failure',
           available_at=now()+(${delay} * interval '1 second'),
           dead_lettered_at=${deadLettered ? new Date().toISOString() : null},
