@@ -213,7 +213,7 @@ async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
       values(${actorId},'admin.seminar.inline_status_changed','seminar',${String(id)},
       ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ canceledRegistrations, status })}::jsonb)`;
   });
-  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments());
+  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments(), 'seminar-cancellation-resolution');
 }
 
 export async function updateAdminTableInlineField(_state: InlineAdminUpdateState, formData: FormData): Promise<InlineAdminUpdateState> {
