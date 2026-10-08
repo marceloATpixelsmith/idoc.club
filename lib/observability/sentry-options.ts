@@ -20,7 +20,7 @@ export function sentryOptions(environment: Partial<NodeJS.ProcessEnv> = process.
     release: environment.VERCEL_GIT_COMMIT_SHA,
     sendDefaultPii: false,
     // @vercel/otel owns OpenTelemetry to preserve Vercel trace-drain propagation.
-    skipOpenTelemetrySetup: true,
+    skipOpenTelemetrySetup: environment.VERCEL === '1',
     tracesSampleRate: 0,
   };
 }
