@@ -6,7 +6,7 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && node scripts/configure-qstash-schedules.mjs --when-vercel-staging",
     "start": "next start",
     "check": "pnpm typecheck && pnpm test",
     "check:release1": "node scripts/validate-auth-docs.mjs && node scripts/validate-release-checklist.mjs && pnpm validate:stripe-acceptance-inventory && node scripts/validate-toolchain-policy.mjs && node scripts/check-whitespace.mjs && pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build",
