@@ -13,12 +13,12 @@ const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx
 const securityDoc = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /first_name|last_name|email|address|postal_code|latitude|longitude|\blat\b|\blng\b/i);
 });
 
 test('the public map never exposes a raw profile id or sequential database identifier', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /p\.id\b/);
   assert.doesNotMatch(aggregateSource, /profileId|userId/);
 });
