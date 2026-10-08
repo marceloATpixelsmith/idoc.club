@@ -19,8 +19,8 @@ export function AdminFormDrawer({ children, closeHref, title }: { children: Reac
     //SHOW THE SHARED TABLE SKELETON WHILE THE SERVER REFRESHES AFTER A DRAWER SAVE.
     window.dispatchEvent(new Event('idoc:table-refresh-start'));
     setOpen(false);
+    //SERVER ACTIONS REVALIDATE THE LIST; A SINGLE REPLACE AVOIDS RACING NAVIGATIONS.
     router.replace(closeHref);
-    router.refresh();
   }, [closeHref, router]);
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) router.push(closeHref); }}>
