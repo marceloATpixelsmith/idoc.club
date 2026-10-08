@@ -9,7 +9,7 @@ import { requireAdministrator, type Actor } from '@/lib/membership/authorization
 import { MEMBERSHIP_STATUSES, MEMBERSHIP_TYPE_OPTIONS } from '@/lib/membership/admin-memberships';
 import { IDOC_REGIONS, ISO_COUNTRY_CODES } from '@/lib/membership/validation';
 import { SUPPORT_CATEGORIES, SUPPORT_STATUSES } from '@/lib/support/inbox';
-import { NEWS_STATUSES, NEWS_TYPES } from '@/lib/news/articles';
+import { NEWS_AUDIENCES, NEWS_STATUSES, NEWS_TYPES } from '@/lib/news/articles';
 import { PAYMENT_STATUSES, SEMINAR_STATUSES } from '@/lib/seminars/status';
 
 export const ADMIN_TABLE_IDENTIFIERS = ['memberships', 'support', 'news', 'seminars', 'seminar_registrations'] as const;
@@ -31,6 +31,12 @@ const page = z.coerce.number().int().positive().max(10_000).optional();
 // so a single selection continues to round-trip identically to before multi-select existed.
 const multiToken = (allowed: readonly string[], maxLength = 500) => z.string().trim().max(maxLength)
   .refine((value) => value.split(',').every((item) => allowed.includes(item.trim())), 'Invalid selection').optional();
+const newsAccessFilter = multiToken(NEWS_AUDIENCES, 200).refine((value) => {
+  if (!value) return true;
+  const selected = value.split(',').map((item) => item.trim());
+  const broad = selected.filter((item) => item === 'public' || item === 'members');
+  return broad.length === 0 || (broad.length === 1 && selected.length === 1);
+}, 'Invalid access combination');
 
 const schemas = {
   memberships: z.object({
@@ -44,7 +50,7 @@ const schemas = {
     type: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
   }).strict(),
   support: z.object({ activityFrom: date, activityTo: date, columns: columns(['member', 'subject', 'category', 'status', 'assigned', 'activity']), columnOrder: text(500), category: multiToken(SUPPORT_CATEGORIES, 200), direction, filters: text(4000), joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), assigned: text(2000), sort: text(1000), status: multiToken(SUPPORT_STATUSES, 200) }).strict(),
-  news: z.object({ columns: columns(['title', 'type', 'status', 'access', 'publication', 'subtitle', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), type: multiToken(NEWS_TYPES, 100), to: date }).strict(),
+  news: z.object({ access: newsAccessFilter, columns: columns(['title', 'type', 'status', 'access', 'publication', 'subtitle', 'updated']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, q: text(), sort: text(1000), status: multiToken(NEWS_STATUSES, 200), type: multiToken(NEWS_TYPES, 100), to: date }).strict(),
   seminars: z.object({ columns: columns(['title', 'status', 'start', 'end', 'deadline', 'prices', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), page, pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
   seminar_registrations: z.object({ columns: columns(['registrant', 'seminar', 'status', 'registered']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, paymentStatus: multiToken(PAYMENT_STATUSES, 500), q: text(), registrantType: multiToken(['member', 'guest'], 100), seminarId: z.string().trim().max(4000).refine((value) => value.split(',').every((item) => /^\d+$/.test(item.trim())), 'Invalid selection').optional(), sort: text(1000), to: date }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;

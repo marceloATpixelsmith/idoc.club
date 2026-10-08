@@ -117,6 +117,23 @@ test('invalid broad and role audience combinations are rejected server-side', as
   );
 });
 
+test('admin access filter matches any selected compatible audience', async () => {
+  const admin = await adminUser();
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['public'], slug: 'filter-public' })));
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['members'], slug: 'filter-members' })));
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['judge'], slug: 'filter-judge' })));
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['steward'], slug: 'filter-steward' })));
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['judge', 'steward'], slug: 'filter-judge-steward' })));
+  await asAdmin(admin.id, () => createArticle(article({ audience: ['veterinarian'], slug: 'filter-veterinarian' })));
+
+  const publicRows = await asAdmin(admin.id, () => listAdminArticles({ access: 'public', pageSize: '100' }));
+  assert.deepEqual(publicRows.rows.map((row) => row.slug), ['filter-public']);
+
+  const roleRows = await asAdmin(admin.id, () => listAdminArticles({ access: 'judge,steward', pageSize: '100' }));
+  const roleSlugs = new Set(roleRows.rows.map((row) => row.slug));
+  assert.deepEqual(roleSlugs, new Set(['filter-judge', 'filter-steward', 'filter-judge-steward']));
+});
+
 test('a scheduled article with a future publication date is never publicly reachable, including by its exact slug', async () => {
   const admin = await adminUser();
   await asAdmin(admin.id, () => createArticle(article({ publicationDate: future(2), slug: 'future-article', status: 'scheduled' })));
