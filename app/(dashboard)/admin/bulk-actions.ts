@@ -31,13 +31,13 @@ function parseIds(formData: FormData): { table: BulkTable; ids: string[] } {
 async function deleteSeminars(ids: string[], actorId: number) {
   const numeric = ids.map(Number);
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; status: string; title: string; registrations: number }[]>`select s.id,s.status,s.title,(select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id) registrations from idoc.seminars s where s.id in ${sql(numeric)} for update`;
+    const rows = await sql<{ id: number; status: string; title: string; registrations: number }[]>`select s.id,s.status,s.title,(select count(*)::int from seminar_registrations r where r.seminar_id=s.id) registrations from seminars s where s.id in ${sql(numeric)} for update`;
     if (rows.length !== numeric.length) throw new Error('One or more selected seminars no longer exist.');
     const blocked = rows.find((row) => row.registrations > 0 || !['draft','canceled'].includes(row.status));
     if (blocked) throw new Error('“' + blocked.title + '” cannot be deleted. A seminar must be Draft or Canceled and have no registration history.');
     for (const row of rows) {
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.seminar.deleted','seminar',${String(row.id)},${JSON.stringify({ status: row.status, title: row.title })}::jsonb,'Bulk delete from Seminars admin table')`;
-      await sql`delete from idoc.seminars where id=${row.id}`;
+      await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.seminar.deleted','seminar',${String(row.id)},${JSON.stringify({ status: row.status, title: row.title })}::jsonb,'Bulk delete from Seminars admin table')`;
+      await sql`delete from seminars where id=${row.id}`;
     }
     return rows.length;
   });
@@ -46,16 +46,16 @@ async function deleteSeminars(ids: string[], actorId: number) {
 async function deleteRegistrations(ids: string[], actorId: number) {
   const numeric = ids.map(Number);
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; registration_status: string; payment_status: string; payment_reference: string | null; stripe_checkout_session_id: string | null; stripe_payment_intent_id: string | null; paid_at: Date | null }[]>`select id,registration_status,payment_status,payment_reference,stripe_checkout_session_id,stripe_payment_intent_id,paid_at from idoc.seminar_registrations where id in ${sql(numeric)} for update`;
+    const rows = await sql<{ id: number; registration_status: string; payment_status: string; payment_reference: string | null; stripe_checkout_session_id: string | null; stripe_payment_intent_id: string | null; paid_at: Date | null }[]>`select id,registration_status,payment_status,payment_reference,stripe_checkout_session_id,stripe_payment_intent_id,paid_at from seminar_registrations where id in ${sql(numeric)} for update`;
     if (rows.length !== numeric.length) throw new Error('One or more selected registrations no longer exist.');
-    const refundRows = await sql<{ seminar_registration_id: number }[]>`select seminar_registration_id from idoc.payment_refunds where seminar_registration_id in ${sql(numeric)}`;
+    const refundRows = await sql<{ seminar_registration_id: number }[]>`select seminar_registration_id from payment_refunds where seminar_registration_id in ${sql(numeric)}`;
     const refundIds = new Set(refundRows.map((row) => row.seminar_registration_id));
     const deletableStatuses = new Set(['unpaid','pending','bank_transfer_pending','cash_pending']);
     const blocked = rows.find((row) => row.registration_status !== 'canceled' || !deletableStatuses.has(row.payment_status) || row.payment_reference || row.stripe_checkout_session_id || row.stripe_payment_intent_id || row.paid_at || refundIds.has(row.id));
     if (blocked) throw new Error('Registrations can only be deleted after cancellation when they have no Stripe, payment, refund, dispute, or charge history.');
     for (const row of rows) {
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.seminar_registration.deleted','seminar_registration',${String(row.id)},${JSON.stringify({ paymentStatus: row.payment_status, registrationStatus: row.registration_status })}::jsonb,'Bulk delete from Registrations admin table')`;
-      await sql`delete from idoc.seminar_registrations where id=${row.id}`;
+      await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.seminar_registration.deleted','seminar_registration',${String(row.id)},${JSON.stringify({ paymentStatus: row.payment_status, registrationStatus: row.registration_status })}::jsonb,'Bulk delete from Registrations admin table')`;
+      await sql`delete from seminar_registrations where id=${row.id}`;
     }
     return rows.length;
   });
@@ -63,16 +63,16 @@ async function deleteRegistrations(ids: string[], actorId: number) {
 
 async function deleteSupport(ids: string[], actorId: number) {
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; public_id: string; status: string; subject: string }[]>`select id,public_id::text,status,subject from idoc.support_conversations where public_id::text in ${sql(ids)} for update`;
+    const rows = await sql<{ id: number; public_id: string; status: string; subject: string }[]>`select id,public_id::text,status,subject from support_conversations where public_id::text in ${sql(ids)} for update`;
     if (rows.length !== ids.length) throw new Error('One or more selected support conversations no longer exist.');
     const blocked = rows.find((row) => row.status !== 'closed');
     if (blocked) throw new Error('Support conversations must be closed before they can be deleted.');
     for (const row of rows) {
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.support_conversation.deleted','support_conversation',${row.public_id},${JSON.stringify({ status: row.status, subject: row.subject })}::jsonb,'Bulk delete from Support admin table')`;
-      await sql`delete from idoc.support_administrator_read_cursors where conversation_id=${row.id}`;
-      await sql`delete from idoc.support_conversation_administrators where conversation_id=${row.id}`;
-      await sql`delete from idoc.support_messages where conversation_id=${row.id}`;
-      await sql`delete from idoc.support_conversations where id=${row.id}`;
+      await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.support_conversation.deleted','support_conversation',${row.public_id},${JSON.stringify({ status: row.status, subject: row.subject })}::jsonb,'Bulk delete from Support admin table')`;
+      await sql`delete from support_administrator_read_cursors where conversation_id=${row.id}`;
+      await sql`delete from support_conversation_administrators where conversation_id=${row.id}`;
+      await sql`delete from support_messages where conversation_id=${row.id}`;
+      await sql`delete from support_conversations where id=${row.id}`;
     }
     return rows.length;
   });
@@ -153,13 +153,13 @@ async function updateInlineNewsRow(formData: FormData, actorId: number) {
   await requireNewsArticleSchema();
 
   await client.begin(async (sql) => {
-    const [row] = await sql<{ audience: string[]; id: number; publication_date: Date | string; status: string }[]>`select id,status,audience,publication_date from idoc.news_articles where id=${id} for update`;
+    const [row] = await sql<{ audience: string[]; id: number; publication_date: Date | string; status: string }[]>`select id,status,audience,publication_date from news_articles where id=${id} for update`;
     if (!row) throw new InlineAdminValidationError('News/Blog record not found.');
 
     if (field === 'access') {
       const audience = normalizeInlineAudience(formData.getAll('audience'));
-      await sql`update idoc.news_articles set audience=${audience},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+      await sql`update news_articles set audience=${audience},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
         values(${actorId},'admin.news_article.inline_access_changed','news_article',${String(id)},
         ${JSON.stringify({ audience: row.audience })}::jsonb,${JSON.stringify({ audience })}::jsonb)`;
       return;
@@ -173,15 +173,15 @@ async function updateInlineNewsRow(formData: FormData, actorId: number) {
 
     if (status === 'published') {
       const publicationDate = new Date(row.publication_date).getTime() > Date.now() ? new Date().toISOString() : new Date(row.publication_date).toISOString();
-      await sql`update idoc.news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`update news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
     } else if (status === 'scheduled') {
-      await sql`update idoc.news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`update news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
     } else if (status === 'archived') {
-      await sql`update idoc.news_articles set status='archived',archived_at=now(),updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`update news_articles set status='archived',archived_at=now(),updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
     } else {
-      await sql`update idoc.news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+      await sql`update news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
     }
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+    await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
       values(${actorId},'admin.news_article.inline_status_changed','news_article',${String(id)},
       ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status })}::jsonb)`;
   });
@@ -195,21 +195,21 @@ async function updateInlineSeminarStatus(formData: FormData, actorId: number) {
 
   let needsCancellationResolution = false;
   await client.begin(async (sql) => {
-    const [row] = await sql<{ id: number; status: string }[]>`select id,status from idoc.seminars where id=${id} for update`;
+    const [row] = await sql<{ id: number; status: string }[]>`select id,status from seminars where id=${id} for update`;
     if (!row) throw new InlineAdminValidationError('Seminar not found.');
-    await sql`update idoc.seminars set status=${status},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
+    await sql`update seminars set status=${status},updated_by_user_id=${actorId},updated_at=now() where id=${id}`;
 
     let canceledRegistrations = 0;
     if (row.status !== 'canceled' && status === 'canceled') {
       needsCancellationResolution = true;
-      const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where seminar_id=${id} and registration_status='registered' returning id`;
+      const canceled = await sql<{ id: number }[]>`update seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where seminar_id=${id} and registration_status='registered' returning id`;
       canceledRegistrations = canceled.length;
       if (canceledRegistrations) {
-        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actorId},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((entry) => entry.id) })}::jsonb)`;
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actorId},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((entry) => entry.id) })}::jsonb)`;
       }
     }
 
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+    await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
       values(${actorId},'admin.seminar.inline_status_changed','seminar',${String(id)},
       ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ canceledRegistrations, status })}::jsonb)`;
   });
@@ -262,14 +262,14 @@ export async function bulkCloseSupportRows(_state: BulkUpdateState, formData: Fo
     const ids = selectedIds(formData, 'support');
     const changed = await client.begin(async (sql) => {
       const rows = await sql<{ id: number; public_id: string; status: string }[]>`
-        select id,public_id::text,status from idoc.support_conversations
+        select id,public_id::text,status from support_conversations
         where public_id::text in ${sql(ids)} for update`;
       if (rows.length !== ids.length) throw new Error('One or more selected support conversations no longer exist.');
       let count = 0;
       for (const row of rows) {
         if (row.status === 'closed') continue;
-        await sql`update idoc.support_conversations set status='closed',updated_at=now() where id=${row.id}`;
-        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+        await sql`update support_conversations set status='closed',updated_at=now() where id=${row.id}`;
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
           values(${actor.id},'support.conversation.closed','support_conversation',${row.public_id},
           ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status: 'closed' })}::jsonb)`;
         count += 1;
@@ -297,7 +297,7 @@ export async function bulkSetNewsStatus(_state: BulkUpdateState, formData: FormD
 
     await client.begin(async (sql) => {
       const rows = await sql<{ id: number; publication_date: Date | string; status: string }[]>`
-        select id,status,publication_date from idoc.news_articles where id in ${sql(ids)} for update`;
+        select id,status,publication_date from news_articles where id in ${sql(ids)} for update`;
       if (rows.length !== ids.length) throw new Error('One or more selected News/Blog records no longer exist.');
       if (status === 'scheduled' && rows.some((row) => new Date(row.publication_date).toISOString().slice(0, 10) <= new Date().toISOString().slice(0, 10))) {
         throw new Error('Every selected item needs a future publication date before it can be scheduled.');
@@ -305,15 +305,15 @@ export async function bulkSetNewsStatus(_state: BulkUpdateState, formData: FormD
       for (const row of rows) {
         if (status === 'published') {
           const publicationDate = new Date(row.publication_date).getTime() > Date.now() ? new Date().toISOString() : new Date(row.publication_date).toISOString();
-          await sql`update idoc.news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+          await sql`update news_articles set status='published',publication_date=${publicationDate},published_at=now(),archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
         } else if (status === 'scheduled') {
-          await sql`update idoc.news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+          await sql`update news_articles set status='scheduled',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
         } else if (status === 'archived') {
-          await sql`update idoc.news_articles set status='archived',archived_at=now(),updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+          await sql`update news_articles set status='archived',archived_at=now(),updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
         } else {
-          await sql`update idoc.news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+          await sql`update news_articles set status='draft',published_at=null,archived_at=null,updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
         }
-        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
           values(${actor.id},'admin.news_article.bulk_status_changed','news_article',${String(row.id)},
           ${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status })}::jsonb)`;
       }
