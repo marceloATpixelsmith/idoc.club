@@ -51,13 +51,11 @@ test('failure evidence and public responses contain no sensitive values', async 
   for (const sensitive of [SECRET, 'member@example.com', 'raw', 'decrypted payload']) assert.equal(visible.includes(sensitive), false);
 });
 
-test('Vercel Cron configuration matches the protected route and its outbox lease duration', () => {
+test('QStash replaces Vercel cron while preserving bounded worker leases', () => {
   const configuration = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const accountDelivery = configuration.crons.find(({ path }: { path: string }) => path === '/api/cron/account-delivery');
   assert.equal(accountDelivery, undefined, 'QStash replaces the Vercel polling schedule');
   assert.ok(readFileSync(new URL('../app/api/cron/account-delivery/route.ts', import.meta.url), 'utf8').includes('handleAccountDeliveryCron'));
 
-  const minutes = Number(/^\*\/(\d+) \* \* \* \*$/.exec(accountDelivery.schedule)?.[1]);
-  assert.ok(Number.isInteger(minutes) && minutes > 0, 'the schedule must be a simple every-N-minutes cadence for this invariant to apply');
-  assert.ok(ACCOUNT_DELIVERY_LEASE_MS <= minutes * 60 * 1000, 'a failed worker lease must expire no later than the next recovery sweep');
+  assert.ok(ACCOUNT_DELIVERY_LEASE_MS <= 24 * 60 * 60 * 1000, 'a failed worker lease must expire before the QStash daily recovery sweep');
 });
