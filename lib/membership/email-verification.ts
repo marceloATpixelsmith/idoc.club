@@ -87,7 +87,7 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
     if (currentUser && currentUser.email !== record.pendingEmail) {
       for (const recipient of [record.pendingEmail, currentUser.email]) {
         const dedupeKey = `email-changed:${record.id}:${recipientDiscriminator(recipient)}`;
-        await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+        await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
           values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${record.userId},'verified_email_changed',${recipient},${dedupeKey})
           on conflict (dedupe_key) where dedupe_key is not null do nothing`);
       }
