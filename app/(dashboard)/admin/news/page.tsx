@@ -6,7 +6,7 @@ export default async function AdminNewsPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <ResourceListPage tableType="news" />
-      {params.new === '1' ? <AdminNewsDrawer isNew /> : params.articleId ? <AdminNewsDrawer articleId={params.articleId} /> : null}
+      {params.new === '1' ? <AdminNewsDrawer key="new" isNew /> : params.articleId ? <AdminNewsDrawer key={params.articleId} articleId={params.articleId} /> : null}
     </>
   );
 }
