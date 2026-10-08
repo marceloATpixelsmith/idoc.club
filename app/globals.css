@@ -204,6 +204,12 @@
     background-size: 1rem 1rem;
   }
 
+  /*//KEEP INLINE TABLE STATUS VALUES CLEAR OF THE GLOBAL NATIVE SELECT CHEVRON. */
+  select.idoc-inline-status-select {
+    background-image: none;
+    padding-right: 0;
+  }
+
   button:disabled,
   [type='button']:disabled,
   [type='submit']:disabled,
