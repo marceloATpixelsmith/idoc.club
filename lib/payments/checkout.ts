@@ -72,11 +72,11 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   const baseUrl = baseUrlForServer();
   const result = await client.begin(async (sql): Promise<{ error: unknown } | string> => {
     await sql`select pg_advisory_xact_lock(${profile.id})`;
-    const [membership] = await sql<{ valid_until: string }[]>`select valid_until from idoc.memberships
+    const [membership] = await sql<{ valid_until: string }[]>`select valid_until from memberships
       where profile_id=${profile.id} order by id desc limit 1 for update`;
     const cycle = membership?.valid_until ?? 'new';
     const [prior] = await sql<{ checkout_url: string | null; external_checkout_session_id: string | null; id: number }[]>`
-      select id,external_checkout_session_id,checkout_url from idoc.membership_checkout_sessions
+      select id,external_checkout_session_id,checkout_url from membership_checkout_sessions
       where profile_id=${profile.id} and mode=${mode} and cycle=${cycle} and status in ('creating','open')
       order by attempt desc limit 1 for update`;
     if (prior?.external_checkout_session_id && stripe.checkout.sessions.retrieve) {
@@ -84,15 +84,15 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
       const payable = provider.status === 'open' && provider.url && (!provider.expires_at || provider.expires_at * 1000 > Date.now());
       if (payable) return provider.url as string;
       const terminal = provider.status === 'expired' ? 'expired' : provider.status === 'complete' ? 'completed' : 'superseded';
-      await sql`update idoc.membership_checkout_sessions set status=${terminal},updated_at=now() where id=${prior.id}`;
+      await sql`update membership_checkout_sessions set status=${terminal},updated_at=now() where id=${prior.id}`;
     } else if (prior) {
-      await sql`update idoc.membership_checkout_sessions set status='superseded',updated_at=now() where id=${prior.id}`;
+      await sql`update membership_checkout_sessions set status='superseded',updated_at=now() where id=${prior.id}`;
     }
     const [sequence] = await sql<{ attempt: number }[]>`select coalesce(max(attempt),0)::int + 1 attempt
-      from idoc.membership_checkout_sessions where profile_id=${profile.id} and mode=${mode} and cycle=${cycle}`;
+      from membership_checkout_sessions where profile_id=${profile.id} and mode=${mode} and cycle=${cycle}`;
     const attempt = sequence.attempt;
     const idempotencyKey = `idoc-membership-checkout-${profile.id}-${mode}-${cycle}-${attempt}`;
-    const [evidence] = await sql<{ id: number }[]>`insert into idoc.membership_checkout_sessions
+    const [evidence] = await sql<{ id: number }[]>`insert into membership_checkout_sessions
       (profile_id,mode,cycle,status,idempotency_key,attempt) values
       (${profile.id},${mode},${cycle},'creating',${idempotencyKey},${attempt}) returning id`;
     let session;
@@ -119,14 +119,14 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     idempotencyKey,
   });
     } catch (error) {
-      await sql`update idoc.membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
+      await sql`update membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
       return { error };
     }
     if (!session.id || !session.url) {
-      await sql`update idoc.membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
+      await sql`update membership_checkout_sessions set status='failed',updated_at=now() where id=${evidence.id}`;
       return { error: new Error('Stripe did not return a complete Checkout Session.') };
     }
-    await sql`update idoc.membership_checkout_sessions set external_checkout_session_id=${session.id},
+    await sql`update membership_checkout_sessions set external_checkout_session_id=${session.id},
       checkout_url=${session.url},expires_at=${session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null},
       status='open',updated_at=now() where id=${evidence.id}`;
     return session.url;
