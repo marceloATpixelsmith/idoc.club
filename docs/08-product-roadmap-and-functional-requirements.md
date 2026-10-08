@@ -380,3 +380,8 @@ The actionable admin tables currently covered are Members, News/Blog, Seminars, 
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.
+
+
+## Redesign database environment isolation — pre-launch gate
+
+The live WordPress site at idoc.club is unaffected. Before launching the Next.js redesign, separate its Render PostgreSQL namespaces: rename the currently shared `idoc` schema to `idoc_production` for redesign.idoc.club, and create a verified, independent copy as `idoc_staging` for staging.idoc.club. This is a coordinated multi-phase migration, not a deployment-time automatic rename. Prerequisites: inventory and convert all schema-qualified ORM/raw SQL and migration references; preserve backups and rollback capability; verify cloned tables, constraints, sequences, triggers, functions, views, permissions and records; quarantine copied staging auth sessions, credentials, outstanding communications and payment queues; verify staging cannot affect production records or service providers; only then enable staging QStash schedules. Keep the original namespace and background processing in place until all gates pass. See `docs/database-schema-separation.md` for the cutover guardrails.
