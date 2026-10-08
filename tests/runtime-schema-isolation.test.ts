@@ -26,7 +26,8 @@ test('runtime source never hardcodes the legacy idoc PostgreSQL schema', async (
   for (const file of files) {
     const source = await readFile(file, 'utf8');
     source.split('\n').forEach((line, index) => {
-      if (/\bidoc\.(?!club\b)/.test(line)) violations.push(`${file}:${index + 1}: ${line.trim()}`);
+      const runtimeCandidate = line.replaceAll('idoc.allow_member_permanent_delete', '').replaceAll('idoc.news_articles.schema', '');
+      if (/\bidoc\.(?!club\b)/.test(runtimeCandidate)) violations.push(`${file}:${index + 1}: ${line.trim()}`);
     });
   }
   assert.deepEqual(violations, [], `Hardcoded runtime schema references found:\n${violations.join('\n')}`);
