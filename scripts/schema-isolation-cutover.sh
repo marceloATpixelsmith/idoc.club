@@ -25,6 +25,13 @@ database_identity()
     psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "select current_database() || '|' || coalesce(inet_server_addr()::text,'local') || '|' || inet_server_port();"
 }
 
+assert_live_database()
+{
+    local name
+    name="$(psql "${POSTGRES_URL}" -X -A -t -v ON_ERROR_STOP=1 -c 'select current_database()')"
+    [[ "${name}" == "ayni_space" ]] || { echo "Refusing schema operations outside ayni_space." >&2; exit 1; }
+}
+
 rollback_failed_cutover()
 {
     local exit_code="$?"
@@ -58,6 +65,7 @@ mkdir -p "${WORK_DIR}"
 case "${ACTION}" in
     backup-and-verify)
         require_value POSTGRES_URL
+        assert_live_database
         require_value SCHEMA_ISOLATION_VERIFY_URL
         [[ "${SCHEMA_ISOLATION_CONFIRM:-}" == "VERIFY_BACKUP_RESTORE" ]] ||
             { echo "Refusing restore rehearsal without SCHEMA_ISOLATION_CONFIRM=VERIFY_BACKUP_RESTORE" >&2; exit 1; }
@@ -104,6 +112,7 @@ SQL
 
     cutover)
         require_value POSTGRES_URL
+        assert_live_database
         [[ "${SCHEMA_ISOLATION_CONFIRM:-}" == "CUTOVER_IDOC_SCHEMAS" ]] ||
             { echo "Refusing live schema cutover without SCHEMA_ISOLATION_CONFIRM=CUTOVER_IDOC_SCHEMAS" >&2; exit 1; }
         [[ -s "${BACKUP_FILE}" && -s "${STAGING_FILE}" && -s "${SOURCE_INVENTORY}" && -s "${RESTORE_INVENTORY}" ]] ||
@@ -136,6 +145,7 @@ SQL
 
     rollback)
         require_value POSTGRES_URL
+        assert_live_database
         [[ "${SCHEMA_ISOLATION_CONFIRM:-}" == "ROLLBACK_IDOC_SCHEMAS" ]] ||
             { echo "Refusing rollback without SCHEMA_ISOLATION_CONFIRM=ROLLBACK_IDOC_SCHEMAS" >&2; exit 1; }
 
