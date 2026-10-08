@@ -26,11 +26,22 @@ Status: implementation and safety tooling are in PR #412. The database cutover h
 - [ ] Run post-cutover validation and require zero mismatches.
 - [ ] Run the read-only preflight again and require zero production↔staging catalog dependencies and zero cross-schema textual function references.
 
+## Database role isolation
+
+- [ ] Provision `idoc_production_app` and `idoc_staging_app` as separate no-inheritance, non-owner login roles.
+- [ ] Confirm both roles can access their own schema but not the opposite schema.
+- [ ] Assign independent passwords using a trusted PostgreSQL GUI/client; never paste them into chat.
+- [ ] Keep the schema-owner credential outside both application environments.
+- [ ] Verify default grants and schema-role login search paths.
+
 ## Vercel activation
 
 Only after the database gates above pass:
 
+- [ ] Inspect both Project and Shared Environment Variables, especially any inherited `POSTGRES_URL`.
+- [ ] Override any shared database URL with project Production `POSTGRES_URL` using the `idoc_production_app` credentials.
 - [ ] Set project Production `DB_SCHEMA=idoc_production`.
+- [ ] Set project Preview `POSTGRES_URL` using the `idoc_staging_app` credentials, restricted specifically to Git branch `staging`.
 - [ ] Set project Preview `DB_SCHEMA=idoc_staging` restricted specifically to Git branch `staging`.
 - [ ] Confirm no Shared Environment Variable named `DB_SCHEMA` conflicts with the project values.
 - [ ] Redeploy Production for `redesign.idoc.club` and the staging branch Preview for `staging.idoc.club`.
