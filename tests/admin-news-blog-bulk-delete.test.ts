@@ -118,3 +118,10 @@ test('inline News and Seminar statuses and News access show saving state until r
   assert.match(resourceTable, /if \(tableType === 'seminars'\)/);
   assert.doesNotMatch(resourceTable, /ChevronDown/);
 });
+
+
+test('inline status selects do not inherit the global native select chevron', () => {
+  const stylesheet = readFileSync('app/globals.css', 'utf8');
+  assert.match(resourceTable, /idoc-inline-status-select/);
+  assert.match(stylesheet, /select\.idoc-inline-status-select\s*\{\s*background-image:\s*none;\s*padding-right:\s*0;/);
+});
