@@ -281,11 +281,11 @@ export function ResourceDataTable({
             ? <span className="block w-full whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span><span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
             : <span className="font-medium">{row.original.title}</span>
           : id === 'status' && (tableType === 'seminars' || tableType === 'news')
-            ? <InlineStatusEditor id={row.original.id} status={row.original.status} tableType={tableType} />
+            ? <InlineStatusEditor id={row.original.id} key={`${row.original.id}:${row.original.status}`} status={row.original.status} tableType={tableType} />
               : id === 'type' && tableType === 'news'
                 ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
                 : id === 'access' && tableType === 'news'
-                  ? <InlineAccessEditor access={row.original.access} id={row.original.id} />
+                  ? <InlineAccessEditor access={row.original.access} id={row.original.id} key={`${row.original.id}:${(row.original.access?.length ? row.original.access : ['public']).join('|')}`} />
                   : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
