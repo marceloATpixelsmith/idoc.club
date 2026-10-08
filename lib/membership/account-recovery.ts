@@ -13,6 +13,8 @@ import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { checkRateLimit } from '@/lib/security/rate-limit';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { logError } from '@/lib/observability/logger';
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAccountDeliveryBatch } from '@/lib/notifications/account-delivery';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
@@ -56,6 +58,8 @@ export async function requestAccountLink(
         await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
+      // Dispatch only after the token and outbox entry are committed.
+      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1));
     }
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
