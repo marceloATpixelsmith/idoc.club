@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, ChevronDown, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
@@ -131,14 +131,13 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
       </span>
       <select
         aria-label={`Change ${tableType === 'seminars' ? 'seminar' : 'News/Blog'} status`}
-        className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-5 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
+        className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-0 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
         disabled={pending}
         onChange={(event) => changeStatus(event.target.value)}
         value={value}
       >
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <ChevronDown aria-hidden className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-gold" />
     </div>
   );
 }
