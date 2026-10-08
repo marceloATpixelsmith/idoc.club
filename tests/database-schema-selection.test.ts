@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getDatabaseSchemaName } from '../lib/db/schema-name';
+import { getDatabaseSchemaName } from '../lib/db/schema-name.ts';
 
 test('legacy schema remains default during preparation', () => {
   const previous = process.env.DB_SCHEMA;
