@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -27,7 +29,7 @@ export async function finalizeInitialAuthenticatorEnrollment(input: {
     return { status: 'invalid-transaction' as const };
   }
 
-  return client.begin(async (tx) => {
+  const result = await client.begin(async (tx) => {
     const [user] = await tx<Record<string, unknown>[]>`
       select id,email,account_state,email_verified_at,deleted_at from idoc.users
       where id=${input.userId} for update`;
@@ -76,4 +78,6 @@ export async function finalizeInitialAuthenticatorEnrollment(input: {
 
     return { status: 'activated' as const };
   });
+  if (result.status === 'activated') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
