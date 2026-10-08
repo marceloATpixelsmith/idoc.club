@@ -644,6 +644,9 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
   const requestedMethod = typeof fields.paymentMethod === 'string' ? fields.paymentMethod.trim() : '';
+  //CHECK ENABLED METHODS BEFORE OPENING THE ROW-LOCKING TRANSACTION SO WE DO
+  //NOT RESERVE ANOTHER CONNECTION THROUGH THE GLOBAL DATABASE CLIENT.
+  const enabledMethods = await listEnabledSeminarPaymentMethods();
   try {
     await client.begin(async (sql) => {
       const [existing] = await sql<{ guest_email: string | null; guest_first_name: string | null; guest_last_name: string | null; guest_name: string | null; guest_phone: string | null; payment_method_canonical_id: string; profile_id: number | null }[]>`select guest_email,guest_first_name,guest_last_name,guest_name,guest_phone,payment_method_canonical_id,profile_id
@@ -653,7 +656,7 @@ export async function updateSeminarRegistrationDetails(registrationIdValue: unkn
       // administrator has since disabled that method in Organization Settings -- only switching to
       // a genuinely different method requires it to be currently enabled.
       const paymentMethod = requestedMethod === existing.payment_method_canonical_id
-        ? requestedMethod : validatePaymentMethod(await listEnabledSeminarPaymentMethods(), requestedMethod);
+        ? requestedMethod : validatePaymentMethod(enabledMethods, requestedMethod);
       if (existing.profile_id === null) {
         const rawFirstName = typeof fields.guestFirstName === 'string' ? fields.guestFirstName.trim() : '';
         const rawLastName = typeof fields.guestLastName === 'string' ? fields.guestLastName.trim() : '';
