@@ -52,8 +52,18 @@ export function DataTable<TData>({
 }: DataTableProps<TData>) {
   const router = useRouter();
   const [mutationPending, setMutationPending] = useState(false);
+  const [drawerRefreshPending, setDrawerRefreshPending] = useState(false);
+  React.useEffect(() => {
+    const begin = () => setDrawerRefreshPending(true);
+    window.addEventListener('idoc:table-refresh-start', begin);
+    return () => window.removeEventListener('idoc:table-refresh-start', begin);
+  }, []);
+  React.useEffect(() => {
+    //THE SERVER SUPPLIED NEW TABLE DATA; CLEAR THE DRAWER-INITIATED SKELETON.
+    setDrawerRefreshPending(false);
+  }, [table.options.data]);
   const [refreshPending, startRefresh] = useTransition();
-  const isLoading = Boolean(loading || mutationPending || refreshPending);
+  const isLoading = Boolean(loading || mutationPending || refreshPending || drawerRefreshPending);
   const mutation = React.useMemo<DataTableMutation>(() => ({
     begin: () => setMutationPending(true),
     finish: (refresh = true) => {

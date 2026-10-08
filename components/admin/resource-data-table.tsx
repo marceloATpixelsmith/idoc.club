@@ -1,11 +1,12 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, ChevronDown, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { updateAdminTableInlineField } from '@/app/(dashboard)/admin/bulk-actions';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { BulkNewsStatusSelected } from '@/components/admin/bulk-update-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
@@ -21,10 +22,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 
 export type ResourceRow = {
   id: number;
@@ -82,6 +86,138 @@ const ACCESS_LABELS: Record<string, string> = {
   veterinarian: 'Veterinarian',
 };
 
+function statusIcon(tableType: ResourceType, status: string) {
+  if (tableType === 'seminars') return status === 'published' ? CircleCheck : status === 'canceled' ? CircleAlert : CircleDashed;
+  return status === 'published' ? CircleCheck : status === 'scheduled' ? Clock3 : status === 'archived' ? Archive : CircleDashed;
+}
+
+function InlineStatusEditor({ id, status, tableType }: { id: number; status: string; tableType: ResourceType }) {
+  const router = useRouter();
+  const [value, setValue] = useState(status);
+  const [pending, startTransition] = useTransition();
+  const Icon = statusIcon(tableType, value);
+  const options = CONFIG[tableType].statuses;
+
+  function changeStatus(next: string) {
+    if (next === value || pending) return;
+    const previous = value;
+    setValue(next);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
+      formData.set('table', tableType);
+      formData.set('id', String(id));
+      formData.set('field', 'status');
+      formData.set('status', next);
+      try {
+        const result = await updateAdminTableInlineField({}, formData);
+        if (result.error) {
+          setValue(previous);
+          window.alert(result.error);
+          return;
+        }
+        router.refresh();
+      } catch {
+        setValue(previous);
+        window.alert('Unable to save this status change. Please try again.');
+      }
+    });
+  }
+
+  return (
+    <div className="relative inline-flex h-8 items-center gap-2 font-medium">
+      <span className="flex size-4 shrink-0 items-center justify-center self-center">
+        <Icon aria-hidden className="size-4" />
+      </span>
+      <select
+        aria-label={`Change ${tableType === 'seminars' ? 'seminar' : 'News/Blog'} status`}
+        className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-5 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
+        disabled={pending}
+        onChange={(event) => changeStatus(event.target.value)}
+        value={value}
+      >
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-gold" />
+    </div>
+  );
+}
+
+const ACCESS_OPTIONS = [
+  { label: 'Public', value: 'public' },
+  { label: 'All logged-in Members', value: 'members' },
+  { label: 'Judge', value: 'judge' },
+  { label: 'Steward', value: 'steward' },
+  { label: 'Veterinarian', value: 'veterinarian' },
+] as const;
+
+function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
+  const router = useRouter();
+  const initial = access?.length ? access : ['public'];
+  const [selected, setSelected] = useState<string[]>(initial);
+  const [pending, startTransition] = useTransition();
+
+  function nextAudience(value: string, checked: boolean): string[] {
+    if (value === 'public' || value === 'members') return checked ? [value] : ['public'];
+    const roles = selected.filter((item) => ['judge', 'steward', 'veterinarian'].includes(item));
+    const next = checked ? [...new Set([...roles, value])] : roles.filter((item) => item !== value);
+    return next.length ? next : ['public'];
+  }
+
+  function updateAudience(value: string, checked: boolean) {
+    if (pending) return;
+    const previous = selected;
+    const next = nextAudience(value, checked);
+    setSelected(next);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set('csrf_token', readCsrfTokenFromDocumentCookie());
+      formData.set('table', 'news');
+      formData.set('id', String(id));
+      formData.set('field', 'access');
+      next.forEach((item) => formData.append('audience', item));
+      try {
+        const result = await updateAdminTableInlineField({}, formData);
+        if (result.error) {
+          setSelected(previous);
+          window.alert(result.error);
+          return;
+        }
+        router.refresh();
+      } catch {
+        setSelected(previous);
+        window.alert('Unable to save this access change. Please try again.');
+      }
+    });
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button aria-label="Edit News/Blog access" className="h-auto min-h-0 w-full justify-start p-0 hover:bg-transparent" disabled={pending} variant="ghost">
+          <span className="flex w-full flex-col items-start gap-1.5 whitespace-normal">
+            {selected.map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-3">
+        <div className="space-y-2">
+          {ACCESS_OPTIONS.map((option) => (
+            <Label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 font-normal hover:bg-accent" key={option.value}>
+              <Checkbox
+                checked={selected.includes(option.value)}
+                disabled={pending}
+                onCheckedChange={(checked) => updateAudience(option.value, checked === true)}
+              />
+              {option.label}
+            </Label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'], type: ResourceType) {
   downloadCsv(
     `${type}-selected.csv`,
@@ -133,7 +269,13 @@ export function ResourceDataTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount, matching useDataTable's own initialState-is-only-read-once contract.
   }, []);
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
-    const header = (label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => <DataTableColumnHeader column={column} label={label} />;
+    const header = (id: ResourceColumn, label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => (
+      <DataTableColumnHeader
+        className={tableType === 'news' && (id === 'publication' || id === 'updated') ? 'w-full min-w-0 justify-between whitespace-nowrap px-1' : undefined}
+        column={column}
+        label={label}
+      />
+    );
     return [
       {
         id: 'select', enableHiding: false, enableSorting: false, size: 40,
@@ -146,7 +288,7 @@ export function ResourceDataTable({
         enableHiding: id !== 'title',
         enableSorting: ['title', 'type', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
         enableColumnFilter: id === 'status' || (tableType === 'news' && id === 'type'),
-        header: header(label),
+        header: header(id, label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'type' && tableType === 'news'
@@ -156,14 +298,12 @@ export function ResourceDataTable({
           ? tableType === 'news'
             ? <span className="block w-full whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span><span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
             : <span className="font-medium">{row.original.title}</span>
-          : id === 'status' && tableType === 'seminars'
-            ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'canceled' ? CircleAlert : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
-            : id === 'status' && tableType === 'news'
-              ? (() => { const Icon = row.original.status === 'published' ? CircleCheck : row.original.status === 'scheduled' ? Clock3 : row.original.status === 'archived' ? Archive : CircleDashed; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{row.original.status.toUpperCase()}</span>; })()
+          : id === 'status' && (tableType === 'seminars' || tableType === 'news')
+            ? <InlineStatusEditor id={row.original.id} key={`${row.original.id}:${row.original.status}`} status={row.original.status} tableType={tableType} />
               : id === 'type' && tableType === 'news'
                 ? (() => { const Icon = row.original.type === 'blog' ? BookOpenText : Newspaper; return <span className="inline-flex items-center gap-2 font-medium"><Icon aria-hidden className="size-4" />{String(row.original.type ?? 'news').toUpperCase()}</span>; })()
                 : id === 'access' && tableType === 'news'
-                  ? <div className="flex w-full flex-col items-start gap-1.5 whitespace-normal">{(row.original.access?.length ? row.original.access : ['public']).map((value) => <Badge className="border-gold/40 bg-gold/10" key={value} variant="outline">{ACCESS_LABELS[value] ?? value}</Badge>)}</div>
+                  ? <InlineAccessEditor access={row.original.access} id={row.original.id} key={`${row.original.id}:${(row.original.access?.length ? row.original.access : ['public']).join('|')}`} />
                   : <span>{row.original[id] ?? '—'}</span>,
       })),
       {
@@ -301,8 +441,8 @@ export function ResourceDataTable({
       type: { width: '90px' },
       status: { width: '122px' },
       access: { width: '130px' },
-      publication: { width: '140px' },
-      updated: { width: '165px' },
+      publication: { width: '180px' },
+      updated: { width: '190px' },
       actions: { width: '92px' },
     }
     : undefined;

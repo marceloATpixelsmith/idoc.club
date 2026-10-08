@@ -20,10 +20,16 @@ test('News Blog admin table exposes slug, typed/status icon labels, filter and d
   assert.match(resourceTable, /row\.original\.slug/);
   assert.match(resourceTable, /BookOpenText/);
   assert.match(resourceTable, /Newspaper/);
-  assert.match(resourceTable, /row\.original\.status\.toUpperCase\(\)/);
+  assert.match(resourceTable, /InlineStatusEditor/);
+  assert.match(resourceTable, /font-medium leading-8 uppercase/);
   assert.match(resourceTable, /row\.original\.type[\s\S]*?toUpperCase\(\)/);
   assert.match(resourceTable, /types: \[\{ label: 'NEWS', value: 'news' \}, \{ label: 'BLOG', value: 'blog' \}\]/);
   assert.match(resourceList, /publication: formatAdminDate/);
+  assert.match(resourceTable, /publication: \{ width: '180px' \}/);
+  assert.match(resourceTable, /updated: \{ width: '190px' \}/);
+  assert.match(resourceTable, /id === 'publication' \|\| id === 'updated'/);
+  assert.match(resourceTable, /justify-between whitespace-nowrap/);
+  assert.match(resourceTable, /top-1\/2 size-3\.5 -translate-y-1\/2/);
 });
 
 test('News Blog type and thumbnail are persisted and public listing queries are type-filtered', () => {
@@ -94,5 +100,9 @@ test('bulk Support close and News status updates keep server authorization, CSRF
   assert.match(bulk, /requireAdministrator\(actor\)/);
   assert.match(bulk, /support\.conversation\.closed/);
   assert.match(bulk, /admin\.news_article\.bulk_status_changed/);
+  assert.match(bulk, /export async function updateAdminTableInlineField/);
+  assert.match(bulk, /admin\.news_article\.inline_status_changed/);
+  assert.match(bulk, /admin\.news_article\.inline_access_changed/);
+  assert.match(bulk, /admin\.seminar\.inline_status_changed/);
   assert.match(bulk, /Every selected item needs a future publication date before it can be scheduled/);
 });
