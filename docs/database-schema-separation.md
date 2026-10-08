@@ -42,6 +42,19 @@ If the live cutover fails after the production rename, the script attempts an au
 
 The post-cutover validator compares relation inventories, row counts, sequence state, indexes, constraints, functions, triggers, relation owners/ACLs, staging sanitization state, and PostgreSQL catalog dependencies. Any cross-reference between `idoc_production` and `idoc_staging` fails validation. The read-only preflight script additionally inspects dependency catalogs and textual function definitions for dynamic cross-schema SQL.
 
+## Database login isolation
+
+The schema name alone is not the security boundary. Cutover provisions two PostgreSQL login roles with no passwords until an operator configures them through a secure PostgreSQL client:
+
+- `idoc_production_app` receives DML access only to `idoc_production`.
+- `idoc_staging_app` receives DML access only to `idoc_staging`.
+
+The roles cannot inherit other role privileges, own neither application schema, cannot create schemas or tables, and are denied access to the opposite schema. Default grants cover future application tables and sequences. DDL migrations must use the separately authorized schema-owner connection under controlled operations, not either application login. The production and staging `POSTGRES_URL` values must use different role credentials, not the existing shared/owner credential.
+
+The roles start without passwords by design. Set unique strong passwords in a trusted PostgreSQL GUI/client after the cutover, then configure corresponding server-only project-scoped `POSTGRES_URL` values in Vercel. Never place passwords in documentation, issue comments or this conversation.
+
+`lib/db/connection-url.ts` refuses a production deployment using any login other than `idoc_production_app` once `DB_SCHEMA=idoc_production`, and refuses staging Preview using any login other than `idoc_staging_app` once `DB_SCHEMA=idoc_staging`. This is an additional guard; the database GRANT/REVOKE policy is the actual access boundary. Only the `staging` Git branch can select `idoc_staging` in Vercel Preview.
+
 ## Vercel activation order
 
 Do not create or activate `DB_SCHEMA` before both target schemas exist and validation succeeds.
