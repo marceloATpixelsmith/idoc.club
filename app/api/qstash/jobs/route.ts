@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { verifyQStashRequest, QSTASH_JOBS, type QStashJob } from '@/lib/background/qstash';
+import { publishQStashJob, verifyQStashRequest, QSTASH_JOBS, type QStashJob } from '@/lib/background/qstash';
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { GET as accountDelivery } from '@/app/api/cron/account-delivery/route';
 import { GET as seminarCancellation } from '@/app/api/cron/seminar-cancellation-resolution/route';
@@ -34,5 +34,14 @@ export async function POST(request: Request): Promise<Response> {
   if (!Object.prototype.hasOwnProperty.call(QSTASH_JOBS, job)) return Response.json({ error: 'Unknown job' }, { status: 400 });
   const secret = cronSecretForServer();
   if (!secret) return Response.json({ error: 'Worker unavailable' }, { status: 503 });
-  return handlers[job as QStashJob](new Request(request.url, { method: 'GET', headers: { authorization: `Bearer ${secret}` } }));
+  const response = await handlers[job as QStashJob](new Request(request.url, { method: 'GET', headers: { authorization: `Bearer ${secret}` } }));
+  if (job === 'account-delivery' && response.ok) {
+    const summary = await response.clone().json() as { retryable?: number };
+    if ((summary.retryable ?? 0) > 0) {
+      // Schedule another attempt only after actual temporary delivery failures.
+      // DB availability windows and lease checks prevent premature redelivery.
+      await publishQStashJob('account-delivery', 120);
+    }
+  }
+  return response;
 }
