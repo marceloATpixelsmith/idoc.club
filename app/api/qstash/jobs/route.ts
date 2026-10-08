@@ -36,12 +36,19 @@ export async function POST(request: Request): Promise<Response> {
   if (!secret) return Response.json({ error: 'Worker unavailable' }, { status: 503 });
   const response = await handlers[job as QStashJob](new Request(request.url, { method: 'GET', headers: { authorization: `Bearer ${secret}` } }));
   if (job === 'account-delivery' && response.ok) {
-    const summary = await response.clone().json() as { retryable?: number };
-    if ((summary.retryable ?? 0) > 0) {
+    const summary = await response.clone().json() as { retryable?: number; delivered?: number; deadLettered?: number; ineligible?: number; leaseLost?: number; blocked?: number };
+    const fullBatch = !summary.blocked && (summary.delivered ?? 0) + (summary.retryable ?? 0) + (summary.deadLettered ?? 0) + (summary.ineligible ?? 0) + (summary.leaseLost ?? 0) >= 20;
+    if ((summary.retryable ?? 0) > 0 || fullBatch) {
       // Schedule another attempt only after actual temporary delivery failures.
       // DB availability windows and lease checks prevent premature redelivery.
       await publishQStashJob('account-delivery', 120);
     }
+  }
+  if (job === 'seminar-cancellation-resolution' && response.ok) {
+    const summary = await response.clone().json() as { failed?: number; processed?: number; blocked?: number };
+    // A failed Stripe call should be retried by QStash, not acknowledged as completed.
+    if ((summary.failed ?? 0) > 0) return Response.json({ error: 'Cancellation resolution pending retry' }, { status: 503 });
+    if (!summary.blocked && (summary.processed ?? 0) >= 25) await publishQStashJob('seminar-cancellation-resolution', 120);
   }
   return response;
 }
