@@ -1,11 +1,12 @@
 \set ON_ERROR_STOP on
+BEGIN;
 SET schema_isolation.inventory_schema = :'inventory_schema';
 
 CREATE TEMP TABLE schema_isolation_inventory (
   object_type text NOT NULL,
   object_name text NOT NULL,
   detail text NOT NULL
-) ON COMMIT DROP;
+);
 
 DO $$
 DECLARE
@@ -58,3 +59,5 @@ WHERE n.nspname=current_setting('schema_isolation.inventory_schema') AND NOT t.t
 SELECT object_type || '|' || object_name || '|' || detail
 FROM schema_isolation_inventory
 ORDER BY object_type, object_name, detail;
+
+ROLLBACK;
