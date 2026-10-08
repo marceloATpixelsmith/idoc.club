@@ -5,9 +5,9 @@ export default {
   schema: './lib/db/schema.ts',
   out: './lib/db/migrations',
   dialect: 'postgresql',
-  schemaFilter: ['idoc'],
+  schemaFilter: [process.env.DB_SCHEMA || 'idoc'],
   migrations: {
-    schema: 'idoc',
+    schema: process.env.DB_SCHEMA || 'idoc',
     table: '__drizzle_migrations',
   },
   dbCredentials: {
