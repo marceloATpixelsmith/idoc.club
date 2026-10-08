@@ -1,3 +1,11 @@
+// During Vercel staging builds, provision schedules before deployment succeeds.
+// In CI and local builds this is a no-op. A failed QStash API call fails the
+// staging build so the previously working deployment and its crons remain active.
+if (process.argv.includes('--when-vercel-staging') &&
+  !(process.env.VERCEL === '1' && process.env.VERCEL_GIT_COMMIT_REF === 'staging' && process.env.VERCEL_ENV === 'preview')) {
+  console.log('Skipping QStash schedule provisioning outside Vercel staging.');
+  process.exit(0);
+}
 // Register stable QStash schedules only after setting the staging resource credentials.
 // Run: node scripts/configure-qstash-schedules.mjs
 // Requires: QSTASH_TOKEN, QSTASH_CALLBACK_BASE_URL; optional QSTASH_URL.
@@ -5,6 +13,7 @@ const token = process.env.QSTASH_TOKEN;
 const origin = process.env.QSTASH_CALLBACK_BASE_URL;
 const api = process.env.QSTASH_URL || 'https://qstash.upstash.io';
 if (!token || !origin) throw new Error('Set QSTASH_TOKEN and QSTASH_CALLBACK_BASE_URL first.');
+if (process.argv.includes('--when-vercel-staging') && new URL(origin).hostname !== 'staging.idoc.club') throw new Error('Staging QStash setup requires staging.idoc.club callback origin.');
 const url = new URL('/api/qstash/jobs', origin);
 if (url.protocol !== 'https:' || new URL(api).protocol !== 'https:') throw new Error('Require HTTPS.');
 const jobs = {
