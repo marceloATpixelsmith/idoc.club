@@ -148,6 +148,10 @@ SELECT 'staging_unconsumed_token','email_otp_codes','0',count(*)::text
 FROM idoc_staging.email_otp_codes WHERE consumed_at IS NULL
 HAVING count(*)<>0;
 INSERT INTO schema_isolation_validation
+SELECT 'staging_unconsumed_token','mfa_recovery_codes','0',count(*)::text
+FROM idoc_staging.mfa_recovery_codes WHERE consumed_at IS NULL
+HAVING count(*)<>0;
+INSERT INTO schema_isolation_validation
 SELECT 'staging_pending_outbox','notification_outbox','0',count(*)::text
 FROM idoc_staging.notification_outbox WHERE sent_at IS NULL AND dead_lettered_at IS NULL
 HAVING count(*)<>0;
@@ -171,6 +175,89 @@ INSERT INTO schema_isolation_validation
 SELECT 'staging_open_checkout','seminar_registrations','0',count(*)::text
 FROM idoc_staging.seminar_registrations WHERE checkout_status='open'
 HAVING count(*)<>0;
+
+
+WITH production AS (
+  SELECT c.relname, c.relkind
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname='idoc_production' AND c.relkind IN ('r','p','S','v','m')
+), staging AS (
+  SELECT c.relname, c.relkind
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname='idoc_staging' AND c.relkind IN ('r','p','S','v','m')
+)
+INSERT INTO schema_isolation_validation
+SELECT 'relation_inventory',coalesce(p.relname,s.relname),
+       CASE WHEN p.relname IS NULL THEN 'missing' ELSE p.relkind::text END,
+       CASE WHEN s.relname IS NULL THEN 'missing' ELSE s.relkind::text END
+FROM production p FULL JOIN staging s USING (relname)
+WHERE p.relname IS NULL OR s.relname IS NULL OR p.relkind<>s.relkind;
+
+WITH production AS (
+  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, coalesce(c.relacl::text,'') AS acl
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname='idoc_production' AND c.relkind IN ('r','p','S','v','m')
+), staging AS (
+  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, coalesce(c.relacl::text,'') AS acl
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname='idoc_staging' AND c.relkind IN ('r','p','S','v','m')
+)
+INSERT INTO schema_isolation_validation
+SELECT 'relation_permissions',coalesce(p.relname,s.relname),
+       coalesce(p.owner_name||'|'||p.acl,'missing'),coalesce(s.owner_name||'|'||s.acl,'missing')
+FROM production p FULL JOIN staging s USING (relname)
+WHERE p.owner_name IS DISTINCT FROM s.owner_name OR p.acl IS DISTINCT FROM s.acl;
+
+WITH resolved AS (
+  SELECT d.*,
+    CASE d.classid
+      WHEN 'pg_class'::regclass THEN (SELECT relnamespace FROM pg_class WHERE oid=d.objid)
+      WHEN 'pg_proc'::regclass THEN (SELECT pronamespace FROM pg_proc WHERE oid=d.objid)
+      WHEN 'pg_constraint'::regclass THEN (SELECT connamespace FROM pg_constraint WHERE oid=d.objid)
+      WHEN 'pg_rewrite'::regclass THEN (SELECT c.relnamespace FROM pg_rewrite r JOIN pg_class c ON c.oid=r.ev_class WHERE r.oid=d.objid)
+      WHEN 'pg_trigger'::regclass THEN (SELECT c.relnamespace FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.oid=d.objid)
+      WHEN 'pg_type'::regclass THEN (SELECT typnamespace FROM pg_type WHERE oid=d.objid)
+      WHEN 'pg_namespace'::regclass THEN d.objid
+      ELSE NULL
+    END AS source_namespace_oid,
+    CASE d.refclassid
+      WHEN 'pg_class'::regclass THEN (SELECT relnamespace FROM pg_class WHERE oid=d.refobjid)
+      WHEN 'pg_proc'::regclass THEN (SELECT pronamespace FROM pg_proc WHERE oid=d.refobjid)
+      WHEN 'pg_constraint'::regclass THEN (SELECT connamespace FROM pg_constraint WHERE oid=d.refobjid)
+      WHEN 'pg_rewrite'::regclass THEN (SELECT c.relnamespace FROM pg_rewrite r JOIN pg_class c ON c.oid=r.ev_class WHERE r.oid=d.refobjid)
+      WHEN 'pg_trigger'::regclass THEN (SELECT c.relnamespace FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.oid=d.refobjid)
+      WHEN 'pg_type'::regclass THEN (SELECT typnamespace FROM pg_type WHERE oid=d.refobjid)
+      WHEN 'pg_namespace'::regclass THEN d.refobjid
+      ELSE NULL
+    END AS target_namespace_oid
+  FROM pg_depend d
+), cross_schema AS (
+  SELECT source_ns.nspname AS source_schema, target_ns.nspname AS target_schema, count(*)::int AS references
+  FROM resolved r
+  JOIN pg_namespace source_ns ON source_ns.oid=r.source_namespace_oid
+  JOIN pg_namespace target_ns ON target_ns.oid=r.target_namespace_oid
+  WHERE source_ns.nspname IN ('idoc_production','idoc_staging')
+    AND target_ns.nspname IN ('idoc_production','idoc_staging')
+    AND source_ns.nspname<>target_ns.nspname
+  GROUP BY source_ns.nspname,target_ns.nspname
+)
+INSERT INTO schema_isolation_validation
+SELECT 'cross_schema_dependency',source_schema||'->'||target_schema,'0',references::text
+FROM cross_schema
+WHERE references<>0;
+
+INSERT INTO schema_isolation_validation
+SELECT 'function_text_cross_schema',n.nspname||'.'||p.proname,'none','cross-schema text reference'
+FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname IN ('idoc_production','idoc_staging')
+  AND (
+    (n.nspname='idoc_staging' AND
+      (position('idoc_production.' in pg_get_functiondef(p.oid))>0 OR position('"idoc_production".' in pg_get_functiondef(p.oid))>0))
+    OR
+    (n.nspname='idoc_production' AND
+      (position('idoc_staging.' in pg_get_functiondef(p.oid))>0 OR position('"idoc_staging".' in pg_get_functiondef(p.oid))>0))
+    OR position('"idoc".' in pg_get_functiondef(p.oid))>0
+  );
 
 TABLE schema_isolation_validation;
 
