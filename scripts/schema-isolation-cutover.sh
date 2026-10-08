@@ -129,6 +129,7 @@ SQL
         pg_restore --no-owner --single-transaction --dbname="${POSTGRES_URL}" "${STAGING_FILE}"
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 -v confirm=SANITIZE_IDOC_STAGING             -f "${ROOT_DIR}/scripts/sanitize-staging-schema.sql"
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1             -f "${ROOT_DIR}/scripts/validate-schema-isolation.sql"
+        psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1             -f "${ROOT_DIR}/scripts/provision-schema-runtime-roles.sql"
         trap - ERR
         echo "Schema cutover completed and validated. Do not enable application traffic until DB_SCHEMA scopes are set."
         ;;
