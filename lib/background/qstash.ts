@@ -63,7 +63,7 @@ export async function verifyQStashRequest(request: Request, rawBody: string): Pr
       const { payload } = await jwtVerify(signature, new TextEncoder().encode(key), {
         issuer: 'Upstash', algorithms: ['HS256'], requiredClaims: ['sub', 'exp', 'nbf'],
       });
-      if (payload.sub === destination && payload.body === hash) return true;
+      if (payload.sub === destination && typeof payload.body === 'string' && payload.body.replace(/=+$/, '') === hash) return true;
     } catch { /* signing-key rotation: try the other configured key */ }
   }
   return false;
