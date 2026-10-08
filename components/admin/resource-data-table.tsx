@@ -120,18 +120,20 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
   }
 
   return (
-    <div className="relative inline-flex items-center gap-2 font-medium">
-      <Icon aria-hidden className="size-4 shrink-0" />
+    <div className="relative inline-flex h-8 items-center gap-2 font-medium">
+      <span className="flex size-4 shrink-0 items-center justify-center self-center">
+        <Icon aria-hidden className="size-4" />
+      </span>
       <select
         aria-label={`Change ${tableType === 'seminars' ? 'seminar' : 'News/Blog'} status`}
-        className="cursor-pointer appearance-none border-0 bg-transparent py-1 pr-5 font-medium uppercase outline-none disabled:cursor-wait disabled:opacity-60"
+        className="h-8 cursor-pointer appearance-none border-0 bg-transparent py-0 pr-5 font-medium leading-8 uppercase outline-none disabled:cursor-wait disabled:opacity-60"
         disabled={pending}
         onChange={(event) => changeStatus(event.target.value)}
         value={value}
       >
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <ChevronDown aria-hidden className="pointer-events-none absolute right-0 size-3.5 text-gold" />
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-gold" />
     </div>
   );
 }
@@ -257,7 +259,13 @@ export function ResourceDataTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount, matching useDataTable's own initialState-is-only-read-once contract.
   }, []);
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
-    const header = (label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => <DataTableColumnHeader column={column} label={label} />;
+    const header = (id: ResourceColumn, label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => (
+      <DataTableColumnHeader
+        className={tableType === 'news' && (id === 'publication' || id === 'updated') ? 'w-full min-w-0 justify-between whitespace-nowrap px-1' : undefined}
+        column={column}
+        label={label}
+      />
+    );
     return [
       {
         id: 'select', enableHiding: false, enableSorting: false, size: 40,
@@ -270,7 +278,7 @@ export function ResourceDataTable({
         enableHiding: id !== 'title',
         enableSorting: ['title', 'type', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
         enableColumnFilter: id === 'status' || (tableType === 'news' && id === 'type'),
-        header: header(label),
+        header: header(id, label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'type' && tableType === 'news'
@@ -423,8 +431,8 @@ export function ResourceDataTable({
       type: { width: '90px' },
       status: { width: '122px' },
       access: { width: '130px' },
-      publication: { width: '140px' },
-      updated: { width: '165px' },
+      publication: { width: '180px' },
+      updated: { width: '190px' },
       actions: { width: '92px' },
     }
     : undefined;
