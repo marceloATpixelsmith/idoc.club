@@ -10,7 +10,7 @@ import { getPostgresConnectionUrl } from '../lib/db/connection-url';
 import { getDatabaseSchemaName } from '../lib/db/schema-name';
 import { rewriteMigrationSql } from './schema-migration-sql.mjs';
 
-async function rewriteSqlFiles(directory, targetSchema)
+async function rewriteSqlFiles(directory: string, targetSchema: string): Promise<void>
 {
     const entries = await readdir(directory, { withFileTypes: true });
 
