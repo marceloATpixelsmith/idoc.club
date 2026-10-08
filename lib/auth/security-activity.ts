@@ -1,4 +1,4 @@
-/** The subset of idoc.audit_log actions that read as "your own account security activity" -- the
+/** The subset of audit_log actions that read as "your own account security activity" -- the
  * My Security page's Activity card (lib/db/queries.ts's getActivityLogs(), rendered by
  * app/(dashboard)/dashboard/security/security-client.tsx). Deliberately excludes audit actions
  * that are just as often self-initiated but belong to a different page's own history instead
