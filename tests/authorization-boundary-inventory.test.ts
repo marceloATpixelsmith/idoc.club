@@ -68,7 +68,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
     unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
   },
-  'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access', updateAdminTableInlineField: 'delegates-to-data-access' },
   'app/(dashboard)/admin/seminars/actions.ts': {
     createAdminSeminarRegistrationAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
     refundSeminarRegistrationAction: 'delegates-to-data-access', setAdminRegistrationStatusAction: 'delegates-to-data-access',
