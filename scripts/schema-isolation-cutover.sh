@@ -25,6 +25,29 @@ database_identity()
     psql "$1" -X -A -t -v ON_ERROR_STOP=1 -c "select current_database() || '|' || coalesce(inet_server_addr()::text,'local') || '|' || inet_server_port();"
 }
 
+rollback_failed_cutover()
+{
+    local exit_code="$?"
+    trap - ERR
+
+    echo "Cutover failed; attempting automatic schema-name rollback." >&2
+    psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 <<'SQL' || true
+BEGIN;
+DO $
+BEGIN
+  IF to_regnamespace('idoc') IS NULL AND to_regnamespace('idoc_production') IS NOT NULL THEN
+    IF to_regnamespace('idoc_staging') IS NOT NULL AND to_regnamespace('idoc_staging_failed') IS NULL THEN
+      EXECUTE 'ALTER SCHEMA idoc_staging RENAME TO idoc_staging_failed';
+    END IF;
+    EXECUTE 'ALTER SCHEMA idoc_production RENAME TO idoc';
+  END IF;
+END $;
+COMMIT;
+SQL
+
+    exit "${exit_code}"
+}
+
 for command_name in pg_dump pg_restore psql diff
 do
     require_command "${command_name}"
@@ -89,9 +112,11 @@ SQL
         pg_restore --list "${BACKUP_FILE}" >/dev/null
         pg_restore --list "${STAGING_FILE}" >/dev/null
 
+        trap rollback_failed_cutover ERR
+
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
-DO $$
+DO $
 BEGIN
   IF to_regnamespace('idoc') IS NULL THEN RAISE EXCEPTION 'legacy idoc schema is missing'; END IF;
   IF to_regnamespace('idoc_production') IS NOT NULL THEN RAISE EXCEPTION 'idoc_production already exists'; END IF;
@@ -104,6 +129,7 @@ SQL
         pg_restore --no-owner --single-transaction --dbname="${POSTGRES_URL}" "${STAGING_FILE}"
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 -v confirm=SANITIZE_IDOC_STAGING             -f "${ROOT_DIR}/scripts/sanitize-staging-schema.sql"
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1             -f "${ROOT_DIR}/scripts/validate-schema-isolation.sql"
+        trap - ERR
         echo "Schema cutover completed and validated. Do not enable application traffic until DB_SCHEMA scopes are set."
         ;;
 
