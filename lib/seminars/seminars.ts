@@ -117,15 +117,15 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   const to = listDate(toValue);
   const order = listOrder(input, {
     date: 's.start_date', start: 's.start_date', end: 's.end_date', deadline: 's.registration_deadline', title: 's.title', status: 's.status',
-    registrations: '(select count(*) from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
+    registrations: '(select count(*) from seminar_registrations r where r.seminar_id=s.id and r.registration_status=\'registered\')',
   }, 'date', 's.id');
   const advancedWhere = advancedListWhere(input, { title: 's.title', status: 's.status' }, SEMINAR_STATUSES);
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = await client`select s.id,s.title,s.status,s.start_date,s.end_date,s.registration_deadline,s.capacity,
     s.member_price_cents,s.non_member_price_cents,count(*) over()::int total_count,
-    (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
-    from idoc.seminars s
+    (select count(*)::int from seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
+    from seminars s
     where (${statusWhere}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
     and (${from}::date is null or s.start_date>=${from}::date) and (${to}::date is null or s.start_date<=${to}::date) and (${advancedWhere})
     order by ${order} limit ${limit + 1} offset ${offset}`;
@@ -143,7 +143,7 @@ export async function getAdminSeminar(value: unknown): Promise<AdminSeminarRow |
   await requireSeminarAdministrator();
   const parsedId = idSchema.safeParse(value);
   if (!parsedId.success) return null;
-  const [row] = await client<AdminSeminarRow[]>`select * from idoc.seminars where id=${parsedId.data} limit 1`;
+  const [row] = await client<AdminSeminarRow[]>`select * from seminars where id=${parsedId.data} limit 1`;
   if (!row) return null;
   return { ...row, end_date: dateOnly(row.end_date), start_date: dateOnly(row.start_date) };
 }
@@ -156,11 +156,11 @@ export async function createSeminar(input: SeminarInput) {
   const actor = await requireSeminarAdministrator();
   const fields = validateFields(input);
   return client.begin(async (sql) => {
-    const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
+    const [row] = await sql<{ id: number }[]>`insert into seminars
       (title,description,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
       values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.organizingNationalFederation},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
       returning id`;
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+    await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
     return row.id;
   });
@@ -174,17 +174,17 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   await client.begin(async (sql) => {
     const [existing] = await sql<{
       capacity: number; member_price_cents: number; non_member_price_cents: number; status: SeminarStatus; title: string;
-    }[]>`select capacity,member_price_cents,non_member_price_cents,status,title from idoc.seminars where id=${id} for update`;
+    }[]>`select capacity,member_price_cents,non_member_price_cents,status,title from seminars where id=${id} for update`;
     if (!existing) throw new SeminarValidationError('Seminar not found.');
-    const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations where seminar_id=${id} and registration_status='registered'`;
-    const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.seminar_registrations where seminar_id=${id}`;
+    const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from seminar_registrations where seminar_id=${id} and registration_status='registered'`;
+    const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from seminar_registrations where seminar_id=${id}`;
     if (totalCount > 0 && (fields.memberPriceCents !== existing.member_price_cents || fields.nonMemberPriceCents !== existing.non_member_price_cents)) {
       throw new SeminarValidationError('Prices cannot change once a seminar has registrations.');
     }
     if (fields.capacity < activeCount) {
       throw new SeminarValidationError(`Capacity cannot be reduced below the ${activeCount} current active registration(s).`);
     }
-    await sql`update idoc.seminars set title=${fields.title},description='',start_date=${fields.startDate},end_date=${fields.endDate},location=${fields.location},
+    await sql`update seminars set title=${fields.title},description='',start_date=${fields.startDate},end_date=${fields.endDate},location=${fields.location},
       language=${fields.language},organizing_national_federation=${fields.organizingNationalFederation},course_directors=${fields.courseDirectors},
       participant_profile=${fields.participantProfile},course_venue_information=${fields.courseVenueInformation},application=${fields.application},accommodation_information=${fields.accommodationInformation},
       capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
@@ -195,12 +195,12 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     // registration state as a durable queue, so refunds/session expiry survive request termination.
     let canceledRegistrations = 0;
     if (existing.status !== 'canceled' && fields.status === 'canceled') {
-      const canceled = await sql<{ id: number }[]>`update idoc.seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
+      const canceled = await sql<{ id: number }[]>`update seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now()
         where seminar_id=${id} and registration_status='registered' returning id`;
       canceledRegistrations = canceled.length;
       needsCancellationResolution = true;
       if (canceledRegistrations) {
-        await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
           (${actor.id},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(id)},${JSON.stringify({ registrationIds: canceled.map((row) => row.id) })}::jsonb)`;
       }
     }
@@ -209,7 +209,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
       existing.capacity !== fields.capacity && 'capacity', existing.member_price_cents !== fields.memberPriceCents && 'memberPriceCents',
       existing.non_member_price_cents !== fields.nonMemberPriceCents && 'nonMemberPriceCents',
     ].filter(Boolean);
-    await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
+    await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar.edited','seminar',${String(id)},
       ${JSON.stringify({ capacity: existing.capacity, memberPriceCents: existing.member_price_cents, nonMemberPriceCents: existing.non_member_price_cents, status: existing.status, title: existing.title })}::jsonb,
       ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
