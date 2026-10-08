@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -164,7 +166,7 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
   dedupeKey: string;
   recipientEmail: string;
 }) {
-  return client.begin(async (tx) => {
+  const result = await client.begin(async (tx) => {
     const revoked = await tx<{ session_id: string }[]>`
       update idoc.auth_sessions
       set revoked_at=coalesce(revoked_at,now()),revoke_reason=coalesce(revoke_reason,${input.reason}),updated_at=now()
@@ -177,6 +179,8 @@ export async function revokeOtherUserSessionsWithEvidence(input: {
       on conflict (dedupe_key) where dedupe_key is not null do nothing`;
     return revoked.length;
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
 
 export async function listActiveSessions(userId: number, currentSessionVersion: number) {
