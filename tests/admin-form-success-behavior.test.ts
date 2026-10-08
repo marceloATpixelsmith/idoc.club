@@ -58,7 +58,9 @@ test('membership suspension keeps the drawer open when Stripe cancellation needs
 test('shared table-backed admin drawers close immediately and refresh after successful saves', () => {
   const drawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
   assert.match(drawer, /const \[open, setOpen\] = useState\(true\)/);
-  assert.match(drawer, /setOpen\(false\); router\.push\(closeHref\); router\.refresh\(\)/);
+  assert.match(drawer, /window\.dispatchEvent\(new Event\('idoc:table-refresh-start'\)\)/);
+  assert.match(drawer, /setOpen\(false\)/);
+  assert.match(drawer, /router\.replace\(closeHref\)/);
   assert.match(drawer, /<Dialog\.Root open=\{open\} onOpenChange=\{\(nextOpen\) => \{ setOpen\(nextOpen\); if \(!nextOpen\) router\.push\(closeHref\); \}\}>/);
 
   for (const path of [
