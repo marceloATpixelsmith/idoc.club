@@ -10,7 +10,7 @@ import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { SeminarRegistrationError } from '@/lib/seminars/registrations';
 
 function seminarCheckoutDeliveryOwner(baseUrl: string): 'production' | 'staging' {
-  return new URL(baseUrl).hostname === 'staging.idoc.club' ? 'staging' : 'production';
+  return new URL(baseUrl).hostname === 'staging.club' ? 'staging' : 'production';
 }
 
 export type SeminarCheckoutStripeClient = {
@@ -34,7 +34,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
   //THESE HELPERS USE THE SHARED DATABASE CLIENT AND MUST NOT WAIT FOR A SECOND
   //CONNECTION WHILE THE TRANSACTION IS HOLDING A POOL CONNECTION.
   const [identity] = await client<{ profile_id: number | null; user_id: number | null }[]>`select r.profile_id,p.user_id
-    from idoc.seminar_registrations r left join idoc.profiles p on p.id=r.profile_id
+    from seminar_registrations r left join profiles p on p.id=r.profile_id
     where r.id=${registrationId}`;
   if (!identity) throw new SeminarRegistrationError('Registration not found.');
   let memberCustomer: { customerId: string; profileId: number; userId: number } | null = null;
@@ -51,8 +51,8 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
       stripe_checkout_session_id: string | null; title: string; user_id: number | null;
     }[]>`select r.registration_status,r.payment_status,r.profile_id,r.guest_email,r.seminar_id,r.stripe_checkout_session_id,r.checkout_status,r.registered_at,
       r.payment_method_canonical_id,s.title,coalesce(r.expected_amount_cents, case when r.profile_id is null then s.non_member_price_cents else s.member_price_cents end) price_cents,
-      p.user_id,u.email from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-      left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id
+      p.user_id,u.email from seminar_registrations r join seminars s on s.id=r.seminar_id
+      left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
       where r.id=${registrationId} for update of r`;
     if (!row) throw new SeminarRegistrationError('Registration not found.');
     let customerId: string | undefined;
@@ -74,7 +74,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
     if (row.stripe_checkout_session_id && row.checkout_status === 'open' && stripe.checkout.sessions.retrieve) {
       const existing = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id);
       if (existing.status === 'open' && existing.url) return existing.url;
-      await sql`update idoc.seminar_registrations set checkout_status=${existing.status === 'expired' ? 'expired' : 'superseded'},updated_at=now() where id=${registrationId}`;
+      await sql`update seminar_registrations set checkout_status=${existing.status === 'expired' ? 'expired' : 'superseded'},updated_at=now() where id=${registrationId}`;
     }
     const baseUrl = baseUrlForServer();
     const deliveryOwner = seminarCheckoutDeliveryOwner(baseUrl);
@@ -95,7 +95,7 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
         : `${baseUrl}/api/ui/flash/seminar-checkout/success/${row.seminar_id}`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
-    await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${session.id},checkout_status='open',
+    await sql`update seminar_registrations set stripe_checkout_session_id=${session.id},checkout_status='open',
       checkout_created_at=now(),expected_amount_cents=${row.price_cents},currency='EUR',payment_status='pending',payment_status_updated_at=now(),updated_at=now()
       where id=${registrationId}`;
     return session.url;
@@ -114,8 +114,8 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
   if (!Number.isInteger(seminarId) || seminarId <= 0) throw new SeminarRegistrationError('Seminar not found.');
   const [seminar] = await client<Array<{ capacity: number; non_member_price_cents: number; registration_deadline: Date | string; status: string; title: string; active_count: number }>>`
     select s.capacity,s.non_member_price_cents,s.registration_deadline,s.status,s.title,
-      (select count(*)::int from idoc.seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') active_count
-    from idoc.seminars s where s.id=${seminarId} limit 1`;
+      (select count(*)::int from seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') active_count
+    from seminars s where s.id=${seminarId} limit 1`;
   if (!seminar || seminar.status !== 'published' || new Date(seminar.registration_deadline).getTime() <= Date.now()) {
     throw new SeminarRegistrationError('Registration is not currently open for this seminar.');
   }
