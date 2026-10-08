@@ -29,6 +29,7 @@ interface DataTableFacetedFilterProps<TData, TValue> {
   title?: string;
   options: Option[];
   multiple?: boolean;
+  exclusiveValues?: string[];
 }
 
 export function DataTableFacetedFilter<TData, TValue>({
@@ -36,6 +37,7 @@ export function DataTableFacetedFilter<TData, TValue>({
   title,
   options,
   multiple,
+  exclusiveValues = [],
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const [open, setOpen] = React.useState(false);
 
@@ -93,7 +95,11 @@ export function DataTableFacetedFilter<TData, TValue>({
         const newSelectedValues = new Set(selectedValues);
         if (isSelected) {
           newSelectedValues.delete(option.value);
+        } else if (exclusiveValues.includes(option.value)) {
+          newSelectedValues.clear();
+          newSelectedValues.add(option.value);
         } else {
+          exclusiveValues.forEach((value) => newSelectedValues.delete(value));
           newSelectedValues.add(option.value);
         }
         setDraftValues(Array.from(newSelectedValues));
@@ -102,7 +108,7 @@ export function DataTableFacetedFilter<TData, TValue>({
         setOpen(false);
       }
     },
-    [column, multiple, selectedValues],
+    [column, exclusiveValues, multiple, selectedValues],
   );
 
   const onReset = React.useCallback(
