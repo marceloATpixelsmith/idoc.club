@@ -45,10 +45,10 @@ export async function POST(request: Request): Promise<Response> {
       // Honor the DB's persisted exponential backoff, including retries beyond 120 seconds.
       const [next] = await client<{ available_at: string | null }[]>`
         select min(available_at) as available_at from (
-          select available_at from idoc.account_delivery_outbox where sent_at is null and dead_lettered_at is null and terminal_at is null
-          union all select available_at from idoc.auth_security_notification_outbox where sent_at is null and dead_lettered_at is null
-          union all select available_at from idoc.operational_alert_outbox where sent_at is null and dead_lettered_at is null
-          union all select available_at from idoc.notification_outbox where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
+          select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from idoc.account_delivery_outbox where sent_at is null and dead_lettered_at is null and terminal_at is null
+          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from idoc.auth_security_notification_outbox where sent_at is null and dead_lettered_at is null
+          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from idoc.operational_alert_outbox where sent_at is null and dead_lettered_at is null
+          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from idoc.notification_outbox where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
         ) pending`;
       const earliest = next?.available_at ? new Date(next.available_at).getTime() : Date.now() + 120_000;
       const delay = Number.isFinite(earliest) ? Math.max(15, Math.ceil((earliest - Date.now()) / 1000) + 10) : 120;
