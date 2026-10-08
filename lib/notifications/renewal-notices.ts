@@ -216,7 +216,7 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
   // absolute public fallback rather than failing the delivery before the provider call.
   const membershipUrl = process.env.BASE_URL?.trim()
     ? new URL('/dashboard/membership', process.env.BASE_URL).toString()
-    : 'https://club/dashboard/membership';
+    : 'https://idoc.club/dashboard/membership';
   const amount = `€${((payload.amountCents ?? 0) / 100).toFixed(2)}`;
 
   const membershipIntro = (message: string) =>
