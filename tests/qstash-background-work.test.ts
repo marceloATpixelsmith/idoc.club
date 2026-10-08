@@ -30,8 +30,9 @@ test('event enqueue paths dispatch only after database commits and prefer QStash
   assert.match(read('lib/seminars/seminars.ts'), /processCanceledSeminarPayments\(\), 'seminar-cancellation-resolution'/);
 });
 
-test('existing Vercel schedules remain during the credential-free migration phase', () => {
+test('Vercel staging builds register QStash schedules before removing crons', () => {
   const schedules = JSON.parse(read('vercel.json')) as { crons: Array<{path:string; schedule:string}> };
-  assert.equal(schedules.crons.length, 8);
+  assert.equal(schedules.crons.length, 0);
+  assert.match(read('package.json'), /configure-qstash-schedules/);
   assert.match(read('scripts/configure-qstash-schedules.mjs'), /QSTASH_CALLBACK_BASE_URL/);
 });
