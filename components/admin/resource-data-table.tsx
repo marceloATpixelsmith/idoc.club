@@ -252,8 +252,9 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 }
 
 export function ResourceDataTable({
-  initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialType, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
+  initialAccess, initialColumnOrder, initialFrom, initialSearch, initialSort, initialStatus, initialType, initialTo, initialVisibleColumns, page, pageSize, rows, tableType, total,
 }: {
+  initialAccess?: string;
   initialColumnOrder?: string;
   initialFrom?: string;
   initialSearch?: string;
@@ -306,13 +307,15 @@ export function ResourceDataTable({
         accessorFn: (row) => row[id] ?? '',
         enableHiding: id !== 'title',
         enableSorting: ['title', 'type', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
-        enableColumnFilter: id === 'status' || (tableType === 'news' && id === 'type'),
+        enableColumnFilter: id === 'status' || (tableType === 'news' && (id === 'type' || id === 'access')),
         header: header(id, label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'type' && tableType === 'news'
             ? { label, options: config.types ?? [], variant: 'multiSelect' }
-            : { label, variant: 'text' },
+            : id === 'access' && tableType === 'news'
+              ? { exclusiveFilterValues: ['public', 'members'], label, options: ACCESS_OPTIONS, variant: 'multiSelect' }
+              : { label, variant: 'text' },
         cell: ({ row }) => id === 'title'
           ? tableType === 'news'
             ? <span className="block w-full whitespace-normal"><span className="block break-words font-medium">{row.original.title}</span><span className="mt-1 block break-all text-xs text-muted-foreground">{row.original.slug}</span></span>
@@ -375,6 +378,7 @@ export function ResourceDataTable({
   const initialColumnFilters = useMemo(() => [
     { id: 'status', value: initialStatus ? initialStatus.split(',') : [] },
     { id: 'type', value: initialType ? initialType.split(',') : [] },
+    { id: 'access', value: initialAccess ? initialAccess.split(',') : [] },
   ].filter((filter) => filter.value.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
@@ -395,6 +399,7 @@ export function ResourceDataTable({
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       status: filterToken(state.columnFilters, 'status'),
       type: tableType === 'news' ? filterToken(state.columnFilters, 'type') : undefined,
+      access: tableType === 'news' ? filterToken(state.columnFilters, 'access') : undefined,
     };
     if (config.dateFilter) { preferences.from = effectiveFrom; preferences.to = effectiveTo; }
     void persistTablePreferences(tableType, preferences).then((response) => {
