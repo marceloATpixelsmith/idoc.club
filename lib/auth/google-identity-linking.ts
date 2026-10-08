@@ -113,7 +113,7 @@ async function atomicUnlink(input: {
   verificationMethod: 'password';
 }): Promise<boolean> {
   if (input.verificationMethod !== 'password') return false;
-  return client.begin(async (sql) => {
+  const outcome = await client.begin(async (sql) => {
     const issuer = GOOGLE_OIDC_PROVIDER.issuer;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-user:${input.userId}:${issuer}`}, 0))`;
     const current = await sql<{ id: number; subject: string }[]>`
