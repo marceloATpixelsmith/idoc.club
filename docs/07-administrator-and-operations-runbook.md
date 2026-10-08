@@ -1035,3 +1035,10 @@ Password reset and migration activation links are inserted into their durable ou
 The account-delivery cron runs every 15 minutes as a **durability and retry safety net** rather than polling every five minutes. It also continues to process Stripe customer-email synchronization. Workers preserve claim leases, deduplication, retry/backoff, communication holds, and dead-lettering. A Vercel function termination or provider failure before/while an after-response callback executes can delay delivery until the next 15-minute sweep; do not claim unconditional instant email delivery. The schedule is UTC. No new environment variables are required.
 
 Diagnose delayed messages by checking the applicable outbox row's availability time, lease, attempt count and error code, then review Sentry for worker exceptions. Do not bypass the communication-and-billing launch hold in staging or during legacy member import.
+
+
+## Seminar cancellations and date-only news publishing
+
+When an administrator cancels a seminar in the form or via inline Status editing, the status change and registration cancellation commit together. The application immediately dispatches the existing cancellation resolution worker after the response, so online payments are refunded or outstanding Checkout Sessions expired promptly. The hourly cancellation cron is retained as a durable recovery sweep for provider failures, interrupted requests, or any canceled registration not processed in the first batch. The existing billing/communication hold remains enforced by the worker.
+
+The News/Blog admin form accepts a publication **calendar date only** (YYYY-MM-DD). Publication dates are normalized to 00:00 UTC. The scheduled-publishing cron runs daily at 00:00 UTC; it publishes due articles and logs the transition. The admin News/Blog table shows only the calendar date. No timezone or time-of-day selection is exposed. The daily publishing job may run shortly after midnight depending on scheduler execution timing. Existing historical timestamps remain in storage; editing an article converts its publication date to midnight UTC.
