@@ -106,3 +106,22 @@ test('bulk Support close and News status updates keep server authorization, CSRF
   assert.match(bulk, /admin\.seminar\.inline_status_changed/);
   assert.match(bulk, /Every selected item needs a future publication date before it can be scheduled/);
 });
+
+test('inline News and Seminar statuses and News access show saving state until refreshed values arrive', () => {
+  assert.match(resourceTable, /function InlineStatusEditor[\s\S]*?const saving = pending \|\| savingTarget !== null/);
+  assert.match(resourceTable, /status === savingTarget\) setSavingTarget\(null\)/);
+  assert.match(resourceTable, /aria-label="Updating status"[\s\S]*?animate-spin/);
+  assert.match(resourceTable, /disabled=\{saving\}[\s\S]*?changeStatus/);
+  assert.match(resourceTable, /function InlineAccessEditor[\s\S]*?const saving = pending \|\| savingTarget !== null/);
+  assert.match(resourceTable, /savingTarget\.every\(\(item\) => actualAccess\.includes\(item\)\)/);
+  assert.match(resourceTable, /aria-label="Updating access"[\s\S]*?animate-spin/);
+  assert.match(resourceTable, /if \(tableType === 'seminars'\)/);
+  assert.doesNotMatch(resourceTable, /ChevronDown/);
+});
+
+
+test('inline status selects do not inherit the global native select chevron', () => {
+  const stylesheet = readFileSync('app/globals.css', 'utf8');
+  assert.match(resourceTable, /idoc-inline-status-select/);
+  assert.match(stylesheet, /select\.idoc-inline-status-select\s*\{\s*background-image:\s*none;\s*padding-right:\s*0;/);
+});
