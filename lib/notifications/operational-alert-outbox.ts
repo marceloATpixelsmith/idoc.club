@@ -32,6 +32,6 @@ export async function enqueueOperationalAlert(input: {
     on conflict (dedupe_key) do nothing
     returning id
   `);
-  if (rows[0]) dispatchQueuedEmailAfterResponse(() => processOperationalAlertBatch(1));
+  if (rows[0]) dispatchQueuedEmailAfterResponse(() => processOperationalAlertBatch(1), 'account-delivery');
   return Boolean(rows[0]);
 }
