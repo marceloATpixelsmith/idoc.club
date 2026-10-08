@@ -31,6 +31,7 @@ UPDATE email_otp_codes SET consumed_at=coalesce(consumed_at,now()) WHERE consume
 UPDATE google_oauth_transactions SET consumed_at=coalesce(consumed_at,now()) WHERE consumed_at IS NULL;
 UPDATE mfa_enrollment_transactions SET consumed_at=coalesce(consumed_at,now()) WHERE consumed_at IS NULL;
 UPDATE mfa_challenge_transactions SET consumed_at=coalesce(consumed_at,now()) WHERE consumed_at IS NULL;
+UPDATE mfa_recovery_codes SET consumed_at=coalesce(consumed_at,now()) WHERE consumed_at IS NULL;
 UPDATE mfa_remembered_devices
 SET revoked_at=coalesce(revoked_at,now()), revoke_reason=coalesce(revoke_reason,'staging_schema_clone')
 WHERE revoked_at IS NULL;
