@@ -1,27 +1,56 @@
-# Schema-isolation execution checklist (NOT YET READY FOR CUTOVER)
+# Schema-isolation execution checklist
 
-The IDOC redesign runs on Render PostgreSQL in the shared `idoc` schema today. Live WordPress is separate.
+Status: implementation and safety tooling are in PR #412. The database cutover has not been executed. The live WordPress site is unrelated.
 
-## Current schema inventory
+## Pre-cutover gates
 
-Read-only Render inspection on 2026-10-08 found 55 tables, 42 sequences, no views or materialized views, and approximately 7.4 MB of total `idoc` relation storage. This is not an authorization to change the database.
+- [ ] PR #412 required CI is green.
+- [ ] Zero unresolved PR review comments remain.
+- [ ] `scripts/preflight-schema-isolation.mjs` reports the current legacy inventory with no unexpected cross-schema dependencies.
+- [ ] `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` remains in the protective state.
+- [ ] Vercel Project and Shared Environment Variables have both been inspected without exposing secret values.
+- [ ] `DB_SCHEMA` has not been activated for `idoc_production` or `idoc_staging`.
+- [ ] A separate PostgreSQL restore-verification database is available; it is not the live `ayni_space` database.
+- [ ] A full custom-format backup has been restored successfully to that verification database.
+- [ ] Source and restored inventories compare exactly.
+- [ ] An independent `idoc_staging` archive has been prepared from the verified restored copy.
 
-## Runtime blockers to fix before switching DB_SCHEMA
+## Coordinated database cutover
 
-The current Drizzle table model in `lib/db/schema.ts` declares `pgSchema('idoc')`, irrespective of `DB_SCHEMA`. The direct SQL in `lib/auth/session-registry.ts`, `lib/notifications/account-delivery.ts`, and `lib/payments/customer-email.ts` also explicitly qualifies tables using `idoc.`. Every runtime SQL entry point must be inventoried and adapted, including auth, member billing, seminar operations, audit logs, outbox workers and raw SQL used by server actions. Setting a PostgreSQL search_path will not fix explicit schema qualifications.
+- [ ] Pause Next.js redesign writes and background work for the cutover window. WordPress stays untouched.
+- [ ] Reconfirm the live database still contains `idoc` and does not contain either target schema.
+- [ ] Run the guarded cutover workflow.
+- [ ] Confirm `idoc` was renamed to `idoc_production`, not copied.
+- [ ] Confirm `idoc_staging` restored successfully from the verified archive.
+- [ ] Confirm staging sessions, temporary credentials, recovery codes, remembered devices, pending outboxes, and open Checkout attempts are quarantined.
+- [ ] Run post-cutover validation and require zero mismatches.
+- [ ] Run the read-only preflight again and require zero production↔staging catalog dependencies and zero cross-schema textual function references.
 
-All historical Drizzle migrations currently include literal `idoc` schema identifiers. A copy must preserve migration journal state; migrations in the future need an approved schema-parametric execution strategy. Do not rewrite the historical migration snapshots casually.
+## Vercel activation
 
-## Proposed rollout (not executed)
+Only after the database gates above pass:
 
-1. Prepare a verified `pg_dump` backup of Render database `ayni_space`; rehearse restore to an isolated temporary database.
-2. Prove schema-qualified runtime isolation through automated integration tests.
-3. Gate outbound staging email, live Stripe calls and copied background queues. Invalidate cloned sessions and recovery/OTP artifacts.
-4. Coordinate a brief pause of the redesign's writing workers and any affected Next.js deployments. WordPress is not involved.
-5. Rename `idoc` to `idoc_production`, using a tested explicit rollback path if application verification fails.
-6. Clone the entire schema into `idoc_staging` with all required schema objects and a consistent dataset, checking references, sequences, privileges, and migration history.
-7. Set environment-specific Vercel `DB_SCHEMA=idoc_production` for future production and `DB_SCHEMA=idoc_staging` for the staging branch Preview, then redeploy each environment. Maintain existing backups and rollback until verified.
-8. Test reads, writes, login, members, seminar registration, Stripe test-mode and notifications for zero cross-schema effects. Only then register staging QStash recurring jobs.
-9. Do not cut over Vercel Cron until the QStash schedule registration and signed delivery paths are proven.
+- [ ] Set project Production `DB_SCHEMA=idoc_production`.
+- [ ] Set project Preview `DB_SCHEMA=idoc_staging` restricted specifically to Git branch `staging`.
+- [ ] Confirm no Shared Environment Variable named `DB_SCHEMA` conflicts with the project values.
+- [ ] Redeploy Production for `redesign.idoc.club` and the staging branch Preview for `staging.idoc.club`.
+- [ ] Verify Production refuses `idoc_staging` and Preview refuses `idoc_production`.
+- [ ] Verify staging cannot initialize a live Stripe client.
+- [ ] Perform a disposable staging-only write and prove the equivalent production record is unchanged.
 
-The Render MCP integration is read-only and cannot execute the dump, rename or clone. The sole purpose of the accompanying preflight script is to inventory metadata without mutating records.
+## QStash staging cutover
+
+- [ ] Keep production schedules unchanged.
+- [ ] Verify signed QStash callback delivery to staging.
+- [ ] Verify the callback runs against `idoc_staging`.
+- [ ] Register staging recurring schedules.
+- [ ] Observe successful staging schedule execution.
+- [ ] Remove obsolete staging Vercel Cron schedules only after QStash replacements are proven.
+
+## Rollback
+
+If validation fails before Vercel activation, use the guarded rollback action. It preserves the staging copy under a rollback name and restores `idoc_production` to legacy `idoc`.
+
+If failure occurs after Vercel `DB_SCHEMA` activation, stop application/background traffic, execute the database rollback, remove/revert the environment-specific `DB_SCHEMA` values to the legacy default, and redeploy before reopening traffic. Preserve the verified backup until the complete rollout is accepted.
+
+The Render SQL connector available to ChatGPT is read-only. The actual backup/restore/cutover therefore requires an authorized PostgreSQL write/backup path; do not paste database credentials into chat.
