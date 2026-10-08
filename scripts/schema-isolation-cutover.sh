@@ -33,7 +33,7 @@ rollback_failed_cutover()
     echo "Cutover failed; attempting automatic schema-name rollback." >&2
     psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 <<'SQL' || true
 BEGIN;
-DO $
+DO $$
 BEGIN
   IF to_regnamespace('idoc') IS NULL AND to_regnamespace('idoc_production') IS NOT NULL THEN
     IF to_regnamespace('idoc_staging') IS NOT NULL AND to_regnamespace('idoc_staging_failed') IS NULL THEN
@@ -41,7 +41,7 @@ BEGIN
     END IF;
     EXECUTE 'ALTER SCHEMA idoc_production RENAME TO idoc';
   END IF;
-END $;
+END $$;
 COMMIT;
 SQL
 
@@ -116,7 +116,7 @@ SQL
 
         psql "${POSTGRES_URL}" -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
-DO $
+DO $$
 BEGIN
   IF to_regnamespace('idoc') IS NULL THEN RAISE EXCEPTION 'legacy idoc schema is missing'; END IF;
   IF to_regnamespace('idoc_production') IS NOT NULL THEN RAISE EXCEPTION 'idoc_production already exists'; END IF;
