@@ -171,7 +171,7 @@ function compromisedMfaKeyIds(environment: Environment, encryptionKeys: Map<stri
 
 // AUTH-CRYPTO-004: an operator-declared complement to compromisedMfaKeyIds -- a key ID the operator
 // has confirmed is fully decommissioned (mfaEncryptionKeyLifecycle in lib/auth/mfa/key-lifecycle.ts
-// verifies this against the real idoc.mfa_factors table and flags it if any factor still references
+// verifies this against the real mfa_factors table and flags it if any factor still references
 // a key declared retired here, rather than silently trusting the declaration). Distinct from a key
 // that is merely unreferenced today but never explicitly retired -- see key-lifecycle.ts's
 // pending/retiring distinction, which is derived from live factor usage, not operator declaration.
