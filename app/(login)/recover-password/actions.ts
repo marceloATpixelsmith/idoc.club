@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 'use server';
 
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
@@ -189,6 +191,7 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
       values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   await clearPendingPasswordReset();
   await setUiFlash('password-reset-success', '/sign-in');
   redirect('/sign-in');
