@@ -21,9 +21,9 @@ test('security and operational notifications kick workers for newly committed re
   }
 });
 
-test('a persistent outbox and hourly recovery schedule remain after immediate dispatch', () => {
+test('a persistent outbox and 15-minute recovery schedule remain after immediate dispatch', () => {
   const vercel = JSON.parse(read('vercel.json')) as { crons: { path: string; schedule: string }[] };
-  assert.equal(vercel.crons.find((item) => item.path === '/api/cron/account-delivery')?.schedule, '0 * * * *');
+  assert.equal(vercel.crons.find((item) => item.path === '/api/cron/account-delivery')?.schedule, '*/15 * * * *');
   const source = read('lib/notifications/immediate-dispatch.ts');
   assert.match(source, /after\(async \(\) =>/);
   assert.match(source, /Sentry\.captureException\(error\)/);
