@@ -23,6 +23,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
   // components/admin/table-preference-sync.tsx and docs/07.
   const preferences = await getTablePreferences(tableType);
   const listQuery = {
+    access: typeof preferences?.access === 'string' ? preferences.access : undefined,
     from: typeof preferences?.from === 'string' ? preferences.from : undefined,
     page: typeof preferences?.page === 'number' ? String(preferences.page) : undefined,
     pageSize: typeof preferences?.pageSize === 'number' ? String(preferences.pageSize) : undefined,
@@ -62,6 +63,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
   return <main className="space-y-6 px-5 py-8 lg:px-8">
     <header className="flex items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold text-gold">{config.title}</h1><p className="text-muted-foreground">{config.description}</p></div><Button asChild><Link href={config.createHref}>{config.create}</Link></Button></header>
     <ResourceDataTable
+      initialAccess={listQuery.access}
       initialColumnOrder={typeof preferences?.columnOrder === 'string' ? preferences.columnOrder : undefined}
       initialFrom={listQuery.from}
       initialSearch={listQuery.q}
