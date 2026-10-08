@@ -17,8 +17,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
+import { getDatabaseSchemaName } from './schema-name';
 
-export const idocSchema = pgSchema('idoc');
+export const idocSchema = pgSchema(getDatabaseSchemaName());
 
 export const users = idocSchema.table('users', {
   id: serial('id').primaryKey(),
