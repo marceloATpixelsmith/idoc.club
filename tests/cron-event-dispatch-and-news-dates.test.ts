@@ -23,6 +23,6 @@ test('date-only publishing is normalized to midnight UTC and runs once daily', (
   assert.match(articles, /publication_date=\(\(publication_date at time zone 'UTC'\)/);
   assert.match(articles, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/);
   const schedules = JSON.parse(read('vercel.json')) as { crons: { path: string; schedule: string }[] };
-  assert.equal(schedules.crons.find((entry) => entry.path === '/api/cron/news-scheduled-publish')?.schedule, '0 0 * * *');
-  assert.equal(schedules.crons.find((entry) => entry.path === '/api/cron/seminar-cancellation-resolution')?.schedule, '0 * * * *');
+  assert.deepEqual(schedules.crons, []);
+  assert.match(read('scripts/configure-qstash-schedules.mjs'), /news-scheduled-publish/);
 });
