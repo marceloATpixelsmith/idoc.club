@@ -70,8 +70,8 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
       afterJson: { role: input.role }, beforeJson: null,
       entityId: String(userId), entityType: 'user', reason: input.reason,
     });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
-      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_granted',email,${`role-granted:${inserted.id}`} from idoc.users where id=${userId}
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_granted',email,${`role-granted:${inserted.id}`} from users where id=${userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { grant: inserted };
   });
@@ -118,8 +118,8 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
       afterJson: null, beforeJson: { role: input.role },
       entityId: String(userId), entityType: 'user', reason: input.reason,
     });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
-      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_revoked',email,${`role-revoked:${revoked.id}`} from idoc.users where id=${userId}
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_revoked',email,${`role-revoked:${revoked.id}`} from users where id=${userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { revoked };
   });
