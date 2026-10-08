@@ -10,7 +10,7 @@ import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { SeminarRegistrationError } from '@/lib/seminars/registrations';
 
 function seminarCheckoutDeliveryOwner(baseUrl: string): 'production' | 'staging' {
-  return new URL(baseUrl).hostname === 'staging.club' ? 'staging' : 'production';
+  return new URL(baseUrl).hostname === 'staging.idoc.club' ? 'staging' : 'production';
 }
 
 export type SeminarCheckoutStripeClient = {
