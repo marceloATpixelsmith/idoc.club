@@ -33,9 +33,9 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
   //RESOLVE AUTHORIZATION AND STRIPE CUSTOMER OUTSIDE THE ROW-LOCKING TRANSACTION.
   //THESE HELPERS USE THE SHARED DATABASE CLIENT AND MUST NOT WAIT FOR A SECOND
   //CONNECTION WHILE THE TRANSACTION IS HOLDING A POOL CONNECTION.
-  const [identity] = await client<{ profile_id: number | null; user_id: number | null }[]>\`select r.profile_id,p.user_id
+  const [identity] = await client<{ profile_id: number | null; user_id: number | null }[]>`select r.profile_id,p.user_id
     from idoc.seminar_registrations r left join idoc.profiles p on p.id=r.profile_id
-    where r.id=\${registrationId}\`;
+    where r.id=${registrationId}`;
   if (!identity) throw new SeminarRegistrationError('Registration not found.');
   let memberCustomer: { customerId: string; profileId: number; userId: number } | null = null;
   if (identity.profile_id !== null) {
