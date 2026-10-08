@@ -19,6 +19,8 @@ test('date-only publishing is normalized to midnight UTC and runs once daily', (
   assert.match(form, /name="publicationDate" required type="date"/);
   const articles = read('lib/news/articles.ts');
   assert.match(articles, /T00:00:00\.000/);
+  assert.match(articles, /publication_date at time zone 'UTC'/);
+  assert.match(articles, /publication_date=\(\(publication_date at time zone 'UTC'\)/);
   assert.match(articles, /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/);
   const schedules = JSON.parse(read('vercel.json')) as { crons: { path: string; schedule: string }[] };
   assert.equal(schedules.crons.find((entry) => entry.path === '/api/cron/news-scheduled-publish')?.schedule, '0 0 * * *');
