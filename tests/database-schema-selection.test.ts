@@ -40,3 +40,23 @@ test('all preview branches refuse production schema selection', () => {
     }
   }
 });
+
+test('production refuses staging schema selection', () =>
+{
+  const previous = { schema: process.env.DB_SCHEMA, env: process.env.VERCEL_ENV, ref: process.env.VERCEL_GIT_COMMIT_REF };
+  try
+  {
+    process.env.DB_SCHEMA = 'idoc_staging';
+    process.env.VERCEL_ENV = 'production';
+    process.env.VERCEL_GIT_COMMIT_REF = 'main';
+    assert.throws(() => getDatabaseSchemaName(), /Production may not use staging schema/);
+  }
+  finally
+  {
+    for (const [key, value] of [['DB_SCHEMA', previous.schema], ['VERCEL_ENV', previous.env], ['VERCEL_GIT_COMMIT_REF', previous.ref]] as const)
+    {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
