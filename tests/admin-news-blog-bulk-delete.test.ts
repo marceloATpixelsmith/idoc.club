@@ -21,7 +21,7 @@ test('News Blog admin table exposes slug, typed/status icon labels, filter and d
   assert.match(resourceTable, /BookOpenText/);
   assert.match(resourceTable, /Newspaper/);
   assert.match(resourceTable, /InlineStatusEditor/);
-  assert.match(resourceTable, /font-medium uppercase/);
+  assert.match(resourceTable, /font-medium leading-8 uppercase/);
   assert.match(resourceTable, /row\.original\.type[\s\S]*?toUpperCase\(\)/);
   assert.match(resourceTable, /types: \[\{ label: 'NEWS', value: 'news' \}, \{ label: 'BLOG', value: 'blog' \}\]/);
   assert.match(resourceList, /publication: formatAdminDate/);
