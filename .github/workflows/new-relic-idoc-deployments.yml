@@ -24,13 +24,11 @@ jobs:
           region: US
           category: Deployment
           type: Basic
+          entitySearch: "name = 'idoc.club' AND type = 'SERVICE'"
           version: ${{ github.event.deployment.sha }}
           commit: ${{ github.event.deployment.sha }}
           deeplink: ${{ github.event.deployment_status.target_url }}
           user: ${{ github.actor }}
           shortDescription: IDOC Vercel deployment
           description: "Successful IDOC Vercel deployment (${{ github.event.deployment.environment }})"
-          customAttributes: '{"application":"idoc.club","vercelProjectId":"prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4","githubRepository":"marceloATpixelsmith/idoc.club"}'
-          # Do not attach to the shared vercel.serverless-runtime entity.
-          # Once a dedicated IDOC OTel entity exists, add an entitySearch
-          # matching only that service so deployments appear on its page.
+          customAttributes: '{application: "idoc.club", vercelProjectId: "prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4", githubRepository: "marceloATpixelsmith/idoc.club"}'
