@@ -17,8 +17,8 @@ export async function GET(
 
   const [owned] = await client<{ id: number }[]>`
     select s.id
-    from idoc.membership_checkout_sessions s
-    join idoc.profiles p on p.id = s.profile_id
+    from membership_checkout_sessions s
+    join profiles p on p.id = s.profile_id
     where s.id = ${id} and p.user_id = ${user.id} and s.status in ('open','completed')
     limit 1
   `;
