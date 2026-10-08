@@ -60,6 +60,9 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA idoc_staging FROM PUBLIC, idoc_production_
 
 GRANT CONNECT ON DATABASE ayni_space TO idoc_production_app, idoc_staging_app;
 
+ALTER ROLE idoc_production_app SET search_path = idoc_production, pg_catalog;
+ALTER ROLE idoc_staging_app SET search_path = idoc_staging, pg_catalog;
+
 GRANT USAGE ON SCHEMA idoc_production TO idoc_production_app;
 GRANT USAGE ON SCHEMA idoc_staging TO idoc_staging_app;
 
