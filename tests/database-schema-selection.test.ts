@@ -23,3 +23,20 @@ test('schema selector rejects invalid names', () => {
     else process.env.DB_SCHEMA = previous;
   }
 });
+
+test('all preview branches refuse production schema selection', () => {
+  const previous = { schema: process.env.DB_SCHEMA, env: process.env.VERCEL_ENV, ref: process.env.VERCEL_GIT_COMMIT_REF };
+  try {
+    process.env.DB_SCHEMA = 'idoc_production';
+    process.env.VERCEL_ENV = 'preview';
+    for (const branch of ['staging', 'feature/untrusted-preview']) {
+      process.env.VERCEL_GIT_COMMIT_REF = branch;
+      assert.throws(() => getDatabaseSchemaName(), /Staging may not use production schema/);
+    }
+  } finally {
+    for (const [key, value] of [['DB_SCHEMA', previous.schema], ['VERCEL_ENV', previous.env], ['VERCEL_GIT_COMMIT_REF', previous.ref]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
