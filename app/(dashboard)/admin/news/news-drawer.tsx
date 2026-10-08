@@ -13,8 +13,8 @@ import { Label } from '@/components/ui/label';
 import { getAdminArticle, STATUS_LABELS } from '@/lib/news/articles';
 import { createNewsArticle, updateNewsArticle } from './actions';
 
-function toDatetimeLocalUtc(value: unknown): string {
-  return new Date(String(value)).toISOString().slice(0, 16);
+function toDateOnlyUtc(value: unknown): string {
+  return new Date(String(value)).toISOString().slice(0, 10);
 }
 
 function TypeStatusFields({ articleType = 'news', status = 'draft' }: { articleType?: string; status?: string }) {
@@ -53,7 +53,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
               <ArticleAccessField />
               <div className="max-w-sm space-y-1.5">
                 <Label htmlFor="publicationDate">Publication date (UTC)</Label>
-                <Input id="publicationDate" name="publicationDate" required type="datetime-local" />
+                <Input id="publicationDate" name="publicationDate" required type="date" />
               </div>
             </AdminFormSection>
             <AdminFormSection title="Article details">
@@ -100,7 +100,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
             <ArticleAccessField initialAudience={Array.isArray(article.audience) ? article.audience.map(String) : ['public']} />
             <div className="max-w-sm space-y-1.5">
               <Label htmlFor="publicationDate">Publication date (UTC)</Label>
-              <Input defaultValue={toDatetimeLocalUtc(article.publication_date)} id="publicationDate" name="publicationDate" required type="datetime-local" />
+              <Input defaultValue={toDateOnlyUtc(article.publication_date)} id="publicationDate" name="publicationDate" required type="date" />
             </div>
           </AdminFormSection>
           <AdminFormSection title="Article details">
