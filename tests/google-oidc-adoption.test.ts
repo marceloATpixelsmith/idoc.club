@@ -48,11 +48,11 @@ test('Google OAuth state is bound to the initiating browser before callback cons
 });
 
 test('Google OAuth transactions are persistent, atomically consumed, rate limited, and retained for a bounded period', () => {
-  assert.match(store, /insert into idoc\.google_oauth_transactions/);
-  assert.match(store, /update idoc\.google_oauth_transactions/);
+  assert.match(store, /insert into google_oauth_transactions/);
+  assert.match(store, /update google_oauth_transactions/);
   assert.match(store, /and consumed_at is null/);
   assert.match(store, /set consumed_at = now\(\)/);
-  assert.match(store, /delete from idoc\.google_oauth_transactions/);
+  assert.match(store, /delete from google_oauth_transactions/);
   assert.match(store, /RETENTION_MILLISECONDS = 24 \* 60 \* 60 \* 1000/);
   assert.match(startRoute, /checkOriginRateLimit\('google_oauth_start'/);
   assert.match(startRoute, /purgeExpiredGoogleOauthTransactions\(\)/);
