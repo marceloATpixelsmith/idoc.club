@@ -2,7 +2,7 @@ import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
-import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, subscriptions } from '@/lib/db/schema';
+import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
 
@@ -17,6 +17,8 @@ export type ReconciliationStripeClient = {
   // regress this back to reading a field that no longer exists.
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ customer: string; id: string; status: string }>; has_more: boolean }> };
+  checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null }> } };
+  paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
 };
 
@@ -73,6 +75,17 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       db.select({ externalSubscriptionScheduleId: renewalPreferences.externalSubscriptionScheduleId,
         profileId: renewalPreferences.profileId, transitionState: renewalPreferences.transitionState }).from(renewalPreferences),
     ]);
+    //SCAN ONLY STRIPE-ONLINE REGISTRATIONS WITH RECORDED CHECKOUT OR PAYMENT REFERENCES.
+    const localSeminarRegistrations = await db.select({
+      id: seminarRegistrations.id,
+      profileId: seminarRegistrations.profileId,
+      paymentStatus: seminarRegistrations.paymentStatus,
+      stripeCheckoutSessionId: seminarRegistrations.stripeCheckoutSessionId,
+      stripePaymentIntentId: seminarRegistrations.stripePaymentIntentId,
+      expectedAmountCents: seminarRegistrations.expectedAmountCents,
+      currency: seminarRegistrations.currency,
+      checkoutStatus: seminarRegistrations.checkoutStatus,
+    }).from(seminarRegistrations).where(sql`${seminarRegistrations.paymentMethodCanonicalId} = 'online_stripe' and (${seminarRegistrations.stripeCheckoutSessionId} is not null or ${seminarRegistrations.stripePaymentIntentId} is not null)`);
     const [stripeCustomers, stripeSubscriptions, stripeOpenInvoices, stripeSchedules] = await Promise.all([
       paginate((params) => stripe.customers.list(params)),
       paginate((params) => stripe.subscriptions.list({ ...params, status: 'all' })),
@@ -90,12 +103,50 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       },
     );
 
+    //KEEP A FAILED STRIPE LOOKUP FROM PRODUCING A FALSE ALL-CLEAR RESULT.
+    const seminarFindings: Array<{ kind: 'seminar_payment_conflict'; profileId: number | null; summary: string; details: Record<string, unknown> }> = [];
+    if (localSeminarRegistrations.length && (!stripe.checkout || !stripe.paymentIntents)) {
+      throw new Error('Seminar reconciliation requires Stripe Checkout and PaymentIntent retrieval.');
+    }
+    for (const registration of localSeminarRegistrations) {
+      const session = registration.stripeCheckoutSessionId
+        ? await stripe.checkout!.sessions.retrieve(registration.stripeCheckoutSessionId)
+        : null;
+      const intentId = registration.stripePaymentIntentId
+        ?? (typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id);
+      const intent = intentId ? await stripe.paymentIntents!.retrieve(intentId) : null;
+      const isPaid = intent?.status === 'succeeded' || session?.payment_status === 'paid';
+      const isUnpaid = Boolean(intent && ['canceled', 'requires_payment_method', 'requires_payment_confirmation'].includes(intent.status));
+      const localPaid = ['paid', 'refunded', 'partially_refunded', 'disputed', 'chargeback'].includes(registration.paymentStatus);
+      const localAwaitingPayment = ['pending', 'unpaid', 'bank_transfer_pending', 'cash_pending'].includes(registration.paymentStatus);
+      const mismatches: string[] = [];
+      if (isPaid && localAwaitingPayment) mismatches.push('Stripe reports payment received but the registration is not marked paid');
+      if (isUnpaid && localPaid) mismatches.push('The registration records payment but Stripe reports an unsuccessful payment');
+      if (isPaid && localPaid && registration.expectedAmountCents !== null) {
+        const settledAmount = intent?.amount_received ?? session?.amount_total;
+        if (settledAmount !== null && settledAmount !== undefined && settledAmount !== registration.expectedAmountCents) {
+          mismatches.push(`Expected ${registration.expectedAmountCents} cents but Stripe reports ${settledAmount} cents`);
+        }
+      }
+      if ((session?.currency ?? intent?.currency)?.toUpperCase() !== registration.currency.toUpperCase() && (session || intent)) {
+        mismatches.push('Stripe payment currency differs from the registration currency');
+      }
+      if (!mismatches.length) continue;
+      seminarFindings.push({
+        kind: 'seminar_payment_conflict',
+        profileId: registration.profileId,
+        summary: `Seminar registration #${registration.id}: ${mismatches.join('; ')}.`,
+        details: { source: 'daily_seminar_scan', registrationId: registration.id, checkoutSessionId: session?.id ?? null, paymentIntentId: intentId ?? null, mismatches },
+      });
+    }
+
     await db.transaction(async (tx) => {
-      await tx.delete(reconciliationFindings).where(sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`);
+      await tx.delete(reconciliationFindings).where(sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
-      await tx.insert(reconciliationRuns).values({ findingsCount: findings.length, status: 'completed' });
+      if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
+      await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });
     });
-    return { findingsCount: findings.length };
+    return { findingsCount: findings.length + seminarFindings.length };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown reconciliation error.';
     await db.insert(reconciliationRuns).values({ errorMessage, findingsCount: 0, status: 'failed' }).catch(() => undefined);

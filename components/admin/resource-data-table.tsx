@@ -62,7 +62,7 @@ type ResourceConfig = {
 
 const CONFIG: Record<ResourceType, ResourceConfig> = {
   news: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'type', label: 'Type' }, { id: 'status', label: 'Status' }, { id: 'access', label: 'Access' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'type', label: 'Article Type' }, { id: 'status', label: 'Status' }, { id: 'access', label: 'Access' }, { id: 'publication', label: 'Publication Date' }, { id: 'updated', label: 'Updated' }],
     dateFilter: true,
     path: '/admin/news',
     searchLabel: 'Search article title, subtitle, or slug',
