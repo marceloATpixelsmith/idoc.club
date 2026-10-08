@@ -11,6 +11,10 @@ const professionalRoleIcons = readFileSync('components/membership/professional-r
 const dateRangeFilter = readFileSync('components/admin/date-range-filter.tsx', 'utf8');
 const dataTableDateFilter = readFileSync('components/data-table/data-table-date-filter.tsx', 'utf8');
 const sitewideIconTooltips = readFileSync('components/site/sitewide-icon-tooltips.tsx', 'utf8');
+const facetedFilter = readFileSync('components/data-table/data-table-faceted-filter.tsx', 'utf8');
+const resourceListPage = readFileSync('components/admin/resource-list-page.tsx', 'utf8');
+const tablePreferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
+const newsArticles = readFileSync('lib/news/articles.ts', 'utf8');
 
 test('record text in admin tables is not used as the edit/open link', () => {
   assert.doesNotMatch(members, /className="font-medium uppercase underline"/);
@@ -76,4 +80,15 @@ test('sitewide SVG icons receive tooltips when they do not already provide one',
   assert.match(sitewideIconTooltips, /svg\.closest<HTMLElement>\('button, a, \[role="button"\], \[role="menuitem"\], \[role="tab"\], \[role="option"\]'\)/);
   assert.doesNotMatch(sitewideIconTooltips, /closest<HTMLElement>\('\[title\], \[aria-label\]'\)/);
   assert.match(sitewideIconTooltips, /new MutationObserver/);
+});
+
+
+test('News Access is a persisted multi-select filter with form-equivalent exclusivity', () => {
+  assert.match(resources, /id === 'access' && tableType === 'news'[\s\S]*?exclusiveFilterValues: \['public', 'members'\][\s\S]*?variant: 'multiSelect'/);
+  assert.match(resources, /\{ id: 'access', value: initialAccess \? initialAccess\.split\(','\) : \[\] \}/);
+  assert.match(resources, /access: tableType === 'news' \? filterToken\(state\.columnFilters, 'access'\) : undefined/);
+  assert.match(facetedFilter, /else if \(exclusiveValues\.includes\(option\.value\)\)[\s\S]*?newSelectedValues\.clear\(\)[\s\S]*?exclusiveValues\.forEach\(\(value\) => newSelectedValues\.delete\(value\)\)/);
+  assert.match(resourceListPage, /access: typeof preferences\?\.access === 'string' \? preferences\.access : undefined/);
+  assert.match(tablePreferences, /access: newsAccessFilter/);
+  assert.match(newsArticles, /audience && \$\{audiences\}::varchar\[\]/);
 });

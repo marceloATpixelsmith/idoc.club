@@ -166,6 +166,7 @@ function DataTableToolbarFilter<TData>({
               title={columnMeta.label ?? column.id}
               options={columnMeta.options ?? []}
               multiple={columnMeta.variant === "multiSelect"}
+              exclusiveValues={columnMeta.exclusiveFilterValues ?? []}
             />
           );
 
