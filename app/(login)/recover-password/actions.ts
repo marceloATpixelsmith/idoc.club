@@ -1,6 +1,7 @@
+'use server';
+
 import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
 import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
-'use server';
 
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { randomUUID } from 'node:crypto';
