@@ -216,7 +216,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   });
   // Start refunds and payment-session expiry immediately after the cancellation commits.
   // The durable canceled registration state remains eligible for scheduled recovery.
-  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments());
+  if (needsCancellationResolution) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments(), 'seminar-cancellation-resolution');
 }
 
 export { seminarEndsAtUtc };

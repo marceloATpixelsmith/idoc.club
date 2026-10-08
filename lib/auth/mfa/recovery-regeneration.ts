@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -24,7 +26,7 @@ export async function regenerateRecoveryCodesWithEvidence(input: {
     return 'invalid' as const;
   }
 
-  return client.begin(async (tx) => {
+  const result = await client.begin(async (tx) => {
     const [user] = await tx<{ email: string; session_version: number }[]>`
       select email,session_version from idoc.users where id=${input.userId} and deleted_at is null
         and account_state in ('active','onboarding') for update`;
@@ -49,4 +51,6 @@ export async function regenerateRecoveryCodesWithEvidence(input: {
       values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},'recovery_codes_regenerated',${user.email},${`recovery-codes:${input.generationId}`})`;
     return 'regenerated' as const;
   });
+  if (result === 'regenerated') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -135,5 +137,6 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
       //THE OUTBOX RECORD RETAINS THE JOB FOR A RETRYING WORKER.
     }
   }
+  if (result.status === 'verified') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   return result.status === 'verified' ? { status: 'verified', userId: result.userId } : result;
 }

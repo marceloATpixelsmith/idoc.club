@@ -1,5 +1,8 @@
 'use server';
 
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
+
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { z } from 'zod';
 import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
@@ -146,6 +149,8 @@ export const disconnectGoogleIdentity = validatedActionWithUser(
     if (!(await comparePasswords(currentPassword, user.passwordHash))) {
       return { error: 'Current password is incorrect.' };
     }
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+
     const result = await unlinkGoogleIdentity({
       userId: String(user.id),
       freshEvidence: createImmediateGoogleUnlinkFreshEvidence(user.id),

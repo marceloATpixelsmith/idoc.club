@@ -1042,3 +1042,29 @@ Diagnose delayed messages by checking the applicable outbox row's availability t
 When an administrator cancels a seminar in the form or via inline Status editing, the status change and registration cancellation commit together. The application immediately dispatches the existing cancellation resolution worker after the response, so online payments are refunded or outstanding Checkout Sessions expired promptly. The hourly cancellation cron is retained as a durable recovery sweep for provider failures, interrupted requests, or any canceled registration not processed in the first batch. The existing billing/communication hold remains enforced by the worker.
 
 The News/Blog admin form accepts a publication **calendar date only** (YYYY-MM-DD). Publication dates are normalized to 00:00 UTC. The scheduled-publishing cron runs daily at 00:00 UTC; it publishes due articles and logs the transition. The admin News/Blog table shows only the calendar date. No timezone or time-of-day selection is exposed. The daily publishing job may run shortly after midnight depending on scheduler execution timing. Existing historical timestamps remain in storage; editing an article converts its publication date to midnight UTC.
+
+
+## QStash event-driven job migration (staging cutover)
+
+QStash executes event-triggered account email and seminar cancellation workers, and can execute all recurring tasks instead of Vercel Cron. This reduces idle database polling, useful for Neon scale-to-zero. **The Vercel schedules intentionally remain active until QStash is configured, its signed endpoint is verified, and all replacement schedules are registered and observed working.** Do not remove both scheduling paths at once. The database outboxes remain authoritative, and repeated callbacks are protected by the existing worker leases/idempotency. Keep staging separate from production.
+
+### Required Vercel environment variables
+
+Set the following on the **staging** deployment (and only later set independent production values):
+- `QSTASH_TOKEN`: QStash publishing API token from the selected Upstash region.
+- `QSTASH_CURRENT_SIGNING_KEY`: current key from QStash security settings.
+- `QSTASH_NEXT_SIGNING_KEY`: next key, required to permit signing-key rotation.
+- `QSTASH_URL`: QStash API origin for the selected region, e.g. `https://qstash-us-east-1.upstash.io`. Omitting it defaults to the global QStash API.
+- `QSTASH_CALLBACK_BASE_URL`: stable **public staging** URL, e.g. `https://staging.idoc.club`. Never set this to a dynamic preview deployment, localhost, or a production hostname while testing staging.
+
+No database migration is required. Existing `CRON_SECRET` remains mandatory for internal worker reuse, including the verified QStash callback.
+
+### Verification and cutover
+
+1. Provision a QStash resource in Upstash, with separate staging and production resources/credentials. Add variables to Vercel staging, then redeploy staging. Ensure the public callback path `/api/qstash/jobs` is accessible to Upstash and not blocked by Vercel Deployment Protection (the endpoint itself verifies the `Upstash-Signature` JWT and raw-body hash).
+2. Run `node scripts/configure-qstash-schedules.mjs` from a trusted local/CI shell with `QSTASH_TOKEN`, `QSTASH_CALLBACK_BASE_URL`, and optionally `QSTASH_URL`. The script uses stable schedule IDs and can be rerun without multiplying schedules. Inspect all ten schedules in Upstash Console.
+3. Confirm forged/unsigned callbacks get HTTP 401, valid callbacks execute once, deliberate Brevo failure produces an on-demand retry, and cancellation/refund tasks are processed without duplicated refunds. Confirm the communication/billing launch hold remains in effect for staging imports.
+4. After verified QStash triggers and schedules, remove all eight Vercel Cron entries from `vercel.json` in this **same PR** and update the contract tests. Do not deactivate Vercel scheduling before this verification, or there will be a delivery gap. Monitor Sentry and QStash failures after deployment.
+5. Keep the daily QStash account and cancellation safety sweeps to recover work committed in Postgres but not successfully published to QStash. Expired account links are ineligible and must never be sent late.
+
+The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery daily 09:00 UTC, cancellation recovery daily 09:05 UTC, clock skew daily 09:10 UTC, renewal scan daily 06:00 UTC, renewal delivery daily 06:15, 14:15 and 22:15 UTC, reconciliation daily 07:00 UTC, retention daily 08:00 UTC and news publishing daily 00:00 UTC. QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.

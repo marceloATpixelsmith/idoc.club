@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -24,7 +26,7 @@ export async function consumeRecoveryCodeAndBeginReplacement(input: {
     input.enrollment.subjectId !== String(input.userId) || input.enrollment.applicationId !== input.applicationId ||
     input.enrollment.purpose !== 'authenticator-replacement') return { status: 'invalid' as const };
   const nowMs = input.nowMs ?? Date.now();
-  return client.begin(async (tx) => {
+  const result = await client.begin(async (tx) => {
     const [existing] = await tx<Record<string, unknown>[]>`
       select e.transaction_id,e.factor_id,e.user_id,e.application_id,e.purpose,e.expires_at,e.consumed_at,
         f.status as factor_status
@@ -70,4 +72,6 @@ export async function consumeRecoveryCodeAndBeginReplacement(input: {
     return { factorId: input.factor.factorId, status: 'ready' as const,
       transactionId: input.enrollment.transactionId };
   });
+  if (result.status === 'ready') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

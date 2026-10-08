@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -31,7 +33,7 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Locking and checking the target's account_state here, before the role insert, closes a real
     // race with suspendUserAccount (lib/membership/account-suspension.ts): that function also locks
     // this same users row and rejects suspending a user who already holds an active grant, but
@@ -73,6 +75,8 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { grant: inserted };
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
 
 /**
@@ -88,7 +92,7 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (input.role === 'super_admin') {
       const activeSuperAdmins = await tx.select({ id: applicationRoles.id }).from(applicationRoles)
         .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt)))
@@ -119,4 +123,6 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { revoked };
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

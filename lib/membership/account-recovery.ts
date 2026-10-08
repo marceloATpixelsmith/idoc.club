@@ -15,6 +15,7 @@ import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/br
 import { logError } from '@/lib/observability/logger';
 import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
 import { processAccountDeliveryBatch } from '@/lib/notifications/account-delivery';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
@@ -59,7 +60,7 @@ export async function requestAccountLink(
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
       // Dispatch only after the token and outbox entry are committed.
-      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1));
+      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1), 'account-delivery');
     }
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
@@ -171,7 +172,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     });
     return { status: 'breached_password' as const };
   }
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [record] = await tx.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date()))).limit(1);
     if (!record) return { status: 'invalid' as const };
     if (purpose === 'migration_activation') {
@@ -194,4 +195,6 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { status: 'success' as const };
   });
+  if (result.status === 'success' && purpose === 'password_reset') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

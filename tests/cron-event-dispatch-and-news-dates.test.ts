@@ -9,7 +9,7 @@ test('cancellation dispatches immediately after database commit in both admin pa
   const inline = read('app/(dashboard)/admin/bulk-actions.ts');
   for (const source of [drawer, inline]) {
     assert.match(source, /needsCancellationResolution = true;/);
-    assert.match(source, /if \(needsCancellationResolution\) dispatchQueuedEmailAfterResponse\(\(\) => processCanceledSeminarPayments\(\)\);/);
+    assert.match(source, /if \(needsCancellationResolution\) dispatchQueuedEmailAfterResponse\(\(\) => processCanceledSeminarPayments\(\), 'seminar-cancellation-resolution'\);/);
   }
 });
 

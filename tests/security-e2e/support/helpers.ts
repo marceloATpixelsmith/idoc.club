@@ -229,8 +229,16 @@ export async function insertSeminar(seminar: SeminarFixture): Promise<number> {
  * payment method in the dialog. */
 export async function chooseSeminarPaymentMethod(page: Page, seminarId: number, methodLabel: string | RegExp) {
   await page.goto(`/seminars/${seminarId}`);
-  await page.getByRole('button', { name: /^Register/ }).click();
-  await page.getByRole('button', { name: methodLabel }).click();
+  const register = page.getByRole('button', { name: /^Register/ });
+  const dialog = page.getByRole('dialog', { name: 'Choose a payment method' });
+  // In Next.js development mode the server-rendered button can be clicked before
+  // React hydration attaches its handler. Wait for the actual dialog, not a
+  // payment button inside a dialog that never opened.
+  await expect(async () => {
+    if (!(await dialog.isVisible())) await register.click();
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000, intervals: [500, 1000, 1500] });
+  await dialog.getByRole('button', { name: methodLabel }).click();
 }
 
 export async function registrationFor(email: string, title: string) {

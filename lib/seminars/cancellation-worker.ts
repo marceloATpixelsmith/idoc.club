@@ -23,7 +23,7 @@ const BATCH_SIZE = 25;
  * Registration/payment state is the durable queue: canceled online registrations remain
  * eligible until their refund succeeds or their open Checkout Session is expired.
  */
-export async function processCanceledSeminarPayments(testStripe?: CancellationStripeClient): Promise<{ blocked: number; processed: number }> {
+export async function processCanceledSeminarPayments(testStripe?: CancellationStripeClient): Promise<{ blocked: number; failed?: number; processed: number }> {
   if (outboxDeliveryHeld(true)) return { blocked: 1, processed: 0 };
   if (testStripe && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const stripe = testStripe ?? (getStripeServerClient() as CancellationStripeClient);
@@ -45,6 +45,7 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
     order by r.updated_at asc,r.id asc
     limit ${BATCH_SIZE}`;
 
+  let failed = 0;
   for (const row of rows) {
     try {
       if (row.payment_status === 'paid' || row.payment_status === 'refund_failed') {
@@ -70,6 +71,7 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
           where id=${row.id} and checkout_status='open'`;
       }
     } catch (error) {
+      failed += 1;
       Sentry.captureException(error, { tags: { background_operation: 'seminar_cancellation_resolution' } });
       await client`insert into idoc.reconciliation_findings(kind,summary,details)
         values('seminar_payment_conflict','Canceled seminar payment requires retry or reconciliation.',
@@ -77,5 +79,5 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
       // Continue with the rest of the bounded batch. The registration remains eligible for a later run.
     }
   }
-  return { blocked: 0, processed: rows.length };
+  return { blocked: 0, failed, processed: rows.length };
 }

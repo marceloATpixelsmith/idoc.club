@@ -1,5 +1,8 @@
 'use server';
 
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
+
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
@@ -251,6 +254,7 @@ export const updatePassword = validatedActionWithUser(
         values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_changed',${user.email},${`password-changed:${user.id}:${user.sessionVersion + 1}`})
         on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
     await consumeFreshStepUp();
     await clearSession();
     await setUiFlash('password-changed', '/sign-in');

@@ -1,3 +1,5 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
 import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -59,7 +61,7 @@ async function atomicLink(input: {
   verificationTransactionId: string;
   verificationMethod: 'password';
 }): Promise<GoogleExternalIdentityAtomicLinkOutcome> {
-  return client.begin(async (sql) => {
+  const outcome = await client.begin(async (sql) => {
     const issuer = GOOGLE_OIDC_PROVIDER.issuer;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-subject:${issuer}:${input.subject}`}, 0))`;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-user:${input.userId}:${issuer}`}, 0))`;
@@ -100,6 +102,8 @@ async function atomicLink(input: {
     `;
     return 'linked';
   });
+  if (outcome === 'linked') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return outcome;
 }
 
 async function atomicUnlink(input: {
@@ -109,7 +113,7 @@ async function atomicUnlink(input: {
   verificationMethod: 'password';
 }): Promise<boolean> {
   if (input.verificationMethod !== 'password') return false;
-  return client.begin(async (sql) => {
+  const outcome = await client.begin(async (sql) => {
     const issuer = GOOGLE_OIDC_PROVIDER.issuer;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-user:${input.userId}:${issuer}`}, 0))`;
     const current = await sql<{ id: number; subject: string }[]>`
@@ -139,6 +143,8 @@ async function atomicUnlink(input: {
     `;
     return true;
   });
+  if (outcome) dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return outcome;
 }
 
 export async function linkGoogleIdentity(input: {
