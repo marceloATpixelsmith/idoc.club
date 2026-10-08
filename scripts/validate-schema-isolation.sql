@@ -194,11 +194,11 @@ FROM production p FULL JOIN staging s USING (relname)
 WHERE p.relname IS NULL OR s.relname IS NULL OR p.relkind<>s.relkind;
 
 WITH production AS (
-  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, coalesce(c.relacl::text,'') AS acl
+  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, replace(coalesce(c.relacl::text,''), 'idoc_production_app','<app_role>') AS acl
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='idoc_production' AND c.relkind IN ('r','p','S','v','m')
 ), staging AS (
-  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, coalesce(c.relacl::text,'') AS acl
+  SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name, replace(coalesce(c.relacl::text,''), 'idoc_staging_app','<app_role>') AS acl
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='idoc_staging' AND c.relkind IN ('r','p','S','v','m')
 )
