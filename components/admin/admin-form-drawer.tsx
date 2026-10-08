@@ -15,7 +15,13 @@ export function useAdminFormDrawer() {
 export function AdminFormDrawer({ children, closeHref, title }: { children: ReactNode; closeHref: string; title: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
-  const closeAndRefresh = useCallback(() => { setOpen(false); router.push(closeHref); router.refresh(); }, [closeHref, router]);
+  const closeAndRefresh = useCallback(() => {
+    //SHOW THE SHARED TABLE SKELETON WHILE THE SERVER REFRESHES AFTER A DRAWER SAVE.
+    window.dispatchEvent(new Event('idoc:table-refresh-start'));
+    setOpen(false);
+    router.replace(closeHref);
+    router.refresh();
+  }, [closeHref, router]);
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) router.push(closeHref); }}>
       <Dialog.Portal>
