@@ -59,7 +59,7 @@ export async function requestAccountLink(
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
       // Dispatch only after the token and outbox entry are committed.
-      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1));
+      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1), 'account-delivery');
     }
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
