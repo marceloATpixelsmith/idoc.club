@@ -47,4 +47,3 @@ $promotion_lock$;
 --> statement-breakpoint
 
 REVOKE ALL ON FUNCTION "idoc"."lock_seminars_for_promotion"() FROM PUBLIC;
-
