@@ -60,8 +60,8 @@ Historical references: PR #414 introduced deployment marker workflow; #415–#41
 
 ## Ordered task queue — do only one item per session or explicit instruction
 
-- [ ] **01 — Verify post-merge deployment markers.** Read GitHub deployment-status run after PR #419 and New Relic IDOC Change Tracking. If absent, diagnose that precise failure and fix it in one staging PR; do not declare complete until an actual marker is visible. *No code change necessary if already working.*
-- [ ] **02 — Complete application APM metrics.** Inspect existing instrumentation and New Relic metric names, implement minimally scoped metric export compatible with current Next.js/Vercel stack, verify staging request/error/latency metrics and privacy.
+- [ ] **01 — Complete application APM metrics (P0).** Inspect existing instrumentation and New Relic metric names, implement minimally scoped metric export compatible with current Next.js/Vercel stack, verify staging request/error/latency metrics and privacy.
+- [ ] **02 — Verify post-merge deployment markers (P1).** Read GitHub deployment-status run after PR #419 and New Relic IDOC Change Tracking. If absent, diagnose that precise failure and fix it in one staging PR; do not declare complete until an actual marker is visible. *No code change necessary if already working.*
 - [ ] **03 — Repair Render syslog delivery.** Diagnose malformed RFC 5424 messages, make the smallest safe configuration fix, verify New Relic ingestion.
 - [ ] **04 — Add PostgreSQL performance monitoring.** Confirm Render workspace/instance with user before database operations; start with read-only discovery and minimal-privilege collector design; shared DB/schema isolation matters.
 - [ ] **05 — Correlate GitHub CI, deployment and application trace/log evidence.** Test one successful and one failed workflow path without changing production.
