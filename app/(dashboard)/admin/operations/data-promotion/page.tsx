@@ -54,7 +54,7 @@ function datasetLabel(dataset: PromotionDataset) {
 export default async function DataPromotionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ dataset?: string; record?: string | string[]; search?: string }>;
+  searchParams: Promise<{ dataset?: string; record?: string | string[]; search?: string; page?: string }>;
 }) {
   const actor = await requireAccountAccess('administration');
   try {
@@ -68,6 +68,7 @@ export default async function DataPromotionPage({
   const dataset = parsePromotionDataset(params.dataset) ?? 'news';
   const records = selectedRecords(params.record);
   const search = typeof params.search === 'string' ? params.search.slice(0, 100) : '';
+  const page = typeof params.page === 'string' && /^[1-9][0-9]{0,3}$/.test(params.page) ? Number(params.page) : 1;
 
   let candidates: Awaited<ReturnType<typeof listPromotionCandidates>> = [];
   let history: Awaited<ReturnType<typeof listPromotionHistory>> = [];
@@ -76,7 +77,7 @@ export default async function DataPromotionPage({
   let previewError: string | null = null;
 
   try {
-    [candidates, history] = await Promise.all([listPromotionCandidates(dataset, search), listPromotionHistory()]);
+    [candidates, history] = await Promise.all([listPromotionCandidates(dataset, search, page), listPromotionHistory()]);
   } catch (error) {
     configurationError = error instanceof Error ? error.message : 'Data promotion is not configured.';
   }
@@ -88,6 +89,12 @@ export default async function DataPromotionPage({
       previewError = error instanceof Error ? error.message : 'The promotion preview could not be generated.';
     }
   }
+
+  const hasNextPage = candidates.length > 100;
+  const visibleCandidates = candidates.slice(0, 100);
+  const pageUrl = (number: number) => '/admin/operations/data-promotion?' + new URLSearchParams({
+    dataset, search, page: String(number),
+  }).toString();
 
   const tabs: Array<{ dataset: PromotionDataset; label: string }> = [
     { dataset: 'news', label: 'News / Blog' },
@@ -135,6 +142,7 @@ export default async function DataPromotionPage({
             <form className="space-y-4" method="get">
               <input name="dataset" type="hidden" value={dataset} />
               <input name="search" type="hidden" value={search} />
+              <input name="page" type="hidden" value={page} />
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-foreground">{datasetLabel(dataset)}</span>
                 <select
@@ -142,14 +150,20 @@ export default async function DataPromotionPage({
                   defaultValue={records}
                   multiple={dataset !== 'organization'}
                   name="record"
-                  size={Math.min(Math.max(candidates.length, 2), 10)}
+                  size={Math.min(Math.max(visibleCandidates.length, 2), 10)}
                 >
-                  {candidates.map((candidate) => (
+                  {visibleCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>{candidate.label} — {candidate.meta}</option>
                   ))}
                 </select>
               </label>
-              {dataset !== 'organization' ? <p className="text-xs text-muted-foreground">Showing up to 100 matches. Search by title or staging ID to find any record, including older records.</p> : null}
+              {dataset !== 'organization' ? (
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>Page {page} · Up to 100 results per page. Search by title or staging ID.</span>
+                  {page > 1 ? <Link className="underline" href={pageUrl(page - 1)}>Previous page</Link> : null}
+                  {hasNextPage ? <Link className="underline" href={pageUrl(page + 1)}>Next page</Link> : null}
+                </div>
+              ) : null}
               <Button type="submit">Generate Preview</Button>
             </form>
           </section>
