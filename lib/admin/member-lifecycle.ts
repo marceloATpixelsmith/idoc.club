@@ -8,8 +8,8 @@ export async function deleteMembers(ids: string[], actorId: number) {
       left join profiles p on p.user_id=u.id where u.id in ${sql(numeric)} for update of u`;
     if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
     if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
-    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
-    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
+    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and role in ('administrator','super_admin')`;
+    if (privileged.length) throw new Error('Current and former administrator accounts cannot be permanently deleted because authored records must be retained. Archive these accounts instead.');
     const profileIds = rows.flatMap((row) => row.profile_id === null ? [] : [row.profile_id]);
     const activeSubscriptions = profileIds.length ? await sql<{ count: number }[]>`select count(*)::int as count from subscriptions where profile_id in ${sql(profileIds)} and status in ('active','trialing','past_due','incomplete')` : [{ count: 0 }];
     if (activeSubscriptions[0]?.count) throw new Error('Cancel active billing subscriptions before permanently deleting selected members.');
