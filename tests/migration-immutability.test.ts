@@ -109,4 +109,9 @@ test('permanent data promotion keeps a narrow content-only runtime boundary', as
   assert.match(migration, /seminars[\s\S]*promotion_key[\s\S]*gen_random_uuid/);
   assert.match(migration, /news_articles_promotion_key_unique/);
   assert.match(migration, /seminars_promotion_key_unique/);
+  assert.match(migration, /CREATE OR REPLACE FUNCTION "idoc"\."lock_seminars_for_promotion"\(\)/);
+  assert.match(migration, /LOCK TABLE "idoc"\."seminars" IN SHARE ROW EXCLUSIVE MODE/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION "idoc"\."lock_seminars_for_promotion"\(\) FROM PUBLIC/);
+  assert.match(source, /select idoc_production\.lock_seminars_for_promotion\(\)/);
+  assert.doesNotMatch(source, /idoc_staging\.[a-z_]+[^'\n]*for share/i);
 });
