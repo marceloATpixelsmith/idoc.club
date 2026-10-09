@@ -100,7 +100,7 @@ function promotionSql() {
   return promotionConnection;
 }
 
-async function rows<T extends Row = Row>(sql: PromotionSql, query: string, params: unknown[] = []) {
+async function rows<T = Row>(sql: PromotionSql, query: string, params: unknown[] = []) {
   return await sql.unsafe(query, params) as unknown as T[];
 }
 
