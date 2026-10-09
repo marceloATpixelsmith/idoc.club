@@ -1078,7 +1078,7 @@ Required Vercel variables (set per environment by an administrator, never in Git
 - `NEW_RELIC_QUERY_KEY`: a dedicated read-only New Relic **user API key**. Do not reuse the deployment-marker key (`NEW_RELIC_API_KEY`) or the OTLP ingest key.
 - `NEW_RELIC_ACCOUNT_ID`: the numeric New Relic account ID.
 
-Verification: after registering the schedule, trigger it once from the Upstash Console, confirm the log event and the email, and check the queries return data. The queries use OpenTelemetry span attributes (`service.name`, `span.kind`, `otel.status_code`, `http.route`, `duration.ms`) and report the whole `idoc.club` service; confirm these attributes and whether staging and production can be separated before relying on the output.
+Verification: after registering the schedule, trigger it once from the Upstash Console, confirm the log event and the email, and check the queries return data. The queries use OpenTelemetry span attributes (`service.name`, `span.kind`, `otel.status_code`, `http.route`, `duration.ms`). Staging and production share the `idoc.club` service name, so each query is also scoped to `deployment.environment.name` equal to the invoking deployment's `VERCEL_ENV` (`production` or `preview`; staging is a preview deployment). Confirm the attribute values match on real data and that the other attributes exist before relying on the output; the job fails on any other `VERCEL_ENV`.
  QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.
 
 

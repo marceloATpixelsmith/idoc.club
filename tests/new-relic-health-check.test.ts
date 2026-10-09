@@ -27,3 +27,9 @@ test('result mapping drops empty rows and sorts slow routes by p95', async () =>
     ['/slow', '/fast'],
   );
 });
+
+test('queries are scoped to the invoking deployment environment', async () => {
+  const source = read('lib/observability/new-relic-health-check.ts');
+  assert.match(source, /deployment\.environment\.name = '\$\{environment\}'/);
+  assert.match(source, /healthQueries\(environment\)/);
+});

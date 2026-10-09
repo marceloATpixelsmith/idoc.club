@@ -15,10 +15,19 @@ import { toErrorRows, toSlowRows, type HealthRow } from './new-relic-health-rows
 const NERDGRAPH_URL = 'https://api.newrelic.com/graphql';
 const REQUEST_TIMEOUT_MS = 20_000;
 const TOP_ROWS = 10;
-const SERVICE = `service.name = 'idoc.club'`;
+const BASE_FILTER = `service.name = 'idoc.club' AND span.kind = 'server'`;
 
-const ERROR_QUERY = `SELECT count(*) AS errors FROM Span WHERE ${SERVICE} AND span.kind = 'server' AND otel.status_code = 'ERROR' FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`;
-const SLOW_QUERY = `SELECT percentile(duration.ms, 95) AS p95, count(*) AS requests FROM Span WHERE ${SERVICE} AND span.kind = 'server' FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`;
+/** Staging and production share the `idoc.club` service name, so every query is scoped to the
+ * invoking deployment's own `deployment.environment.name` span attribute (Vercel `production` or
+ * `preview`; staging is a preview deployment). */
+export function healthQueries(environment: string): { errors: string; slow: string } {
+  if (environment !== 'production' && environment !== 'preview') throw new Error('New Relic health check requires a production or preview deployment.');
+  const filter = `${BASE_FILTER} AND deployment.environment.name = '${environment}'`;
+  return {
+    errors: `SELECT count(*) AS errors FROM Span WHERE ${filter} AND otel.status_code = 'ERROR' FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`,
+    slow: `SELECT percentile(duration.ms, 95) AS p95, count(*) AS requests FROM Span WHERE ${filter} FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`,
+  };
+}
 
 async function nrql(accountId: string, key: string, query: string): Promise<Record<string, unknown>[]> {
   const response = await fetch(NERDGRAPH_URL, {
@@ -52,7 +61,9 @@ export async function runNewRelicHealthCheck(): Promise<{ emailed: number; error
   const accountId = process.env.NEW_RELIC_ACCOUNT_ID;
   if (!key || !accountId || !/^\d+$/.test(accountId)) throw new Error('New Relic health check is not configured.');
 
-  const [errorResults, slowResults] = await Promise.all([nrql(accountId, key, ERROR_QUERY), nrql(accountId, key, SLOW_QUERY)]);
+  const environment = process.env.VERCEL_ENV ?? '';
+  const queries = healthQueries(environment);
+  const [errorResults, slowResults] = await Promise.all([nrql(accountId, key, queries.errors), nrql(accountId, key, queries.slow)]);
   const errors = toErrorRows(errorResults);
   const slow = toSlowRows(slowResults);
 
@@ -63,7 +74,6 @@ export async function runNewRelicHealthCheck(): Promise<{ emailed: number; error
 
   const to = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL;
   if (!to) return { emailed: 0, errorRoutes: errors.length, slowRoutes: slow.length };
-  const environment = process.env.VERCEL_ENV ?? 'unknown';
   try {
     await sendTransactionalEmail({
       html: renderTransactionalEmail({
