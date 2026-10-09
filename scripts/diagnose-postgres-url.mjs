@@ -23,13 +23,13 @@ const checks = {
   urlValid: Boolean(parsed),
   protocolValid: parsed ? ['postgres:', 'postgresql:'].includes(parsed.protocol) : false,
   hostnamePresent: Boolean(parsed?.hostname),
-  usernameMatchesEnvironment: requiredUsername ? parsed?.username === requiredUsername : null,
+  usernameMatchesEnvironment: requiredUsername ? decodeURIComponent(parsed?.username ?? '') === requiredUsername : null,
   databaseMatches: parsed ? parsed.pathname === '/ayni_space' : false,
   passwordPresent: Boolean(parsed?.password),
   surroundingWhitespace: typeof value === 'string' ? value !== value.trim() : null,
 };
 
 console.log('POSTGRES_URL_SANITIZED_DIAGNOSTIC', JSON.stringify(checks));
-if (!checks.present || !checks.urlValid || !checks.protocolValid || !checks.hostnamePresent || checks.usernameMatchesEnvironment === false) {
+if (!checks.present || !checks.urlValid || !checks.protocolValid || !checks.hostnamePresent || !checks.databaseMatches || !checks.passwordPresent || checks.usernameMatchesEnvironment === false) {
   process.exitCode = 1;
 }
