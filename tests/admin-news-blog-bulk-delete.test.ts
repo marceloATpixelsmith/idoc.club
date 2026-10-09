@@ -125,3 +125,17 @@ test('inline status selects do not inherit the global native select chevron', ()
   assert.match(resourceTable, /idoc-inline-status-select/);
   assert.match(stylesheet, /select\.idoc-inline-status-select\s*\{\s*background-image:\s*none;\s*padding-right:\s*0;/);
 });
+
+
+test('News/Blog Article Type stays visible before Status in saved admin views', () => {
+  const preferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
+  assert.match(resourceTable, /\{ id: 'type', label: 'Article Type' \}, \{ id: 'status', label: 'Status' \}/);
+  assert.match(resourceTable, /\['select', 'title', 'type', 'status', 'access', 'publication', 'updated', 'actions'\]/);
+  assert.match(resourceTable, /enableHiding: id !== 'title' && !\(tableType === 'news' && id === 'type'\)/);
+  assert.match(preferences, /normalizedOrder\.splice\(statusIndex >= 0 \? statusIndex : normalizedOrder\.length, 0, 'type'\)/);
+  assert.match(preferences, /\.\.\.savedColumns, 'type'/);
+  assert.match(resourceTable, /lockedBefore: 'status'/);
+  const viewOptions = readFileSync('components/data-table/data-table-view-options.tsx', 'utf8');
+  assert.match(viewOptions, /column\.columnDef\.meta\?\.lockedBefore/);
+  assert.match(viewOptions, /nextOrder\.splice\(nextOrder\.indexOf\(before\), 0, column\.id\)/);
+});

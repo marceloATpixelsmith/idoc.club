@@ -305,14 +305,14 @@ export function ResourceDataTable({
       ...config.columns.map(({ id, label }): ColumnDef<ResourceRow> => ({
         id,
         accessorFn: (row) => row[id] ?? '',
-        enableHiding: id !== 'title',
+        enableHiding: id !== 'title' && !(tableType === 'news' && id === 'type'),
         enableSorting: ['title', 'type', 'status', 'publication', 'updated', 'date', 'start', 'end', 'deadline', 'registrations'].includes(id),
         enableColumnFilter: id === 'status' || (tableType === 'news' && (id === 'type' || id === 'access')),
         header: header(id, label),
         meta: id === 'status'
           ? { label, options: config.statuses, variant: 'multiSelect' }
           : id === 'type' && tableType === 'news'
-            ? { label, options: config.types ?? [], variant: 'multiSelect' }
+            ? { label, lockedBefore: 'status', options: config.types ?? [], variant: 'multiSelect' }
             : id === 'access' && tableType === 'news'
               ? { exclusiveFilterValues: ['public', 'members'], label, options: ACCESS_OPTIONS, variant: 'multiSelect' }
               : { label, variant: 'text' },
