@@ -23,7 +23,7 @@ export function serverDurationMetricPayload(spans: readonly ServerSpan[]) {
     const ms = span.duration[0] * 1000 + span.duration[1] / 1e6;
     if (!Number.isFinite(ms) || ms < 0) continue;
     const status = span.attributes['http.status_code'];
-    const attrs: Array<{ key: string; value: { stringValue: string } }> = [
+    const attrs: Array<{ key: string; value: { stringValue: string } | { intValue: string } }> = [
       { key: 'http.method', value: { stringValue: method } },
     ];
     // Only route *templates*, never actual URLs or resource identifiers.
@@ -35,7 +35,7 @@ export function serverDurationMetricPayload(spans: readonly ServerSpan[]) {
       attrs.push({ key: 'http.route', value: { stringValue: route } });
     }
     if (typeof status === 'number' && status >= 500 && status <= 599) {
-      attrs.push({ key: 'http.status_code', value: { stringValue: String(status) } });
+      attrs.push({ key: 'http.status_code', value: { intValue: String(status) } });
     }
     const bucketCounts = Array(bounds.length + 1).fill('0');
     bucketCounts[bounds.findIndex(bound => ms <= bound) === -1
