@@ -20,13 +20,14 @@ function newRelicTraceExporter() {
 export async function register() {
   if (process.env.VERCEL === '1') {
     // A custom exporter is not suppressed when Vercel's Trace Drain is active.
-    // The default Vercel exporter remains available for platform tracing.
+    // The team Trace Drain independently preserves Vercel's platform spans.
     const traceExporter = process.env.NEXT_RUNTIME === 'nodejs'
       ? newRelicTraceExporter()
       : undefined;
     registerOTel({
       serviceName: 'idoc.club',
-      ...(traceExporter ? { traceExporter } : {}),
+      // Override automatic processors to prevent duplicate OTLP export when the drain changes state.
+      ...(traceExporter ? { traceExporter, spanProcessors: [] } : {}),
       // Do not export provider API keys, addresses, or query strings in fetch URLs.
       instrumentationConfig: { fetch: { ignoreUrls: [/.*/] } },
     });
