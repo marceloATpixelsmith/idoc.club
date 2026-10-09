@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // MANUAL, SCHEMA-BOUND MIGRATION 0071 RUNNER. NEVER RUN FROM AN APPLICATION BUILD.
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import postgres from 'postgres';
 import { rewriteMigrationSql } from './schema-migration-sql.mjs';
 
@@ -34,12 +35,18 @@ try
     {
         throw new Error('Wrong database or missing target schema');
     }
-    const migration = rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), schema)
-        .replaceAll('--> statement-breakpoint', '');
+    const migration = rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), schema);
+    const statements = migration.split('--> statement-breakpoint').map(x => x.trim()).filter(Boolean);
+    const hash = createHash('sha256').update(migration).digest('hex');
     // THE SCRIPT IS CHECKED OUT FROM THE PROTECTED STAGING BRANCH ONLY.
     await sql.begin(async tx =>
     {
         await tx`SELECT pg_advisory_xact_lock(71071, ${schema === 'idoc_staging' ? 1 : 2})`;
+        const latest = await tx.unsafe('SELECT MAX(created_at)::bigint AS timestamp FROM "' + schema + '".__drizzle_migrations');
+        if (Number(latest[0]?.timestamp) !== 1791381600000)
+        {
+            throw new Error('Unexpected migration history: expected 0070 as latest');
+        }
         const existing = await tx`SELECT
             (SELECT COUNT(*)::integer FROM information_schema.columns
              WHERE table_schema = ${schema} AND table_name IN ('news_articles','seminars')
@@ -49,7 +56,11 @@ try
             throw new Error('Migration 0071 is already present or partially present: stop for investigation');
         }
         // INVOKE postgres.js unsafe() WITH ONE SERVER-SIDE TRANSACTION.
-        await tx.unsafe(migration);
+        for (const statement of statements)
+        {
+            await tx.unsafe(statement);
+        }
+        await tx.unsafe('INSERT INTO "' + schema + '".__drizzle_migrations (hash, created_at) VALUES ($1, $2)', [hash, 1791566400000]);
         const result = await tx`SELECT (SELECT COUNT(*)::integer FROM information_schema.columns
             WHERE table_schema = ${schema} AND table_name IN ('news_articles','seminars')
             AND column_name = 'promotion_key' AND is_nullable = 'NO') AS columns`;
