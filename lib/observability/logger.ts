@@ -59,5 +59,6 @@ async function log(sink: (...args: unknown[]) => void, event: SecurityEventName,
   }
 }
 
+export const logInfo = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.info, event, meta);
 export const logWarn = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.warn, event, meta);
 export const logError = (event: SecurityEventName, meta?: Record<string, unknown>) => log(console.error, event, meta, true);
