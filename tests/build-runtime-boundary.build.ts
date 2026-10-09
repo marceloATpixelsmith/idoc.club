@@ -105,7 +105,7 @@ test('local and CI Release 1 gates are fail-fast and contain every required boun
   assert.equal(scripts.check, 'pnpm typecheck && pnpm test');
   assert.equal(scripts['check:release1'], 'node scripts/validate-auth-docs.mjs && node scripts/validate-release-checklist.mjs && pnpm validate:stripe-acceptance-inventory && node scripts/validate-toolchain-policy.mjs && node scripts/check-whitespace.mjs && pnpm typecheck && pnpm test:ci && pnpm test:integration-db && pnpm test:build-boundary && pnpm build');
   const workflow = readFileSync(path.join(root, '.github/workflows/release-1-verification.yml'), 'utf8');
-  assert.match(workflow, /image: postgres:16-alpine/);
+  assert.match(workflow, /image: (?:public\.ecr\.aws\/docker\/library\/)?postgres:16-alpine/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /run: pnpm check:release1:extended/);
   const marker = path.join(mkdtempSync(path.join(tmpdir(), 'idoc-gate-failure-')), 'should-not-exist');
