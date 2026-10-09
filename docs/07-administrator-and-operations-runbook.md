@@ -1253,6 +1253,8 @@ Configure these as encrypted, server-only variables for the **staging branch dep
 
 In Vercel Project Settings, add each variable to the branch-scoped staging environment/override, confirm it is unavailable to arbitrary Preview branches, then redeploy the `staging` branch. The runtime deliberately refuses promotion when the Vercel git ref is not `staging`.
 
+Before executing migration 0071, use the dedicated [manual migration workflow rollout procedure](15-manual-promotion-migration-rollout.md). It requires an independently verified backup, GitHub maintenance-environment protection and a temporary schema-owner credential; neither the migration nor the subsequent Production data-promotion operation runs automatically.
+
 ### Migration and rollout
 
 Migration `0071_permanent_data_promotion` is additive. It creates and backfills a unique UUID `promotion_key` on `news_articles` and `seminars`. Per the schema-isolation rules, run it as an explicit maintenance action with schema-owner credentials against `idoc_staging` first and `idoc_production` separately; never place schema-owner credentials in Vercel and never make a Vercel build run migrations.
