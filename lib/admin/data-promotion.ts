@@ -381,17 +381,24 @@ function readPlan(token: string): PromotionPlanPayload {
   return payload;
 }
 
-export async function listPromotionCandidates(dataset: PromotionDataset): Promise<PromotionCandidate[]> {
+export async function listPromotionCandidates(
+  dataset: PromotionDataset, search = '', page = 1,
+): Promise<PromotionCandidate[]> {
   await verifyBoundary();
   const sql = promotionSql();
+  const term = search.trim().slice(0, 100);
+  const offset = (Math.min(Math.max(Math.floor(page) || 1, 1), 10000) - 1) * 100;
+  // Fetch one extra row to determine whether the selection UI has a next page.
   if (dataset === 'news') {
     const result = await rows<{ id: number; title: string; status: string; article_type: string }>(sql,
-      'select id,title,status,article_type from idoc_staging.news_articles order by updated_at desc,id desc limit 100');
+      'select id,title,status,article_type from idoc_staging.news_articles where ($1 = \'\' or strpos(lower(title), lower($1)) > 0 or id::text = $1) order by updated_at desc,id desc limit 101 offset $2',
+      [term, offset]);
     return result.map((row) => ({ id: String(row.id), label: row.title, meta: row.article_type.toUpperCase() + ' · ' + row.status }));
   }
   if (dataset === 'seminar') {
     const result = await rows<{ id: number; title: string; status: string; start_date: string }>(sql,
-      'select id,title,status,start_date from idoc_staging.seminars order by start_date desc,id desc limit 100');
+      'select id,title,status,start_date from idoc_staging.seminars where ($1 = \'\' or strpos(lower(title), lower($1)) > 0 or id::text = $1) order by start_date desc,id desc limit 101 offset $2',
+      [term, offset]);
     return result.map((row) => ({ id: String(row.id), label: row.title, meta: String(row.start_date) + ' · ' + row.status }));
   }
   const result = await rows<{ id: number; city: string | null; country: string | null }>(sql,
