@@ -3,7 +3,7 @@ import 'server-only';
 import { escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { taggedSubject } from '@/lib/notifications/alert-severity';
-import { logError, logInfo } from './logger';
+import { logError, logInfo, logWarn } from './logger';
 import { toErrorRows, toSlowRows, type HealthRow } from './new-relic-health-rows.ts';
 
 // Weekly digest of server-side errors and slow routes for the dedicated `idoc.club` New Relic
@@ -21,12 +21,20 @@ const BASE_FILTER = `service.name = 'idoc.club' AND span.kind = 'server'`;
  * invoking deployment's own `deployment.environment.name` span attribute (Vercel `production` or
  * `preview`; staging is a preview deployment). */
 export function healthQueries(environment: string): { errors: string; slow: string } {
-  if (environment !== 'production' && environment !== 'preview') throw new Error('New Relic health check requires a production or preview deployment.');
+  if (environment !== 'production' && environment !== 'preview') throw new HealthCheckError('bad_environment');
   const filter = `${BASE_FILTER} AND deployment.environment.name = '${environment}'`;
   return {
     errors: `SELECT count(*) AS errors FROM Span WHERE ${filter} AND otel.status_code = 'ERROR' FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`,
     slow: `SELECT percentile(duration.ms, 95) AS p95, count(*) AS requests FROM Span WHERE ${filter} FACET http.route SINCE 7 days ago LIMIT ${TOP_ROWS}`,
   };
+}
+
+type FailureReason = 'bad_environment' | 'graphql_error' | 'http_status' | 'not_configured' | 'other' | 'timeout' | 'unexpected_response';
+
+/** Carries a closed-vocabulary reason (and HTTP status) so the log line says why a run failed
+ * without ever recording New Relic's response text. */
+class HealthCheckError extends Error {
+  constructor(readonly reason: FailureReason, readonly status?: number) { super(`New Relic health check failed (${reason})`); }
 }
 
 async function nrql(accountId: string, key: string, query: string): Promise<Record<string, unknown>[]> {
@@ -40,10 +48,11 @@ async function nrql(accountId: string, key: string, query: string): Promise<Reco
     method: 'POST',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`New Relic query failed (${response.status})`);
+  if (!response.ok) throw new HealthCheckError('http_status', response.status);
   const body = await response.json() as { data?: { actor?: { account?: { nrql?: { results?: Record<string, unknown>[] } } } }; errors?: unknown[] };
   const results = body.data?.actor?.account?.nrql?.results;
-  if (body.errors?.length || !Array.isArray(results)) throw new Error('New Relic query returned an error');
+  if (body.errors?.length) throw new HealthCheckError('graphql_error');
+  if (!Array.isArray(results)) throw new HealthCheckError('unexpected_response');
   return results;
 }
 
@@ -57,9 +66,17 @@ function table(rows: HealthRow[], valueLabel: string, format: (row: HealthRow) =
  * records `new_relic_health_check_failed`; email delivery trouble is logged but does not retry the
  * whole run, since the log line already carries the result. */
 export async function runNewRelicHealthCheck(): Promise<{ emailed: number; errorRoutes: number; slowRoutes: number }> {
+  try { return await runHealthCheck(); } catch (error) {
+    const failure = error instanceof HealthCheckError ? error : new HealthCheckError(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'other');
+    await logWarn('new_relic_health_check_failed', { reason: failure.reason, ...(failure.status ? { status: failure.status } : {}) });
+    throw error; // keep the original exception (type, message, stack) for Sentry
+  }
+}
+
+async function runHealthCheck(): Promise<{ emailed: number; errorRoutes: number; slowRoutes: number }> {
   const key = process.env.NEW_RELIC_QUERY_KEY;
   const accountId = process.env.NEW_RELIC_ACCOUNT_ID;
-  if (!key || !accountId || !/^\d+$/.test(accountId)) throw new Error('New Relic health check is not configured.');
+  if (!key || !accountId || !/^\d+$/.test(accountId)) throw new HealthCheckError('not_configured');
 
   const environment = process.env.VERCEL_ENV ?? '';
   const queries = healthQueries(environment);
