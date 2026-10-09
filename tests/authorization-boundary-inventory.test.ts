@@ -116,6 +116,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/clock-skew-check/route.ts': 'shared-secret-header',
   'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
+  'app/api/cron/new-relic-health-check/route.ts': 'shared-secret-header',
   'app/api/cron/news-scheduled-publish/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
