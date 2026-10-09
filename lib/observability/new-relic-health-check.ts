@@ -69,7 +69,7 @@ export async function runNewRelicHealthCheck(): Promise<{ emailed: number; error
   try { return await runHealthCheck(); } catch (error) {
     const failure = error instanceof HealthCheckError ? error : new HealthCheckError(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'other');
     await logWarn('new_relic_health_check_failed', { reason: failure.reason, ...(failure.status ? { status: failure.status } : {}) });
-    throw failure;
+    throw error; // keep the original exception (type, message, stack) for Sentry
   }
 }
 
