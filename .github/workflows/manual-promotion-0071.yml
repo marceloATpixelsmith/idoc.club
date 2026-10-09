@@ -34,6 +34,17 @@ jobs:
     timeout-minutes: 15
     environment: ${{ inputs.target_schema == 'idoc_production' && 'idoc-db-production-maintenance' || 'idoc-db-staging-maintenance' }}
     steps:
+      - name: Verify Production environment has non-bypassable review protection
+        if: inputs.target_schema == 'idoc_production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          configuration="$(gh api "repos/${GITHUB_REPOSITORY}/environments/idoc-db-production-maintenance")"
+          if ! jq -e '.can_admins_bypass == false and (.protection_rules | any(.type == "required_reviewers" and (.reviewers | length > 0)))' <<<"$configuration" >/dev/null; then
+            echo "::error::Production environment must require reviewers and disable administrator bypass."
+            exit 1
+          fi
       - name: Check out protected staging code
         uses: actions/checkout@v4
         with:
