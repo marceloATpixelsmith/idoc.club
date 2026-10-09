@@ -75,7 +75,7 @@ test('all five mutable record tables expose protected selected-row deletion', ()
   assert.match(support, /table="support"/);
   assert.match(bulk, /requireCsrfToken/);
   assert.match(bulk, /requireFreshStepUp/);
-  assert.match(memberLifecycle, /Current and former administrator accounts cannot be permanently deleted/);
+  assert.match(memberLifecycle, /Administrator accounts cannot be bulk deleted/);
   assert.match(bulk, /must be Draft or Canceled and have no registration history/);
   assert.match(bulk, /Registrations can only be deleted after cancellation/);
   assert.match(bulk, /Support conversations must be closed before they can be deleted/);
