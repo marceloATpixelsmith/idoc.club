@@ -72,6 +72,8 @@ export function serverDurationMetricPayload(spans: readonly ServerSpan[]) {
   };
 }
 
+let reportedMetricAcceptance = false;
+
 export async function sendServerDurationMetrics(
   spans: readonly ServerSpan[], apiKey: string,
   send: typeof fetch = fetch,
@@ -87,7 +89,13 @@ export async function sendServerDurationMetrics(
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    if (!response.ok) console.warn('[telemetry] metric export failed', { status: response.status });
+    if (!response.ok) {
+      console.warn('[telemetry] metric export failed', { status: response.status });
+    } else if (!reportedMetricAcceptance) {
+      // CONFIRM THE FIRST ACCEPTED BATCH PER RUNTIME WITHOUT LOGGING METRIC ATTRIBUTES OR CREDENTIALS.
+      reportedMetricAcceptance = true;
+      console.info('[telemetry] metric export accepted', { status: response.status });
+    }
   } catch {
     console.warn('[telemetry] metric export unavailable');
   } finally {
