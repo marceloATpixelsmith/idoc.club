@@ -136,7 +136,7 @@ export async function createGuestSeminarCheckoutSession(seminarIdValue: unknown,
     mode: 'payment',
     payment_intent_data: { metadata: { deliveryOwner, kind: checkoutKind, seminarId: String(seminarId) } },
     phone_number_collection: { enabled: true },
-    success_url: `${baseUrl}/api/ui/flash/seminar-checkout/success/${seminarId}?session_id={CHECKOUT_SESSION_ID}`, 
+    success_url: `${baseUrl}/api/ui/flash/seminar-checkout/success/${seminarId}?session_id={CHECKOUT_SESSION_ID}`,
   });
   if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
   return session.url;
