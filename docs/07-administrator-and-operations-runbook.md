@@ -1174,20 +1174,24 @@ TO idoc_data_promoter;
 GRANT SELECT ON
   idoc_production.news_articles,
   idoc_production.seminars,
-  idoc_production.organization_settings,
-  idoc_production.seminar_registrations
+  idoc_production.organization_settings
 TO idoc_data_promoter;
 
 -- Identity matching reads only the columns referenced by productionOperator.
 -- Never grant table-level SELECT on either users table (password hashes are excluded).
+GRANT SELECT (seminar_id)
+ON idoc_production.seminar_registrations TO idoc_data_promoter;
+
+GRANT SELECT (id, entity_id, after_json, created_at)
+ON idoc_staging.promotion_audit_success TO idoc_data_promoter;
+
 GRANT SELECT (id, email, deleted_at, account_state)
 ON idoc_staging.users, idoc_production.users TO idoc_data_promoter;
 
 GRANT SELECT (user_id, role, revoked_at)
 ON idoc_staging.application_roles, idoc_production.application_roles TO idoc_data_promoter;
 
-GRANT SELECT (id, action, entity_type, entity_id, after_json, created_at),
-  INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
+GRANT INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
 ON idoc_staging.audit_log TO idoc_data_promoter;
 
 GRANT INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
@@ -1226,7 +1230,7 @@ GRANT EXECUTE ON FUNCTION idoc_staging.lock_promotion_source(text, bigint)
 TO idoc_data_promoter;
 ```
 
-After provisioning, explicitly verify with `has_table_privilege`, `has_column_privilege`, `has_schema_privilege` and `has_function_privilege` that the role can perform the listed operations, can execute only the dedicated Production seminar-lock helper and staging row-lock helper, and cannot `CREATE` in either schema, cannot `DELETE` from promoted tables and cannot write staging content, member, membership, payment, subscription, registration, MFA or session tables. Migration `0071` revokes PUBLIC execute on both helpers; do not restore it.
+After provisioning, explicitly verify with `has_table_privilege`, `has_column_privilege`, `has_schema_privilege` and `has_function_privilege` that the role can perform the listed operations, can execute only the dedicated Production seminar-lock helper and staging row-lock helper, and cannot `CREATE` in either schema, cannot `DELETE` from promoted tables and cannot write staging content, member, membership, payment, subscription, registration, MFA or session tables. The promoter can read staging audit outcomes only through the fixed-filter `promotion_audit_success` view; do not grant direct SELECT on staging `audit_log` payloads or broad Production registration fields. Migration `0071` revokes PUBLIC execute on both helpers and PUBLIC SELECT on the view; do not restore it.
 
 ### Vercel configuration
 
