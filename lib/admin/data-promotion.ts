@@ -218,42 +218,40 @@ function cloudinaryWarnings(row: Row) {
 async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId: string, lock = false): Promise<Row | null> {
   if (dataset === 'news') {
     const result = await rows(sql,
-      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_staging.news_articles where id=$1 limit 1',
+      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_staging.news_articles where id=$1 limit 1' + (lock ? ' for share' : ''),
       [Number(sourceId)]);
-    if (lock && result[0]) await rows(sql, 'select id from idoc_staging.news_articles where id=$1 for share', [Number(sourceId)]);
     return result[0] ?? null;
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
+      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1' + (lock ? ' for share' : ''),
       [Number(sourceId)]);
-    if (lock && result[0]) await rows(sql, 'select id from idoc_staging.seminars where id=$1 for share', [Number(sourceId)]);
     return result[0] ?? null;
   }
   const result = await rows(sql,
-    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_staging.organization_settings where id=1 limit 1');
-  if (lock && result[0]) await rows(sql, 'select id from idoc_staging.organization_settings where id=1 for share');
+    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_staging.organization_settings where id=1 limit 1' +
+      (lock ? ' for share' : ''));
   return result[0] ?? null;
 }
 
 async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: Row, lock = false): Promise<Row | null> {
   if (dataset === 'news') {
     const result = await rows(sql,
-      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_production.news_articles where promotion_key=$1::uuid limit 1',
+      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_production.news_articles where promotion_key=$1::uuid limit 1' +
+        (lock ? ' for update' : ''),
       [String(source.promotion_key)]);
-    if (lock && result[0]) await rows(sql, 'select id from idoc_production.news_articles where id=$1 for update', [Number(result[0].id)]);
     return result[0] ?? null;
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1',
+      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1' +
+        (lock ? ' for update' : ''),
       [String(source.promotion_key)]);
-    if (lock && result[0]) await rows(sql, 'select id from idoc_production.seminars where id=$1 for update', [Number(result[0].id)]);
     return result[0] ?? null;
   }
   const result = await rows(sql,
-    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_production.organization_settings where id=1 limit 1');
-  if (lock && result[0]) await rows(sql, 'select id from idoc_production.organization_settings where id=1 for update');
+    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_production.organization_settings where id=1 limit 1' +
+      (lock ? ' for update' : ''));
   return result[0] ?? null;
 }
 
