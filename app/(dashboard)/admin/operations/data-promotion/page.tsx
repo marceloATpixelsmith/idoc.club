@@ -54,7 +54,7 @@ function datasetLabel(dataset: PromotionDataset) {
 export default async function DataPromotionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ dataset?: string; record?: string | string[] }>;
+  searchParams: Promise<{ dataset?: string; record?: string | string[]; search?: string }>;
 }) {
   const actor = await requireAccountAccess('administration');
   try {
@@ -67,6 +67,7 @@ export default async function DataPromotionPage({
   const params = await searchParams;
   const dataset = parsePromotionDataset(params.dataset) ?? 'news';
   const records = selectedRecords(params.record);
+  const search = typeof params.search === 'string' ? params.search.slice(0, 100) : '';
 
   let candidates: Awaited<ReturnType<typeof listPromotionCandidates>> = [];
   let history: Awaited<ReturnType<typeof listPromotionHistory>> = [];
@@ -75,7 +76,7 @@ export default async function DataPromotionPage({
   let previewError: string | null = null;
 
   try {
-    [candidates, history] = await Promise.all([listPromotionCandidates(dataset), listPromotionHistory()]);
+    [candidates, history] = await Promise.all([listPromotionCandidates(dataset, search), listPromotionHistory()]);
   } catch (error) {
     configurationError = error instanceof Error ? error.message : 'Data promotion is not configured.';
   }
@@ -123,8 +124,17 @@ export default async function DataPromotionPage({
                 </Button>
               ))}
             </div>
+            <form className="flex flex-wrap items-end gap-3" method="get">
+              <input name="dataset" type="hidden" value={dataset} />
+              <label className="flex min-w-64 flex-1 flex-col gap-2 text-sm font-medium text-foreground">
+                Search staging records by title or ID
+                <input aria-label="Search staging records" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="search" defaultValue={search} maxLength={100} placeholder="Search all staging records" />
+              </label>
+              <Button type="submit" variant="secondary">Search records</Button>
+            </form>
             <form className="space-y-4" method="get">
               <input name="dataset" type="hidden" value={dataset} />
+              <input name="search" type="hidden" value={search} />
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-foreground">{datasetLabel(dataset)}</span>
                 <select
@@ -139,6 +149,7 @@ export default async function DataPromotionPage({
                   ))}
                 </select>
               </label>
+              {dataset !== 'organization' ? <p className="text-xs text-muted-foreground">Showing up to 100 matches. Search by title or staging ID to find any record, including older records.</p> : null}
               <Button type="submit">Generate Preview</Button>
             </form>
           </section>
