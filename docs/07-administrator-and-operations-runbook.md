@@ -1167,19 +1167,23 @@ GRANT USAGE ON SCHEMA idoc_staging, idoc_production TO idoc_data_promoter;
 GRANT SELECT ON
   idoc_staging.news_articles,
   idoc_staging.seminars,
-  idoc_staging.organization_settings,
-  idoc_staging.users,
-  idoc_staging.application_roles
+  idoc_staging.organization_settings
 TO idoc_data_promoter;
 
 GRANT SELECT ON
   idoc_production.news_articles,
   idoc_production.seminars,
   idoc_production.organization_settings,
-  idoc_production.users,
-  idoc_production.application_roles,
   idoc_production.seminar_registrations
 TO idoc_data_promoter;
+
+-- Identity matching reads only the columns referenced by productionOperator.
+-- Never grant table-level SELECT on either users table (password hashes are excluded).
+GRANT SELECT (id, email, deleted_at, account_state)
+ON idoc_staging.users, idoc_production.users TO idoc_data_promoter;
+
+GRANT SELECT (user_id, role, revoked_at)
+ON idoc_staging.application_roles, idoc_production.application_roles TO idoc_data_promoter;
 
 GRANT SELECT (id, action, entity_type, entity_id, after_json, created_at),
   INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
@@ -1215,6 +1219,9 @@ GRANT USAGE, SELECT ON SEQUENCE
 TO idoc_data_promoter;
 
 GRANT EXECUTE ON FUNCTION idoc_production.lock_seminars_for_promotion()
+TO idoc_data_promoter;
+
+GRANT EXECUTE ON FUNCTION idoc_staging.lock_promotion_source(text, bigint)
 TO idoc_data_promoter;
 ```
 
