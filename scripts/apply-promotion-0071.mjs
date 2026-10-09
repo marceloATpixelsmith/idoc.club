@@ -83,7 +83,7 @@ async function verifyInstalledMigration(tx,targetSchema,expectedHash)
             result[0].protected_functions !== 2 || result[0].protected_audit_views !== 1 ||
             ledger[0].count !== 1)
         {
-            throw new Error('Migration 0071 invariant validation failed for ' + targetSchema + '');
+            throw new Error('Migration 0071 invariant validation failed for ' + targetSchema);
         }
         return { uuidColumns: result[0].uuid_columns, uniqueConstraints: result[0].unique_constraints,
             protectedFunctions: result[0].protected_functions, protectedAuditViews: result[0].protected_audit_views,
@@ -114,18 +114,7 @@ try
             const stagingHash = createHash('sha256').update(rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), 'idoc_staging')).digest('hex');
             const expectedStaging = [...await expectedHistory('idoc_staging'), [1791566400000, stagingHash]];
             assertHistory(stagingLedger, expectedStaging, 'idoc_staging (must be migrated first)');
-            const stagingObjects = await tx.unsafe(`SELECT
-                (SELECT COUNT(*)::integer FROM information_schema.columns WHERE table_schema = 'idoc_staging'
-                 AND table_name IN ('news_articles', 'seminars') AND column_name = 'promotion_key'
-                 AND is_nullable = 'NO') AS columns,
-                to_regprocedure('idoc_staging.lock_promotion_source(text,bigint)') IS NOT NULL AS source_lock,
-                to_regprocedure('idoc_staging.lock_seminars_for_promotion()') IS NOT NULL AS seminar_lock,
-                to_regclass('idoc_staging.promotion_audit_success') IS NOT NULL AS audit_view`);
-            if (stagingObjects[0].columns !== 2 || !stagingObjects[0].source_lock ||
-                !stagingObjects[0].seminar_lock || !stagingObjects[0].audit_view)
-            {
-                throw new Error('Staging 0071 objects are incomplete; Production migration blocked');
-            }
+            await verifyInstalledMigration(tx, 'idoc_staging', stagingHash);
         }
         const existing = await tx`SELECT
             (SELECT COUNT(*)::integer FROM information_schema.columns
