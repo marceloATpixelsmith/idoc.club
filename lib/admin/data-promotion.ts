@@ -256,22 +256,29 @@ async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: R
 }
 
 async function conflictReason(sql: PromotionSql, dataset: PromotionDataset, source: Row, target: Row | null) {
-  if (target) return null;
   if (dataset === 'news') {
-    const conflict = await rows(sql, 'select id from idoc_production.news_articles where slug=$1 limit 1', [String(source.slug)]);
+    const conflict = target
+      ? await rows(sql, 'select id from idoc_production.news_articles where slug=$1 and id<>$2 limit 1',
+          [String(source.slug), Number(target.id)])
+      : await rows(sql, 'select id from idoc_production.news_articles where slug=$1 limit 1', [String(source.slug)]);
     return conflict.length
       ? 'Production already has this slug under a different promotion identity. Resolve the conflict manually before promotion.'
       : null;
   }
   if (dataset === 'seminar') {
-    const conflict = await rows(sql,
-      'select id from idoc_production.seminars where title=$1 and start_date=$2 and end_date=$3 limit 1',
-      [String(source.title), String(canonicalValue(source.start_date)), String(canonicalValue(source.end_date))]);
+    const params = [String(source.title), String(canonicalValue(source.start_date)), String(canonicalValue(source.end_date))];
+    const conflict = target
+      ? await rows(sql,
+          'select id from idoc_production.seminars where title=$1 and start_date=$2 and end_date=$3 and id<>$4 limit 1',
+          [...params, Number(target.id)])
+      : await rows(sql,
+          'select id from idoc_production.seminars where title=$1 and start_date=$2 and end_date=$3 limit 1',
+          params);
     return conflict.length
       ? 'Production already has a matching seminar under a different promotion identity. Resolve the conflict manually before promotion.'
       : null;
   }
-  return 'The Production organization-settings singleton is missing and must be repaired before promotion.';
+  return target ? null : 'The Production organization-settings singleton is missing and must be repaired before promotion.';
 }
 
 async function previewItem(sql: PromotionSql, dataset: PromotionDataset, sourceId: string): Promise<{
