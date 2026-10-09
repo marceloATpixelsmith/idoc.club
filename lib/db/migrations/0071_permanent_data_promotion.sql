@@ -47,3 +47,34 @@ $promotion_lock$;
 --> statement-breakpoint
 
 REVOKE ALL ON FUNCTION "idoc"."lock_seminars_for_promotion"() FROM PUBLIC;
+--> statement-breakpoint
+
+CREATE OR REPLACE FUNCTION "idoc"."lock_promotion_source"(p_dataset text, p_id bigint)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $promotion_source_lock$
+BEGIN
+  IF p_id IS NULL OR p_id <= 0 THEN
+    RAISE EXCEPTION 'Invalid promotion source ID';
+  END IF;
+
+  IF p_dataset = 'news' THEN
+    PERFORM 1 FROM "idoc"."news_articles" WHERE id = p_id FOR SHARE;
+  ELSIF p_dataset = 'seminar' THEN
+    PERFORM 1 FROM "idoc"."seminars" WHERE id = p_id FOR SHARE;
+  ELSIF p_dataset = 'organization' AND p_id = 1 THEN
+    PERFORM 1 FROM "idoc"."organization_settings" WHERE id = 1 FOR SHARE;
+  ELSE
+    RAISE EXCEPTION 'Invalid promotion source dataset';
+  END IF;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Promotion source not found';
+  END IF;
+END;
+$promotion_source_lock$;
+--> statement-breakpoint
+
+REVOKE ALL ON FUNCTION "idoc"."lock_promotion_source"(text, bigint) FROM PUBLIC;
