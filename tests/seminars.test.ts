@@ -581,7 +581,7 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
 });
 
 
-test('guest registration completion always returns to seminar detail with one-time success flash', () => {
+test('guest registration completion only flashes success after confirmed paid registration', () => {
   const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
   const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
   const flashRoute = readFileSync('app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts', 'utf8');
