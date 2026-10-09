@@ -1062,12 +1062,24 @@ No database migration is required. Existing `CRON_SECRET` remains mandatory for 
 ### Verification and cutover
 
 1. Provision a QStash resource in Upstash, with separate staging and production resources/credentials. Add variables to Vercel staging, then redeploy staging. Ensure the public callback path `/api/qstash/jobs` is accessible to Upstash and not blocked by Vercel Deployment Protection (the endpoint itself verifies the `Upstash-Signature` JWT and raw-body hash).
-2. Run `node scripts/configure-qstash-schedules.mjs` from a trusted local/CI shell with `QSTASH_TOKEN`, `QSTASH_CALLBACK_BASE_URL`, and optionally `QSTASH_URL`. The script uses stable schedule IDs and can be rerun without multiplying schedules. Inspect all ten schedules in Upstash Console.
+2. Run `node scripts/configure-qstash-schedules.mjs` from a trusted local/CI shell with `QSTASH_TOKEN`, `QSTASH_CALLBACK_BASE_URL`, and optionally `QSTASH_URL`. The script uses stable schedule IDs and can be rerun without multiplying schedules. Inspect all eleven schedules in Upstash Console.
 3. Confirm forged/unsigned callbacks get HTTP 401, valid callbacks execute once, deliberate Brevo failure produces an on-demand retry, and cancellation/refund tasks are processed without duplicated refunds. Confirm the communication/billing launch hold remains in effect for staging imports.
 4. After verified QStash triggers and schedules, remove all eight Vercel Cron entries from `vercel.json` in this **same PR** and update the contract tests. Do not deactivate Vercel scheduling before this verification, or there will be a delivery gap. Monitor Sentry and QStash failures after deployment.
 5. Keep the daily QStash account and cancellation safety sweeps to recover work committed in Postgres but not successfully published to QStash. Expired account links are ineligible and must never be sent late.
 
-The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery daily 09:00 UTC, cancellation recovery daily 09:05 UTC, clock skew daily 09:10 UTC, renewal scan daily 06:00 UTC, renewal delivery daily 06:15, 14:15 and 22:15 UTC, reconciliation daily 07:00 UTC, retention daily 08:00 UTC and news publishing daily 00:00 UTC. QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.
+The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery daily 09:00 UTC, cancellation recovery daily 09:05 UTC, clock skew daily 09:10 UTC, renewal scan daily 06:00 UTC, renewal delivery daily 06:15, 14:15 and 22:15 UTC, reconciliation daily 07:00 UTC, retention daily 08:00 UTC and news publishing daily 00:00 UTC. The weekly New Relic health check (`new-relic-weekly-health-check`) runs Mondays 08:00 UTC and is QStash-only: it has no Vercel Cron entry, so the cutover step that removes the Vercel entries does not apply to it.
+
+### Weekly New Relic health check
+
+`app/api/cron/new-relic-health-check/route.ts` (reached only through the signed `/api/qstash/jobs` callback, or with `CRON_SECRET`) queries New Relic NerdGraph for the `idoc.club` service over the last 7 days: server routes with error spans and the slowest routes by p95. It writes a `new_relic_health_check_completed` log event (counts only) and emails `IDOC_ADMIN_NOTIFICATION_EMAIL` a digest of route names and numbers. Missing configuration or a New Relic error makes the job fail so QStash retries and `new_relic_health_check_failed` goes to Sentry. A failed run first logs `new_relic_health_check_failed` with a fixed `reason` (`not_configured`, `bad_environment`, `http_status` with `status`, `graphql_error`, `unexpected_response`, `timeout` or `other`); New Relic response text is never logged. Only templated route names and aggregate numbers leave New Relic; no URLs, member data or span payloads.
+
+Required Vercel variables (set per environment by an administrator, never in GitHub or chat):
+
+- `NEW_RELIC_QUERY_KEY`: a dedicated read-only New Relic **user API key**. Do not reuse the deployment-marker key (`NEW_RELIC_API_KEY`) or the OTLP ingest key.
+- `NEW_RELIC_ACCOUNT_ID`: the numeric New Relic account ID.
+
+Verification: after registering the schedule, trigger it once from the Upstash Console, confirm the log event and the email, and check the queries return data. The queries use OpenTelemetry span attributes (`service.name`, `span.kind`, `otel.status_code`, `http.route`, `duration.ms`). Staging and production share the `idoc.club` service name, so each query is also scoped to `deployment.environment.name` equal to the invoking deployment's `VERCEL_ENV` (`production` or `preview`; staging is a preview deployment). Confirm the attribute values match on real data and that the other attributes exist before relying on the output; the job fails on any other `VERCEL_ENV`.
+ QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.
 
 
 ## New Relic observability and deployment change tracking
@@ -1093,6 +1105,7 @@ The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery d
   ```
 - Check `SELECT count(*) FROM Span FACET `service.name` SINCE 1 hour ago` to confirm whether a dedicated IDOC service is emitting spans. A nonzero first query plus only `vercel.serverless-runtime` does **not** meet this prerequisite.
 - After provisioning the dedicated entity, confirm the `entitySearch` query matches **only** IDOC. Deploy to **staging** first; confirm that GitHub Actions shows `New Relic IDOC deployment tracking` completing successfully for an actual Vercel `deployment_status: success` event, and that the event is visible in New Relic Change Tracking attached to IDOC. Verify `version`, commit, deep link, and environment, and that unrelated projects receive no event.
+- **Failed deployments.** The same workflow also runs for Vercel `deployment_status` states `failure` and `error` on the environment branch head and records a Change Tracking event with `shortDescription` `IDOC Vercel deployment FAILED` and custom attribute `deploymentState: "failed"` (successful events carry `deploymentState: "success"`). A failed event has the same `version`/`commit` as the SHA that failed, so a later successful retry of that SHA appears alongside it; filter on `deploymentState`. Spans carry `vercel.sha` (the commit SHA) and `service.version` (the Vercel deployment ID `dpl_…`), so a trace joins to its deployment event by `vercel.sha` = event `version`. Verified for successful staging deployments on 2026-10-09; the failed path is awaiting a real failed staging deployment.
 - Never interpret passing PR CI alone as deployment/change-tracking verification: the workflow is deployment-status-triggered, not PR-triggered. Do not merge or enable it as complete when the dedicated service is still absent.
 
 ### Rotation and troubleshooting
@@ -1114,3 +1127,170 @@ During the schema-isolation cutover, run `node scripts/diagnose-postgres-url.mjs
 Vercel builds run `pnpm build` (Next.js build) only; they MUST NOT run `pnpm db:migrate` or schema-changing DDL. The runtime `POSTGRES_URL` is a least-privilege role (`idoc_staging_app` in branch-scoped staging or `idoc_production_app` in Production) and `DB_SCHEMA` is respectively `idoc_staging` or `idoc_production`. Both connect to the same Render PostgreSQL database, `ayni_space`. Do not grant either application role `CREATE` on its schema to bypass a failing build.
 
 Run `pnpm db:migrate` only as an explicit, separately authorized maintenance action using schema-owner credentials, scoped to the target `DB_SCHEMA`, after backups and migration review. The command uses `scripts/migrate-selected-schema.ts`, which rewrites schema-qualified migration SQL to the selected schema. Never put schema-owner credentials in the normal Vercel `POSTGRES_URL` or expose them to Preview branches. Verify migration journal state and run the migration separately before deploying application code that requires it. The Vercel Build Command must be `pnpm build` (not `pnpm db:migrate && next build` or a conditional variant). Production remains a separate staging-reviewed promotion, not an automatic staging merge.
+
+
+## Permanent staging-to-production data promotion
+
+### Scope and security boundary
+
+The permanent data-promotion feature is a Super-Admin-only Operations function at `/admin/operations/data-promotion`. It is deliberately not a database clone, migration runner, arbitrary SQL surface, or automatic side effect of a code promotion. Each operation starts from the protected `staging` branch deployment, previews one to ten approved staging records, requires an explicit execute action plus fresh privileged TOTP step-up, revalidates the source and target state inside the execution transaction, and writes only the allowlisted Production fields.
+
+The permanent allowlist is:
+
+- **News / Blog:** selective create/update of article content, type, slug, publication state/date, audience, thumbnail, inline HTML, Cloudinary references and external URL. Existing Production audience may stay the same or become narrower; promotion rejects any update that broadens an existing Production audience.
+- **Seminars:** selective create/update of the seminar definition and presentation fields only. Registrations, registration payment state, refunds and reconciliation never move. If the linked Production seminar has any registration rows, any modifying promotion is rejected.
+- **Organization Settings:** only the public structured address fields `address_1`, `address_2`, `city`, `state_province`, `postal_code` and `country`. Seminar payment-method configuration, billing, security and other operational settings are Production-owned.
+- **Content pages:** not currently exposed for promotion because the former Pages authoring surface is retired. The persisted read-only CMS tables are not silently treated as promotable data.
+
+Members, profiles, memberships, professional-role history, entitlements, Stripe customers/subscriptions/payments, seminar registrations, refunds, reconciliation state, sessions, MFA, trusted devices, OTP/recovery material, notification/outbox state, cron state, administrator grants/invitations, administrator table preferences and audit-log history are prohibited datasets. The only audit writes made by the feature are new promotion evidence rows.
+
+News/Blog and Seminar rows use a generated UUID `promotion_key` as the cross-environment identity. Numeric primary keys remain environment-local. Existing unrelated Production rows are never auto-linked merely because IDs match. A slug collision for News/Blog or a title/date collision for a Seminar without the matching UUID is treated as an operator-resolvable conflict, not as permission to adopt the Production row automatically.
+
+Cloudinary media are referenced rather than copied. Promotion verifies that detected Cloudinary references use HTTPS; because the URL identifies the shared Cloudinary asset independently of either PostgreSQL schema, the database promotion copies only the validated reference. Missing/deleted Cloudinary assets remain a media-library operational issue and must be repaired before promotion if preview/public verification exposes one.
+
+### Execution architecture
+
+Ordinary application credentials remain isolated: `idoc_staging_app` and `idoc_production_app` keep their own-schema permissions and do not gain cross-schema rights. The promotion module opens a separate one-connection pool using `DATA_PROMOTION_DATABASE_URL`; at runtime it fails closed unless all of the following are true:
+
+- application `DB_SCHEMA` is exactly `idoc_staging`;
+- on Vercel, `VERCEL_GIT_COMMIT_REF` is exactly `staging`, which prevents feature-branch Preview deployments from executing promotion;
+- `current_database()` is exactly `ayni_space`;
+- `current_user` is exactly `idoc_data_promoter`;
+- both `idoc_staging` and `idoc_production` exist and are distinct;
+- migration `0071_permanent_data_promotion` has added `promotion_key` to News/Blog and Seminars in both schemas;
+- the signing secret is present and at least 32 bytes.
+
+A preview is read-only. It contains exact changed field names and display-safe before/after values, conflicts, warnings and create/update/skip/reject disposition. The executable plan is HMAC-signed with `DATA_PROMOTION_PLAN_SECRET`, expires after five minutes and contains record hashes rather than trusted browser-supplied values. Execution rejects a stale plan if either the staging source or Production target changed after preview.
+
+Execution uses one PostgreSQL transaction across both schemas. It obtains advisory transaction locks for the operation and each promotion identity, and calls the migration-owned `idoc_staging.lock_promotion_source(dataset, id)` to hold a staging `FOR SHARE` row lock until commit without granting the promoter staging UPDATE rights, revalidates the Super Admin in staging, maps that operator by normalized email to an active Production Super Admin for Production ownership/audit fields, and reruns promotion policy. Seminar promotion additionally calls the migration-owned `SECURITY DEFINER` helper `idoc_production.lock_seminars_for_promotion()`, whose only operation is a `SHARE ROW EXCLUSIVE` lock on the Production seminars table. That lock prevents any concurrent Seminar insert/update/delete from entering between collision validation and the promoted write without granting the promoter broad table-update rights. The transaction then performs the narrow write, writes a secret-safe Production audit row, and finally writes the staging promotion-success audit row. The staging success audit uses the promotion UUID as its entity ID and is the idempotency record. If the caller retries after an uncertain network result, the same operation UUID returns as already completed rather than creating a duplicate. A transaction failure before commit rolls back the Production mutation and both audit writes atomically.
+
+A second human approval is not required for this first permanent implementation. The risk control is instead a five-minute signed preview, explicit Super Admin confirmation, fresh privileged TOTP, a maximum batch of ten records, per-record concurrency locks, a dedicated least-privilege database role, policy revalidation at commit time and immutable audit evidence. If operational history later shows a need for dual control, add it as a separate approval state rather than weakening or bypassing these controls.
+
+### Database role provisioning
+
+Create the promotion role using schema-owner/database-owner credentials, never an application credential. Generate a unique strong password in the approved secrets manager and substitute it only in the database administration session; never commit or paste it into source control or logs.
+
+The intended privilege shape is below. Review the actual PostgreSQL catalog before applying it, and keep grants column-specific. Do not grant schema `CREATE`, table ownership, `DELETE`, membership/billing writes or broad `ALL PRIVILEGES`.
+
+```sql
+CREATE ROLE idoc_data_promoter LOGIN PASSWORD '<secret>';
+GRANT CONNECT ON DATABASE ayni_space TO idoc_data_promoter;
+GRANT USAGE ON SCHEMA idoc_staging, idoc_production TO idoc_data_promoter;
+
+GRANT SELECT ON
+  idoc_staging.news_articles,
+  idoc_staging.seminars,
+  idoc_staging.organization_settings
+TO idoc_data_promoter;
+
+GRANT SELECT ON
+  idoc_production.news_articles,
+  idoc_production.seminars,
+  idoc_production.organization_settings
+TO idoc_data_promoter;
+
+-- Identity matching reads only the columns referenced by productionOperator.
+-- Never grant table-level SELECT on either users table (password hashes are excluded).
+GRANT SELECT (seminar_id)
+ON idoc_production.seminar_registrations TO idoc_data_promoter;
+
+GRANT SELECT (id, entity_id, after_json, created_at)
+ON idoc_staging.promotion_audit_success TO idoc_data_promoter;
+
+GRANT SELECT (id, email, deleted_at, account_state)
+ON idoc_staging.users, idoc_production.users TO idoc_data_promoter;
+
+GRANT SELECT (user_id, role, revoked_at)
+ON idoc_staging.application_roles, idoc_production.application_roles TO idoc_data_promoter;
+
+GRANT INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
+ON idoc_staging.audit_log TO idoc_data_promoter;
+
+GRANT INSERT (actor_id, action, entity_type, entity_id, after_json, reason)
+ON idoc_production.audit_log TO idoc_data_promoter;
+
+GRANT INSERT (promotion_key, slug, title, subtitle, content_html, article_type, audience, thumbnail_url,
+  external_url, status, publication_date, published_at, archived_at, created_by_user_id, updated_by_user_id),
+  UPDATE (slug, title, subtitle, content_html, article_type, audience, thumbnail_url, external_url, status,
+  publication_date, published_at, archived_at, updated_by_user_id, updated_at)
+ON idoc_production.news_articles TO idoc_data_promoter;
+
+GRANT INSERT (promotion_key, title, description, start_date, end_date, start_time, end_time, timezone, location,
+  language, organizing_national_federation, course_directors, participant_profile, course_venue_information,
+  application, accommodation_information, capacity, member_price_cents, non_member_price_cents,
+  registration_deadline, status, is_fei, levels, created_by_user_id, updated_by_user_id),
+  UPDATE (title, description, start_date, end_date, start_time, end_time, timezone, location, language,
+  organizing_national_federation, course_directors, participant_profile, course_venue_information, application,
+  accommodation_information, capacity, member_price_cents, non_member_price_cents, registration_deadline,
+  status, is_fei, levels, updated_by_user_id, updated_at)
+ON idoc_production.seminars TO idoc_data_promoter;
+
+GRANT UPDATE (address_1, address_2, city, state_province, postal_code, country, updated_at)
+ON idoc_production.organization_settings TO idoc_data_promoter;
+
+GRANT USAGE, SELECT ON SEQUENCE
+  idoc_staging.audit_log_id_seq,
+  idoc_production.audit_log_id_seq,
+  idoc_production.news_articles_id_seq,
+  idoc_production.seminars_id_seq
+TO idoc_data_promoter;
+
+GRANT EXECUTE ON FUNCTION idoc_production.lock_seminars_for_promotion()
+TO idoc_data_promoter;
+
+GRANT EXECUTE ON FUNCTION idoc_staging.lock_promotion_source(text, bigint)
+TO idoc_data_promoter;
+```
+
+After provisioning, explicitly verify with `has_table_privilege`, `has_column_privilege`, `has_schema_privilege` and `has_function_privilege` that the role can perform the listed operations, can execute only the dedicated Production seminar-lock helper and staging row-lock helper, and cannot `CREATE` in either schema, cannot `DELETE` from promoted tables and cannot write staging content, member, membership, payment, subscription, registration, MFA or session tables. The promoter can read staging audit outcomes only through the fixed-filter `promotion_audit_success` view; do not grant direct SELECT on staging `audit_log` payloads or broad Production registration fields. Migration `0071` revokes PUBLIC execute on both helpers and PUBLIC SELECT on the view; do not restore it.
+
+### Vercel configuration
+
+Configure these as encrypted, server-only variables for the **staging branch deployment only**. Do not expose them to feature-branch previews and do not prefix them with `NEXT_PUBLIC_`.
+
+- `DATA_PROMOTION_DATABASE_URL`: PostgreSQL URL for the dedicated `idoc_data_promoter` role connecting to database `ayni_space`. It is not the staging application `POSTGRES_URL`, not the Production application URL and not a schema-owner credential.
+- `DATA_PROMOTION_PLAN_SECRET`: an independent random secret of at least 32 bytes used only to HMAC-sign five-minute promotion plans. Generate it in the approved password/secrets manager; do not reuse an auth, CSRF, Stripe, database or MFA key.
+
+In Vercel Project Settings, add each variable to the branch-scoped staging environment/override, confirm it is unavailable to arbitrary Preview branches, then redeploy the `staging` branch. The runtime deliberately refuses promotion when the Vercel git ref is not `staging`.
+
+Before executing migration 0071, use the dedicated [manual migration workflow rollout procedure](15-manual-promotion-migration-rollout.md). It requires an independently verified backup, GitHub maintenance-environment protection and a temporary schema-owner credential; neither the migration nor the subsequent Production data-promotion operation runs automatically.
+
+### Migration and rollout
+
+Migration `0071_permanent_data_promotion` is additive. It creates and backfills a unique UUID `promotion_key` on `news_articles` and `seminars`. Per the schema-isolation rules, run it as an explicit maintenance action with schema-owner credentials against `idoc_staging` first and `idoc_production` separately; never place schema-owner credentials in Vercel and never make a Vercel build run migrations.
+
+Before enabling execution:
+
+1. Back up the Render database and record the backup identifier/time.
+2. Apply migration 0071 to staging and validate unique/non-null promotion keys.
+3. Apply migration 0071 to Production and validate the same schema shape.
+4. Provision and verify `idoc_data_promoter` with the narrow grants above.
+5. Add the two branch-scoped Vercel secrets and redeploy staging.
+6. Open Data Promotion as a Super Admin and confirm Preview is read-only.
+7. Promote a disposable draft News/Blog record, verify the Production row and both audit entries, then update the same staging record and verify the UUID maps back to the same Production row.
+8. Confirm a forbidden audience broadening is rejected, a Seminar with a Production registration cannot be updated, a stale preview cannot execute, a repeated successful token is idempotent, and a feature-branch Preview deployment cannot execute.
+9. Confirm ordinary `idoc_staging_app` still cannot write `idoc_production`.
+
+### Recovery and rollback
+
+- **Failure before commit:** PostgreSQL rolls back the Production write and both audit writes. Generate a new preview after correcting the cause.
+- **Outcome initially uncertain:** retry the exact signed plan while it is valid. The operation UUID and staging audit evidence make the retry idempotent; a committed operation is reported as already completed rather than repeated.
+- **Incorrect promotion already committed:** do not blindly run a reverse copy. First compare the current Production row, the promotion audit evidence, later Production edits and the pre-operation database backup. If Production has not changed since the promotion, restore only the affected allowlisted fields using an explicitly reviewed repair. If later legitimate Production changes exist, reconcile field-by-field or restore into a temporary comparison target first. Deleting a newly promoted record is a separate destructive decision and is never automatic.
+
+Promotion audits intentionally store operation IDs, dataset, source promotion identity, target ID and changed field names rather than full content/private row dumps. Therefore database backups and existing CMS/application history remain the source for a controlled reversal of already committed values.
+
+### Pre-launch versus post-launch
+
+The permanent promotion rules do not become broader merely because Production is pre-launch. Pre-launch can use the same content/configuration workflow repeatedly, but members, billing and imported financial history remain prohibited. After public launch, the same allowlist stays valid; the Seminar registration guard is especially important because Production commitments must not be overwritten from staging.
+
+### Future One-Time Legacy Transfer Handoff
+
+The future pre-launch legacy member transfer is a separate maintenance operation and must not be exposed through Data Promotion.
+
+Reusable pieces from the permanent system are: explicit staging/Production identity checks, schema-shape validation, stable operation identifiers, source/target comparison conventions, stale-state hashes, advisory-lock/idempotency patterns, backup/verification procedure, secret-safe reporting and the rule that cross-schema credentials are isolated from ordinary application credentials.
+
+Additional migration-specific tooling will still be required for a consistent broad snapshot, dependency-ordered transfer, reconciliation totals, legacy-ID mappings, password/hash migration state, membership/entitlement history, legacy payment/transaction history, resumable dry runs and migration-specific rollback. Sensitive datasets requiring special treatment include users/profiles, membership and professional-role state, historical transactions/payments, authentication/password migration material and any billing identifiers that must remain historical rather than trigger live provider actions.
+
+The transfer must explicitly exclude staging sessions, MFA challenges/tokens, trusted-device state, OTPs/recovery material, test Stripe objects/payments, notification/outbox delivery state, cron/job state, administrator UI preferences and other environment-specific operational records. `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` must remain exactly `true` throughout the import, validation, Production transfer and reconciliation window; missing or invalid values also remain fail-closed.
+
+Before that future task executes, decide the final authoritative legacy-import cutoff time, exact included historical financial datasets, whether imported authentication hashes are copied or converted, backup/restore point, maintenance window, acceptance/reconciliation totals and the explicit person authorized to execute. The proposed workflow is: create Production backup; freeze the validated staging import snapshot; run a no-write comparison/dry run; review exclusions, counts, referential checks and financial totals; obtain explicit execute authorization; transfer in one migration-specific maintenance process; reconcile counts/totals and representative accounts; verify the communications/billing hold is still active; then either accept the transfer or restore the recorded backup. This future process must be authorized separately and is not implemented by the permanent promotion UI.
