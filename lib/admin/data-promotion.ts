@@ -190,6 +190,14 @@ function validSelectionIds(dataset: PromotionDataset, values: readonly string[])
   return unique;
 }
 
+function sanitizedSource(dataset: PromotionDataset, source: Row): Row {
+  if (dataset === 'organization') return source;
+  const richFields = dataset === 'news' ? ['content_html'] :
+    ['description', 'course_directors', 'participant_profile', 'course_venue_information', 'application', 'accommodation_information'];
+  return { ...source, ...Object.fromEntries(richFields.map((field) =>
+    [field, sanitizeArticleContent(String(source[field] ?? ''))])) };
+}
+
 function recordFields(dataset: PromotionDataset) {
   if (dataset === 'news') return NEWS_FIELDS;
   if (dataset === 'seminar') return SEMINAR_FIELDS;
@@ -302,7 +310,7 @@ async function previewItem(sql: PromotionSql, dataset: PromotionDataset, sourceI
   }
   const target = await targetRow(sql, dataset, source);
   const fields = recordFields(dataset);
-  const changes = changesBetween(source, target, fields);
+  const changes = changesBetween(sanitizedSource(dataset, source), target, fields);
   const label = dataset === 'organization' ? 'Organization Settings' : String(source.title ?? ('Record ' + sourceId));
   const conflict = await conflictReason(sql, dataset, source, target);
   if (conflict) return { item: { action: 'reject', changes, label, promotionKey, reason: conflict, sourceId, warnings: [] } };
@@ -450,7 +458,7 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
       'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24) returning id',
       [String(source.promotion_key), String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date),
         canonicalValue(source.end_date), source.start_time, source.end_time, source.timezone, String(source.location),
-        String(source.language), String(source.organizing_national_federation), String(source.course_directors),
+        String(source.language), String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)),
         sanitizeArticleContent(String(source.participant_profile)), sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)),
         sanitizeArticleContent(String(source.accommodation_information)), Number(source.capacity), Number(source.member_price_cents),
         Number(source.non_member_price_cents), source.registration_deadline, String(source.status), Boolean(source.is_fei),
@@ -466,7 +474,7 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
     'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,start_time=$5,end_time=$6,timezone=$7,location=$8,language=$9,organizing_national_federation=$10,course_directors=$11,participant_profile=$12,course_venue_information=$13,application=$14,accommodation_information=$15,capacity=$16,member_price_cents=$17,non_member_price_cents=$18,registration_deadline=$19,status=$20,is_fei=$21,levels=$22,updated_by_user_id=$23,updated_at=now() where id=$24 returning id',
     [String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date), canonicalValue(source.end_date),
       source.start_time, source.end_time, source.timezone, String(source.location), String(source.language),
-      String(source.organizing_national_federation), String(source.course_directors), sanitizeArticleContent(String(source.participant_profile)),
+      String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)), sanitizeArticleContent(String(source.participant_profile)),
       sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)), sanitizeArticleContent(String(source.accommodation_information)),
       Number(source.capacity), Number(source.member_price_cents), Number(source.non_member_price_cents),
       source.registration_deadline, String(source.status), Boolean(source.is_fei), source.levels, actorId, Number(target.id)]);
@@ -520,8 +528,8 @@ export async function executePromotionPlan(token: string, stagingActorId: number
       if (planned.action === 'skip') continue;
 
       let targetId: number;
-      if (payload.dataset === 'news') targetId = await applyNews(tx, source, target, productionActorId);
-      else if (payload.dataset === 'seminar') targetId = await applySeminar(tx, source, target, productionActorId);
+      if (payload.dataset === 'news') targetId = await applyNews(tx, sanitizedSource(payload.dataset, source), target, productionActorId);
+      else if (payload.dataset === 'seminar') targetId = await applySeminar(tx, sanitizedSource(payload.dataset, source), target, productionActorId);
       else targetId = await applyOrganization(tx, source, target);
 
       const changedFields = reviewed.item.changes.map((change) => change.field);
@@ -535,7 +543,7 @@ export async function executePromotionPlan(token: string, stagingActorId: number
     }
 
     await rows(tx,
-      "insert into idoc_staging.audit_log (actor_id,action,entity_type,entity_id,after_json,reason) values ($1,'admin.data_promotion.succeeded','data_promotion',$2,$3::jsonb,'explicit_super_admin_promotion') returning id",
+      "insert into idoc_staging.audit_log (actor_id,action,entity_type,entity_id,after_json,reason) values ($1,'admin.data_promotion.succeeded','data_promotion',$2,$3::jsonb,'explicit_super_admin_promotion')",
       [stagingActorId, payload.operationId, JSON.stringify({ dataset: payload.dataset, results })]);
     return { duplicate: false, operationId: payload.operationId, results };
   });
