@@ -57,7 +57,7 @@ export function postgresMetricsPayload(values: PostgresMetrics, timeMs: number) 
         { key: 'db.scope', value: { stringValue: 'shared' } },
       ] },
       scopeMetrics: [{
-        scope: { name: 'idoc.postgres.stats' },
+        scope: { name: 'postgres.aggregate.stats' },
         metrics: definitions.map(([name, value, unit]) => ({
           name, unit,
           gauge: { dataPoints: [{ timeUnixNano, asDouble: value }] },
