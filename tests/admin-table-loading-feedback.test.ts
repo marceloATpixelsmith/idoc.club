@@ -46,7 +46,7 @@ test('member bulk archive is protected and permanently delete removes member dat
   assert.match(bulkActions, /requireCsrfToken/);
   assert.match(bulkActions, /requireFreshStepUp/);
   assert.match(memberLifecycle, /You cannot delete your own administrator account/);
-  assert.match(memberLifecycle, /Current and former administrator accounts cannot be permanently deleted/);
+  assert.match(memberLifecycle, /Administrator accounts cannot be bulk deleted/);
   assert.match(deletionMigration, /ON DELETE SET NULL/);
   assert.match(deletionMigration, /idoc\.allow_member_permanent_delete/);
 });
