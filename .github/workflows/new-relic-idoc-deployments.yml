@@ -8,12 +8,15 @@ permissions:
 
 jobs:
   record-deployment:
-    # Record successful Vercel deployments only. GitHub deployment events are
+    # Record finished Vercel deployments: success, and failure/error so a failed
+    # build is visible in New Relic Change Tracking. GitHub deployment events are
     # emitted by Vercel; a git push is not evidence of a successful deployment.
     # Vercel sends a commit SHA in deployment.ref, not a branch name.
     # The branch-head check below excludes unrelated Preview deployments.
     if: >-
-      github.event.deployment_status.state == 'success' &&
+      (github.event.deployment_status.state == 'success' ||
+       github.event.deployment_status.state == 'failure' ||
+       github.event.deployment_status.state == 'error') &&
       (github.event.deployment.environment == 'Production' ||
        github.event.deployment.environment == 'Preview') &&
       github.event.deployment.creator.login == 'vercel[bot]'
@@ -31,7 +34,7 @@ jobs:
             core.info(`Deployment environment=${environment}, expected branch=${branch}, matches current head=${matches}`);
             core.setOutput('eligible', String(matches));
       - name: Record IDOC change in New Relic
-        if: steps.verify.outputs.eligible == 'true'
+        if: steps.verify.outputs.eligible == 'true' && github.event.deployment_status.state == 'success'
         uses: newrelic/deployment-marker-action@v2.6.2
         with:
           commandType: changeTrackingCreateEvent
@@ -46,4 +49,21 @@ jobs:
           user: ${{ github.actor }}
           shortDescription: IDOC Vercel deployment
           description: "Successful IDOC Vercel deployment (${{ github.event.deployment.environment }})"
-          customAttributes: '{application: "idoc.club", vercelProjectId: "prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4", githubRepository: "marceloATpixelsmith/idoc.club"}'
+          customAttributes: '{application: "idoc.club", deploymentState: "success", vercelProjectId: "prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4", githubRepository: "marceloATpixelsmith/idoc.club"}'
+      - name: Record failed IDOC deployment in New Relic
+        if: steps.verify.outputs.eligible == 'true' && github.event.deployment_status.state != 'success'
+        uses: newrelic/deployment-marker-action@v2.6.2
+        with:
+          commandType: changeTrackingCreateEvent
+          apiKey: ${{ secrets.NEW_RELIC_API_KEY }}
+          region: US
+          category: Deployment
+          type: Basic
+          entitySearch: "name = 'idoc.club' AND type = 'SERVICE' AND accountId = '8600002'"
+          version: ${{ github.event.deployment.sha }}
+          commit: ${{ github.event.deployment.sha }}
+          deeplink: ${{ github.event.deployment_status.target_url }}
+          user: ${{ github.actor }}
+          shortDescription: IDOC Vercel deployment FAILED
+          description: "FAILED IDOC Vercel deployment (${{ github.event.deployment.environment }}, state ${{ github.event.deployment_status.state }}); the previous successful deployment remains live"
+          customAttributes: '{application: "idoc.club", deploymentState: "failed", vercelProjectId: "prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4", githubRepository: "marceloATpixelsmith/idoc.club"}'
