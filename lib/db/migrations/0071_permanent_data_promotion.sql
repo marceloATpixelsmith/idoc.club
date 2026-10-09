@@ -78,3 +78,12 @@ $promotion_source_lock$;
 --> statement-breakpoint
 
 REVOKE ALL ON FUNCTION "idoc"."lock_promotion_source"(text, bigint) FROM PUBLIC;
+--> statement-breakpoint
+
+CREATE OR REPLACE VIEW "idoc"."promotion_audit_success" WITH (security_barrier = true) AS
+SELECT id, entity_id, after_json, created_at
+FROM "idoc"."audit_log"
+WHERE action = 'admin.data_promotion.succeeded' AND entity_type = 'data_promotion';
+--> statement-breakpoint
+
+REVOKE ALL ON "idoc"."promotion_audit_success" FROM PUBLIC;
