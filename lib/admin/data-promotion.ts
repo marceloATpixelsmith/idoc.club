@@ -105,7 +105,7 @@ async function rows<T = Row>(sql: PromotionSql, query: string, params: unknown[]
 }
 
 async function verifyBoundary() {
-  boundaryVerification ??= (async () => {
+  const verification = boundaryVerification ??= (async () => {
     const sql = promotionSql();
     const identity = await rows<{ database_name: string; role_name: string }>(
       sql, 'select current_database() as database_name, current_user as role_name');
@@ -123,7 +123,12 @@ async function verifyBoundary() {
       throw new DataPromotionError('The data promotion schema migration has not been applied to both environments.');
     }
   })();
-  return boundaryVerification;
+  try {
+    await verification;
+  } catch (error) {
+    if (boundaryVerification === verification) boundaryVerification = undefined;
+    throw error;
+  }
 }
 
 export function parsePromotionDataset(value: unknown): PromotionDataset | null {
@@ -210,39 +215,45 @@ function cloudinaryWarnings(row: Row) {
     : [];
 }
 
-async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId: string): Promise<Row | null> {
+async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId: string, lock = false): Promise<Row | null> {
   if (dataset === 'news') {
     const result = await rows(sql,
       'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_staging.news_articles where id=$1 limit 1',
       [Number(sourceId)]);
+    if (lock && result[0]) await rows(sql, 'select id from idoc_staging.news_articles where id=$1 for share', [Number(sourceId)]);
     return result[0] ?? null;
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
       'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
       [Number(sourceId)]);
+    if (lock && result[0]) await rows(sql, 'select id from idoc_staging.seminars where id=$1 for share', [Number(sourceId)]);
     return result[0] ?? null;
   }
   const result = await rows(sql,
     'select id,address_1,address_2,city,state_province,postal_code,country from idoc_staging.organization_settings where id=1 limit 1');
+  if (lock && result[0]) await rows(sql, 'select id from idoc_staging.organization_settings where id=1 for share');
   return result[0] ?? null;
 }
 
-async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: Row): Promise<Row | null> {
+async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: Row, lock = false): Promise<Row | null> {
   if (dataset === 'news') {
     const result = await rows(sql,
       'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_production.news_articles where promotion_key=$1::uuid limit 1',
       [String(source.promotion_key)]);
+    if (lock && result[0]) await rows(sql, 'select id from idoc_production.news_articles where id=$1 for update', [Number(result[0].id)]);
     return result[0] ?? null;
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
       'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1',
       [String(source.promotion_key)]);
+    if (lock && result[0]) await rows(sql, 'select id from idoc_production.seminars where id=$1 for update', [Number(result[0].id)]);
     return result[0] ?? null;
   }
   const result = await rows(sql,
     'select id,address_1,address_2,city,state_province,postal_code,country from idoc_production.organization_settings where id=1 limit 1');
+  if (lock && result[0]) await rows(sql, 'select id from idoc_production.organization_settings where id=1 for update');
   return result[0] ?? null;
 }
 
@@ -477,9 +488,9 @@ export async function executePromotionPlan(token: string, stagingActorId: number
 
     for (const planned of payload.items) {
       await rows(tx, 'select pg_advisory_xact_lock(hashtext($1))', ['idoc-data-promotion-record:' + planned.promotionKey]);
-      const source = await sourceRow(tx, payload.dataset, planned.sourceId);
+      const source = await sourceRow(tx, payload.dataset, planned.sourceId, true);
       if (!source) throw new DataPromotionError('A staging record was deleted after preview. Generate a new preview.');
-      const target = await targetRow(tx, payload.dataset, source);
+      const target = await targetRow(tx, payload.dataset, source, true);
       const fields = recordFields(payload.dataset);
       if (digestRecord(source, fields) !== planned.sourceHash || digestRecord(target, fields) !== planned.targetHash) {
         throw new DataPromotionError('Staging or Production changed after preview. Generate a new preview before executing.');
