@@ -116,5 +116,9 @@ test('permanent data promotion keeps a narrow content-only runtime boundary', as
   assert.match(migration, /CREATE OR REPLACE FUNCTION "idoc"\."lock_promotion_source"\(p_dataset text, p_id bigint\)/);
   assert.match(migration, /REVOKE ALL ON FUNCTION "idoc"\."lock_promotion_source"\(text, bigint\) FROM PUBLIC/);
   assert.match(source, /select idoc_staging\.lock_promotion_source\(/);
+  assert.match(source, /sanitizeArticleContent/);
+  assert.match(source, /idoc_staging\.promotion_audit_success/);
+  assert.match(migration, /CREATE OR REPLACE VIEW "idoc"\."promotion_audit_success" WITH \(security_barrier = true\)/);
+  assert.match(migration, /REVOKE ALL ON "idoc"\."promotion_audit_success" FROM PUBLIC/);
   assert.doesNotMatch(source, /idoc_staging\.[a-z_]+[^'\n]*for share/i);
 });
