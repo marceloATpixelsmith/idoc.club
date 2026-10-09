@@ -64,7 +64,7 @@ try
     const statements = migration.split('--> statement-breakpoint').map(x => x.trim()).filter(Boolean);
     const hash = createHash('sha256').update(migration).digest('hex');
     // THE SCRIPT IS CHECKED OUT FROM THE PROTECTED STAGING BRANCH ONLY.
-    await sql.begin(async tx =>
+    const validation = await sql.begin(async tx =>
     {
         await tx`SELECT pg_advisory_xact_lock(71071, ${schema === 'idoc_staging' ? 1 : 2})`;
         const historical = await tx.unsafe('SELECT created_at, hash FROM "' + schema + '".__drizzle_migrations ORDER BY created_at, hash');
@@ -102,16 +102,43 @@ try
             await tx.unsafe(statement);
         }
         await tx.unsafe('INSERT INTO "' + schema + '".__drizzle_migrations (hash, created_at) VALUES ($1, $2)', [hash, 1791566400000]);
-        const result = await tx`SELECT (SELECT COUNT(*)::integer FROM information_schema.columns
-            WHERE table_schema = ${schema} AND table_name IN ('news_articles','seminars')
-            AND column_name = 'promotion_key' AND is_nullable = 'NO') AS columns`;
-        if (result[0].columns !== 2)
+        const result = await tx`SELECT
+            (SELECT COUNT(*)::integer FROM information_schema.columns
+                WHERE table_schema = ${schema} AND table_name IN ('news_articles','seminars')
+                AND column_name = 'promotion_key' AND data_type = 'uuid' AND is_nullable = 'NO'
+                AND column_default LIKE '%gen_random_uuid%') AS uuid_columns,
+            (SELECT COUNT(*)::integer FROM pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = ${schema} AND c.contype = 'u'
+                AND ((t.relname = 'news_articles' AND c.conname = 'news_articles_promotion_key_unique')
+                  OR (t.relname = 'seminars' AND c.conname = 'seminars_promotion_key_unique'))) AS unique_constraints,
+            (SELECT COUNT(*)::integer FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = ${schema}
+                  AND p.proname IN ('lock_promotion_source','lock_seminars_for_promotion')
+                  AND p.prosecdef
+                  AND NOT EXISTS (SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f',p.proowner))) a
+                      WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')) AS protected_functions,
+            (SELECT COUNT(*)::integer FROM pg_class t
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = ${schema} AND t.relname = 'promotion_audit_success'
+                AND t.relkind = 'v' AND 'security_barrier=true' = ANY(COALESCE(t.reloptions, ARRAY[]::text[]))
+                AND NOT EXISTS (SELECT 1 FROM aclexplode(COALESCE(t.relacl,acldefault('r',t.relowner))) a
+                    WHERE a.grantee = 0 AND a.privilege_type = 'SELECT')) AS protected_audit_views`;
+        const ledger = await tx.unsafe('SELECT COUNT(*)::integer AS count FROM "' + schema + '".__drizzle_migrations WHERE created_at = $1 AND hash = $2', [1791566400000, hash]);
+        if (result[0].uuid_columns !== 2 || result[0].unique_constraints !== 2 ||
+            result[0].protected_functions !== 2 || result[0].protected_audit_views !== 1 ||
+            ledger[0].count !== 1)
         {
-            throw new Error('Post-migration schema validation failed; transaction will roll back');
+            throw new Error('Detailed post-migration verification failed; entire transaction will roll back');
         }
+        return { uuidColumns: result[0].uuid_columns, uniqueConstraints: result[0].unique_constraints,
+            protectedFunctions: result[0].protected_functions, protectedAuditViews: result[0].protected_audit_views,
+            ledgerEntries: ledger[0].count };
     });
     console.log(JSON.stringify({ result: 'migration_0071_applied', schema, backupReference: reference,
-        database: identity[0].database, operator: identity[0].operator }));
+        database: identity[0].database, operator: identity[0].operator, verification: validation }));
 }
 finally
 {
