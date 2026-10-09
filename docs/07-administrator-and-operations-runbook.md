@@ -1062,12 +1062,24 @@ No database migration is required. Existing `CRON_SECRET` remains mandatory for 
 ### Verification and cutover
 
 1. Provision a QStash resource in Upstash, with separate staging and production resources/credentials. Add variables to Vercel staging, then redeploy staging. Ensure the public callback path `/api/qstash/jobs` is accessible to Upstash and not blocked by Vercel Deployment Protection (the endpoint itself verifies the `Upstash-Signature` JWT and raw-body hash).
-2. Run `node scripts/configure-qstash-schedules.mjs` from a trusted local/CI shell with `QSTASH_TOKEN`, `QSTASH_CALLBACK_BASE_URL`, and optionally `QSTASH_URL`. The script uses stable schedule IDs and can be rerun without multiplying schedules. Inspect all ten schedules in Upstash Console.
+2. Run `node scripts/configure-qstash-schedules.mjs` from a trusted local/CI shell with `QSTASH_TOKEN`, `QSTASH_CALLBACK_BASE_URL`, and optionally `QSTASH_URL`. The script uses stable schedule IDs and can be rerun without multiplying schedules. Inspect all eleven schedules in Upstash Console.
 3. Confirm forged/unsigned callbacks get HTTP 401, valid callbacks execute once, deliberate Brevo failure produces an on-demand retry, and cancellation/refund tasks are processed without duplicated refunds. Confirm the communication/billing launch hold remains in effect for staging imports.
 4. After verified QStash triggers and schedules, remove all eight Vercel Cron entries from `vercel.json` in this **same PR** and update the contract tests. Do not deactivate Vercel scheduling before this verification, or there will be a delivery gap. Monitor Sentry and QStash failures after deployment.
 5. Keep the daily QStash account and cancellation safety sweeps to recover work committed in Postgres but not successfully published to QStash. Expired account links are ineligible and must never be sent late.
 
-The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery daily 09:00 UTC, cancellation recovery daily 09:05 UTC, clock skew daily 09:10 UTC, renewal scan daily 06:00 UTC, renewal delivery daily 06:15, 14:15 and 22:15 UTC, reconciliation daily 07:00 UTC, retention daily 08:00 UTC and news publishing daily 00:00 UTC. QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.
+The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery daily 09:00 UTC, cancellation recovery daily 09:05 UTC, clock skew daily 09:10 UTC, renewal scan daily 06:00 UTC, renewal delivery daily 06:15, 14:15 and 22:15 UTC, reconciliation daily 07:00 UTC, retention daily 08:00 UTC and news publishing daily 00:00 UTC. The weekly New Relic health check (`new-relic-weekly-health-check`) runs Mondays 08:00 UTC and is QStash-only: it has no Vercel Cron entry, so the cutover step that removes the Vercel entries does not apply to it.
+
+### Weekly New Relic health check
+
+`app/api/cron/new-relic-health-check/route.ts` (reached only through the signed `/api/qstash/jobs` callback, or with `CRON_SECRET`) queries New Relic NerdGraph for the `idoc.club` service over the last 7 days: server routes with error spans and the slowest routes by p95. It writes a `new_relic_health_check_completed` log event (counts only) and emails `IDOC_ADMIN_NOTIFICATION_EMAIL` a digest of route names and numbers. Missing configuration or a New Relic error makes the job fail so QStash retries and `new_relic_health_check_failed` goes to Sentry. Only templated route names and aggregate numbers leave New Relic; no URLs, member data or span payloads.
+
+Required Vercel variables (set per environment by an administrator, never in GitHub or chat):
+
+- `NEW_RELIC_QUERY_KEY`: a dedicated read-only New Relic **user API key**. Do not reuse the deployment-marker key (`NEW_RELIC_API_KEY`) or the OTLP ingest key.
+- `NEW_RELIC_ACCOUNT_ID`: the numeric New Relic account ID.
+
+Verification: after registering the schedule, trigger it once from the Upstash Console, confirm the log event and the email, and check the queries return data. The queries use OpenTelemetry span attributes (`service.name`, `span.kind`, `otel.status_code`, `http.route`, `duration.ms`) and report the whole `idoc.club` service; confirm these attributes and whether staging and production can be separated before relying on the output.
+ QStash itself doesn't keep Postgres awake; each actual callback will briefly wake Neon if needed.
 
 
 ## New Relic observability and deployment change tracking

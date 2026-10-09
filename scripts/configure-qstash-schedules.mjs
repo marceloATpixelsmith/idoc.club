@@ -18,6 +18,7 @@ const jobs = {
   'reconciliation-scan': '0 7 * * *',
   'data-retention-purge': '0 8 * * *',
   'news-scheduled-publish': '0 0 * * *',
+  'new-relic-weekly-health-check': '0 8 * * 1',
 };
 for (const [job, cron] of Object.entries(jobs)) {
   const response = await fetch(new URL(`/v2/schedules/${url.href}`, api), {

@@ -35,6 +35,8 @@ export const ALERT_SEVERITY = {
   // check. A drifted app clock could make an expired token look current, or the reverse -- a genuine
   // infrastructure-integrity signal, not itself proof of an active attack.
   'auth.clock_skew_detected': 'high',
+  // Weekly New Relic digest of server-side errors and slow routes; a routine operational report.
+  'operations.new_relic_weekly_health': 'informational',
   // A Super Admin used the incident-response tool to force-revoke a member's entire standing
   // authority (AUTH-OPERATIONS-007). This is a deliberate, already-audited operator action -- not
   // itself evidence of an attack -- but the operations team should always see it happen, not only

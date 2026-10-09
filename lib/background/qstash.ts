@@ -14,6 +14,7 @@ export const QSTASH_JOBS = {
   'reconciliation-scan': '0 7 * * *',
   'data-retention-purge': '0 8 * * *',
   'news-scheduled-publish': '0 0 * * *',
+  'new-relic-weekly-health-check': '0 8 * * 1',
 } as const;
 
 export type QStashJob = keyof typeof QSTASH_JOBS;

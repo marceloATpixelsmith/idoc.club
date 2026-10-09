@@ -51,6 +51,8 @@ export const SECURITY_EVENT_TAXONOMY = {
   breached_password_alert_failed: { attribution: 'system', category: 'delivery', resource: 'breached-password-alert', retentionClass: 'security', sentry: true },
   breached_password_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'breached-password-alert', retentionClass: 'operational' },
   clock_skew_check_failed: { attribution: 'system', category: 'operational', resource: 'clock-skew-check', retentionClass: 'operational', sentry: true },
+  new_relic_health_check_completed: { attribution: 'system', category: 'operational', metadata: { errorSpanGroups: 'positiveInteger', slowRoutes: 'positiveInteger' }, resource: 'new-relic-health-check', retentionClass: 'operational' },
+  new_relic_health_check_failed: { attribution: 'system', category: 'operational', resource: 'new-relic-health-check', retentionClass: 'operational', sentry: true },
   client_error: { attribution: 'anonymous', category: 'operational', resource: 'client-error-report', retentionClass: 'operational' },
   csrf_validation_failed: { attribution: 'anonymous', category: 'auth', metadata: { expectedSessionPresent: [true, false], reason: ['missing_cookie', 'missing_candidate', 'value_mismatch', 'invalid_token', 'session_ref_mismatch'], tokenSessionPresent: [true, false] }, resource: 'csrf', retentionClass: 'security' },
   csrf_validation_failed_authenticated: { attribution: 'subject', category: 'auth', metadata: { reason: ['missing_cookie', 'missing_candidate', 'value_mismatch', 'invalid_token', 'session_ref_mismatch'], subjectId: 'positiveInteger', tokenSessionPresent: [true, false] }, resource: 'csrf', retentionClass: 'security' },
