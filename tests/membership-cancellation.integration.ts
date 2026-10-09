@@ -3,7 +3,7 @@ import test, { after, beforeEach } from 'node:test';
 import { cancelOwnMembership } from '../lib/membership/data-access.ts';
 import { isEntitled } from '../lib/membership/entitlement.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
-import { cancelMemberSubscription } from '../lib/payments/stripe.ts';
+import { cancelMemberSubscriptionAtPeriodEnd } from '../lib/payments/stripe.ts';
 import { closeHarness, createCompleteGraph, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
@@ -15,10 +15,10 @@ function fakeCancellationClient(behavior: 'succeed' | 'throw' = 'succeed') {
     calls,
     client: {
       subscriptions: {
-        cancel: async (id: string) => {
-          calls.push(id);
+        update: async (id: string, params: { cancel_at_period_end: boolean }) => {
+          calls.push(`${id}:${params.cancel_at_period_end}`);
           if (behavior === 'throw') throw new Error('Stripe is unavailable.');
-          return { id, status: 'canceled' };
+          return { id, status: 'active' };
         },
       },
     },
@@ -30,7 +30,7 @@ async function insertOpenSubscription(profileId: number, externalSubscriptionId 
     values(${profileId},${externalSubscriptionId},'price_fixture','active','2099-12-31')`;
 }
 
-test('cancelOwnMembership ends access immediately, cancels an open Stripe subscription, and writes a self-service audit entry', async () => {
+test('cancelOwnMembership keeps access to the end of the paid cycle, ends the Stripe subscription at period end, and writes a self-service audit entry', async () => {
   const { profile, user } = await createCompleteGraph();
   await insertOpenSubscription(profile.id);
   const { calls, client } = fakeCancellationClient();
@@ -38,17 +38,15 @@ test('cancelOwnMembership ends access immediately, cancels an open Stripe subscr
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  // 'suspended', not 'canceled' -- reuses suspendMembership's own proven "deny access regardless of
-  // valid_until, don't touch the date" semantics rather than backdating valid_until, which can
-  // violate memberships_dates_check when starts_on is today (a Codex review finding on the first
-  // version of this function).
-  assert.equal(result.membership.status, 'suspended');
+  // 'canceled' with valid_until untouched: the member keeps access through the paid-through date.
+  assert.equal(result.membership.status, 'canceled');
   assert.equal(result.stripeCancelled, true);
-  assert.deepEqual(calls, ['sub_fixture']);
+  assert.deepEqual(calls, ['sub_fixture:true'], 'the subscription is set to end at period end, never cancelled immediately');
 
   const today = new Date().toISOString().slice(0, 10);
-  assert.equal(result.membership.validUntil, before.valid_until, 'valid_until must be left untouched -- status alone denies access');
-  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), false);
+  assert.equal(result.membership.validUntil, before.valid_until, 'valid_until must be left untouched');
+  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), true);
+  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, '2100-01-01'), false);
 
   const [audit] = await sql`select action,actor_id,entity_type,entity_id from idoc.audit_log
     where entity_type='profile' and entity_id=${String(profile.id)} and action='member.membership_canceled'`;
@@ -57,9 +55,7 @@ test('cancelOwnMembership ends access immediately, cancels an open Stripe subscr
 });
 
 test('a membership that starts today can still be cancelled the same day (valid_until >= starts_on is never violated)', async () => {
-  // The exact scenario the original backdating approach broke: starts_on = today means any
-  // valid_until before today would violate memberships_dates_check and roll back the whole
-  // cancellation, silently leaving access and any subscription active.
+  // valid_until is never moved by a cancellation, so no date constraint can be violated.
   const { user, profile } = await createCompleteGraph();
   const today = new Date().toISOString().slice(0, 10);
   await sql`update idoc.memberships set starts_on=${today}, valid_until=${today} where profile_id=${profile.id}`;
@@ -67,19 +63,19 @@ test('a membership that starts today can still be cancelled the same day (valid_
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'suspended');
+  assert.equal(result.membership.status, 'canceled');
   assert.equal(result.membership.validUntil, today);
-  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), false);
+  assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, today), true);
 });
 
-test('cancellation is unconditional even when the Stripe cancellation fails', async () => {
+test('cancellation is unconditional even when the Stripe call fails', async () => {
   const { profile, user } = await createCompleteGraph();
   await insertOpenSubscription(profile.id);
   const { client } = fakeCancellationClient('throw');
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'suspended');
+  assert.equal(result.membership.status, 'canceled');
   assert.equal(result.stripeCancelled, false);
   assert.ok(result.stripeCancelError);
 });
@@ -90,7 +86,7 @@ test('a member with no open Stripe subscription is cleanly canceled without any 
 
   const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
 
-  assert.equal(result.membership.status, 'suspended');
+  assert.equal(result.membership.status, 'canceled');
   assert.equal(result.stripeCancelled, false);
   assert.deepEqual(calls, []);
 });
@@ -114,17 +110,17 @@ test('a member with no profile at all cannot request cancellation', async () => 
   );
 });
 
-test('cancelMemberSubscription (the Stripe call cancelOpenSubscriptionIfAny delegates to) rejects a client override outside NODE_ENV=test', async () => {
+test('cancelMemberSubscriptionAtPeriodEnd (the Stripe call cancelOpenSubscriptionIfAny delegates to) rejects a client override outside NODE_ENV=test', async () => {
   // Exercised directly rather than through cancelOwnMembership: that path requires
   // withTestMembershipBoundary for actor resolution, which itself demands NODE_ENV=test, so the two
-  // guards can't both be exercised in the same call stack. cancelMemberSubscription has no actor
+  // guards can't both be exercised in the same call stack. cancelMemberSubscriptionAtPeriodEnd has no actor
   // resolution of its own (lib/payments/stripe.ts: "No authorization check of its own"), so its
   // override guard is testable in isolation.
   const { client } = fakeCancellationClient();
   const originalEnv = process.env.NODE_ENV;
   Object.assign(process.env, { NODE_ENV: 'production' });
   try {
-    await assert.rejects(cancelMemberSubscription('sub_fixture', client), /test-only/);
+    await assert.rejects(cancelMemberSubscriptionAtPeriodEnd('sub_fixture', client), /test-only/);
   } finally {
     Object.assign(process.env, { NODE_ENV: originalEnv });
   }

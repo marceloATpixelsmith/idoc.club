@@ -20,6 +20,13 @@ The current, from-scratch `AUTH-*` evidence matrix against this baseline lives i
 [`docs/22-canonical-auth-evidence-matrix.md`](22-canonical-auth-evidence-matrix.md); it supersedes
 per-requirement status claims elsewhere in this document and in `docs/21`.
 
+### Current staging alignment — 3 October 2026
+
+The cross-domain current-state snapshot is [document 28](28-auth-membership-seminar-current-state.md). The live session policy distinguishes ordinary members from privileged accounts: member sessions use a 7-day idle timeout and 14-day absolute lifetime, while Administrator/Super Admin sessions use the canonical 30-minute idle timeout and 12-hour absolute lifetime. Every session is registry-backed; possession of a signed session JWT alone is not authentication authority.
+
+Ordinary-member returning-login trust lasts 14 days and is stored as a separate revocable opaque credential. It never substitutes for Administrator/Super Admin TOTP, recovery, enrollment, replacement, or fresh sensitive-action step-up. The current password minimum is 10 characters, with the existing composition/maximum policy and breached-password rejection retained.
+
+
 ## IDOC application model
 
 IDOC uses the canonical single-application role model: Member, Admin, and Super Admin. Professional member classifications such as Judge, Steward, Combo Judge/Steward, and Veterinarian are membership-domain attributes, not authentication roles and must never grant administrator authority.
@@ -41,7 +48,7 @@ Imported/migrated accounts use the same public sign-in surface. Migration status
 
 ## Canonical UI and branding adoption
 
-IDOC authentication pages use the reference shell geometry (split layout, 48px field/button height, 10px control radius) and responsive behavior. IDOC-specific customization covers application branding, route values, and — since the September 2026 visual redesign — the application-wide visual theme (color palette, typography, and control coloring/styling) applied on top of that unchanged canonical geometry; it does not alter the canonical shell structure, layout mechanics, or control behavior. The production Cloudflare widget remains real and server-verified and uses the canonical light/flexible presentation regardless of the surrounding page theme.
+IDOC authentication pages use the reference shell geometry (split layout, 48px field/button height, 10px control radius) and responsive behavior. IDOC-specific customization covers application branding, route values, and — since the September 2026 visual redesign — the application-wide visual theme (color palette, typography, and control coloring/styling) applied on top of that unchanged canonical geometry; it does not alter the canonical shell structure, layout mechanics, or control behavior. Sitewide minimum text size: no rendered website text is smaller than 0.75rem (12px); hard-coded sizes below that in components, the auth reference stylesheet and the in-repo Pixelsmith packages are raised to the floor, and the Tailwind type scale is otherwise unchanged. List-section headings such as "Available seminars" and "Past seminars" use the `section-label` utility in `app/globals.css` (uppercase, wide-tracked, gold) so they stay visually above the card titles and meta lines beneath them. Transactional email templates are outside this rule. The production Cloudflare widget remains real and server-verified and uses the canonical light/flexible presentation regardless of the surrounding page theme.
 
 The 24 August 2026 UI parity pass aligned the implemented login, signup, verification, recovery, reset, and compatibility auth surfaces with the canonical reference geometry, copy, and controls.
 
@@ -115,8 +122,10 @@ IDOC uses versioned, persisted canonical sessions with a distinct random session
 
 The security boundaries are:
 
-- idle timeout: 30 minutes (`1800` seconds);
-- absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
+- ordinary-member idle timeout: 7 days;
+- ordinary-member absolute timeout: 14 days from the original authentication event;
+- privileged Administrator/Super Admin idle timeout: 30 minutes (`1800` seconds);
+- privileged Administrator/Super Admin absolute timeout: 12 hours (`43200` seconds) from the original authentication event;
 - middleware may advance only last activity, never original authentication or absolute expiration;
 - production uses the host-only `__Host-idoc-session` cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, path `/`, no Domain attribute, and explicit absolute expiration;
 - every successful authentication creates a new random `sessionId`;

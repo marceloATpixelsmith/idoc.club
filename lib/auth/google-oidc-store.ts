@@ -13,7 +13,7 @@ export async function purgeExpiredGoogleOauthTransactions(now = new Date()) {
   // same conversion explicitly. An ISO-8601 string compares correctly against a timestamptz column.
   const cutoff = new Date(now.getTime() - RETENTION_MILLISECONDS).toISOString();
   await client`
-    delete from idoc.google_oauth_transactions
+    delete from google_oauth_transactions
     where expires_at < ${cutoff}
        or (consumed_at is not null and consumed_at < ${cutoff})
   `;
@@ -22,7 +22,7 @@ export async function purgeExpiredGoogleOauthTransactions(now = new Date()) {
 export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
   async create(transaction) {
     await client`
-      insert into idoc.google_oauth_transactions (
+      insert into google_oauth_transactions (
         state,
         provider,
         application_id,
@@ -72,7 +72,7 @@ export const googleOidcTransactionStore: GoogleOidcTransactionStore = {
       created_at: string;
       expires_at: string;
     }[]>`
-      update idoc.google_oauth_transactions
+      update google_oauth_transactions
       set consumed_at = now()
       where state = ${state}
         and consumed_at is null

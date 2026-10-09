@@ -13,7 +13,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-IDENTITY-003, AUTH-EMAIL-001
-- **CI coverage:** mapped — `tests/email-identity-normalization.integration.ts`, `tests/auth-email-resend-safety.integration.ts`
+- **CI coverage:** mapped — `tests/email-identity-normalization.integration.ts`, `tests/auth-email-resend-safety.integration.ts`, `tests/security-e2e/member-signup.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
@@ -44,7 +44,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-IDENTITY-003, AUTH-ERROR-001
-- **CI coverage:** mapped — `tests/email-identity-normalization.integration.ts`, `tests/auth-error-classes.integration.ts`, `tests/rate-limit-normalization.integration.ts`
+- **CI coverage:** mapped — `tests/email-identity-normalization.integration.ts`, `tests/auth-error-classes.integration.ts`, `tests/rate-limit-normalization.integration.ts`, `tests/security-e2e/member-signup.spec.ts`
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
@@ -72,7 +72,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-STORAGE-004, AUTH-ERROR-001, AUTH-RATE-001
-- **CI coverage:** mapped — `tests/password-hash.test.ts`, `tests/auth-error-classes.integration.ts`, `tests/rate-limit-normalization.integration.ts`
+- **CI coverage:** mapped — `tests/password-hash.test.ts`, `tests/auth-error-classes.integration.ts`, `tests/rate-limit-normalization.integration.ts`, `tests/security-e2e/member-signin.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -186,12 +186,12 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
 
-## LIVE-AUTH-007 — Unpaid/expired member access is restricted to the intended payment/membership flow
+## LIVE-AUTH-007 — Unpaid/expired member sees only the payment page while signed in
 
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001
-- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`
+- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`, `tests/security-e2e/membership-access-gate.spec.ts`, `tests/session-gate.test.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -199,16 +199,18 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Authenticate as an unpaid/expired disposable member.
-2. Confirm the first authenticated screen is the intended payment/membership state.
-3. Directly request ordinary member dashboard routes and APIs.
-4. After test payment/state transition, verify access updates.
+1. Authenticate as an unpaid or lapsed disposable member (completed onboarding, no current membership).
+2. Confirm the first screen after sign-in is the membership-payment page.
+3. Directly request the homepage, a public page (for example /seminars), ordinary member dashboard routes, /admin, and a non-GET request to a gated page.
+4. Confirm /terms and /privacy remain reachable and that signing out restores the public site.
+5. After a test payment and verified webhook, verify access updates.
 
 ### PASS
-- Unpaid/expired users cannot bypass entitlement restrictions; payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation to any entitlement-gated member route/API produces a clean redirect or safe denial -- never an uncaught error/generic error boundary, which fails to grant access but also fails to redirect the member anywhere useful.
+- While signed in, an unpaid or lapsed member can reach only the payment page, the authentication pages, the legal documents and the routes the payment flow needs; every other page redirects to the payment page and any other non-GET request is refused.
+- The payment flow is reachable directly; post-payment entitlement updates correctly; direct navigation never surfaces an uncaught error or generic error boundary.
 
 ### FAIL
-- Protected member content is accessible before entitlement, the user is trapped behind an unnecessary/incorrect intermediate state, OR direct navigation to an entitlement-gated route surfaces an uncaught error/generic error boundary instead of a clean redirect.
+- A signed-in unpaid or lapsed member can see the public site, member dashboard content, or register for a seminar, is trapped on an incorrect page, or a gated route surfaces an uncaught error instead of a clean redirect.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
@@ -221,7 +223,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-TRANSACTION-002
-- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`
+- **CI coverage:** mapped — `tests/security-e2e/auth-boundaries.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -340,7 +342,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-REMEMBER-001, AUTH-REMEMBER-002, AUTH-REMEMBER-003, AUTH-REMEMBER-004
-- **CI coverage:** mapped — `tests/canonical-mfa-runtime.test.ts`, `tests/production-mfa-finalization.integration.ts`
+- **CI coverage:** mapped — `tests/canonical-mfa-runtime.test.ts`, `tests/production-mfa-finalization.integration.ts`, `tests/security-e2e/member-signin.spec.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
@@ -370,8 +372,8 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-MFA-006, AUTH-TRANSACTION-003, AUTH-TRANSACTION-004
-- **CI coverage:** mapped — `tests/fresh-mfa-step-up.test.ts`, `tests/security-e2e/mfa-production-boundaries.spec.ts`
-- **Live:** required; email=no; admin=yes; destructive=no
+- **CI coverage:** mapped — `tests/fresh-mfa-step-up.test.ts`, `tests/security-e2e/mfa-production-boundaries.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
+- **Live:** required; email=no; admin=yes; destructive=yes
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
@@ -383,9 +385,11 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 3. Submit a valid TOTP once.
 4. Do not click the original action a second time; inspect the resulting state/network activity.
 5. Replay refresh/back/callback state after completion.
+6. On disposable admin-table records, exercise Delete selected and confirm fresh MFA resumes the exact selected destructive action without a second click.
 
 ### PASS
 - Wrong code is inert; valid TOTP causes the programmed original action to resume automatically exactly once; no second user click is needed; replay does not repeat the mutation.
+- Admin bulk deletion cannot mutate before fresh step-up, preserves server-side eligibility/retention checks, and executes once after valid MFA.
 
 ### FAIL
 - Mutation happens before valid step-up, requires a second original click, executes twice, or can be replayed.
@@ -401,7 +405,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-PASSWORD-005, AUTH-LIFECYCLE-002
-- **CI coverage:** mapped — `tests/account-security-management.test.ts`, `tests/password-security-hardening.test.ts`
+- **CI coverage:** mapped — `tests/account-security-management.test.ts`, `tests/password-security-hardening.test.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -431,7 +435,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-TRANSACTION-003, AUTH-STORAGE-005
-- **CI coverage:** mapped — `tests/password-reset-adversarial.integration.ts`, `tests/account-token-lifecycles.integration.ts`
+- **CI coverage:** mapped — `tests/password-reset-adversarial.integration.ts`, `tests/account-token-lifecycles.integration.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
@@ -492,7 +496,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004
-- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`
+- **CI coverage:** mapped — `tests/authorization-boundary-inventory.test.ts`, `tests/authorization-matrix.integration.ts`, `tests/authorization-privilege-boundaries.integration.ts`, `tests/security-e2e/api-authorization-disclosure.spec.ts`, `tests/admin-news-blog-bulk-delete.test.ts`, `tests/security-e2e/dashboard-membership-tabs.spec.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
@@ -504,6 +508,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 2. Verify an unauthorized visit to /admin and a Super Admin-only admin page renders a safe denial instead of a generic retry screen.
 3. As an administrator, alter target user/member IDs to another account and attempt out-of-scope actions.
 4. Attempt self-elevation or role mutation outside permitted scope.
+5. Attempt bulk delete against protected targets: the acting admin, another privileged administrator, a seminar with registrations, a payment-evidenced registration, and an open support conversation.
 
 ### PASS
 - Every server-side boundary rejects unauthorized role/object access with 401/403 or equivalent safe denial; no protected data or mutation occurs.
@@ -524,7 +529,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-CSRF-003
-- **CI coverage:** mapped — `tests/security-e2e/csrf.spec.ts`, `tests/pending-flow-csrf-nonce.integration.ts`
+- **CI coverage:** mapped — `tests/security-e2e/csrf.spec.ts`, `tests/pending-flow-csrf-nonce.integration.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -584,7 +589,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-RATE-001, AUTH-RATE-004
-- **CI coverage:** mapped — `tests/rate-limit-normalization.integration.ts`, `tests/rate-limit-correlation.integration.ts`
+- **CI coverage:** mapped — `tests/rate-limit-normalization.integration.ts`, `tests/rate-limit-correlation.integration.ts`, `tests/security-e2e/member-signin.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -613,7 +618,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-BOT-001, AUTH-BOT-002
-- **CI coverage:** mapped — `tests/turnstile-contract.test.ts`, `tests/turnstile-retry-restore.test.ts`, `tests/turnstile-widget-resilience.test.ts`
+- **CI coverage:** mapped — `tests/turnstile-contract.test.ts`, `tests/turnstile-retry-restore.test.ts`, `tests/turnstile-widget-resilience.test.ts`, `tests/security-e2e/member-signup.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -754,7 +759,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUDIT-002, AUTH-LOG-001, AUTH-LOG-003
-- **CI coverage:** mapped — `tests/auth-security-events.integration.ts`, `tests/security-event-log-attribution.integration.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/audit-evidence.integration.ts`
+- **CI coverage:** mapped — `tests/auth-security-events.integration.ts`, `tests/security-event-log-attribution.integration.ts`, `tests/security-event-taxonomy.integration.ts`, `tests/audit-evidence.integration.ts`, `tests/admin-news-blog-bulk-delete.test.ts`
 - **Live:** required; email=no; admin=yes; destructive=no
 
 ### Preconditions
@@ -782,7 +787,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-ERROR-001, AUTH-DEPENDENCY-001
-- **CI coverage:** mapped — `tests/auth-error-classes.integration.ts`, `tests/dependency-risk-register.test.ts`, `tests/google-oauth-failure-alerting.test.ts`
+- **CI coverage:** mapped — `tests/auth-error-classes.integration.ts`, `tests/dependency-risk-register.test.ts`, `tests/google-oauth-failure-alerting.test.ts`, `tests/security-e2e/member-signup.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions
@@ -968,32 +973,141 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record role, issued/observed expiry policy, relevant session-list behavior, HTTP status, and any screenshot/trace needed to prove the deployed behavior. Never record cookie/token values.
 
-## LIVE-AUTH-034 — Imported legacy members remediate credentials and complete a server-gated full profile review
+## LIVE-AUTH-034 — Signup, password reset and password change reject passwords found in known data breaches
 
 - **Risk:** high
 - **Applicability:** applicable
-- **Canonical controls:** AUTH-STORAGE-005, AUTH-PASSWORD-006, AUTH-AUTHZ-001
-- **CI coverage:** mapped — `tests/account-profile.integration.ts`, `tests/legacy-first-login.test.ts`, `tests/legacy-import.test.ts`, `tests/ordinary-login-device-trust.test.ts`, `tests/password-hash-migration.integration.ts`, `tests/password-hash.test.ts`, `tests/unified-migrated-login.test.ts`
-- **Live:** required; email=yes; admin=yes; destructive=no
+- **Canonical controls:** AUTH-PASSWORD-006, AUTH-PASSWORD-007
+- **CI coverage:** mapped — `tests/password-breach-check.test.ts`, `tests/password-reset-adversarial.integration.ts`, `tests/security-e2e/member-signup.spec.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts` — The range-check unit test stubs a matching HIBP suffix for deterministic coverage; the password-reset integration test covers the authorized reset boundary. The browser specs drive the real signup, reset and Security-page password-change forms against a local breach-API stand-in, including the operations alert and the documented fail-open behavior.
+- **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
-- Use synthetic imported-member fixtures on staging only.
-- Give the fixture an existing migration entitlement and legacy profile-review flag.
+- Use staging.idoc.club, never redesign.idoc.club, a Vercel preview, or localhost.
+- Use only a disposable test account and mailbox. Staging shares the production database, so cleanup is required.
+- Use the designated test password `Password#1` (10 characters; meets the composition rules) for the live HIBP check. Confirm the range response reports a match before submitting it in signup or password reset; use only the disposable test identity.
 
 ### Steps
-1. Sign in with each supported legacy credential format and exercise policy-pass, policy-fail, breached, and provider-outage results.
-2. Verify normal protected routes are denied until password remediation when required and until the full prefilled profile is saved.
-3. Save corrected and missing official fields, sign out, and sign in again.
+1. For signup, start signup with a fresh disposable mailbox and complete its email verification step.
+2. Enter the composition-compliant breached password at password creation and submit.
+3. Verify the password is rejected with the breached-password message and no account is created.
+4. For reset, use an existing disposable account, request password reset, and complete the required email OTP or privileged TOTP verification.
+5. Enter the same currently confirmed breached password and submit.
+6. Verify the password is rejected and the prior credential remains valid; then complete reset with a unique, non-breached password.
+7. For self-service change, sign in as a disposable paid-up member, open Security settings, enter the current password and the same confirmed breached password as the new one, and submit; verify it is rejected and the current password still works.
 
 ### PASS
-- Supported credentials upgrade atomically; unsupported credentials use neutral verified-email recovery.
-- The full profile is prefilled without invented values, server-gated once, and existing entitlement reaches the account without checkout.
+- Both signup and password reset reject the breached password and allow retry with a unique password.
+- The rejected signup creates no account; the rejected reset does not change the existing password.
+- Neither the raw password nor its full hash is sent to HIBP; only the 5-character SHA-1 prefix is sent.
+- Self-service password change also rejects the breached password and leaves the current credential unchanged; any configured operations alert names the flow and account and never contains the password.
 
 ### FAIL
-- A normal session precedes remediation, a protected route bypasses review, profile data is fabricated, entitlement is lost, or review repeats after successful completion.
+- Either flow accepts the breached password, changes account state before rejecting it, or sends the raw password/full hash to HIBP.
 
 ### Cleanup
-- Delete only synthetic fixtures after evidence is captured.
+- Complete a successful reset for the disposable account, then remove disposable account state after evidence is captured.
 
 ### Evidence
-- Record categorical outcomes, route/status, audit action identifiers, and screenshots without credentials, hashes, email addresses, subscription IDs, or breach-query material.
+- Record the test flow, whether HIBP reported the selected password as pwned, visible validation result, and account-state outcome. Never record the password, its hash, OTP/TOTP, cookies, or tokens.
+
+## LIVE-AUTH-035 — Member archive and permanent deletion enforce authorization, billing guards, and audit retention
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003
+- **CI coverage:** mapped — `tests/admin-table-loading-feedback.test.ts`, `tests/member-lifecycle.integration.ts`, `tests/fresh-mfa-step-up.test.ts`, `tests/csrf-client-cookie-name.test.ts` — The disposable PostgreSQL integration test invokes the same transaction helpers used by the member actions and verifies permanent purge, archive retention, active-subscription and active-role guards, audit actor redaction, immutable-history trigger authorization, and atomic rollback. Shared tests cover the Server Action MFA and CSRF boundaries.
+- **Live:** required; email=no; admin=yes; destructive=yes
+
+### Preconditions
+- Use the designated staging hostname and a disposable ordinary-member identity.
+- Use an identity with no active Stripe subscription; never select an administrator, Super Admin, or the acting administrator.
+- Capture the member-linked audit events before the test.
+
+### Steps
+1. As an administrator with fresh MFA, archive the disposable member and confirm sign-in is denied while profile, payment, registration, and audit records remain.
+2. For a second disposable member with no active subscription, permanently delete the member.
+3. Attempt the same operations with an active subscription and verify both are rejected before any records change.
+4. Verify the deletion preserves audit events with actor_id cleared and removes the member account and linked records.
+
+### PASS
+- Archive removes sign-in and revokes sessions while retaining related records.
+- Permanent delete removes the member account and configured linked records, retains audit event rows with null actor references, and is atomic.
+- Active subscriptions and privileged/self identities are never changed.
+
+### FAIL
+- An unauthorized/CSRF-forged or non-step-up action succeeds; a protected identity is changed; active billing is left chargeable; audit rows are deleted or changed beyond actor redaction; or a failed delete partially purges data.
+
+### Cleanup
+- Keep evidence of audit-row preservation and the active-subscription guard; remove disposable state only after evidence is captured.
+
+### Evidence
+- Record URL, administrator role, action, response, relevant audit-row IDs and before/after table counts. Do not record credentials or payment secrets.
+
+## LIVE-AUTH-036 — Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004, AUTH-CSRF-003
+- **CI coverage:** mapped — `tests/checkout.integration.ts`, `tests/stripe-webhook.integration.ts`, `tests/seminars.integration.ts`, `tests/security-e2e/member-lifecycle.spec.ts`, `tests/security-e2e/seminar-registration.spec.ts` — The browser specs run the real app and Stripe SDK against a local Stripe stand-in with webhooks signed by Stripe's own SDK; the Stripe-hosted payment page remains covered by the opt-in tests/stripe-e2e suite.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- The staged deployment must be using Stripe test-mode credentials and have a published, fee-bearing test seminar; never use live-mode keys. Staging shares the production database, so cleanup is required.
+
+### Steps
+1. Sign up a fresh member, complete onboarding, and confirm seminar registration is unavailable while unpaid.
+2. Start membership checkout and return from Stripe without paying; confirm entitlement is not granted by the return redirect alone.
+3. Pay with a Stripe test card and wait for the verified webhook; confirm entitlement becomes active exactly once.
+4. Register for a seminar by each enabled payment method; for online payment complete Stripe test checkout and confirm the registration becomes paid once.
+5. Confirm a full seminar and a seminar past its registration deadline reject registration with a clear message, and that cancellation updates My Seminars.
+
+### PASS
+- Entitlement and seminar payment status change only after a verified provider event, never from browser redirects or client-supplied fields.
+- Redelivered events do not double-credit.
+- Capacity, deadline, disabled payment methods and unpaid-member restrictions are enforced server-side.
+
+### FAIL
+- Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-037 — A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002
+- **CI coverage:** mapped — `tests/session-gate.test.ts`, `tests/membership-cancellation.integration.ts`, `tests/status-actions.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- Use a disposable, paid-up member. Staging shares the production database, so cleanup is required.
+- Moving the paid-through date requires administrator entitlement correction; record the original value first.
+
+### Steps
+1. Sign in as the paid-up disposable member and cancel the membership from My Membership, confirming the dialog.
+2. Confirm the member stays signed in with full access and My Membership shows when access ends.
+3. Have an administrator move the paid-through date to yesterday (entitlement correction, with a reason).
+4. Reload any page in the member's session and confirm it is signed out, then attempt password sign-in and, if linked, Google sign-in.
+5. Have an administrator reverse the cancellation and confirm sign-in works again.
+
+### PASS
+- Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.
+- After the paid-through date the existing session ends and both sign-in methods are refused, with the canceled-membership message shown only after a correct password.
+- An administrator's reversal restores sign-in.
+
+### FAIL
+- Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.

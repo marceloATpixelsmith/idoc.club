@@ -18,9 +18,7 @@
   flex: 0 0 50%;
   min-height: 100vh;
   overflow: hidden;
-  background-image: url('/auth-background.jpg');
-  background-position: calc(50% + 150px) center;
-  background-size: cover;
+  background: url('/auth-background.jpg') center / cover no-repeat;
 }
 
 .idoc-auth-shell__visual::after {
@@ -135,7 +133,7 @@
 
 .idoc-auth-label {
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.18em;

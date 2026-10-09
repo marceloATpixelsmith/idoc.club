@@ -18,6 +18,7 @@ let originalFetch: typeof fetch;
 let sentMessages: { subject: string; to: string }[];
 
 beforeEach(() => {
+  process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
   process.env.BREVO_WEBHOOK_KEY = webhookKey;
   process.env.BREVO_API_KEY = 'integration-only-provider-key';
   process.env.BREVO_FROM_EMAIL = 'accounts@idoc.club';

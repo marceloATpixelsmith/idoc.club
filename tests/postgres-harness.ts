@@ -1,3 +1,5 @@
+// Existing lifecycle fixtures exercise an explicitly released deployment; launch-hold tests override this.
+process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
 import assert from 'node:assert/strict';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -7,7 +9,7 @@ import { validateTestDatabaseUrl } from '../lib/db/test-database-url.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 
 export const testUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL).toString();
-export const sql = postgres(testUrl, { max: 10, onnotice: () => {} });
+export const sql = postgres(testUrl, { max: 10, onnotice: () => {}, connection: { search_path: 'idoc' } });
 export const database = drizzle(sql);
 const migrationsFolder = new URL('../lib/db/migrations', import.meta.url).pathname;
 
@@ -58,7 +60,10 @@ export function profileInput(roles: Array<typeof judgeRole | typeof stewardRole 
     firstName: 'Test', lastName: 'Member', postalCode: '10115', roles, stateProvince: 'Berlin' };
 }
 
-export async function createProfile(userId: number, roles = [judgeRole]) {
+export async function createProfile(
+  userId: number,
+  roles: Array<typeof judgeRole | typeof stewardRole | typeof veterinarianRole> = [judgeRole],
+) {
   const input = profileInput(roles);
   const [profile] = await sql<{ id: number }[]>`
     insert into idoc.profiles(user_id,first_name,last_name,address_1,address_2,city,state_province,postal_code,country_code)

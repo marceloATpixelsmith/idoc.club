@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import Stripe from 'stripe';
 import postgres from 'postgres';
+import { payWithTestCard } from './support/hosted-card';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
@@ -68,13 +69,10 @@ async function completeHostedCheckout(page: import('@playwright/test').Page, aut
   await expect(renewal).toBeVisible();
   if (await renewal.isChecked() !== autoRenew) await renewal.click();
   await page.locator('form').filter({ has: renewal }).getByRole('button').click();
-  await page.waitForURL(/checkout\.stripe\.com/);
+  await page.waitForURL(/checkout\.stripe\.com/, { waitUntil: 'domcontentloaded' });
   const checkoutSessionId = page.url().match(/cs_[A-Za-z0-9_]+/)?.[0];
   expect(checkoutSessionId).toBeTruthy();
-  await page.getByLabel(/card number/i).fill('4242424242424242');
-  await page.getByLabel(/expiration/i).fill('1230');
-  await page.getByLabel(/security code|cvc/i).fill('123');
-  await page.getByRole('button', { name: /pay|subscribe|complete/i }).click();
+  await payWithTestCard(page);
   await page.waitForURL(/dashboard\/membership|dashboard/, { timeout: 60_000 });
   return checkoutSessionId as string;
 }

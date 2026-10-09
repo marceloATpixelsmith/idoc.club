@@ -115,7 +115,7 @@ test('callback rejects a missing, tampered, or state-mismatched binding cookie b
   // No binding cookie at all -- e.g. an attacker linking straight to a crafted callback URL.
   const noCookie = await context.request.get('/api/auth/google/callback?state=attacker-supplied-state', { maxRedirects: 0 });
   expect(noCookie.status()).toBe(302);
-  expect(pathAndQuery(noCookie.headers().location)).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(noCookie.headers().location)).toBe('/sign-in');
 
   // A real transaction, but the binding cookie's HMAC signature is tampered before the callback runs.
   const start = await context.request.get('/api/auth/google/start?intent=login', { maxRedirects: 0 });
@@ -126,13 +126,13 @@ test('callback rejects a missing, tampered, or state-mismatched binding cookie b
   await context.addCookies([{ ...bindingCookie!, value: `${state}.tampered-signature` }]);
   const tampered = await context.request.get(`/api/auth/google/callback?state=${state}`, { maxRedirects: 0 });
   expect(tampered.status()).toBe(302);
-  expect(pathAndQuery(tampered.headers().location)).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(tampered.headers().location)).toBe('/sign-in');
 
   // A validly-signed binding cookie, but bound to a different state than the one presented.
   await context.addCookies([bindingCookie!]);
   const mismatched = await context.request.get('/api/auth/google/callback?state=a-different-state-entirely', { maxRedirects: 0 });
   expect(mismatched.status()).toBe(302);
-  expect(pathAndQuery(mismatched.headers().location)).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(mismatched.headers().location)).toBe('/sign-in');
 
   await context.close();
 });
@@ -154,7 +154,7 @@ test('a consumed callback cannot be replayed against the live route', async ({ b
 
   const replay = await context.request.get(replayUrl!, { maxRedirects: 0 });
   expect(replay.status()).toBe(302);
-  expect(pathAndQuery(replay.headers().location)).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(replay.headers().location)).toBe('/sign-in');
   await context.close();
 });
 
@@ -164,7 +164,7 @@ test('an existing password account is never auto-linked: a matching Google ident
 
   await page.goto('/api/auth/google/start?intent=signup');
   await page.click('#continue');
-  await expect(page).toHaveURL(/\/sign-in\?google=link-required$/);
+  await expect(page).toHaveURL(/\/sign-in$/);
 });
 
 test('a declined Google consent sends the user back to the page they started from: signup stays on signup, login stays on sign-in', async ({ browser }) => {
@@ -179,7 +179,7 @@ test('a declined Google consent sends the user back to the page they started fro
     { maxRedirects: 0 },
   );
   expect(signupCallback.status()).toBe(302);
-  expect(pathAndQuery(signupCallback.headers().location)).toBe('/sign-up?google=failed');
+  expect(pathAndQuery(signupCallback.headers().location)).toBe('/sign-up');
   await signupContext.close();
 
   const loginContext = await browser.newContext();
@@ -190,7 +190,7 @@ test('a declined Google consent sends the user back to the page they started fro
     { maxRedirects: 0 },
   );
   expect(loginCallback.status()).toBe(302);
-  expect(pathAndQuery(loginCallback.headers().location)).toBe('/sign-in?google=failed');
+  expect(pathAndQuery(loginCallback.headers().location)).toBe('/sign-in');
   await loginContext.close();
 });
 
@@ -223,7 +223,7 @@ test('a real Google callback fails closed, without exposing any raw provider/JWK
     await page.goto('/api/auth/google/start?intent=signup');
     await expect(page.locator('#continue')).toBeVisible();
     await page.click('#continue');
-    await expect(page).toHaveURL(/\/sign-up\?google=failed$/);
+    await expect(page).toHaveURL(/\/sign-up$/);
 
     // Only the rendered, user-visible text -- not page.content()'s full HTML source. In dev mode that
     // source also carries Next.js's own RSC debug payload (arbitrary internal timing floats, module

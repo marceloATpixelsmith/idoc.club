@@ -205,6 +205,7 @@ test('migrated activation failure matrix preserves foundations, credentials, ses
   const cases = [
     { name: 'missing mapping', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.migration_map where new_entity_id=${String(graph.user.id)}` },
     { name: 'missing profile', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.billing_accounts where profile_id=${graph.profile.id}`.then(() => sql`delete from idoc.professional_roles where profile_id=${graph.profile.id}`).then(() => sql`delete from idoc.memberships where profile_id=${graph.profile.id}`).then(() => sql`delete from idoc.profiles where id=${graph.profile.id}`) },
+    { name: 'malformed profile', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`update idoc.profiles set country_code='XX' where id=${graph.profile.id}` },
     { name: 'missing role', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`delete from idoc.professional_roles where profile_id=${graph.profile.id}` },
     { name: 'invalid membership', mutate: (graph: Awaited<ReturnType<typeof createCompleteGraph>>) => sql`update idoc.memberships set status='review_required' where profile_id=${graph.profile.id}` },
   ];

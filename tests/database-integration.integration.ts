@@ -24,7 +24,7 @@ after(async () => { await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE'); awai
 test('Drizzle applies every migration to an empty isolated database', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 57);
+  assert.equal(count, JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')).entries.length);
 });
 
 test('Drizzle applies account-delivery migrations to a database already at 0004', async () => {
@@ -77,7 +77,7 @@ test('forward migration preserves databases that already applied released migrat
 
     await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 57);
+    assert.equal(count, JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')).entries.length);
     assert.equal((await sql`select 1 from information_schema.columns where table_schema='idoc' and table_name='account_delivery_outbox' and column_name='terminal_reason'`).length, 1);
   } finally {
     await rm(temporary, { force: true, recursive: true });
@@ -118,11 +118,47 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 51, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and includes migration 0056');
+    assert.equal(count, 65, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0070, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
   }
+});
+
+test('migration 0061 preserves existing seminar content while retaining nullable legacy time columns for rollout compatibility', async () => {
+  await sql.unsafe('DROP SCHEMA IF EXISTS idoc CASCADE');
+  const through0060 = await mkdtemp(join(tmpdir(), 'idoc-through-0060-'));
+  try {
+    await mkdir(join(through0060, 'meta'));
+    const migrationNames = (await readdir(migrationsFolder)).filter((name) => name.endsWith('.sql') && Number(name.slice(0, 4)) <= 60);
+    for (const name of migrationNames) await cp(join(migrationsFolder, name), join(through0060, name));
+    const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8'));
+    journal.entries = journal.entries.filter(({ idx }: { idx: number }) => idx <= 60);
+    await writeFile(join(through0060, 'meta', '_journal.json'), `${JSON.stringify(journal, null, 2)}\n`);
+    await migrate(database, { migrationsFolder: through0060, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    const [user] = await sql`insert into idoc.users (email,password_hash) values ('legacy-seminar-admin@idoc.club','hash') returning id`;
+    const [legacy] = await sql`insert into idoc.seminars
+      (title,description,start_date,start_time,end_date,end_time,timezone,location,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
+      values ('Legacy Seminar','Preserve this content','2026-01-01','09:00','2026-01-01','17:00','Europe/Berlin','Somewhere',10,1000,2000,now(),'published',${user.id},${user.id}) returning id`;
+    await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
+    const [row] = await sql`select course_directors,application from idoc.seminars where id=${legacy.id}`;
+    assert.equal(row.course_directors, 'Preserve this content');
+    assert.equal(row.application, 'Preserve this content');
+    const legacyColumns = await sql<{ column_name: string; is_nullable: string }[]>`select column_name,is_nullable from information_schema.columns where table_schema='idoc' and table_name='seminars' and column_name in ('start_time','end_time','timezone') order by column_name`;
+    assert.deepEqual([...legacyColumns], [
+      { column_name: 'end_time', is_nullable: 'YES' },
+      { column_name: 'start_time', is_nullable: 'YES' },
+      { column_name: 'timezone', is_nullable: 'YES' },
+    ]);
+  } finally { await rm(through0060, { force: true, recursive: true }); }
+});
+
+test('the seminars_levels_valid_check constraint rejects all_levels alongside any other level, even bypassing application-layer parseLevels', async () => {
+  const [user] = await sql`insert into idoc.users (email,password_hash) values ('levels-check-admin@idoc.club','hash') returning id`;
+  await assert.rejects(sql`insert into idoc.seminars
+    (title,description,start_date,end_date,location,language,organizing_national_federation,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
+    values ('Bad Levels','desc','2026-01-01','2026-01-01','Somewhere','en','IE',10,1000,2000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
+    /seminars_levels_valid_check/, 'the database must reject all_levels combined with any other level, not just the application layer');
 });
 
 test('migration 0035 removes passkey/WebAuthn support without a foreign-key violation against a real historical satisfied_factor_id reference', async () => {
@@ -247,10 +283,16 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   assert.ok(journal.entries[40].when > journal.entries[39].when, 'the news-articles migration must follow migration 0039');
   assert.equal(journal.entries[41].tag, '0041_seminars');
   assert.ok(journal.entries[41].when > journal.entries[40].when, 'the seminars migration must follow migration 0040');
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0055_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0051_snapshot.json'), 'utf8'));
   // Migration 0035 removed passkey/WebAuthn support: these two tables, present in the 0030 snapshot,
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
+  // Migrations 0055/0056 renamed/removed these columns off of idoc.seminars: seminar_date -> start_date
+  // (plus a new end_date), price_cents -> member_price_cents (plus a new non_member_price_cents), and
+  // payment_method_canonical_id moved from the seminar to each registration -- see 0056_snapshot.json.
+  const columnsRemovedAfterSnapshot: Record<string, Set<string>> = {
+    'idoc.seminars': new Set(['seminar_date', 'price_cents', 'payment_method_canonical_id']),
+  };
   for (const tableName of Object.keys(snapshot.tables)) {
     if (tablesRemovedAfterSnapshot.has(tableName)) continue;
     const [schemaName, name] = tableName.split('.');
@@ -258,6 +300,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
     assert.ok(rows.length > 0, `${tableName} from the Drizzle snapshot must exist`);
     const migratedColumns = new Set(rows.map(({ column_name }) => column_name));
     for (const columnName of Object.keys(snapshot.tables[tableName].columns)) {
+      if (columnsRemovedAfterSnapshot[tableName]?.has(columnName)) continue;
       assert.ok(migratedColumns.has(columnName), `${tableName}.${columnName} must exist`);
     }
   }
@@ -279,7 +322,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
 });
 
 test('final migrated catalog exactly agrees with the authoritative Drizzle snapshot', async () => {
-  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0055_snapshot.json'), 'utf8'));
+  const snapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0051_snapshot.json'), 'utf8'));
   assert.deepEqual(Object.keys(snapshot.schemas).sort(), ['idoc']);
   assert.deepEqual(snapshot.enums, {});
 
@@ -301,28 +344,28 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // taken (null means the account has never had a real, member-known password -- see lib/db/schema.ts).
   expectedSchema['idoc.users'].columns.password_set_at = { name: 'password_set_at', type: 'timestamp', primaryKey: false, notNull: false };
 
-  // Migration 0056 added the durable legacy profile-review state and its invariant.
-  expectedSchema['idoc.users'].columns.legacy_profile_review_required = {
-    name: 'legacy_profile_review_required', type: 'boolean', primaryKey: false, notNull: true, default: false,
-  };
-  expectedSchema['idoc.users'].columns.legacy_profile_reviewed_at = {
-    name: 'legacy_profile_reviewed_at', type: 'timestamp with time zone', primaryKey: false, notNull: false,
-  };
-  expectedSchema['idoc.users'].checkConstraints.users_legacy_profile_review_state_check = {
-    name: 'users_legacy_profile_review_state_check',
-    value: 'NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL',
-  };
-
   // Migration 0054 widened email_otp_codes_purpose_check to add the google_disconnect_verification
   // purpose (lib/auth/email-otp.ts) after this frozen snapshot was taken.
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
 
-  // Migration 0056 made imported official-profile fields nullable so missing legacy source values
-  // remain null until the member completes the full first-login review.
-  for (const column of ['first_name', 'last_name', 'address_1', 'city', 'state_province', 'postal_code', 'country_code']) {
-    expectedSchema['idoc.profiles'].columns[column].notNull = false;
-  }
+  // Migrations 0055/0056/0057/0058/0061/0063/0064/0069/0070 reshaped these tables after this frozen snapshot was taken
+  // (payment method moved from the seminar to each registration; multi-day dates; dual
+  // member/non-member prices; guest registration; the FEI-affiliation flag; the levels field).
+  // Rather than hand-patching every column/constraint/index delta here, this substitutes the
+  // affected tables' definitions straight from the current 0070 snapshot -- generated from
+  // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
+  // authoritative as the frozen 0051 snapshot was for everything else.
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0070_snapshot.json'), 'utf8'));
+  expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
+  expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
+  expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
+  expectedSchema['idoc.notification_outbox'] = currentSnapshot.tables['idoc.notification_outbox'];
+  expectedSchema['idoc.news_articles'] = currentSnapshot.tables['idoc.news_articles'];
+  expectedSchema['idoc.administrator_table_preferences'] = currentSnapshot.tables['idoc.administrator_table_preferences'];
+  expectedSchema['idoc.audit_log'] = currentSnapshot.tables['idoc.audit_log'];
+  expectedSchema['idoc.support_category_defaults'] = currentSnapshot.tables['idoc.support_category_defaults'];
+  expectedSchema['idoc.support_conversations'] = currentSnapshot.tables['idoc.support_conversations'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
@@ -471,7 +514,10 @@ function normalizeSql(value: unknown) {
     .toLowerCase()
     .replaceAll('"', '')
     .replaceAll(/idoc\.[a-z0-9_]+\./g, '')
-    .replaceAll(/::(?:character varying|text|timestamp without time zone)(?:\[\])?/g, '')
+    // Postgres renders an array-typed default's cast with its canonical spelling and length modifier
+    // (::character varying(20)[]) while a hand-written migration or drizzle-generated snapshot may
+    // spell it as ::varchar(20)[] -- both must normalize to the same thing (levels, migration 0058).
+    .replaceAll(/::(?:character varying|varchar|text|timestamp without time zone)(?:\(\d+\))?(?:\[\])?/g, '')
     .replaceAll(/=\s*any[\s(]*array\[([^\]]+)\][^a-z]*/g, 'in ($1)')
     .replaceAll(/\bin\s*\(([^()]*)\)/g, 'in $1')
     .replaceAll(/[()\s]+/g, ' ')
@@ -485,7 +531,7 @@ function actionCode(action: string) {
 test('migration re-execution is safe and does not duplicate objects', async () => {
   await migrate(database, { migrationsFolder, migrationsSchema: 'idoc', migrationsTable: '__drizzle_migrations' });
   const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-  assert.equal(count, 57);
+  assert.equal(count, JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')).entries.length);
 });
 
 test('migrations enforce normalized unique identities and one profile per user', async () => {

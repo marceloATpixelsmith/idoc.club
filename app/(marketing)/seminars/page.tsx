@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CalendarDays, MapPin } from 'lucide-react';
-import { seminars } from '@/lib/content/site';
+import { ArrowUpRight } from 'lucide-react';
 import { PageHeader } from '@/components/site/PageHeader';
-import { MemberRegistrations } from '@/components/seminars/member-registrations';
+import { MemberRegistrations, PublicSeminarsCatalog } from '@/components/seminars/member-registrations';
 import { getPublicUser } from '@/lib/db/queries';
 
 export const dynamic = 'force-dynamic';
@@ -21,13 +20,24 @@ export const metadata: Metadata = {
 export default async function SeminarsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
   const { tab, view } = await searchParams;
   const user = await getPublicUser();
-  // Logged-in members land on "My Seminars" by default; "Available Seminars" is the explicit
-  // second tab. A non-member always sees the available list, with no tabs at all.
-  const showMySeminars = Boolean(user) && view !== 'available';
+  // Available Seminars (the full published catalog) is always the landing view, whether or not a
+  // visitor is signed in. "My Seminars" is an explicit second tab, reachable only by a logged-in
+  // member -- a signed-out visitor sees no tabs at all, just the catalog.
+  const showMySeminars = Boolean(user) && view === 'my';
 
   return (
     <>
       <PageHeader
+        action={(
+          <a
+            className="idoc-secondary-button idoc-secondary-button--dotted px-6 py-3 text-sm"
+            href="https://data.fei.org/Calendar/OfficialCourseSearch.aspx"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            FEI Course Calendar <ArrowUpRight className="size-4" />
+          </a>
+        )}
         eyebrow="Calendar"
         title="Seminars & Courses"
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."
@@ -36,13 +46,13 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
         {user ? (
           <nav aria-label="Seminars view" className="mt-10 flex gap-4 border-b border-border">
             <Link
-              href="/seminars?view=available"
+              href="/seminars"
               className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'text-muted-foreground' : 'border-b-2 border-gold'}`}
             >
               Available Seminars
             </Link>
             <Link
-              href="/seminars"
+              href="/seminars?view=my"
               className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'border-b-2 border-gold' : 'text-muted-foreground'}`}
             >
               My Seminars
@@ -52,24 +62,7 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
         {user ? (
           <MemberRegistrations tab={tab} view={showMySeminars ? 'my' : 'available'} />
         ) : (
-          <ul className="grid gap-6 py-12 sm:grid-cols-2">
-            {seminars.map((s) => (
-              <li key={s.title} className="card-midnight p-7">
-                <span className="text-[0.68rem] uppercase tracking-[0.18em] text-gold">
-                  {s.audience}
-                </span>
-                <h2 className="mt-3 text-2xl leading-snug">{s.title}</h2>
-                <div className="mt-5 space-y-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                  <p className="inline-flex items-center gap-2">
-                    <MapPin className="size-3.5 text-gold" /> {s.location}
-                  </p>
-                  <p className="inline-flex items-center gap-2">
-                    <CalendarDays className="size-3.5 text-gold" /> {s.date}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <PublicSeminarsCatalog />
         )}
       </div>
     </>

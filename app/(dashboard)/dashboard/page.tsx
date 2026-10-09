@@ -23,7 +23,5 @@ export default async function DashboardEntryPage({ searchParams }: { searchParam
     );
   }
 
-  if (user?.legacyProfileReviewRequired) redirect('/dashboard/profile?confirmDetails=1');
-
   redirect('/dashboard/membership');
 }

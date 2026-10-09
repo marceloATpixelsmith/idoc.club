@@ -167,6 +167,10 @@ The implementation consumes `STRIPE_MEMBERSHIP_PRODUCT_ID` for both technical Pr
 
 The production Stripe webhook must deliver every event consumed by current payment/subscription handling plus any Subscription Schedule or SetupIntent events selected by the final transition design. The exact event list and restricted-key permissions must be documented from the implemented calls before production signoff.
 
+### 6.1 Checkout cancel_url routing
+
+`createMembershipCheckoutSession` (`lib/payments/checkout.ts`) sets `cancel_url` to `${baseUrl}/dashboard/membership`. Stripe bakes this value into the Checkout Session at creation time, so it cannot be changed retroactively for a session that already exists. An earlier revision used `${baseUrl}/pricing`; once that page was removed from the app, `next.config.ts` gained a non-permanent redirect from `/pricing` to `/dashboard/membership` so a member who opened Checkout before the change and then cancels still lands back in the app instead of hitting a 404. Remove that redirect entry once enough time has passed that no pre-existing Checkout Session could still be open (Stripe Checkout Sessions expire after at most 24 hours by default), and confirm no other historical `cancel_url`/`success_url` value needs the same compatibility treatment before doing so.
+
 ## 7. Required automated tests
 
 - one membership payment presentation; no second product/card/plan wording;
@@ -241,9 +245,9 @@ This inventory records the requested dashboard slice against current implementat
 | Owned canonical payment-history table with date, amount, currency, and source | Already implemented and verified | The server-owned payment ledger is queried by authenticated profile and supports Stripe plus PayPal, bank transfer, cash, and complimentary sources. Amount and currency are displayed together. |
 | Profile includes verified-email workflow and separate first/last names | Already implemented and verified | My Profile contains account email plus all member fields; ownership, normalized uniqueness, and verification are server-enforced, and no duplicate `users.name` field remains. |
 | Security layout, password controls, activity placement, and deletion confirmation | Already implemented and verified | Password and Google panels form a responsive two-column grid; reusable constrained password fields have stateful accessible show/hide labels; password change has no confirmation field, while deletion retains one; owned activity appears immediately above Delete Account. |
-| My Seminars lists only the member's registered-and-paid seminars with loading/error states | Not implemented | Release 5 seminar authoring/registration/payment schema does not yet exist. The server-gated tab therefore renders an honest empty state and never fabricates or exposes registrations. Authoritative registration querying plus loading/error states remain deferred to the seminar slice. |
+| My Seminars lists the signed-in profile's own seminar registrations with current/past views, payment method/status, and loading/error states | Already implemented and verified | Release 5 seminar schema and registration/payment flows are implemented. Current entitlement receives member pricing; a signed-in profile without current entitlement remains profile-backed at the non-member price. Bank Transfer/Cash registrations appear immediately, and Stripe registrations become paid only from verified webhook evidence. My Seminars remains the management surface for the profile's durable registration history. |
 
-No dashboard item is superseded by a newer decision or blocked by an unresolved product decision. The seminar row is a known sequencing/schema dependency, not a product-policy blocker. This slice adds no schema and no migration.
+No dashboard item is superseded by a newer decision or blocked by an unresolved product decision. The former seminar sequencing dependency has been completed by the later Release 5 implementation; see document 28 for the current cross-domain auth/billing/seminar contract.
 
 ### Manual verification for this slice
 

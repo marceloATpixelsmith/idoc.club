@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
@@ -46,14 +47,14 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
               or (o.purpose='migration_activation' and u.account_state='migrated_pending')) then 'account_ineligible'
             else 'expired_token'
           end as terminal_reason
-        from idoc.account_delivery_outbox o
-        left join idoc.account_tokens t on t.id=o.token_id
-        left join idoc.users u on u.id=o.user_id
+        from account_delivery_outbox o
+        left join account_tokens t on t.id=o.token_id
+        left join users u on u.id=o.user_id
         where o.sent_at is null and o.dead_lettered_at is null and o.terminal_at is null
           and o.available_at <= ${now.toISOString()} and (o.lease_expires_at is null or o.lease_expires_at < ${now.toISOString()})
         order by o.available_at, o.id for update of o skip locked limit 1
       )
-      update idoc.account_delivery_outbox outbox set
+      update account_delivery_outbox outbox set
         lease_owner=case when candidate.eligible then ${owner} else null end,
         lease_expires_at=case when candidate.eligible then ${now.toISOString()}::timestamptz + (${ACCOUNT_DELIVERY_LEASE_MS} * interval '1 millisecond') else null end,
         terminal_at=case when candidate.eligible then null else ${now.toISOString()}::timestamptz end,
@@ -76,6 +77,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
 }
 
 export async function deliverNextAccountLink(owner: string = randomUUID(), testDependencies?: Partial<DeliveryDependencies>) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const dependencies = dependenciesForTest(testDependencies);
   const claimed = await claimAccountDelivery(owner, dependencies.now());
   if (!claimed) return { status: 'empty' as const };
@@ -87,13 +89,13 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
       // Lock and re-check immediately before the external call. Token consumption cannot
       // race this delivery because its update must wait for this transaction to finish.
       const eligible = await tx.execute<{ expires_at: Date }>(sql`
-        select t.expires_at from idoc.account_tokens t
-        join idoc.account_delivery_outbox o on o.token_id=t.id
+        select t.expires_at from account_tokens t
+        join account_delivery_outbox o on o.token_id=t.id
         where o.id=${record.id} and o.lease_owner=${owner} and o.lease_expires_at>${dependencies.now().toISOString()}
           and o.sent_at is null and o.dead_lettered_at is null and o.terminal_at is null and t.user_id=o.user_id
           and t.purpose=o.purpose and t.consumed_at is null and t.expires_at>${dependencies.now().toISOString()}
-          and ((o.purpose='password_reset' and exists(select 1 from idoc.users u where u.id=o.user_id and u.account_state in ('active','onboarding')))
-            or (o.purpose='migration_activation' and exists(select 1 from idoc.users u where u.id=o.user_id and u.account_state='migrated_pending')))
+          and ((o.purpose='password_reset' and exists(select 1 from users u where u.id=o.user_id and u.account_state in ('active','onboarding')))
+            or (o.purpose='migration_activation' and exists(select 1 from users u where u.id=o.user_id and u.account_state='migrated_pending')))
         for update of t, o
       `);
       if (!eligible[0]) {

@@ -1,7 +1,7 @@
 // AUTH-LOG-001: "Trusted server security events MUST use stable taxonomy, safe correlation,
 // actor/subject/tenant/resource attribution, minimized metadata, and remain distinct from
 // application logs and audit records." Safe correlation (requestId) and the distinctness from
-// idoc.audit_log (a separate, DB-persisted, actor-attributed table for security-sensitive state
+// audit_log (a separate, DB-persisted, actor-attributed table for security-sensitive state
 // *changes* -- see AUTH-AUDIT-001/002) were already true before this file existed. What was missing
 // was a closed, explicit taxonomy: `event` was a bare `string` parameter, so any call site could
 // invent a new name with no compile-time record of what names exist, and each call site supplied
@@ -30,6 +30,8 @@ export type SecurityEventDefinition = {
   /** The subsystem/domain this event is attributed to. */
   resource: string;
   retentionClass: SecurityEventRetentionClass;
+  /** Genuine application/operational failures belong in the central Sentry error inbox. */
+  sentry?: boolean;
   /** Whether an authenticated subject is ever meaningfully attachable to this event: 'subject' means
    * call sites pass a `subjectId` in meta when one is resolved; 'anonymous' means the event fires
    * only in pre-authentication flows where attaching an identifier would itself be an enumeration
@@ -42,36 +44,37 @@ export type SecurityEventDefinition = {
 
 export const SECURITY_EVENT_TAXONOMY = {
   account_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'account-delivery-outbox', retentionClass: 'operational' },
-  account_link_request_failed: { attribution: 'anonymous', category: 'operational', metadata: { purpose: ['migration_activation', 'password_reset'], reason: ['configuration', 'database', 'encryption', 'operational'] }, resource: 'account-recovery', retentionClass: 'security' },
+  account_link_request_failed: { attribution: 'anonymous', category: 'operational', metadata: { purpose: ['migration_activation', 'password_reset'], reason: ['configuration', 'database', 'encryption', 'operational'] }, resource: 'account-recovery', retentionClass: 'security', sentry: true },
   auth_security_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'account-delivery-outbox', retentionClass: 'operational' },
-  bounce_complaint_alert_failed: { attribution: 'system', category: 'delivery', resource: 'bounce-complaint-alert', retentionClass: 'operational' },
+  bounce_complaint_alert_failed: { attribution: 'system', category: 'delivery', resource: 'bounce-complaint-alert', retentionClass: 'operational', sentry: true },
   bounce_complaint_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'bounce-complaint-alert', retentionClass: 'operational' },
-  breached_password_alert_failed: { attribution: 'system', category: 'delivery', resource: 'breached-password-alert', retentionClass: 'security' },
+  breached_password_alert_failed: { attribution: 'system', category: 'delivery', resource: 'breached-password-alert', retentionClass: 'security', sentry: true },
   breached_password_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'breached-password-alert', retentionClass: 'operational' },
-  clock_skew_check_failed: { attribution: 'system', category: 'operational', resource: 'clock-skew-check', retentionClass: 'operational' },
+  clock_skew_check_failed: { attribution: 'system', category: 'operational', resource: 'clock-skew-check', retentionClass: 'operational', sentry: true },
   client_error: { attribution: 'anonymous', category: 'operational', resource: 'client-error-report', retentionClass: 'operational' },
   csrf_validation_failed: { attribution: 'anonymous', category: 'auth', metadata: { expectedSessionPresent: [true, false], reason: ['missing_cookie', 'missing_candidate', 'value_mismatch', 'invalid_token', 'session_ref_mismatch'], tokenSessionPresent: [true, false] }, resource: 'csrf', retentionClass: 'security' },
   csrf_validation_failed_authenticated: { attribution: 'subject', category: 'auth', metadata: { reason: ['missing_cookie', 'missing_candidate', 'value_mismatch', 'invalid_token', 'session_ref_mismatch'], subjectId: 'positiveInteger', tokenSessionPresent: [true, false] }, resource: 'csrf', retentionClass: 'security' },
-  data_retention_purge_failed: { attribution: 'system', category: 'operational', resource: 'data-retention-purge', retentionClass: 'operational' },
+  data_retention_purge_failed: { attribution: 'system', category: 'operational', resource: 'data-retention-purge', retentionClass: 'operational', sentry: true },
   email_otp_delivery_failed: { attribution: 'subject', category: 'delivery', metadata: { purpose: ['login_verification', 'password_reset'], reason: ['configuration', 'network', 'operational'], subjectId: 'positiveInteger' }, resource: 'email-otp', retentionClass: 'security' },
   email_otp_anonymous_delivery_failed: { attribution: 'anonymous', category: 'delivery', metadata: { purpose: ['signup_verification'], reason: ['configuration', 'network', 'operational'] }, resource: 'email-otp', retentionClass: 'security' },
   google_oauth_callback_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['account_not_eligible', 'binding_cookie_invalid', 'configuration', 'expired_transaction', 'invalid_id_token', 'invalid_request', 'invalid_transaction', 'link_required', 'provider_error', 'token_exchange_failed', 'unexpected_error', 'user_declined_consent'] }, resource: 'google-oauth', retentionClass: 'security' },
-  google_oauth_failure_alert_failed: { attribution: 'system', category: 'delivery', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
+  google_oauth_failure_alert_failed: { attribution: 'system', category: 'delivery', resource: 'google-oauth-failure-alert', retentionClass: 'operational', sentry: true },
   google_oauth_failure_alert_rate_limited: { attribution: 'system', category: 'auth', resource: 'google-oauth-failure-alert', retentionClass: 'security' },
   google_oauth_failure_alert_skipped: { attribution: 'system', category: 'configuration', resource: 'google-oauth-failure-alert', retentionClass: 'operational' },
   google_oauth_start_failed: { attribution: 'anonymous', category: 'auth', metadata: { reason: ['configuration', 'invalid_request', 'rate_limited', 'unexpected_error:authorization_request', 'unexpected_error:configuration', 'unexpected_error:transaction', 'unexpected_error:transaction_purge'] }, resource: 'google-oauth', retentionClass: 'security' },
-  directory_map_query_failed: { attribution: 'system', category: 'operational', resource: 'directory-map', retentionClass: 'operational' },
+  directory_map_query_failed: { attribution: 'system', category: 'operational', resource: 'directory-map', retentionClass: 'operational', sentry: true },
   brevo_webhook_malformed_payload: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },
   brevo_webhook_authentication_failed: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'security' },
   brevo_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },
-  mfa_recovery_transition_failed: { attribution: 'subject', category: 'auth', metadata: { subjectId: 'positiveInteger' }, resource: 'mfa-recovery', retentionClass: 'security' },
-  news_scheduled_publish_failed: { attribution: 'system', category: 'operational', resource: 'news-scheduled-publish', retentionClass: 'operational' },
-  operational_alert_dead_lettered: { attribution: 'system', category: 'delivery', metadata: { kind: ['incident_response_action_taken', 'rate_limit_correlation_alert'] }, resource: 'operational-alert-outbox', retentionClass: 'operational' },
+  mfa_recovery_transition_failed: { attribution: 'subject', category: 'auth', metadata: { subjectId: 'positiveInteger' }, resource: 'mfa-recovery', retentionClass: 'security', sentry: true },
+  news_scheduled_publish_failed: { attribution: 'system', category: 'operational', resource: 'news-scheduled-publish', retentionClass: 'operational', sentry: true },
+  operational_alert_dead_lettered: { attribution: 'system', category: 'delivery', metadata: { kind: ['incident_response_action_taken', 'rate_limit_correlation_alert'] }, resource: 'operational-alert-outbox', retentionClass: 'operational', sentry: true },
   operational_alert_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'operational-alert-outbox', retentionClass: 'operational' },
-  rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security' },
-  reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational' },
-  renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational' },
-  renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational' },
+  rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security', sentry: true },
+  reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: true },
+  seminar_cancellation_resolution_failed: { attribution: 'system', category: 'operational', resource: 'seminar-cancellation-resolution', retentionClass: 'operational', sentry: true },
+  renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational', sentry: true },
+  renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational', sentry: true },
   stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['invalid_signature'] }, resource: 'stripe-webhook', retentionClass: 'security' },
 } as const satisfies Record<string, SecurityEventDefinition>;
 

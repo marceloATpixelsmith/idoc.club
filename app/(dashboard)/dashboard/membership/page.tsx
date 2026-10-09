@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Gavel, Flag, Stethoscope } from 'lucide-react';
+import { Bell, Stethoscope } from 'lucide-react';
 import { getOwnPrivateMember, hasOwnBillingAccount, listOwnPaymentHistory, requireAccountAccess } from '@/lib/membership/data-access';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { MEMBERSHIP_STATUS_LABELS, isEntitled, renewalMode } from '@/lib/membership/entitlement';
@@ -12,6 +12,10 @@ import { getAccountStateUser } from '@/lib/db/queries';
 import { MembershipPerksList } from '@/components/membership/membership-perks-list';
 import { getMembershipPerks } from '@/lib/organization/membership-perks';
 import { CheckoutForm } from './checkout-form';
+import { FlashBanner, FlashConsumer } from '@/components/ui/flash-banner';
+import { readUiFlash } from '@/lib/ui/flash-state';
+import { formatDate } from '@/lib/format';
+import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
 
 const RENEW_WINDOW_DAYS = 15;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -22,10 +26,10 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 function classificationDisplay(roles: { roleType: string }[]): { icon: React.ReactNode; label: string } {
   const types = new Set(roles.map(({ roleType }) => roleType));
   if (types.has('judge') && types.has('steward')) {
-    return { icon: <span className="inline-flex items-center gap-1"><Gavel className="size-7" aria-hidden="true" /><Flag className="size-7" aria-hidden="true" /></span>, label: 'J&S Combo' };
+    return { icon: <span className="inline-flex items-center gap-1"><Bell className="size-7" aria-hidden="true" /><HorseshoeIcon className="size-7" aria-hidden="true" /></span>, label: 'J&S Combo' };
   }
-  if (types.has('judge')) return { icon: <Gavel className="size-7" aria-hidden="true" />, label: 'Judge' };
-  if (types.has('steward')) return { icon: <Flag className="size-7" aria-hidden="true" />, label: 'Steward' };
+  if (types.has('judge')) return { icon: <Bell className="size-7" aria-hidden="true" />, label: 'Judge' };
+  if (types.has('steward')) return { icon: <HorseshoeIcon className="size-7" aria-hidden="true" />, label: 'Steward' };
   return { icon: <Stethoscope className="size-7" aria-hidden="true" />, label: 'Veterinarian' };
 }
 
@@ -55,11 +59,8 @@ function MembershipCheckoutPanel({ perks }: { perks: Awaited<ReturnType<typeof g
   );
 }
 
-export default async function DashboardMembershipPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ renew?: string }>;
-}) {
+export default async function DashboardMembershipPage() {
+  const flash = await readUiFlash('/dashboard/membership');
   const user = await getAccountStateUser();
   if (!user || user.accountState === 'onboarding') redirect('/dashboard');
   // 'profile', not 'member': an expired or under-review member must still be able to reach this
@@ -95,6 +96,7 @@ export default async function DashboardMembershipPage({
     return (
       <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
         <h1 className="text-2xl font-semibold">My Membership</h1>
+        {flash === 'membership-checkout-success' ? <FlashBanner targetPath="/dashboard/membership">Payment completed. Your membership will update as soon as Stripe confirms the payment.</FlashBanner> : null}
         <p className="mt-3 text-muted-foreground">
           Your membership is not currently active. Pay the annual fee below to activate or renew it.
         </p>
@@ -104,9 +106,9 @@ export default async function DashboardMembershipPage({
   }
 
   const mode = renewalMode(subscription, entitlement);
-  const showRenew = Boolean(entitlement) && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
-  const { renew } = await searchParams;
-  const renewalPerks = showRenew && renew === '1' ? await getMembershipPerks() : null;
+  // A canceled membership has ended by choice: no renewal offer. An administrator reverses it.
+  const showRenew = Boolean(entitlement) && entitlement!.status !== 'canceled' && daysUntil(entitlement!.validUntil, today) <= RENEW_WINDOW_DAYS;
+  const renewalPerks = showRenew && flash === 'membership-renew-panel' ? await getMembershipPerks() : null;
   const [history, renewalPreference, paymentMethodSummary] = await Promise.all([
     listOwnPaymentHistory(),
     getOwnRenewalPreference(),
@@ -120,10 +122,14 @@ export default async function DashboardMembershipPage({
   return (
     <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
       <h1 className="text-2xl font-semibold">My Membership</h1>
+      {flash === 'membership-checkout-success' ? <FlashBanner targetPath="/dashboard/membership">Payment completed. Your membership will update as soon as Stripe confirms the payment.</FlashBanner> : null}
+      {flash === 'membership-renewal-setup-success' ? <FlashBanner targetPath="/dashboard/membership">Automatic renewal setup completed. Your saved payment method will be used when the renewal becomes due.</FlashBanner> : null}
+      {flash === 'membership-renew-panel' ? <FlashConsumer targetPath="/dashboard/membership" /> : null}
       <p className="mt-3">Welcome, {member.profile.firstName} {member.profile.lastName}.</p>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <MembershipCard
+          canceled={entitlement?.status === 'canceled'}
           preference={renewalPreference}
           recurring={mode === 'auto_renew' || mode === 'cancels_at_period_end'}
           renewalDate={entitlement?.validUntil ?? null}
@@ -158,7 +164,7 @@ export default async function DashboardMembershipPage({
               )}
               {history.map((payment) => (
                 <tr key={payment.id} className="border-b">
-                  <td className="p-2">{payment.paidAt.toISOString().slice(0, 10)}</td>
+                  <td className="p-2">{formatDate(payment.paidAt)}</td>
                   <td className="p-2">{(payment.amountCents / 100).toFixed(2)} {payment.currency}</td>
                   <td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td>
                 </tr>

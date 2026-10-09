@@ -22,6 +22,8 @@ export default defineConfig({
   testDir: './tests/stripe-e2e',
   fullyParallel: false,
   workers: 1,
+  // These specs drive real Stripe Checkout, webhooks and refunds; the default 30 s is shorter than their own 60 s waits.
+  timeout: 120_000,
   globalSetup: './tests/stripe-e2e/global-setup.ts',
   outputDir: 'test-results/stripe-e2e',
   reporter: process.env.CI ? [['dot'], ['html', { open: 'never' }]] : [['list'], ['html', { open: 'never' }]],
@@ -29,7 +31,8 @@ export default defineConfig({
     storageState: process.env.STRIPE_E2E_STORAGE_STATE ?? '.stripe-e2e/member.json',
     baseURL: parsedAppUrl.origin,
     screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
+    // The hosted Checkout spec records its own trace as evidence, so automatic tracing must stay off.
+    trace: 'off',
     video: 'retain-on-failure',
     ...devices['Desktop Chrome'],
   },
@@ -48,7 +51,7 @@ export default defineConfig({
   },
   webServer: process.env.STRIPE_E2E_START_COMMAND ? {
     command: process.env.STRIPE_E2E_START_COMMAND,
-    env: { ...process.env, POSTGRES_URL: databaseUrl, TEST_DATABASE_URL: databaseUrl },
+    env: { ...process.env, TEST_DATABASE_URL: databaseUrl },
     reuseExistingServer: false,
     timeout: 120_000,
     url: parsedAppUrl.origin,

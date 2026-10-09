@@ -6,6 +6,9 @@ const preferences = readFileSync(new URL('../lib/admin/table-preferences.ts', im
 const migration = readFileSync(new URL('../lib/db/migrations/0045_administrator_table_preferences.sql', import.meta.url), 'utf8');
 const route = readFileSync(new URL('../app/api/admin/table-preferences/[table]/route.ts', import.meta.url), 'utf8');
 const membershipPage = readFileSync(new URL('../app/(dashboard)/admin/members/page.tsx', import.meta.url), 'utf8');
+const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/members-table.tsx', import.meta.url), 'utf8');
+const resourceTable = readFileSync(new URL('../components/admin/resource-data-table.tsx', import.meta.url), 'utf8');
+const supportTable = readFileSync(new URL('../app/(dashboard)/admin/support/support-inbox-table.tsx', import.meta.url), 'utf8');
 
 test('administrator table preferences are owner-scoped and uniquely upserted by table', () => {
   assert.match(migration, /UNIQUE INDEX "administrator_table_preferences_user_table_unique"/);
@@ -16,15 +19,40 @@ test('administrator table preferences are owner-scoped and uniquely upserted by 
 });
 
 test('only validated durable state is accepted for each supported table', () => {
-  for (const table of ['memberships', 'support', 'news', 'seminars', 'content_pages']) assert.match(preferences, new RegExp(`${table}: z\\.object`));
+  for (const table of ['memberships', 'support', 'news', 'seminars', 'seminar_registrations']) assert.match(preferences, new RegExp(`${table}: z\\.object`));
   for (const transient of ['selected', 'loading', 'openMenu', 'confirmation', 'bulkAction']) assert.doesNotMatch(preferences, new RegExp(`${transient}:`));
   assert.match(preferences, /\.strict\(\)/);
   assert.match(preferences, /z\.union\(\[z\.literal\(10\), z\.literal\(25\), z\.literal\(50\), z\.literal\(100\)\]\)/);
 });
 
-test('URL state takes precedence and default Active applies only without URL or saved state', () => {
-  assert.match(membershipPage, /hasUrlState \? null : await getTablePreferences\('memberships'\)/);
-  assert.match(membershipPage, /defaultActive=\{!hasUrlState && !savedPreferences\}/);
+test('database preferences are always the source of truth for filters/sort/columns/pagination -- there is no URL state to take precedence over, and only profileId is read from the URL', () => {
+  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string; tab\?: string \}>/);
+  assert.match(membershipPage, /const savedPreferences = await getTablePreferences\('memberships'\);/);
+  assert.doesNotMatch(membershipPage, /hasUrlState/);
+  assert.doesNotMatch(membershipPage, /redirect\(/);
   assert.match(route, /requireCsrfTokenValue/);
   assert.match(route, /resetTablePreferences/);
+});
+
+test('a multi-select facet filter\'s selected values are read from react-table\'s own columnFilters state (an array) and comma-joined into a single preference field when persisted -- there is no URL-repeated-key form to canonicalize anymore', () => {
+  for (const table of [memberTable, resourceTable, supportTable]) {
+    assert.match(table, /function filterToken\(columnFilters: ColumnFiltersState, id: string\): string \| undefined \{/);
+    assert.match(table, /const value = columnFilters\.find\(\(filter\) => filter\.id === id\)\?\.value;/);
+  }
+  for (const field of ['country', 'federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
+  assert.match(resourceTable, /status: filterToken\(state\.columnFilters, 'status'\)/);
+  assert.match(resourceTable, /type: tableType === 'news' \? filterToken\(state\.columnFilters, 'type'\) : undefined/);
+  for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
+});
+
+test('legacy News column preferences migrate from Subtitle to Access without hiding the new column', () => {
+  assert.match(preferences, /columns\(\['title', 'type', 'status', 'access', 'publication', 'subtitle', 'updated'\]\)/);
+  assert.match(preferences, /function normalizeLegacyNewsPreferences/);
+  assert.match(preferences, /order\.includes\('subtitle'\)/);
+  assert.match(preferences, /item !== 'subtitle'/);
+  assert.match(preferences, /normalizedOrder\.splice\(statusIndex >= 0 \? statusIndex \+ 1 : normalizedOrder\.length, 0, 'access'\)/);
+});
+
+test('the active-by-default Status view applies only when no table preference has ever been saved, so Reset can genuinely clear it', () => {
+  assert.match(membershipPage, /savedPreferences === null \? 'active' : undefined/);
 });

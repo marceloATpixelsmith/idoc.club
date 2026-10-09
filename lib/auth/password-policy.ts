@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Canonical password creation policy. Do not trim or normalize passwords; spaces and Unicode are allowed. */
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 10;
 export const MAX_PASSWORD_LENGTH = 128;
 
 /** Canonical password length is measured in Unicode code points, not UTF-16 code units (matching
@@ -16,7 +16,7 @@ export function countPasswordCharacters(value: string): number {
 }
 
 export const PASSWORD_REQUIREMENTS = [
-  { key: 'length', label: 'At least 12 characters', test: (value: string) => countPasswordCharacters(value) >= MIN_PASSWORD_LENGTH },
+  { key: 'length', label: 'At least 10 characters', test: (value: string) => countPasswordCharacters(value) >= MIN_PASSWORD_LENGTH },
   { key: 'uppercase', label: 'At least one uppercase letter', test: (value: string) => /\p{Lu}/u.test(value) },
   { key: 'lowercase', label: 'At least one lowercase letter', test: (value: string) => /\p{Ll}/u.test(value) },
   { key: 'number', label: 'At least one number', test: (value: string) => /\p{N}/u.test(value) },
@@ -24,7 +24,7 @@ export const PASSWORD_REQUIREMENTS = [
 ] as const;
 
 export const passwordSchema = z.string()
-  .refine((value) => countPasswordCharacters(value) >= MIN_PASSWORD_LENGTH, 'Use at least 12 characters.')
+  .refine((value) => countPasswordCharacters(value) >= MIN_PASSWORD_LENGTH, 'Use at least 10 characters.')
   .refine((value) => countPasswordCharacters(value) <= MAX_PASSWORD_LENGTH, 'Use no more than 128 characters.')
   .refine((value) => /\p{Lu}/u.test(value), 'Include at least one uppercase letter.')
   .refine((value) => /\p{Ll}/u.test(value), 'Include at least one lowercase letter.')

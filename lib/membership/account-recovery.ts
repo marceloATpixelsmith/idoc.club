@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -7,11 +8,14 @@ import { db } from '@/lib/db/drizzle';
 import { accountDeliveryOutbox, accountRequestLimits, accountTokens, auditLog, memberships, migrationMap, professionalRoles, profiles, users } from '@/lib/db/schema';
 import { encryptDeliveryPayload } from '@/lib/security/encrypted-payload';
 import { defaultTiming, equalizeAnonymousResponse, type TimingDependencies } from '@/lib/security/response-timing';
-import { normalizeEmail } from './validation';
+import { memberProfileSchema, normalizeEmail } from './validation';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { checkRateLimit } from '@/lib/security/rate-limit';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { logError } from '@/lib/observability/logger';
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAccountDeliveryBatch } from '@/lib/notifications/account-delivery';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 
 export type AccountTokenPurpose = 'migration_activation' | 'password_reset';
 export type AccountLinkTransactionStage = 'after_token_insert' | 'after_outbox_insert' | 'before_commit';
@@ -42,9 +46,7 @@ export async function requestAccountLink(
     const now = new Date();
     const allowed = await checkRateLimit(purpose, email, origin, now);
     const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-    const eligible = allowed && user && (purpose === 'password_reset'
-      ? ['active', 'onboarding', 'migrated_pending'].includes(user.accountState)
-      : user.accountState === 'migrated_pending');
+    const eligible = allowed && user && (purpose === 'password_reset' ? ['active', 'onboarding'].includes(user.accountState) : user.accountState === 'migrated_pending');
     if (eligible) {
       const rawToken = randomBytes(32).toString('base64url');
       const deliveryPayload = encryptDeliveryPayload({ email, token: rawToken });
@@ -52,11 +54,13 @@ export async function requestAccountLink(
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
         if (testFailureAt === 'after_token_insert') throw new Error('injected transaction failure');
-        await tx.insert(accountDeliveryOutbox).values({ ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        await tx.insert(accountDeliveryOutbox).values({ ...communicationHoldFields(), ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
         if (testFailureAt === 'after_outbox_insert') throw new Error('injected transaction failure');
-        await tx.insert(auditLog).values({ action: `account.${purpose}.delivery_queued`, entityId: String(user.id), entityType: 'user' });
+        await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
+      // Dispatch only after the token and outbox entry are committed.
+      dispatchQueuedEmailAfterResponse(() => processAccountDeliveryBatch(1), 'account-delivery');
     }
   } catch (error) {
     // Do not include the identifier, origin, token, exception, or environment in logs.
@@ -85,10 +89,22 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
     tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
     tx.select().from(migrationMap).where(and(eq(migrationMap.newEntityId, String(userId)), eq(migrationMap.legacyType, 'wp_user'), eq(migrationMap.disposition, 'imported'))),
   ]);
+  const importedProfile = memberProfileSchema.safeParse({
+    address1: profile.address1, address2: profile.address2 ?? undefined, city: profile.city,
+    countryCode: profile.countryCode, firstName: profile.firstName, lastName: profile.lastName,
+    postalCode: profile.postalCode, stateProvince: profile.stateProvince,
+    roles: roles.map((role) => ({
+      ...(role.roleType === 'veterinarian' ? {} : {
+        feiId: role.feiId, idocRegion: role.idocRegion,
+        nationalFederationCountryCode: role.nationalFederationCountryCode,
+        officialStatuses: role.officialStatuses,
+      }),
+      ...(role.roleType === 'judge' ? { isTechnicalDelegate: role.isTechnicalDelegate } : {}),
+      roleType: role.roleType,
+    })),
+  });
   const entitlement = entitlements.find(({ source }) => source === 'migration');
-  // Imported values may legitimately be absent. Completeness is enforced by the official profile
-  // form; activation proves only traceability and preserved entitlement, never fabricated data.
-  const foundationValid = mappings.length === 1 && roles.length > 0 && Boolean(entitlement)
+  const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
     && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
     && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
   if (!foundationValid) {
@@ -156,7 +172,7 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     });
     return { status: 'breached_password' as const };
   }
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [record] = await tx.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date()))).limit(1);
     if (!record) return { status: 'invalid' as const };
     if (purpose === 'migration_activation') {
@@ -174,9 +190,11 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     await tx.update(users).set({ passwordHash: await hashPassword(password), passwordSetAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now }).where(eq(users.id, record.userId));
     await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, record.userId), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt)));
     await tx.insert(auditLog).values({ actorId: record.userId, action: `account.${purpose}.completed`, entityId: String(record.userId), entityType: 'user' });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      select id,'password_reset_completed',email,${`password-reset-token:${record.id}`} from idoc.users where id=${record.userId}
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'password_reset_completed',email,${`password-reset-token:${record.id}`} from users where id=${record.userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { status: 'success' as const };
   });
+  if (result.status === 'success' && purpose === 'password_reset') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

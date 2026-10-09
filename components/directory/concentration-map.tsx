@@ -31,11 +31,11 @@ export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
           const width = Math.max((area.memberCount / maxCount) * 260, 4);
           return (
             <g key={area.countryCode}>
-              <text className="fill-muted-foreground text-[10px]" x="0" y={y + barHeight / 2 + 4}>
+              <text className="fill-muted-foreground text-xs" x="0" y={y + barHeight / 2 + 4}>
                 {countryNameForCode(area.countryCode)}
               </text>
               <rect className="fill-gold" height={barHeight - 8} rx="2" width={width} x="120" y={y + 4} />
-              <text className="fill-foreground text-[10px]" x={128 + width} y={y + barHeight / 2 + 4}>
+              <text className="fill-foreground text-xs" x={128 + width} y={y + barHeight / 2 + 4}>
                 {area.memberCount}
               </text>
             </g>
@@ -51,7 +51,7 @@ export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
         <table className="w-full min-w-[24rem] text-left text-sm">
           <caption className="sr-only">Member count by country</caption>
           <thead>
-            <tr className="border-b border-border bg-surface/50 text-[0.68rem] uppercase tracking-[0.16em] text-muted-foreground">
+            <tr className="border-b border-border bg-surface/50 text-xs uppercase tracking-[0.16em] text-muted-foreground">
               <th className="px-6 py-4 font-medium" scope="col">Country</th>
               <th className="px-6 py-4 font-medium" scope="col">Members</th>
             </tr>

@@ -6,6 +6,7 @@ import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InternationalPhoneInput } from '@/components/ui/international-phone-input';
 import { Label } from '@/components/ui/label';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
@@ -41,11 +42,10 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
   const judge = member?.roles.find((role) => role.roleType === 'judge');
   const steward = member?.roles.find((role) => role.roleType === 'steward');
   const official = judge ?? steward;
-  const veterinarian = member?.roles.find((role) => role.roleType === 'veterinarian');
-  const initialClassification: Classification | '' = judge && steward ? 'judge_steward'
-    : ((judge?.roleType ?? steward?.roleType ?? veterinarian?.roleType) as Classification | undefined) ?? '';
-  const [classification, setClassification] = useState<Classification | ''>(initialClassification);
+  const initialClassification: Classification = judge && steward ? 'judge_steward' : ((judge?.roleType ?? steward?.roleType) as Classification | undefined) ?? 'veterinarian';
+  const [classification, setClassification] = useState<Classification>(initialClassification);
 
+  const [phone, setPhone] = useState(str(member?.profile.phone));
   const [countryCode, setCountryCode] = useState(str(member?.profile.countryCode));
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState(official?.nationalFederationCountryCode ?? '');
   // An existing, already-saved value represents a deliberate choice -- editing the street address's
@@ -188,6 +188,14 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
           </fieldset>
 
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
+            <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Contact</legend>
+            <div className="max-w-sm">
+              <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="phone">Phone</Label>
+              <InternationalPhoneInput id="phone" name="phone" onChange={setPhone} value={phone} />
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
             <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Address</legend>
             <div className="max-w-sm">
               <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="countryCode">Country</Label>
@@ -232,7 +240,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
                   <p className="text-xs text-muted-foreground">
                     {autocompleteAvailable ? 'Choose a suggestion to fill Address 2, city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
                   </p>
-                  <p className="mt-0.5 text-right text-[10px] text-gray-400">
+                  <p className="mt-0.5 text-right text-xs text-gray-400">
                     <a className="underline decoration-gray-300 underline-offset-2" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
                   </p>
                 </div>
@@ -276,10 +284,8 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
                 id="classification"
                 name="classification"
                 onChange={(event) => setClassification(event.target.value as Classification)}
-                required
                 value={classification}
               >
-                <option value="">Select</option>
                 <option value="judge">Judge</option>
                 <option value="steward">Steward</option>
                 <option value="judge_steward">Judge + Steward</option>
@@ -288,7 +294,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
             </div>
           </fieldset>
 
-          {classification && classification !== 'veterinarian' ? (
+          {classification !== 'veterinarian' ? (
             <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
               <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Official information</legend>
               <div className="grid gap-4 sm:grid-cols-2">

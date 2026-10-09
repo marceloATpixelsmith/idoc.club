@@ -3,7 +3,8 @@
 import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
-import { parseMemberProfileFormData } from '@/lib/membership/validation';
+import { adminBoardProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
+import { uploadCloudinaryImage } from '@/lib/news/thumbnail';
 import { correctEntitlement, extendMembershipExpiration, reinstateMembership, suspendMembership } from '@/lib/membership/status-actions';
 import { grantApplicationRole, revokeApplicationRole } from '@/lib/membership/role-grants';
 import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/account-suspension';
@@ -15,7 +16,7 @@ async function requireCsrf(formData: FormData): Promise<void> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
 }
 
-type FormState = { error?: string; stepUpRequired?: boolean; success?: string };
+type FormState = { attentionRequired?: boolean; error?: string; stepUpRequired?: boolean; success?: string };
 
 function friendlyError(error: unknown, fallback: string): FormState {
   if (error instanceof Error && error.name === 'ZodError') return { error: 'Review the highlighted fields.' };
@@ -49,7 +50,20 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
   const profileId = Number(formData.get('profileId'));
   const reason = String(formData.get('reason') ?? '');
   try {
-    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { reason });
+    const existingBoardPhotoUrl = String(formData.get('existingBoardPhotoUrl') ?? '').trim();
+    const boardPhoto = formData.get('boardPhoto');
+    let boardPhotoUrl = formData.get('removeBoardPhoto') === '1' ? null : existingBoardPhotoUrl || null;
+    if (boardPhoto instanceof File && boardPhoto.size > 0) {
+      boardPhotoUrl = await uploadCloudinaryImage(boardPhoto, 'idoc/board');
+    }
+    const board = adminBoardProfileSchema.parse({
+      boardFacebookUrl: formData.get('boardFacebookUrl'),
+      boardPhotoUrl,
+      boardSubtitle: formData.get('boardSubtitle'),
+      boardTitle: formData.get('boardTitle'),
+      isBoardMember: formData.get('isBoardMember') === '1',
+    });
+    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, reason });
     return { success: 'Profile updated and audit entry recorded.' };
   } catch (error) {
     if (error instanceof Error && error.message === 'An administrative reason is required for this correction.') return { error: error.message };
@@ -58,27 +72,27 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
 }
 
 export async function suspendMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
-  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be suspended.'); }
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be canceled.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     const result = await suspendMembership(profileId, formData.get('reason'));
     if (result.stripeCancelError) {
-      return { success: `Membership suspended. Warning: could not cancel the Stripe subscription (${result.stripeCancelError}) — cancel it manually.` };
+      return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — end it manually.` };
     }
-    return { success: result.stripeCancelled ? 'Membership suspended and the Stripe subscription cancelled.' : 'Membership suspended.' };
+    return { success: result.stripeCancelled ? 'Membership canceled; access continues to the end of the paid period and the Stripe subscription will not renew.' : 'Membership canceled; access continues to the end of the paid period.' };
   } catch (error) {
-    return friendlyError(error, 'The membership could not be suspended.');
+    return friendlyError(error, 'The membership could not be canceled.');
   }
 }
 
 export async function reinstateMembershipForm(_state: FormState, formData: FormData): Promise<FormState> {
-  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The membership could not be reinstated.'); }
+  try { await requireCsrf(formData); } catch (error) { return friendlyError(error, 'The cancellation could not be reversed.'); }
   const profileId = Number(formData.get('profileId'));
   try {
     await reinstateMembership(profileId, { reason: formData.get('reason'), status: formData.get('status') });
-    return { success: 'Membership reinstated.' };
+    return { success: 'Cancellation reversed.' };
   } catch (error) {
-    return friendlyError(error, 'The membership could not be reinstated.');
+    return friendlyError(error, 'The cancellation could not be reversed.');
   }
 }
 

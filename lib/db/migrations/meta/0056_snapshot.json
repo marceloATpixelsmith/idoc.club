@@ -1,6 +1,6 @@
 {
-  "id": "f7a4b599-2840-4d77-91ee-fc1cf028449b",
-  "prevId": "b5c3a6f0-0d67-4f47-8b1a-6fbca9300555",
+  "id": "a9e8c73d-0190-4ca6-bc69-98c31c9cb94b",
+  "prevId": "d299a285-76c7-4525-83a7-a50987f29d61",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3928,19 +3928,19 @@
           "name": "first_name",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "last_name": {
           "name": "last_name",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "address_1": {
           "name": "address_1",
           "type": "varchar(200)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "address_2": {
           "name": "address_2",
@@ -3952,25 +3952,25 @@
           "name": "city",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "state_province": {
           "name": "state_province",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "postal_code": {
           "name": "postal_code",
           "type": "varchar(30)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "country_code": {
           "name": "country_code",
           "type": "varchar(2)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -4435,6 +4435,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "guest_name": {
+          "name": "guest_name",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "guest_email": {
+          "name": "guest_email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "registration_status": {
           "name": "registration_status",
           "type": "varchar(20)",
@@ -4447,6 +4459,18 @@
           "type": "varchar(30)",
           "primaryKey": false,
           "notNull": true
+        },
+        "payment_method_canonical_id": {
+          "name": "payment_method_canonical_id",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_reference": {
+          "name": "payment_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "stripe_checkout_session_id": {
           "name": "stripe_checkout_session_id",
@@ -4534,42 +4558,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "payment_method_canonical_id": {
-          "name": "payment_method_canonical_id",
-          "type": "varchar(40)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "guest_first_name": {
-          "name": "guest_first_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "guest_last_name": {
-          "name": "guest_last_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "guest_email": {
-          "name": "guest_email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "guest_phone": {
-          "name": "guest_phone",
-          "type": "varchar(40)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "refunded_at": {
-          "name": "refunded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -4590,6 +4578,28 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "seminar_registrations_seminar_guest_email_unique": {
+          "name": "seminar_registrations_seminar_guest_email_unique",
+          "columns": [
+            {
+              "expression": "seminar_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"guest_email\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"idoc\".\"seminar_registrations\".\"profile_id\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4629,28 +4639,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "seminar_registrations_seminar_guest_email_unique": {
-          "name": "seminar_registrations_seminar_guest_email_unique",
-          "columns": [
-            {
-              "expression": "seminar_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lower(\"guest_email\")",
-              "isExpression": true,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {},
-          "where": "\"idoc\".\"seminar_registrations\".\"profile_id\" is null"
         }
       },
       "foreignKeys": {
@@ -4682,20 +4670,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "seminar_registrations_marked_paid_by_user_id_users_id_fk": {
-          "name": "seminar_registrations_marked_paid_by_user_id_users_id_fk",
-          "tableFrom": "seminar_registrations",
-          "tableTo": "users",
-          "schemaTo": "idoc",
-          "columnsFrom": [
-            "marked_paid_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "seminar_registrations_payment_method_canonical_id_seminar_payment_methods_canonical_id_fk": {
           "name": "seminar_registrations_payment_method_canonical_id_seminar_payment_methods_canonical_id_fk",
           "tableFrom": "seminar_registrations",
@@ -4706,6 +4680,20 @@
           ],
           "columnsTo": [
             "canonical_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "seminar_registrations_marked_paid_by_user_id_users_id_fk": {
+          "name": "seminar_registrations_marked_paid_by_user_id_users_id_fk",
+          "tableFrom": "seminar_registrations",
+          "tableTo": "users",
+          "schemaTo": "idoc",
+          "columnsFrom": [
+            "marked_paid_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -4732,7 +4720,7 @@
       "checkConstraints": {
         "seminar_registrations_registration_status_check": {
           "name": "seminar_registrations_registration_status_check",
-          "value": "\"idoc\".\"seminar_registrations\".\"registration_status\" in ('registered', 'canceled', 'refunded')"
+          "value": "\"idoc\".\"seminar_registrations\".\"registration_status\" in ('registered', 'canceled')"
         },
         "seminar_registrations_payment_status_check": {
           "name": "seminar_registrations_payment_status_check",
@@ -4750,9 +4738,9 @@
           "name": "seminar_registrations_checkout_status_check",
           "value": "\"idoc\".\"seminar_registrations\".\"checkout_status\" is null or \"idoc\".\"seminar_registrations\".\"checkout_status\" in ('open', 'complete', 'expired', 'superseded')"
         },
-        "seminar_registrations_identity_check": {
-          "name": "seminar_registrations_identity_check",
-          "value": "(\"idoc\".\"seminar_registrations\".\"profile_id\" is not null and num_nonnulls(\"idoc\".\"seminar_registrations\".\"guest_first_name\",\"idoc\".\"seminar_registrations\".\"guest_last_name\",\"idoc\".\"seminar_registrations\".\"guest_email\",\"idoc\".\"seminar_registrations\".\"guest_phone\") = 0) or (\"idoc\".\"seminar_registrations\".\"profile_id\" is null and num_nonnulls(\"idoc\".\"seminar_registrations\".\"guest_first_name\",\"idoc\".\"seminar_registrations\".\"guest_last_name\",\"idoc\".\"seminar_registrations\".\"guest_email\",\"idoc\".\"seminar_registrations\".\"guest_phone\") = 4)"
+        "seminar_registrations_registrant_identity_check": {
+          "name": "seminar_registrations_registrant_identity_check",
+          "value": "(\"idoc\".\"seminar_registrations\".\"profile_id\" is not null and \"idoc\".\"seminar_registrations\".\"guest_name\" is null and \"idoc\".\"seminar_registrations\".\"guest_email\" is null) or (\"idoc\".\"seminar_registrations\".\"profile_id\" is null and \"idoc\".\"seminar_registrations\".\"guest_name\" is not null and \"idoc\".\"seminar_registrations\".\"guest_email\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -4779,8 +4767,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "seminar_date": {
-          "name": "seminar_date",
+        "start_date": {
+          "name": "start_date",
           "type": "date",
           "primaryKey": false,
           "notNull": true
@@ -4791,9 +4779,21 @@
           "primaryKey": false,
           "notNull": true
         },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
         "end_time": {
           "name": "end_time",
           "type": "time",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "varchar(60)",
           "primaryKey": false,
           "notNull": true
         },
@@ -4809,8 +4809,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "price_cents": {
-          "name": "price_cents",
+        "member_price_cents": {
+          "name": "member_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "non_member_price_cents": {
+          "name": "non_member_price_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -4866,7 +4872,7 @@
               "nulls": "last"
             },
             {
-              "expression": "seminar_date",
+              "expression": "start_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4932,13 +4938,17 @@
           "name": "seminars_capacity_check",
           "value": "\"idoc\".\"seminars\".\"capacity\" > 0"
         },
-        "seminars_price_check": {
-          "name": "seminars_price_check",
-          "value": "\"idoc\".\"seminars\".\"price_cents\" >= 0"
+        "seminars_member_price_check": {
+          "name": "seminars_member_price_check",
+          "value": "\"idoc\".\"seminars\".\"member_price_cents\" >= 0"
         },
-        "seminars_time_order_check": {
-          "name": "seminars_time_order_check",
-          "value": "\"idoc\".\"seminars\".\"end_time\" > \"idoc\".\"seminars\".\"start_time\""
+        "seminars_non_member_price_check": {
+          "name": "seminars_non_member_price_check",
+          "value": "\"idoc\".\"seminars\".\"non_member_price_cents\" >= 0"
+        },
+        "seminars_date_order_check": {
+          "name": "seminars_date_order_check",
+          "value": "\"idoc\".\"seminars\".\"end_date\" > \"idoc\".\"seminars\".\"start_date\" or (\"idoc\".\"seminars\".\"end_date\" = \"idoc\".\"seminars\".\"start_date\" and \"idoc\".\"seminars\".\"end_time\" > \"idoc\".\"seminars\".\"start_time\")"
         }
       },
       "isRLSEnabled": false
@@ -5932,19 +5942,6 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
-        },
-        "legacy_profile_review_required": {
-          "name": "legacy_profile_review_required",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "legacy_profile_reviewed_at": {
-          "name": "legacy_profile_reviewed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -5980,10 +5977,6 @@
         "users_account_state_check": {
           "name": "users_account_state_check",
           "value": "\"idoc\".\"users\".\"account_state\" in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')"
-        },
-        "users_legacy_profile_review_state_check": {
-          "name": "users_legacy_profile_review_state_check",
-          "value": "NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL"
         }
       },
       "isRLSEnabled": false

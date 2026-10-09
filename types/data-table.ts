@@ -13,6 +13,8 @@ declare module "@tanstack/react-table" {
     variant?: FilterVariant;
     allowEmptyFilter?: boolean;
     options?: Option[];
+    exclusiveFilterValues?: string[];
+    lockedBefore?: string;
     range?: [number, number];
     unit?: string;
     icon?: React.ComponentType<React.ComponentProps<"svg">>;

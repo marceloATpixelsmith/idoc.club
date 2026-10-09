@@ -4,12 +4,15 @@ import test from 'node:test';
 
 const source = readFileSync('lib/support/inbox.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0039_support_inbox.sql', 'utf8');
-const memberThread = readFileSync('app/(dashboard)/dashboard/support/[publicId]/page.tsx', 'utf8');
+const otherCategoryMigration = readFileSync('lib/db/migrations/0068_support_other_category.sql', 'utf8');
+const memberThread = readFileSync('components/support/member-support-thread.tsx', 'utf8');
 
 test('support categories, states, body lengths, and opaque identifiers are constrained in both layers', () => {
   for (const value of ['billing_membership', 'seminars', 'technical_support', 'admin_responded', 'member_replied', 'closed']) {
     assert.match(source, new RegExp(value)); assert.match(migration, new RegExp(value));
   }
+  assert.match(source, /'other'/);
+  assert.match(otherCategoryMigration, /'other'/);
   assert.match(migration, /char_length\("body"\) between 1 and 10000/);
   assert.match(migration, /char_length\("subject"\) between 1 and 160/);
   assert.match(migration, /"public_id" uuid DEFAULT gen_random_uuid/);
@@ -17,7 +20,7 @@ test('support categories, states, body lengths, and opaque identifiers are const
 });
 
 test('member-facing support labels match the approved categories and workflow statuses', () => {
-  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
+  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Other', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
     assert.match(source, new RegExp(label.replace('/', '\\/')));
   }
 });
@@ -35,6 +38,10 @@ test('administrator mutations authorize roles and revalidate submitted assignees
   assert.match(source, /values\.map\(resolveEligibleAdministrator\)/);
   assert.match(source, /u\.account_state='active'/);
   assert.match(source, /requireSuperAdmin\(actor\)/);
+});
+
+test('a saved assignment filter whose values no longer resolve to a real administrator falls back to no filter instead of matching nothing', () => {
+  assert.match(source, /const assignedWhere = !assignedValues\.length \|\| !assignedParts\.length \? client`true`/);
 });
 
 test('thread transitions, read sides, chronological order, and idempotency are explicit', () => {
@@ -65,16 +72,16 @@ test('the administrator queue provides Tablecn-style server controls', () => {
   const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
   const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');
   const dataTable = readFileSync('components/data-table/data-table.tsx', 'utf8');
-  const toolbar = readFileSync('components/data-table/data-table-toolbar.tsx', 'utf8');
-  for (const control of ['DataTable', 'DataTableToolbar', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
+  const actionsRow = readFileSync('components/data-table/data-table-actions-row.tsx', 'utf8');
+  for (const control of ['DataTable', 'DataTableToolbar', 'DataTableActionsRow', 'DataTableSortList', 'useDataTable', 'ActionBar']) assert.match(table, new RegExp(control));
   assert.doesNotMatch(table, /DataTableAdvancedToolbar|DataTableFilterList/);
-  assert.match(page, /hasUrlState \? params/);
-  assert.match(page, /preferenceQuery\(saved\)/);
+  assert.match(page, /const saved = await getTablePreferences\('support'\);/);
+  assert.doesNotMatch(page, /hasUrlState/);
   assert.match(table, /pageSizeOptions=\{\[10, 25, 50, 100\]\}/);
-  assert.match(table, /getAll\('column'\)/);
+  assert.match(table, /initialVisibleColumns\.includes\(column\)/);
   assert.match(table, /resetRowSelection/);
   assert.match(dataTable, /DataTablePagination/);
-  assert.match(toolbar, /DataTableViewOptions/);
+  assert.match(actionsRow, /DataTableViewOptions/);
 });
 
 test('support queue applies advanced operators, multi-value filters, joins, and ordered sorting on the server', () => {
@@ -95,7 +102,11 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
   assert.match(table, /No conversations match this view/);
   assert.match(table, /No support conversations exist/);
   assert.match(table, /persistTablePreferences\('support'/);
-  assert.match(table, /params\.delete\('page'\)/);
+  // The navigation must fire only after the preference write settles -- a fire-and-forget PUT
+  // racing an immediate navigation can read the database before the write commits. It navigates
+  // to the bare pathname (not router.refresh(), which reuses whatever URL is currently shown) so
+  // the one-time `memberEmail` query param is dropped on the admin's first edit here.
+  assert.match(table, /\}\)\.finally\(\(\) => startTransition\(\(\) => router\.replace\(pathname\)\)\);/);
   assert.match(loading, /aria-busy="true"/);
   assert.match(error, /AdminErrorState/);
 });
@@ -103,7 +114,27 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
 test('assignment and workflow audit events exclude support bodies', () => {
   assert.match(source, /support\.assignment\.changed/);
   assert.match(source, /support\.conversation\.closed/);
-  const auditStatements = source.match(/insert into idoc\.audit_log[^;]+/gs) ?? [];
+  const auditStatements = source.match(/insert into audit_log[^;]+/gs) ?? [];
   assert.ok(auditStatements.length >= 2);
   for (const statement of auditStatements) assert.doesNotMatch(statement, /\$\{body\}/);
+});
+
+test('a member can close their own conversation, mirroring the admin workflow action but scoped to a conversation they actually own -- once an administrator\'s fix is confirmed working, the member doesn\'t need an admin to close it out for them', () => {
+  assert.match(source, /export async function setOwnConversationClosed\(publicIdValue: unknown, close: boolean\)/);
+  const fn = source.slice(source.indexOf('export async function setOwnConversationClosed'));
+  assert.match(fn, /const actor = await requireSupportMember\(\);/);
+  assert.match(fn, /where public_id=\$\{publicId\}::uuid and member_user_id=\$\{actor\.id\} for update/);
+  const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
+  assert.match(memberActions, /export async function closeOwnConversation/);
+  assert.match(memberActions, /setOwnConversationClosed\(publicId, true\)/);
+  assert.match(memberThread, /closeOwnConversation/);
+  assert.match(memberThread, /<BackLink href="\/contact">Back to My Support Tickets<\/BackLink>/);
+  assert.match(memberThread, /Close conversation/);
+});
+
+test('the member close action is close-only and never reads a client-supplied direction -- a member submitting the form with a tampered or missing field can\'t reopen their own conversation, since docs/08\'s Support Inbox contract reserves reopening for administrators', () => {
+  const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
+  const fn = memberActions.slice(memberActions.indexOf('export async function closeOwnConversation'));
+  assert.doesNotMatch(fn, /formData\.get\('operation'\)/);
+  assert.doesNotMatch(memberThread, /name="operation"/);
 });

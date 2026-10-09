@@ -13,6 +13,16 @@ How to keep existing recurring subscriptions while adopting the Vercel subscript
 
 Working project document. Update this document when project decisions change.
 
+## Current staging alignment — 3 October 2026
+
+For the cross-domain current-state contract, see [document 28](28-auth-membership-seminar-current-state.md). The current implementation preserves these billing invariants:
+
+- Membership access changes only from verified, idempotent Stripe webhook evidence or an approved audited administrator workflow; browser success redirects are never payment authority.
+- Enabling automatic renewal for an already-paid non-recurring member uses Stripe Checkout `setup` mode to collect payment authorization without an immediate charge. The pending recurring transition is effective on the membership's current `valid_until`, with persisted transition state and stable idempotency.
+- Disabling automatic renewal sets the existing subscription to `cancel_at_period_end`; it does not cancel the membership or shorten paid entitlement.
+- Seminar Checkout uses separate metadata classifications, registration/payment records, and webhook handlers. Seminar payments never update membership entitlement even when amounts or Stripe customers overlap.
+
+
 # 1. Guiding decision
 
 Do not cancel and recreate legitimate existing Stripe subscriptions solely because the new Next.js application uses a different database or a new canonical Product/Price configuration. The new application should attach itself to the existing Stripe objects by storing their identifiers and responding to verified Stripe events.
@@ -168,3 +178,15 @@ authoritative database price, expected amount, EUR currency, paid status, and a 
 mismatch creates reconciliation evidence and never credits the registration. Seminar payments and
 refunds never alter membership entitlement. Stripe E2E fixtures add an unmistakable per-run tag to
 PaymentIntent and Refund metadata; ordinary member objects do not receive test metadata.
+
+## Member communications and billing launch hold
+
+The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting overrides outgoing communications and live billing initiation: only exact `false` releases it. Missing, empty and invalid values block. Validated Stripe test-mode mutations remain available, while all email remains held. Existing local accounting/entitlement rules and read-only reconciliation continue. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for webhook/queue handling, staging isolation, migration verification and explicit operator release.
+
+## Daily Stripe reconciliation: seminar payments
+
+The administrative **Stripe Reconciliation** page combines findings for **Membership** and **Seminar** and offers a category filter. The daily read-only cron scan compares membership subscriptions, subscription schedules, open subscription invoices, and Stripe customers, plus locally recorded online seminar registrations with a Stripe Checkout Session or PaymentIntent reference. Offline bank-transfer/cash registrations are not checked against Stripe.
+
+For each referenced seminar payment, the scan retrieves Stripe Checkout and PaymentIntent evidence and reports a `seminar_payment_conflict` if Stripe reports payment received while the local registration is still awaiting payment, if an unsuccessful payment is marked paid locally, if the settled amount differs from the recorded expected amount, or if the currency differs. A normal open/pending checkout is not a conflict. Refunded, partially refunded, disputed, or charged-back registrations retain their payment history and are not automatically reverted merely because the original Stripe payment succeeded. The scan is **diagnostic only**; staff should verify discrepancies in Stripe and the Seminar Registrations admin area before making manual corrections.
+
+The daily scan replaces only its own `seminar_payment_conflict` findings tagged `details.source = daily_seminar_scan` on successful completion. Existing findings from Stripe webhooks, including refund conflicts, missing refunds, disputes, chargebacks, and other seminar payment conflicts, are retained. If Stripe retrieval fails, the scan records a failed run and keeps the prior snapshot rather than falsely reporting no issues. The current scan checks registrations with stored Stripe identifiers; it is **not** a complete discovery audit for Stripe payments with no local registration or stored Stripe reference.

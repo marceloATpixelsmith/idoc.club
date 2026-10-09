@@ -18,13 +18,15 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 12. [Release 1 Verification Matrix](11-release-1-verification-matrix.md)
 13. [Runtime Requirements](12-runtime-requirements.md)
 14. [Canonical Authentication Reference Retrofit](13-canonical-auth-reference-retrofit.md)
-15. [Authentication Security Test Acceptance](20-authentication-security-test-acceptance.md)
-16. [Authentication & Account-Security Control Inventory](21-authentication-security-control-inventory.md)
-17. [Canonical Auth Contract Evidence Matrix](22-canonical-auth-evidence-matrix.md)
-18. [Authentication and Security Remediation Backlog](23-auth-security-remediation-backlog.md)
-19. [Membership Billing and Access Remediation](25-membership-billing-and-access-remediation.md)
+15. [Canonical MFA Runtime Adoption](14-canonical-mfa-runtime-adoption.md)
+16. [Authentication Security Test Acceptance](20-authentication-security-test-acceptance.md)
+17. [Authentication & Account-Security Control Inventory](21-authentication-security-control-inventory.md)
+18. [Canonical Auth Contract Evidence Matrix](22-canonical-auth-evidence-matrix.md)
+19. [Authentication and Security Remediation Backlog](23-auth-security-remediation-backlog.md)
+20. [Membership Billing and Access Remediation](25-membership-billing-and-access-remediation.md)
+21. [Auth, Membership Billing, and Seminar Registration — Current Staging Alignment](28-auth-membership-seminar-current-state.md)
 
-Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult document 13, document 21, document 22, document 23, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Document 22 is the current authoritative canonical-ID-keyed status source; document 23 owns the actionable non-verified closure backlog; document 21 retains descriptive detail and its pull-request changelog but its own per-requirement status claims should be read as historical narrative. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
+Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult documents 13 and 14, document 21, document 22, document 23, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Document 22 is the current authoritative canonical-ID-keyed status source; document 23 owns the actionable non-verified closure backlog; document 21 retains descriptive detail and its pull-request changelog but its own per-requirement status claims should be read as historical narrative. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
 
 ## Document ownership
 
@@ -44,15 +46,18 @@ Start with document 08 when planning the next development phase, then consult th
 | Release 1 implementation/evidence matrix | 11 |
 | Runtime/platform requirements | 12 |
 | Canonical authentication retrofit, version baseline, and remaining auth gaps | 13 |
+| Canonical MFA runtime adoption and IDOC MFA adaptation | 14 |
 | Authentication/account-security automated acceptance gate | 20 |
 | Authentication/account-security control-by-control traceability matrix | 21 |
 | Current canonical-ID-keyed authentication evidence matrix (authoritative status) | 22 |
 | Actionable authentication/security gap and evidence-closure backlog | 23 |
 | Reopened membership billing/access implementation and acceptance backlog | 25 |
+| Cross-domain current-state alignment for auth, membership billing/access, and seminar registration | 28 |
+| Member communications and live billing launch hold, release and rollback runbook | 27 |
 
 ## Maintenance rule
 
-Any code change that affects membership rules, fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing must update the governing Markdown document in the same pull request.
+Any code change that affects membership rules, fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing must update the governing Markdown document in the same pull request. A change that crosses authentication, membership billing/access, or seminar registration boundaries must also update document 28 so the shared current-state contract remains aligned.
 
 Unresolved items must be labeled `Decision required`. Once IDOC approves a decision, replace that marker with the approved rule and update every dependent document in the same pull request. The current approved policy set is recorded in document 02 and reflected in document 08.
 

@@ -18,7 +18,7 @@ test('provider readiness is proven by isolated test-mode Customer and Product ob
 
   for (const row of rows) {
     const customer = await stripe.customers.retrieve(row.external_customer_id);
-    expect(customer.deleted).toBe(false);
+    expect(customer.deleted ?? false).toBe(false); // Stripe omits `deleted` for live Customers
     if (!customer.deleted) {
       expect(customer.livemode).toBe(false);
       expect(customer.metadata.fixture).toBe(row.fixture_key);
@@ -27,7 +27,7 @@ test('provider readiness is proven by isolated test-mode Customer and Product ob
   }
 
   const product = await stripe.products.retrieve(process.env.STRIPE_MEMBERSHIP_PRODUCT_ID as string);
-  expect(product.deleted).toBe(false);
+  expect(product.deleted ?? false).toBe(false);
   if (!product.deleted) {
     expect(product.livemode).toBe(false);
     expect(product.active).toBe(true);

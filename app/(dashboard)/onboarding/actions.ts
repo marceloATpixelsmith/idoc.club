@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createOwnMemberProfile } from '@/lib/membership/data-access';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
+import { memberPhoneSchema } from '@/lib/membership/validation';
 
 export async function completeOnboarding(_state: { error?: string }, formData: FormData) {
   try {
@@ -11,6 +12,8 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Your session security check failed.' };
   }
+  const phone = memberPhoneSchema.safeParse(formData.get('phone'));
+  if (!phone.success) return { error: 'Enter a valid international phone number.' };
   const kind = String(formData.get('classification'));
   const shared = {
     feiId: formData.get('feiId'), idocRegion: formData.get('idocRegion'),
@@ -23,7 +26,7 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
   try {
     await createOwnMemberProfile({
       address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'),
-      countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'),
+      countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: phone.data,
       postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince'),
     }, {
       keepUpdated: formData.get('keepUpdated') === 'on',

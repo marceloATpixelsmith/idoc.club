@@ -8,7 +8,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const article = await getPublicArticleBySlug(slug);
+  const article = await getPublicArticleBySlug(slug, 'news');
   if (!article) return { title: 'Article not found — IDOC News' };
   const title = `${String(article.title)} — IDOC News`;
   const description = article.subtitle ? String(article.subtitle) : 'An update from the International Dressage Officials Club.';
@@ -17,7 +17,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'article', publishedTime: new Date(String(article.publication_date)).toISOString() },
+    openGraph: {
+      title, description, url: canonical, type: 'article',
+      publishedTime: new Date(String(article.publication_date)).toISOString(),
+      images: article.thumbnail_url ? [{ url: String(article.thumbnail_url) }] : undefined,
+    },
   };
 }
 
@@ -27,9 +31,13 @@ export default async function NewsArticlePage({ params }: Props) {
   if (!article) notFound();
   return (
     <ArticleView
+      articleType="news"
+      backHref="/news"
+      backLabel="Back to News"
       contentHtml={String(article.content_html)}
       publicationDate={String(article.publication_date)}
       subtitle={article.subtitle ? String(article.subtitle) : null}
+      thumbnailUrl={article.thumbnail_url ? String(article.thumbnail_url) : null}
       title={String(article.title)}
     />
   );

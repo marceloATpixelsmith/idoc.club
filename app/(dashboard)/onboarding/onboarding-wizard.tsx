@@ -5,6 +5,7 @@ import type { ChangeEvent, ReactNode } from 'react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InternationalPhoneInput } from '@/components/ui/international-phone-input';
 import { Label } from '@/components/ui/label';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
@@ -50,6 +51,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
   const [detailsComplete, setDetailsComplete] = useState(false);
   const detailsFormRef = useRef<HTMLFormElement>(null);
 
+  const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('');
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState('');
   const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
@@ -100,7 +102,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
       window.clearTimeout(autofillDelay);
       window.removeEventListener('pageshow', syncReadiness);
     };
-  }, [address1, city, classification, countryCode, idocRegion, nationalFederationCountryCode, postalCode, stateProvince, step]);
+  }, [address1, city, classification, countryCode, idocRegion, nationalFederationCountryCode, phone, postalCode, stateProvince, step]);
 
   useEffect(() => {
     const query = address1.trim();
@@ -234,6 +236,11 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
           </div>
         </div>
 
+        <div>
+          <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="phone">Phone</Label>
+          <InternationalPhoneInput id="phone" name="phone" onChange={setPhone} required value={phone} />
+        </div>
+
         <fieldset className="space-y-4 border-0 p-0">
           <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">ADDRESS</legend>
           <div>
@@ -279,7 +286,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
                 <p className="text-xs text-muted-foreground">
                   {autocompleteAvailable ? 'Choose a suggestion to fill Address 2, city, region, and postal code automatically, or enter the address manually.' : 'Address autocomplete is unavailable right now. You can still enter the address manually.'}
                 </p>
-                <p className="mt-0.5 text-right text-[10px] text-gray-400">
+                <p className="mt-0.5 text-right text-xs text-gray-400">
                   <a className="underline decoration-gray-300 underline-offset-2" href="https://www.geoapify.com/" rel="noreferrer" target="_blank">Powered by Geoapify</a>
                 </p>
               </div>

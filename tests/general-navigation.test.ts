@@ -39,7 +39,8 @@ test('dashboard navigation uses the shared logged-out Member Login fallback', ()
 test('an already-open protected page leaves for sign-in when its shared identity revalidates to null', () => {
   assert.match(dashboardShell, /<ProtectedSessionRedirect initiallySignedIn=\{navAccess\.signedIn\} \/>/);
   assert.match(protectedSessionRedirect, /\['\/dashboard', '\/admin', '\/onboarding'\]/);
-  assert.match(protectedSessionRedirect, /mutate<PublicUser \| null>\('\/api\/user'\)/);
+  assert.match(protectedSessionRedirect, /fetch\('\/api\/user', \{ cache: 'no-store' \}\)/);
+  assert.match(protectedSessionRedirect, /mutate\('\/api\/user', user, \{ revalidate: false \}\)/);
   assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
   assert.match(protectedSessionRedirect, /window\.location\.replace\('\/sign-in'\)/);
   assert.match(protectedSessionRedirect, /addEventListener\('focus'/);
@@ -67,8 +68,14 @@ test('the shared menu drops My Dashboard, keeping only the conditional Admin Das
   assert.match(menu, /href="\/admin"/);
 });
 
-test('the header exposes a My IDOC dropdown of the dashboard subpages (including Support), gated on entitlement -- falling back to My Membership for a signed-in member who is not yet entitled', () => {
-  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} memberSupport=\{memberSupport\} pathname=\{pathname\} \/>/);
+test('the About landing submenu item is active only on its exact route', () => {
+  assert.match(header, /function isAboutItemActive\(pathname: string, href: string\)/);
+  assert.match(header, /href === '\/about' \? pathname === href : isActive\(pathname, href\)/);
+  assert.match(header, /<NavDropdown href="\/about" isItemActive=\{isAboutItemActive\}/);
+});
+
+test('the header exposes My IDOC dashboard subpages, excluding Support, and falls back to My Membership before entitlement', () => {
+  assert.match(header, /signedIn && <MyIdocNav entitled=\{entitled\} pathname=\{pathname\} \/>/);
   assert.match(header, /label="My IDOC"/);
   assert.match(header, /href="\/dashboard\/membership"/);
   assert.match(header, /from '@\/lib\/navigation\/dashboard-nav'/);
@@ -80,15 +87,9 @@ test('Contact is a plain nav item, never swapped for Support', () => {
   assert.doesNotMatch(header, /'\/dashboard\/support' : '\/contact'/);
 });
 
-test('Contact is hidden for every signed-in, entitled account (ordinary members and privileged administrators alike) -- never for a signed-out visitor or a signed-in account with no other way back in (onboarding/unpaid)', () => {
-  const desktopContactBlock = header.slice(header.indexOf('<MyIdocNav '), header.indexOf('<span className="text-border"'));
-  assert.match(desktopContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
-  assert.match(desktopContactBlock, /href=\{contactLink\.href\}/);
-
-  const mobilePaymentFallback = header.lastIndexOf('href="/dashboard/membership"');
-  const mobileContactBlock = header.slice(mobilePaymentFallback, header.indexOf('facebook.com/groups', mobilePaymentFallback));
-  assert.match(mobileContactBlock, /\{\(!signedIn \|\| !entitled\) && \(/);
-  assert.match(mobileContactBlock, /href=\{contactLink\.href\}/);
+test('Contact is present for signed-in and signed-out visitors', () => {
+  assert.match(header, /<Link href=\{contactLink\.href\} className=\{navClassName/);
+  assert.match(header, /href=\{contactLink\.href\}[\s\S]{0,120}onClick=\{\(\) => setOpen\(false\)\}/);
 });
 
 test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
@@ -108,14 +109,12 @@ test('Membership is hidden from the top nav once signed in -- a member already h
   assert.doesNotMatch(header, /nav\.slice\(1\)\.map/);
 });
 
-test('Support lives in both the dashboard sidebar and the header My IDOC dropdown, hidden from privileged administrators in either', () => {
-  assert.match(dashboardTabs, /LifeBuoy/);
-  assert.match(dashboardTabs, /'\/dashboard\/support': LifeBuoy/);
+test('Support is not part of the My IDOC sidebar or dropdown', () => {
   const dashboardNav = readFileSync('lib/navigation/dashboard-nav.ts', 'utf8');
-  assert.match(dashboardNav, /\{ href: '\/dashboard\/support', label: 'Support\/Contact' \}/);
-  assert.match(dashboardNav, /export function dashboardNavItems\(memberSupport: boolean\)/);
-  assert.match(dashboardTabs, /dashboardNavItems\(memberSupport\)/);
-  assert.match(header, /dashboardNavItems\(memberSupport\)/);
+  assert.doesNotMatch(dashboardNav, /dashboard\/support/);
+  assert.doesNotMatch(dashboardTabs, /Support|LifeBuoy|supportUnread/);
+  assert.match(dashboardTabs, /dashboardNavItems\(\)/);
+  assert.match(header, /dashboardNavItems\(\)/);
 });
 
 test('every dashboard nav item URL matches its label and no entry is a prefix of another, in both the sidebar and the header dropdown, so a dashboard subpage never highlights two items at once', () => {
@@ -168,10 +167,8 @@ test('the menu supports mouse hover plus keyboard, click, and touch operation', 
 test('sign out retains the CSRF-protected action and clears shared user state', () => {
   assert.match(menu, /signOut\(readCsrfTokenFromDocumentCookie\(\)\)/);
   assert.match(menu, /mutate\('\/api\/user'\)/);
-  assert.match(menu, /router\.push\('\/'\)/);
-});
-
-test('navigation loading remains scoped to dashboard content and absent from public pages', () => {
-  assert.match(dashboardShell, /<NavigationLoadingProvider>\{children\}<\/NavigationLoadingProvider>/);
-  assert.doesNotMatch(marketingLayout, /NavigationLoading/);
+  assert.match(menu, /pathname === '\/admin'.*pathname\.startsWith\('\/admin\/'\)/s);
+  assert.match(menu, /pathname === '\/dashboard'.*pathname\.startsWith\('\/dashboard\/'\)/s);
+  assert.match(menu, /router\.push\('\/sign-in'\)/);
+  assert.match(menu, /router\.refresh\(\)/);
 });

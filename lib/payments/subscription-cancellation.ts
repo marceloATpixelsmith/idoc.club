@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { subscriptions } from '@/lib/db/schema';
 import { OPEN_SUBSCRIPTION_STATUSES } from './pricing';
-import { cancelMemberSubscription, type CancellationStripeClient } from './stripe';
+import { cancelMemberSubscriptionAtPeriodEnd, type CancellationStripeClient } from './stripe';
 
 async function findOpenSubscription(profileId: number) {
   const [subscription] = await db.select({ externalSubscriptionId: subscriptions.externalSubscriptionId })
@@ -14,7 +14,7 @@ async function findOpenSubscription(profileId: number) {
   return subscription ?? null;
 }
 
-// Best-effort: cancels an open Stripe subscription if one exists, never throws. Does not write
+// Best-effort: ends an open Stripe subscription at the end of the paid period if one exists, never throws. Does not write
 // subscriptions.status — the customer.subscription.deleted webhook this triggers owns that write.
 // Shared by lib/membership/status-actions.ts's admin suspendMembership and data-access.ts's
 // self-service cancelOwnMembership, which need identical behavior. Lives in its own module (rather
@@ -26,7 +26,7 @@ export async function cancelOpenSubscriptionIfAny(profileId: number, testStripeC
   const subscription = await findOpenSubscription(profileId);
   if (!subscription) return { stripeCancelled: false };
   try {
-    await cancelMemberSubscription(subscription.externalSubscriptionId, testStripeClient);
+    await cancelMemberSubscriptionAtPeriodEnd(subscription.externalSubscriptionId, testStripeClient);
     return { stripeCancelled: true };
   } catch (error) {
     return { stripeCancelError: error instanceof Error ? error.message : 'Unknown Stripe error.', stripeCancelled: false };

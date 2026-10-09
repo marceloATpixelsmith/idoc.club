@@ -56,5 +56,5 @@ test('deliverNextAuthSecurityNotification types created_at as a string and conve
   const fnBody = delivery.slice(delivery.indexOf('export async function deliverNextAuthSecurityNotification'), delivery.indexOf('export async function processAuthSecurityNotificationBatch'));
   assert.match(fnBody, /created_at: string;/);
   assert.doesNotMatch(fnBody, /created_at: Date;/);
-  assert.match(fnBody, /new Date\(record\.created_at\)\.toISOString\(\)/);
+  assert.match(fnBody, /formatDateTime\(record\.created_at\)/);
 });

@@ -52,10 +52,10 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 
 async function takeBucket(purpose: string, identifierHash: string, originHash: string, windowStartedAt: Date, max: number) {
   const rows = await db.execute<{ request_count: number }>(sql`
-    insert into idoc.account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
+    insert into account_request_limits (purpose, identifier_hash, origin_hash, window_started_at)
     values (${purpose}, ${identifierHash}, ${originHash}, ${windowStartedAt.toISOString()})
     on conflict (purpose, identifier_hash, origin_hash, window_started_at)
-    do update set request_count = idoc.account_request_limits.request_count + 1, updated_at = now()
+    do update set request_count = account_request_limits.request_count + 1, updated_at = now()
     returning request_count
   `);
   return Boolean(rows[0] && rows[0].request_count <= max);

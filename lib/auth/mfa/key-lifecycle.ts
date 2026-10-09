@@ -16,7 +16,7 @@ type Sql = ReturnType<typeof postgres>;
 // MFA_TOTP_COMPROMISED_KEY_IDS) -- the app cannot infer either from data alone. retired is also
 // operator-declared (MFA_TOTP_RETIRED_KEY_IDS: "I have confirmed this key is fully decommissioned"),
 // but unlike compromised it is not blindly trusted: this function cross-checks it against the real
-// idoc.mfa_factors table and flags retiredWithActiveFactors rather than silently believing a stale
+// mfa_factors table and flags retiredWithActiveFactors rather than silently believing a stale
 // or mistaken declaration. pending and retiring are NOT operator-declared -- they are derived
 // directly from live factor usage, since that is knowable without any additional persisted history:
 // a non-active, non-compromised, non-retired key with zero referencing factors has never been
@@ -27,7 +27,7 @@ export type MfaEncryptionKeyState = 'pending' | 'active' | 'retiring' | 'retired
 export type MfaEncryptionKeyLifecycle = {
   keyId: string;
   state: MfaEncryptionKeyState;
-  /** Count of idoc.mfa_factors rows *still live* (status 'pending', 'active', or 'disabled' -- the
+  /** Count of mfa_factors rows *still live* (status 'pending', 'active', or 'disabled' -- the
    * same set revokeFactor() in store.ts treats as revokable, i.e. not yet in a terminal state)
    * currently encrypted under this key ID. Deliberately excludes 'revoked'/'replaced' rows: those
    * are historical and permanently done, so a key that only such rows still reference has genuinely
@@ -54,7 +54,7 @@ export async function mfaEncryptionKeyLifecycle(
 ): Promise<MfaEncryptionKeyLifecycle[]> {
   const rows = await sql<{ encryptionKeyId: string; factorCount: string }[]>`
     select encryption_key_id as "encryptionKeyId", count(*)::text as "factorCount"
-    from idoc.mfa_factors
+    from mfa_factors
     where factor_type = 'totp' and encryption_key_id is not null and status in ('pending', 'active', 'disabled')
     group by encryption_key_id
   `;

@@ -29,6 +29,7 @@ interface DataTableFacetedFilterProps<TData, TValue> {
   title?: string;
   options: Option[];
   multiple?: boolean;
+  exclusiveValues?: string[];
 }
 
 export function DataTableFacetedFilter<TData, TValue>({
@@ -36,12 +37,54 @@ export function DataTableFacetedFilter<TData, TValue>({
   title,
   options,
   multiple,
+  exclusiveValues = [],
 }: DataTableFacetedFilterProps<TData, TValue>) {
   const [open, setOpen] = React.useState(false);
 
   const columnFilterValue = column?.getFilterValue();
+  const committedValues = React.useMemo(
+    () => (Array.isArray(columnFilterValue) ? columnFilterValue : []),
+    [columnFilterValue],
+  );
+  // In multiple mode, checking a box only updates this draft -- the column filter (and the URL/query
+  // it drives) is committed once when the popover closes, so picking several options doesn't refetch
+  // after every click.
+  const [draftValues, setDraftValues] = React.useState<string[]>(committedValues);
+  // Re-sync whenever the committed value changes while the popover is open (e.g. browser
+  // back/forward navigating the URL out from under an open popover), not just on open -- otherwise
+  // closing would commit the now-stale draft and silently revert that navigation.
+  React.useEffect(() => {
+    if (open) setDraftValues(committedValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- committedValues is a derived array; its content, not identity, should drive this.
+  }, [column, open, columnFilterValue]);
   const selectedValues = new Set(
-    Array.isArray(columnFilterValue) ? columnFilterValue : [],
+    multiple && open ? draftValues : committedValues,
+  );
+
+  // A toolbar-level Reset button lives outside this popover, so clicking it while the popover is
+  // open is itself an "outside" interaction. Radix's outside-dismiss detection can run before
+  // Reset's own click reaches it, and onOpenChange below would then commit a draft (e.g. an
+  // unchecked-to-empty selection) that Reset was about to clear anyway -- if that commit removes
+  // the toolbar's last active filter, Reset can unmount before its own click is processed, dropping
+  // the click entirely instead of clearing everything. Skip the auto-dismiss for a click that lands
+  // on Reset; closing (and any real commit) still happens via the popover's own controls.
+  const onPointerDownOutside: React.ComponentProps<typeof PopoverContent>["onPointerDownOutside"] = (event) => {
+    if ((event.target as Element | null)?.closest('[aria-label="Reset filters"]')) event.preventDefault();
+  };
+
+  const onOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (!next && multiple) {
+        const changed =
+          draftValues.length !== committedValues.length ||
+          draftValues.some((value) => !committedValues.includes(value));
+        if (changed) {
+          column?.setFilterValue(draftValues.length ? draftValues : undefined);
+        }
+      }
+      setOpen(next);
+    },
+    [column, committedValues, draftValues, multiple],
   );
 
   const onItemSelect = React.useCallback(
@@ -52,34 +95,38 @@ export function DataTableFacetedFilter<TData, TValue>({
         const newSelectedValues = new Set(selectedValues);
         if (isSelected) {
           newSelectedValues.delete(option.value);
+        } else if (exclusiveValues.includes(option.value)) {
+          newSelectedValues.clear();
+          newSelectedValues.add(option.value);
         } else {
+          exclusiveValues.forEach((value) => newSelectedValues.delete(value));
           newSelectedValues.add(option.value);
         }
-        const filterValues = Array.from(newSelectedValues);
-        column.setFilterValue(filterValues.length ? filterValues : undefined);
+        setDraftValues(Array.from(newSelectedValues));
       } else {
         column.setFilterValue(isSelected ? undefined : [option.value]);
         setOpen(false);
       }
     },
-    [column, multiple, selectedValues],
+    [column, exclusiveValues, multiple, selectedValues],
   );
 
   const onReset = React.useCallback(
     (event?: React.MouseEvent) => {
       event?.stopPropagation();
+      setDraftValues([]);
       column?.setFilterValue(undefined);
     },
     [column],
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button
           data-idoc-table-control
           variant="outline"
-          className="border-dashed font-normal"
+          className="h-8 border-dashed font-normal"
         >
           {selectedValues?.size > 0 ? (
             <div
@@ -135,8 +182,9 @@ export function DataTableFacetedFilter<TData, TValue>({
       </PopoverTrigger>
       <PopoverContent
         data-idoc-table-panel
-        className="w-50 p-0"
+        className="w-max max-w-[calc(100vw-2rem)] p-0"
         align="start"
+        onPointerDownOutside={onPointerDownOutside}
       >
         <Command>
           <CommandInput placeholder={title} />
@@ -163,7 +211,7 @@ export function DataTableFacetedFilter<TData, TValue>({
                       <Check />
                     </div>
                     {option.icon && <option.icon />}
-                    <span className="truncate">{option.label}</span>
+                    <span className="whitespace-normal break-words">{option.label}</span>
                     {option.count && (
                       <span className="ml-auto font-mono text-xs">
                         {option.count}

@@ -1,8 +1,13 @@
 'use server';
 
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
+
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { z } from 'zod';
 import { passwordEntrySchema, passwordSchema } from '@/lib/auth/password-policy';
 import { redirect } from 'next/navigation';
+import { setUiFlash } from '@/lib/ui/flash-state';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
@@ -42,7 +47,7 @@ async function canonicalSession(userId: number) {
 }
 
 async function audit(userId: number, action: string, reason: string) {
-  await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+  await db.execute(sql`insert into audit_log (actor_id, action, entity_type, entity_id, reason)
     values (${userId}, ${action}, 'user', ${String(userId)}, ${reason})`);
 }
 
@@ -144,6 +149,8 @@ export const disconnectGoogleIdentity = validatedActionWithUser(
     if (!(await comparePasswords(currentPassword, user.passwordHash))) {
       return { error: 'Current password is incorrect.' };
     }
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+
     const result = await unlinkGoogleIdentity({
       userId: String(user.id),
       freshEvidence: createImmediateGoogleUnlinkFreshEvidence(user.id),
@@ -218,10 +225,10 @@ export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
         updatedAt: now,
       }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });
       if (!saved) throw new Error('Your account changed. Sign in again.');
-      await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      await tx.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
         values(${user.id},'account.password.created','user',${String(user.id)},'google-disconnect-password-creation')`);
-      await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-        values(${user.id},'password_changed',${user.email},${`password-created:${user.id}:${user.sessionVersion + 1}`})
+      await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+        values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_changed',${user.email},${`password-created:${user.id}:${user.sessionVersion + 1}`})
         on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     });
 
@@ -236,9 +243,13 @@ export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
     // validatedActionWithUser on the retry rather than failing gracefully.
     await consumeFreshStepUp();
     await clearSession();
-    if (result.status === 'unlinked' || result.status === 'not-linked') redirect('/sign-in?password=created');
+    if (result.status === 'unlinked' || result.status === 'not-linked') {
+      await setUiFlash('password-created', '/sign-in');
+      redirect('/sign-in');
+    }
     // Google stays connected; the member signs back in with the new password they just saved and
     // retries disconnecting from a fresh session.
-    redirect('/sign-in?password=created&google=unlink-failed');
+    await setUiFlash('google-unlink-failed', '/sign-in');
+    redirect('/sign-in');
   },
 );

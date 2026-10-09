@@ -1,16 +1,15 @@
 'use client';
 
 import {
-  Bell,
   BookOpen,
-  Files,
   Building2,
-  CreditCard,
+  ClipboardList,
   FileDown,
   GraduationCap,
   Headphones,
   LayoutDashboard,
   LineChart,
+  Mail,
   Menu,
   Settings,
   ShieldCheck,
@@ -26,20 +25,19 @@ const SHARED_ITEMS = [
   { href: '/admin', icon: LayoutDashboard, label: 'Overview' },
   { href: '/admin/members', icon: Users, label: 'Members' },
   { href: '/admin/revenue', icon: LineChart, label: 'Revenue' },
-  { href: '/admin/payments', icon: CreditCard, label: 'Manual payments' },
   { href: '/admin/exports', icon: FileDown, label: 'Exports' },
   { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
-  { href: '/admin/notifications', icon: Bell, label: 'Notifications' },
   { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
   { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
-  { href: '/admin/pages', icon: Files, label: 'Pages' },
   { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars' },
+  { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [
   { href: '/admin/organization', icon: Building2, label: 'Organization settings' },
   { href: '/admin/support/defaults', icon: Settings, label: 'Support defaults' },
   { href: '/admin/security', icon: ShieldCheck, label: 'Security operations' },
+  { href: '/admin/email-previews', icon: Mail, label: 'Email previews' },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -71,14 +69,14 @@ export function AdminNavigation({ isSuperAdmin, unreadCount }: { isSuperAdmin: b
         </button>
       </div>
       <nav aria-label="Admin Dashboard" className={`${open ? 'block' : 'hidden'} px-3 pb-5 lg:block`}>
-        <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Administration</p>
+        <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Administration</p>
         <ul className="space-y-1">
           {items.map((item, index) => {
             const beginsSuperAdminSection = isSuperAdmin && index === SHARED_ITEMS.length;
             const active = activeHref === item.href;
             return (
               <li className={beginsSuperAdminSection ? 'mt-6 border-t border-border pt-6' : ''} key={item.href}>
-                {beginsSuperAdminSection && <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-gold">Super Admin</p>}
+                {beginsSuperAdminSection && <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gold">Super Admin</p>}
                 <Link
                   aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm transition-colors ${active ? 'border-gold bg-background text-foreground shadow-sm' : 'border-transparent text-muted-foreground hover:bg-background/70 hover:text-foreground'}`}
