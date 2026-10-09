@@ -84,6 +84,12 @@ The task order may be changed **only when the user asks** or when a blocking dep
 - For new GitHub or Vercel environment variables, record the **key name, scope and instructions** in the relevant PR/runbook, but never record actual secrets.
 - Every code change: check existing open PRs, target `staging`, use one PR, resolve all comments/checks, then merge under the project's merge rules. **Link the PR**.
 
+### APM metrics implementation in validation (not yet complete)
+
+The Next.js 15 service emits OpenTelemetry HTTP server spans with `http.method` (GET/POST) and internal spans, but the 2026-10-09 New Relic metric-name query yielded only `apm.service.transaction.overview` and `apm.service.transaction.sampled_duration`; `apm.service.transaction.duration` was absent. A follow-up 24-hour span query showed 229 GET server spans, 2 POST server spans and 594 internal spans. The APM overview requires a real HTTP server-duration histogram. The IDOC instrumentation now derives the documented old-semantic-convention `http.server.duration` delta histogram (milliseconds, `http.method`, optionally safe `http.route`, HTTP 5xx status) from existing Node.js server spans and sends OTLP/HTTP JSON to the fixed US New Relic metrics endpoint. It reuses the existing encrypted trace ingest credential; no additional environment variable is needed. It does not export URLs, raw request data, email, session IDs or authentication payloads, and avoids duplicate server spans. Exports are best-effort: tracing continues if metric delivery fails. This approach uses already-exported spans, so accuracy is constrained by span sampling; it is not a substitute for independent unsampled request metrics at scale.
+
+**Verification still required:** merge green CI and review comments, deploy staging, exercise known GET/POST requests, check `SELECT uniques(metricName) FROM Metric WHERE `service.name` = 'idoc.club' SINCE 1 hour ago` for `http.server.duration` and synthesized `apm.service.transaction.duration`, and confirm New Relic APM throughput, latency and error indicators. Only mark task 01 complete when the APM UI is populated; troubleshoot metric-export log warning and OTLP ingestion if not.
+
 ## Progress log
 
 | Date | Result | Evidence / limitation |
