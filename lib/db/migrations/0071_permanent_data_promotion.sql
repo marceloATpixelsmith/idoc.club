@@ -12,8 +12,8 @@ ALTER TABLE "idoc"."news_articles"
   ALTER COLUMN "promotion_key" SET NOT NULL;
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX IF NOT EXISTS "news_articles_promotion_key_unique"
-  ON "idoc"."news_articles" ("promotion_key");
+ALTER TABLE "idoc"."news_articles"
+  ADD CONSTRAINT "news_articles_promotion_key_unique" UNIQUE ("promotion_key");
 --> statement-breakpoint
 
 ALTER TABLE "idoc"."seminars"
@@ -30,8 +30,8 @@ ALTER TABLE "idoc"."seminars"
   ALTER COLUMN "promotion_key" SET NOT NULL;
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX IF NOT EXISTS "seminars_promotion_key_unique"
-  ON "idoc"."seminars" ("promotion_key");
+ALTER TABLE "idoc"."seminars"
+  ADD CONSTRAINT "seminars_promotion_key_unique" UNIQUE ("promotion_key");
 --> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION "idoc"."lock_seminars_for_promotion"()
