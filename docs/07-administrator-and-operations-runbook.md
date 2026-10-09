@@ -1072,6 +1072,8 @@ The QStash schedule catalog is in `lib/background/qstash.ts`: account recovery d
 
 ## New Relic observability and deployment change tracking
 
+**Implementation inventory and next tasks:** [IDOC observability status and task ledger](observability-implementation-status.md). Update this checklist after completing each observability task; this runbook continues to document the operational configuration.
+
 **Scope.** IDOC Next.js runs on Vercel; logs and Vercel-generated spans stream to the US New Relic account (account ID `8600002`). The Vercel project ID for IDOC is `prj_OQ45skGMvZt6XB0ieDfsyqyp7Sb4`. The Render PostgreSQL instance is **shared by multiple applications**; do not treat all Render database logs as IDOC-only telemetry. Sentry remains the application error-monitoring system. Neither these integrations nor the GitHub workflow affect the still-live WordPress site at `idoc.club`.
 
 ### Provisioning and credentials
