@@ -508,7 +508,7 @@ export async function executePromotionPlan(token: string, stagingActorId: number
       const entityType = payload.dataset === 'news' ? 'news_article'
         : payload.dataset === 'seminar' ? 'seminar' : 'organization_settings';
       await rows(tx,
-        "insert into idoc_production.audit_log (actor_id,action,entity_type,entity_id,after_json,reason) values ($1,'admin.data_promotion.applied',$2,$3,$4::jsonb,'approved_staging_data_promotion') returning id",
+        "insert into idoc_production.audit_log (actor_id,action,entity_type,entity_id,after_json,reason) values ($1,'admin.data_promotion.applied',$2,$3,$4::jsonb,'approved_staging_data_promotion')",
         [productionActorId, entityType, String(targetId),
           JSON.stringify({ changedFields, operationId: payload.operationId, sourcePromotionKey: planned.promotionKey })]);
       results.push({ action: planned.action, changedFields, sourceId: planned.sourceId, targetId });
