@@ -591,7 +591,10 @@ test('guest registration completion only flashes success after confirmed paid re
   assert.match(guestActions, /setUiFlash\('seminar-registration-success', targetPath\)/);
   assert.match(guestActions, /return \{ redirectTo: targetPath \}/);
   assert.match(checkout, /createGuestSeminarCheckoutSession[\s\S]*seminar-checkout\/success/);
-  assert.match(flashRoute, /status === 'success' \? 'seminar-registration-success'/);
+  assert.match(flashRoute, /registration_status='registered' and payment_status='paid'/);
+  assert.match(flashRoute, /if \(rows.length === 0\)/);
+  assert.match(flashRoute, /Refresh:/);
+  assert.match(checkout, /session_id=\{CHECKOUT_SESSION_ID\}/);
   assert.match(detailPage, /flash === 'seminar-registration-success'/);
   assert.match(detailPage, /Registration completed successfully/);
 });
