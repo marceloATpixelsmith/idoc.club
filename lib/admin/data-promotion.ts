@@ -501,7 +501,7 @@ export async function executePromotionPlan(token: string, stagingActorId: number
 
     for (const planned of payload.items) {
       await rows(tx, 'select pg_advisory_xact_lock(hashtext($1))', ['idoc-data-promotion-record:' + planned.promotionKey]);
-      const source = await sourceRow(tx, payload.dataset, planned.sourceId);
+      // Lock the authoritative staging row until this cross-schema transaction commits.\n      // The SECURITY DEFINER helper has a fixed table allowlist and never grants staging UPDATE.\n      await rows(tx, 'select idoc_staging.lock_promotion_source($1, $2::bigint)',\n        [payload.dataset, Number(planned.sourceId)]);\n      const source = await sourceRow(tx, payload.dataset, planned.sourceId);
       if (!source) throw new DataPromotionError('A staging record was deleted after preview. Generate a new preview.');
       const target = await targetRow(tx, payload.dataset, source, true);
       const fields = recordFields(payload.dataset);
