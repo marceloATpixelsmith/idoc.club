@@ -11,13 +11,11 @@ const jobs = {
   'account-delivery': '0 9 * * *',
   'seminar-cancellation-resolution': '5 9 * * *',
   'clock-skew-check': '10 9 * * *',
-  'renewal-notice-scan': '0 6 * * *',
-  'renewal-notice-delivery-morning': '15 6 * * *',
-  'renewal-notice-delivery-afternoon': '15 14 * * *',
-  'renewal-notice-delivery-evening': '15 22 * * *',
+  'renewal-notice-scan': '20 7 * * *',
+  'renewal-notice-delivery-morning': '30 7 * * *',
   'reconciliation-scan': '0 7 * * *',
   'data-retention-purge': '0 8 * * *',
-  'news-scheduled-publish': '0 0 * * *',
+  'news-scheduled-publish': '15 8 * * *',
   'new-relic-weekly-health-check': '0 8 * * 1',
 };
 for (const [job, cron] of Object.entries(jobs)) {

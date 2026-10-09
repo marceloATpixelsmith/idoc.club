@@ -19,8 +19,6 @@ const handlers: Record<QStashJob, (request: Request) => Promise<Response>> = {
   'clock-skew-check': clockSkew,
   'renewal-notice-scan': renewalScan,
   'renewal-notice-delivery-morning': renewalDelivery,
-  'renewal-notice-delivery-afternoon': renewalDelivery,
-  'renewal-notice-delivery-evening': renewalDelivery,
   'reconciliation-scan': reconciliation,
   'data-retention-purge': retention,
   'news-scheduled-publish': newsPublishing,
