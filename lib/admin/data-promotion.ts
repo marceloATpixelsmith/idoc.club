@@ -122,6 +122,11 @@ async function verifyBoundary() {
     if (Number(columns[0]?.count ?? 0) !== 4) {
       throw new DataPromotionError('The data promotion schema migration has not been applied to both environments.');
     }
+    const functions = await rows<{ promotion_lock: string | null }>(sql,
+      "select to_regprocedure('idoc_production.lock_seminars_for_promotion()')::text as promotion_lock");
+    if (!functions[0]?.promotion_lock) {
+      throw new DataPromotionError('The Production seminar-promotion lock function is not available.');
+    }
   })();
   try {
     await verification;
@@ -215,16 +220,16 @@ function cloudinaryWarnings(row: Row) {
     : [];
 }
 
-async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId: string, lock = false): Promise<Row | null> {
+async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId: string): Promise<Row | null> {
   if (dataset === 'news') {
     const result = await rows(sql,
-      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_staging.news_articles where id=$1 limit 1' + (lock ? ' for share' : ''),
+      'select id,promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at from idoc_staging.news_articles where id=$1 limit 1',
       [Number(sourceId)]);
     return result[0] ?? null;
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1' + (lock ? ' for share' : ''),
+      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
       [Number(sourceId)]);
     return result[0] ?? null;
   }
@@ -491,9 +496,13 @@ export async function executePromotionPlan(token: string, stagingActorId: number
     const productionActorId = await productionOperator(tx, stagingActorId);
     const results: Array<{ action: string; changedFields: string[]; sourceId: string; targetId: number }> = [];
 
+    if (payload.dataset === 'seminar') {
+      await rows(tx, 'select idoc_production.lock_seminars_for_promotion()');
+    }
+
     for (const planned of payload.items) {
       await rows(tx, 'select pg_advisory_xact_lock(hashtext($1))', ['idoc-data-promotion-record:' + planned.promotionKey]);
-      const source = await sourceRow(tx, payload.dataset, planned.sourceId, true);
+      const source = await sourceRow(tx, payload.dataset, planned.sourceId);
       if (!source) throw new DataPromotionError('A staging record was deleted after preview. Generate a new preview.');
       const target = await targetRow(tx, payload.dataset, source, true);
       const fields = recordFields(payload.dataset);
