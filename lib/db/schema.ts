@@ -421,6 +421,7 @@ export const supportCategoryDefaults = idocSchema.table('support_category_defaul
  * defense-in-depth check never leaks a future-dated article ahead of its scheduled time. */
 export const newsArticles = idocSchema.table('news_articles', {
   id: serial('id').primaryKey(),
+  promotionKey: uuid('promotion_key').notNull().defaultRandom().unique(),
   slug: varchar('slug', { length: 160 }).notNull().unique(),
   title: varchar('title', { length: 200 }).notNull(),
   subtitle: varchar('subtitle', { length: 300 }),
@@ -501,6 +502,7 @@ export const contentPageRevisions = idocSchema.table('content_page_revisions', {
  * lowered to at least the current active-registration count. */
 export const seminars = idocSchema.table('seminars', {
   id: serial('id').primaryKey(),
+  promotionKey: uuid('promotion_key').notNull().defaultRandom().unique(),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').notNull(),
   startDate: date('start_date').notNull(),

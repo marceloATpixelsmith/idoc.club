@@ -498,6 +498,13 @@
       "when": 1791381600000,
       "tag": "0070_news_article_audience",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791566400000,
+      "tag": "0071_permanent_data_promotion",
+      "breakpoints": true
     }
   ]
 }
