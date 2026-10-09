@@ -26,15 +26,30 @@ if (!url)
     throw new Error('Missing IDOC_MIGRATION_DATABASE_URL secret');
 }
 
-const ledgerBaseline = JSON.parse(await readFile('scripts/migration-0071-ledger-baseline.json', 'utf8'));
+const journal = JSON.parse(await readFile('lib/db/migrations/meta/_journal.json', 'utf8'));
+const historicalEntries = journal.entries.filter(entry => entry.idx <= 70);
+if (historicalEntries.length !== 71 || journal.entries.find(entry => entry.idx === 71)?.tag !== '0071_permanent_data_promotion')
+{
+    throw new Error('Unexpected repository migration journal');
+}
 const normalizeRows = rows => rows.map(row => [Number(row.created_at), row.hash]);
-const assertBaseline = (actual, expected, label) =>
+async function expectedHistory(targetSchema)
+{
+    const expected = await Promise.all(historicalEntries.map(async entry =>
+    {
+        const file = await readFile('lib/db/migrations/' + entry.tag + '.sql', 'utf8');
+        const rewritten = rewriteMigrationSql(file, targetSchema);
+        return [entry.when, createHash('sha256').update(rewritten).digest('hex')];
+    }));
+    return expected.sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
+}
+function assertHistory(actual, expected, label)
 {
     if (JSON.stringify(normalizeRows(actual)) !== JSON.stringify(expected))
     {
-        throw new Error(label + ' migration history does not match the frozen 0070 baseline; investigate before migrating');
+        throw new Error(label + ' ledger differs from committed migration journal (timestamps or hashes). Reconcile actual applied SQL and schema before attempting migration 0071');
     }
-};
+}
 
 const sql = postgres(url, { max: 1, connect_timeout: 15, connection: { application_name: 'idoc-promotion-0071-maintenance' } });
 try
@@ -53,13 +68,13 @@ try
     {
         await tx`SELECT pg_advisory_xact_lock(71071, ${schema === 'idoc_staging' ? 1 : 2})`;
         const historical = await tx.unsafe('SELECT created_at, hash FROM "' + schema + '".__drizzle_migrations ORDER BY created_at, hash');
-        assertBaseline(historical, ledgerBaseline[schema], schema);
+        assertHistory(historical, await expectedHistory(schema), schema);
         if (schema === 'idoc_production')
         {
             const stagingLedger = await tx.unsafe('SELECT created_at, hash FROM idoc_staging.__drizzle_migrations ORDER BY created_at, hash');
             const stagingHash = createHash('sha256').update(rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), 'idoc_staging')).digest('hex');
-            const expectedStaging = [...ledgerBaseline.idoc_staging, [1791566400000, stagingHash]];
-            assertBaseline(stagingLedger, expectedStaging, 'idoc_staging (must be migrated first)');
+            const expectedStaging = [...await expectedHistory('idoc_staging'), [1791566400000, stagingHash]];
+            assertHistory(stagingLedger, expectedStaging, 'idoc_staging (must be migrated first)');
             const stagingObjects = await tx.unsafe(`SELECT
                 (SELECT COUNT(*)::integer FROM information_schema.columns WHERE table_schema = 'idoc_staging'
                  AND table_name IN ('news_articles', 'seminars') AND column_name = 'promotion_key'
