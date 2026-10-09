@@ -1,7 +1,7 @@
 # IDOC observability — implemented configuration, verification, and remaining work
 
-**Last reviewed:** 2026-10-09  
-**Scope:** IDOC Next.js on Vercel, Render PostgreSQL, GitHub Actions, New Relic US, Sentry, and relevant external service workflows.  
+**Last reviewed:** 2026-10-09
+**Scope:** IDOC Next.js on Vercel, Render PostgreSQL, GitHub Actions, New Relic US, Sentry, and relevant external service workflows.
 **Execution policy:** Work **one task at a time**, starting with the highest-priority unchecked item. Changes go to `staging` via one PR per coherent task; do not promote to `main` or touch the live WordPress site without explicit direction. Fix CI and review comments before merging. Record completed work and evidence here after **each** task.
 
 This document is the **status ledger and roadmap**. For operational secrets, configuration and troubleshooting see [administrator and operations runbook](07-administrator-and-operations-runbook.md), section **New Relic observability and deployment change tracking**. That runbook is the authority for current implementation mechanics. Do not record tokens, connection URLs, API keys or user data here.
