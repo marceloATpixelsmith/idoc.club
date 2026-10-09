@@ -234,8 +234,7 @@ async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId:
     return result[0] ?? null;
   }
   const result = await rows(sql,
-    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_staging.organization_settings where id=1 limit 1' +
-      (lock ? ' for share' : ''));
+    'select id,address_1,address_2,city,state_province,postal_code,country from idoc_staging.organization_settings where id=1 limit 1');
   return result[0] ?? null;
 }
 
