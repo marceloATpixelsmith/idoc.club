@@ -32,3 +32,19 @@ ALTER TABLE "idoc"."seminars"
 
 CREATE UNIQUE INDEX IF NOT EXISTS "seminars_promotion_key_unique"
   ON "idoc"."seminars" ("promotion_key");
+--> statement-breakpoint
+
+CREATE OR REPLACE FUNCTION "idoc"."lock_seminars_for_promotion"()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $promotion_lock$
+BEGIN
+  LOCK TABLE "idoc"."seminars" IN SHARE ROW EXCLUSIVE MODE;
+END;
+$promotion_lock$;
+--> statement-breakpoint
+
+REVOKE ALL ON FUNCTION "idoc"."lock_seminars_for_promotion"() FROM PUBLIC;
+
