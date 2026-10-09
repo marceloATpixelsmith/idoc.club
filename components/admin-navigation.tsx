@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowUpFromLine,
   BookOpen,
   Building2,
   ClipboardList,
@@ -34,6 +35,7 @@ const SHARED_ITEMS = [
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [
+  { href: '/admin/operations/data-promotion', icon: ArrowUpFromLine, label: 'Data promotion' },
   { href: '/admin/organization', icon: Building2, label: 'Organization settings' },
   { href: '/admin/support/defaults', icon: Settings, label: 'Support defaults' },
   { href: '/admin/security', icon: ShieldCheck, label: 'Security operations' },
