@@ -32,6 +32,24 @@ export async function register() {
         directExporterEnabled: Boolean(traceExporter),
       });
     }
+    if (traceExporter) {
+      // Preserve existing trace delivery and emit one OTLP delta histogram
+      // for the same server spans. Do not duplicate HTTP request spans.
+      const { sendServerDurationMetrics } = await import('./lib/observability/otlp-server-metrics');
+      const originalExport = traceExporter.export.bind(traceExporter);
+      const apiKey = /^api-key=([^,\r\n]+)$/.exec(
+        process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS || ''
+      )?.[1];
+      if (apiKey) {
+        traceExporter.export = (spans, callback) => {
+          // Metrics errors are best-effort and must never suppress traces.
+          const metrics = sendServerDurationMetrics(spans, apiKey);
+          originalExport(spans, result => {
+            void metrics.then(() => callback(result));
+          });
+        };
+      }
+    }
     registerOTel({
       serviceName: 'idoc.club',
       // Override automatic processors to prevent duplicate OTLP export when the drain changes state.
