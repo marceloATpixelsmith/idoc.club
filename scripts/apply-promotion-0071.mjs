@@ -26,6 +26,16 @@ if (!url)
     throw new Error('Missing IDOC_MIGRATION_DATABASE_URL secret');
 }
 
+const ledgerBaseline = JSON.parse(await readFile('scripts/migration-0071-ledger-baseline.json', 'utf8'));
+const normalizeRows = rows => rows.map(row => [Number(row.created_at), row.hash]);
+const assertBaseline = (actual, expected, label) =>
+{
+    if (JSON.stringify(normalizeRows(actual)) !== JSON.stringify(expected))
+    {
+        throw new Error(label + ' migration history does not match the frozen 0070 baseline; investigate before migrating');
+    }
+};
+
 const sql = postgres(url, { max: 1, connect_timeout: 15, connection: { application_name: 'idoc-promotion-0071-maintenance' } });
 try
 {
@@ -42,10 +52,26 @@ try
     await sql.begin(async tx =>
     {
         await tx`SELECT pg_advisory_xact_lock(71071, ${schema === 'idoc_staging' ? 1 : 2})`;
-        const latest = await tx.unsafe('SELECT MAX(created_at)::bigint AS timestamp FROM "' + schema + '".__drizzle_migrations');
-        if (Number(latest[0]?.timestamp) !== 1791381600000)
+        const historical = await tx.unsafe('SELECT created_at, hash FROM "' + schema + '".__drizzle_migrations ORDER BY created_at, hash');
+        assertBaseline(historical, ledgerBaseline[schema], schema);
+        if (schema === 'idoc_production')
         {
-            throw new Error('Unexpected migration history: expected 0070 as latest');
+            const stagingLedger = await tx.unsafe('SELECT created_at, hash FROM idoc_staging.__drizzle_migrations ORDER BY created_at, hash');
+            const stagingHash = createHash('sha256').update(rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), 'idoc_staging')).digest('hex');
+            const expectedStaging = [...ledgerBaseline.idoc_staging, [1791566400000, stagingHash]];
+            assertBaseline(stagingLedger, expectedStaging, 'idoc_staging (must be migrated first)');
+            const stagingObjects = await tx.unsafe(`SELECT
+                (SELECT COUNT(*)::integer FROM information_schema.columns WHERE table_schema = 'idoc_staging'
+                 AND table_name IN ('news_articles', 'seminars') AND column_name = 'promotion_key'
+                 AND is_nullable = 'NO') AS columns,
+                to_regprocedure('idoc_staging.lock_promotion_source(text,bigint)') IS NOT NULL AS source_lock,
+                to_regprocedure('idoc_staging.lock_seminars_for_promotion()') IS NOT NULL AS seminar_lock,
+                to_regclass('idoc_staging.promotion_audit_success') IS NOT NULL AS audit_view`);
+            if (stagingObjects[0].columns !== 2 || !stagingObjects[0].source_lock ||
+                !stagingObjects[0].seminar_lock || !stagingObjects[0].audit_view)
+            {
+                throw new Error('Staging 0071 objects are incomplete; Production migration blocked');
+            }
         }
         const existing = await tx`SELECT
             (SELECT COUNT(*)::integer FROM information_schema.columns
