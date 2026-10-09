@@ -2,6 +2,8 @@
 
 The permanent promotion implementation was merged into `staging` in PR #430, but schema migration 0071 is not yet applied to either live IDOC schema. The **Manual Promotion Migration 0071** GitHub Actions workflow prepares a narrowly scoped, manually triggered migration. It does not run on pushes, PRs, builds, or deployments.
 
+**Availability prerequisite:** GitHub only enables `workflow_dispatch` when the workflow definition exists on the repository's default branch (`main`). Merging this preparation PR into `staging` does not enable the Run workflow button by itself. When the team explicitly authorizes the workflow's inclusion in `main` through the normal staging-to-main promotion process, verify the GitHub Action appears, and choose the `staging` ref when dispatching. Do not deploy or promote `main` solely as an implicit side effect of this PR.
+
 ## Before dispatching
 
 1. Obtain a verified, restorable backup of Render database `ayni_space`, record the backup identifier and UTC time, and independently confirm the restore procedure. The GitHub workflow checks that a reference is supplied; it **cannot verify that the backup exists or is restorable**. Do not enter a fabricated reference.
