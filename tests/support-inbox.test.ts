@@ -114,7 +114,7 @@ test('support queue exposes search, filtered-empty, persistence, pagination rese
 test('assignment and workflow audit events exclude support bodies', () => {
   assert.match(source, /support\.assignment\.changed/);
   assert.match(source, /support\.conversation\.closed/);
-  const auditStatements = source.match(/insert into idoc\.audit_log[^;]+/gs) ?? [];
+  const auditStatements = source.match(/insert into audit_log[^;]+/gs) ?? [];
   assert.ok(auditStatements.length >= 2);
   for (const statement of auditStatements) assert.doesNotMatch(statement, /\$\{body\}/);
 });

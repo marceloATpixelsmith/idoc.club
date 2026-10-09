@@ -131,13 +131,13 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
 // blocks the code-consumption logic but does not stop the request from being sent again -- clearing
 // the cookie in the response doesn't revoke the still-valid, replayable stateless cookie itself, so
 // an attacker (or a replayed/concurrent burst of requests) could keep hitting this branch
-// indefinitely, each call appending a new immutable row with no cap. idoc.account_request_limits
+// indefinitely, each call appending a new immutable row with no cap. account_request_limits
 // (lib/security/rate-limit.ts) already durably records this outcome, bounded to one row per
 // purpose/identifier/15-minute window no matter how many requests hit it -- an operator can query
-// `select * from idoc.account_request_limits where purpose='mfa_recovery_code_verify'` for exactly
+// `select * from account_request_limits where purpose='mfa_recovery_code_verify'` for exactly
 // this evidence without this function needing to duplicate it unboundedly.
 async function auditRecoveryCodeRejected(userId: number) {
-  await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+  await db.execute(sql`insert into audit_log (actor_id, action, entity_type, entity_id, reason)
     values (${userId}, 'auth.mfa.recovery_code.rejected', 'user', ${String(userId)}, 'invalid_or_already_consumed_code')`);
 }
 

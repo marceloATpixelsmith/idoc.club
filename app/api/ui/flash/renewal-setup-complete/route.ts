@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
 
   const [pending] = await client<{ id: number }[]>`
     select rp.id
-    from idoc.renewal_preferences rp
-    join idoc.profiles p on p.id = rp.profile_id
+    from renewal_preferences rp
+    join profiles p on p.id = rp.profile_id
     where p.user_id = ${user.id}
       and rp.pending_mode = 'recurring'
       and rp.transition_state = 'awaiting_setup'

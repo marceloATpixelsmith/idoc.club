@@ -25,11 +25,11 @@ export async function deliverNextStripeCustomerEmailSync(owner: string = randomU
   if (outboxDeliveryHeld(true)) return { status: 'blocked' as const };
   if (testStripe && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const [job] = await db.execute<{ attemptCount: number; id: number; profileId: number }>(sql`
-    with candidate as (select id from idoc.notification_outbox
+    with candidate as (select id from notification_outbox
       where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
       and available_at <= now() and (lease_expires_at is null or lease_expires_at < now())
       order by available_at,id for update skip locked limit 1)
-    update idoc.notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
+    update notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
     from candidate where o.id=candidate.id returning o.id,o.profile_id as "profileId",o.attempt_count as "attemptCount"
   `);
   if (!job) return { status: 'empty' as const };

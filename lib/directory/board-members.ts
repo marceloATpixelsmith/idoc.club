@@ -40,15 +40,15 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
       roles.judge_official_statuses "judgeOfficialStatuses",
       roles.steward_official_statuses "stewardOfficialStatuses",
       roles.is_technical_delegate "isTechnicalDelegate"
-    from idoc.profiles p
-    join idoc.users u on u.id = p.user_id
+    from profiles p
+    join users u on u.id = p.user_id
     left join lateral (
       select
         min(national_federation_country_code) federation,
         coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'judge' and status.value is not null and lower(trim(status.value)) <> 'other'), array[]::varchar[]) judge_official_statuses,
         coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'steward' and status.value is not null), array[]::varchar[]) steward_official_statuses,
         bool_or(coalesce(is_technical_delegate, false)) is_technical_delegate
-      from idoc.professional_roles pr
+      from professional_roles pr
       left join lateral unnest(pr.official_statuses) as status(value) on true
       where pr.profile_id = p.id and pr.effective_to is null
     ) roles on true

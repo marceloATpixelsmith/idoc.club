@@ -41,7 +41,7 @@ test('member bulk archive is protected and permanently delete removes member dat
   assert.match(archiveMembers, /mutation\.begin\(\)/);
   assert.match(bulkDelete, /Permanently delete/);
   assert.match(memberLifecycle, /admin\.member\.permanently_deleted/);
-  assert.match(memberLifecycle, /delete from idoc\.users where id in/);
+  assert.match(memberLifecycle, /delete from users where id in/);
   assert.match(memberLifecycle, /Cancel active billing subscriptions/);
   assert.match(bulkActions, /requireCsrfToken/);
   assert.match(bulkActions, /requireFreshStepUp/);

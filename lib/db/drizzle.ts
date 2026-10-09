@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import dotenv from 'dotenv';
 import { getPostgresConnectionUrl } from './connection-url';
+import { getDatabaseSchemaName } from './schema-name';
 import 'server-only';
 
 dotenv.config();
@@ -18,7 +19,7 @@ const CONNECTION_OPTIONS = {
   idle_timeout: 20,
   max_lifetime: 300,
   connect_timeout: 10,
-  connection: { application_name: 'idoc-club' },
+  connection: { application_name: 'idoc-club', search_path: getDatabaseSchemaName() },
 } as const;
 
 function getClient() { connection ??= postgres(getPostgresConnectionUrl(), CONNECTION_OPTIONS); return connection; }

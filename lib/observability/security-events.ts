@@ -1,7 +1,7 @@
 // AUTH-LOG-001: "Trusted server security events MUST use stable taxonomy, safe correlation,
 // actor/subject/tenant/resource attribution, minimized metadata, and remain distinct from
 // application logs and audit records." Safe correlation (requestId) and the distinctness from
-// idoc.audit_log (a separate, DB-persisted, actor-attributed table for security-sensitive state
+// audit_log (a separate, DB-persisted, actor-attributed table for security-sensitive state
 // *changes* -- see AUTH-AUDIT-001/002) were already true before this file existed. What was missing
 // was a closed, explicit taxonomy: `event` was a bare `string` parameter, so any call site could
 // invent a new name with no compile-time record of what names exist, and each call site supplied

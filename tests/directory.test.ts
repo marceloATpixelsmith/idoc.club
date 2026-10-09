@@ -13,12 +13,12 @@ const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx
 const securityDoc = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /first_name|last_name|email|address|postal_code|latitude|longitude|\blat\b|\blng\b/i);
 });
 
 test('the public map never exposes a raw profile id or sequential database identifier', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /p\.id\b/);
   assert.doesNotMatch(aggregateSource, /profileId|userId/);
 });
@@ -72,8 +72,8 @@ test('the paid member directory rate-limits searches per account and per origin 
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.first_name'), memberDirectorySource.indexOf('${from} where ${where} order'));
   assert.match(select, /coalesce\(u\.email_display, u\.email\) email/);
-  assert.match(memberDirectorySource, /join idoc\.users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state = 'active'/);
-  assert.match(memberDirectorySource, /not exists \(select 1 from idoc\.application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
+  assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state = 'active'/);
+  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
   assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
 });
 

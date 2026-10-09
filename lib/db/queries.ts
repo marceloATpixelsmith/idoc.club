@@ -92,7 +92,7 @@ export async function getUser() {
   return user[0];
 }
 
-/** Powers My Security's Activity card with the member's own real security history -- idoc.audit_log
+/** Powers My Security's Activity card with the member's own real security history -- audit_log
  * rows they themselves caused, restricted to SECURITY_ACTIVITY_LABELS' curated allow-list so this
  * stays a security activity feed rather than a general account-history dump. */
 export async function getActivityLogs() {

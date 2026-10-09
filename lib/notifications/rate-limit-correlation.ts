@@ -14,15 +14,15 @@ import { logWarn } from '@/lib/observability/logger';
 // same identity/origin across consecutive windows, which is the actual shape of a live
 // credential-stuffing or brute-force attempt rather than an ordinary user mistake. This deliberately
 // does not attempt general anomaly detection -- only this one, narrow, real correlation over data
-// this codebase already records in idoc.account_request_limits.
+// this codebase already records in account_request_limits.
 //
 // A Codex review caught that the original version both (a) awaited the actual Brevo send
 // directly inside this function, which checkRateLimit calls on the authentication-adjacent hot path
 // every sign-in/sign-up/password-reset request runs through, and (b) had no durable retry: a
 // transient send failure was only ever logged, never retried. This version enqueues into
-// idoc.operational_alert_outbox (a fast, single indexed insert) and lets the existing
+// operational_alert_outbox (a fast, single indexed insert) and lets the existing
 // lease-and-retry worker (operational-alert-delivery.ts, piggybacked on the account-delivery cron
-// exactly like idoc.auth_security_notification_outbox already is) perform the actual network call
+// exactly like auth_security_notification_outbox already is) perform the actual network call
 // off the request path entirely. The outbox's own dedupe_key unique index -- scoped to this purpose,
 // bucket, and hour-long cooldown window -- replaces the previous bespoke, race-prone
 // check-then-write cooldown mechanism with a single atomic insert.
@@ -51,7 +51,7 @@ export async function correlateRepeatedRateLimitExceedance(input: {
   try {
     const lookbackStart = new Date(now.getTime() - LOOKBACK_WINDOWS * WINDOW_MS);
     const rows = await db.execute<{ blocked_windows: number }>(sql`
-      select count(*)::int as blocked_windows from idoc.account_request_limits
+      select count(*)::int as blocked_windows from account_request_limits
       where purpose=${input.purpose} and identifier_hash=${input.identifierHash} and origin_hash=${input.originHash}
         and request_count > ${input.max} and window_started_at >= ${lookbackStart.toISOString()}
     `);
@@ -66,7 +66,7 @@ export async function correlateRepeatedRateLimitExceedance(input: {
     const html = renderTransactionalEmail({
       bodyHtml: `<p>The <b>${escapeHtml(input.purpose)}</b> rate limit has been exceeded in <b>${blockedWindows}</b> of the last ${LOOKBACK_WINDOWS} 15-minute windows for the same account or request origin.</p>
 <p>This pattern -- repeated blocking rather than a single blocked request -- is consistent with a sustained credential-stuffing or brute-force attempt, not an ordinary user mistake. The rate limiter itself already rejected every one of these requests; no account was compromised by this activity alone.</p>
-<p>Review recent activity for this purpose in <code>idoc.account_request_limits</code> and, if this looks like an active attack, consider the incident-response steps in docs/07 §11.</p>`,
+<p>Review recent activity for this purpose in <code>account_request_limits</code> and, if this looks like an active attack, consider the incident-response steps in docs/07 §11.</p>`,
       footerNote: 'IDOC security monitoring. This message never contains a raw email address or IP address, only their existing one-way digests.',
       heading: 'Repeated rate-limit exceedance',
     });

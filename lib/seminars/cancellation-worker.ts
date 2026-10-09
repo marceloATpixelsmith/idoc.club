@@ -33,8 +33,8 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
     payment_status: string;
     stripe_checkout_session_id: string | null;
   }>>`select r.id,r.payment_status,r.checkout_status,r.stripe_checkout_session_id
-    from idoc.seminar_registrations r
-    join idoc.seminars s on s.id=r.seminar_id
+    from seminar_registrations r
+    join seminars s on s.id=r.seminar_id
     where s.status='canceled'
       and r.registration_status='canceled'
       and r.payment_method_canonical_id='online_stripe'
@@ -57,23 +57,23 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
       if (session.payment_status === 'paid') {
         const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
         if (!paymentIntentId) throw new Error('Paid canceled seminar Checkout Session has no PaymentIntent.');
-        await client`update idoc.seminar_registrations
+        await client`update seminar_registrations
           set stripe_payment_intent_id=${paymentIntentId},payment_status='paid',checkout_status='complete',
               paid_at=coalesce(paid_at,now()),payment_status_updated_at=now(),updated_at=now()
           where id=${row.id} and registration_status='canceled'`;
         await refundSeminarRegistrationCore(row.id, 'Automatic full refund because the seminar was canceled.', null, stripe);
       } else if (session.status === 'open') {
         await stripe.checkout.sessions.expire(row.stripe_checkout_session_id);
-        await client`update idoc.seminar_registrations set checkout_status='expired',updated_at=now()
+        await client`update seminar_registrations set checkout_status='expired',updated_at=now()
           where id=${row.id} and checkout_status='open'`;
       } else {
-        await client`update idoc.seminar_registrations set checkout_status='expired',updated_at=now()
+        await client`update seminar_registrations set checkout_status='expired',updated_at=now()
           where id=${row.id} and checkout_status='open'`;
       }
     } catch (error) {
       failed += 1;
       Sentry.captureException(error, { tags: { background_operation: 'seminar_cancellation_resolution' } });
-      await client`insert into idoc.reconciliation_findings(kind,summary,details)
+      await client`insert into reconciliation_findings(kind,summary,details)
         values('seminar_payment_conflict','Canceled seminar payment requires retry or reconciliation.',
           ${JSON.stringify({ registrationId: row.id, message: error instanceof Error ? error.message : 'Unknown cancellation resolution error.' })}::jsonb)`;
       // Continue with the rest of the bounded batch. The registration remains eligible for a later run.

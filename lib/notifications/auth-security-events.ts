@@ -24,11 +24,11 @@ export async function enqueueAuthSecurityNotification(input: {
   userId: number;
 }) {
   const rows = input.recipientEmail
-    ? await db.execute<{ id: number }>(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+    ? await db.execute<{ id: number }>(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
         values (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${input.userId},${input.kind},${input.recipientEmail},${input.dedupeKey})
         on conflict (dedupe_key) where dedupe_key is not null do nothing returning id`)
-    : await db.execute<{ id: number }>(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
-        select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,${input.kind},email,${input.dedupeKey} from idoc.users where id=${input.userId}
+    : await db.execute<{ id: number }>(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+        select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,${input.kind},email,${input.dedupeKey} from users where id=${input.userId}
         on conflict (dedupe_key) where dedupe_key is not null do nothing returning id`);
   if (rows[0]) dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   return Boolean(rows[0]);

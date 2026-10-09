@@ -47,7 +47,7 @@ async function canonicalSession(userId: number) {
 }
 
 async function audit(userId: number, action: string, reason: string) {
-  await db.execute(sql`insert into idoc.audit_log (actor_id, action, entity_type, entity_id, reason)
+  await db.execute(sql`insert into audit_log (actor_id, action, entity_type, entity_id, reason)
     values (${userId}, ${action}, 'user', ${String(userId)}, ${reason})`);
 }
 
@@ -225,9 +225,9 @@ export const createPasswordAndDisconnectGoogle = validatedActionWithUser(
         updatedAt: now,
       }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });
       if (!saved) throw new Error('Your account changed. Sign in again.');
-      await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      await tx.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
         values(${user.id},'account.password.created','user',${String(user.id)},'google-disconnect-password-creation')`);
-      await tx.execute(sql`insert into idoc.auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
         values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_changed',${user.email},${`password-created:${user.id}:${user.sessionVersion + 1}`})
         on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     });

@@ -34,7 +34,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     user_id: number;
   }[]>`
     select user_id
-    from idoc.external_identities
+    from external_identities
     where issuer = ${identity.issuer}
       and subject = ${identity.subject}
     limit 1
@@ -45,7 +45,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
 
   if (userId) {
     await client`
-      update idoc.external_identities
+      update external_identities
       set last_used_at = now()
       where issuer = ${identity.issuer}
         and subject = ${identity.subject}
@@ -63,7 +63,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     const passwordHash = await hashPassword(randomBytes(48).toString('base64url'));
     const rows = await client<{ id: number }[]>`
       with created_user as (
-        insert into idoc.users (
+        insert into users (
           email,
           password_hash,
           account_state,
@@ -84,7 +84,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
         )
         returning id
       )
-      insert into idoc.external_identities (
+      insert into external_identities (
         provider,
         issuer,
         subject,

@@ -52,22 +52,22 @@ function todayIso(): string {
 // overlapping cron tick safe.
 async function enqueueRenewalReminders(today: string): Promise<number> {
   const inserted = await db.execute(sql`
-    insert into idoc.notification_outbox (profile_id, kind, payload, dedupe_key)
+    insert into notification_outbox (profile_id, kind, payload, dedupe_key)
     select s.profile_id, 'membership.renewal_reminder',
       jsonb_build_object('to', u.email, 'firstName', p.first_name, 'renewalDate', s.current_period_end),
       'membership.renewal_reminder:' || s.profile_id || ':' || s.current_period_end
-    from idoc.subscriptions s
-    join idoc.profiles p on p.id = s.profile_id
-    join idoc.users u on u.id = p.user_id
+    from subscriptions s
+    join profiles p on p.id = s.profile_id
+    join users u on u.id = p.user_id
     where s.status = 'active' and s.cancel_at_period_end = false
       and s.current_period_end between ${today}::date and (${today}::date + ${AUTO_RENEWAL_NOTICE_DAYS}::int)
     union all
     select r.profile_id, 'membership.renewal_reminder',
       jsonb_build_object('to', u2.email, 'firstName', p2.first_name, 'renewalDate', r.effective_on),
       'membership.renewal_reminder:' || r.profile_id || ':' || r.effective_on
-    from idoc.renewal_preferences r
-    join idoc.profiles p2 on p2.id = r.profile_id
-    join idoc.users u2 on u2.id = p2.user_id
+    from renewal_preferences r
+    join profiles p2 on p2.id = r.profile_id
+    join users u2 on u2.id = p2.user_id
     where r.pending_mode = 'recurring'
       and r.transition_state = 'pending_activation'
       and r.external_subscription_schedule_id is not null
@@ -81,17 +81,17 @@ async function enqueueRenewalReminders(today: string): Promise<number> {
 async function enqueueExpirationReminders(today: string): Promise<number> {
   const openStatuses = sql.join(OPEN_SUBSCRIPTION_STATUSES.map((status) => sql`${status}`), sql`, `);
   const inserted = await db.execute(sql`
-    insert into idoc.notification_outbox (profile_id, kind, payload, dedupe_key)
+    insert into notification_outbox (profile_id, kind, payload, dedupe_key)
     select m.profile_id, 'membership.expiration_reminder',
       jsonb_build_object('to', u.email, 'firstName', p.first_name, 'expirationDate', m.valid_until),
       'membership.expiration_reminder:' || m.profile_id || ':' || m.valid_until
-    from idoc.memberships m
-    join idoc.profiles p on p.id = m.profile_id
-    join idoc.users u on u.id = p.user_id
+    from memberships m
+    join profiles p on p.id = m.profile_id
+    join users u on u.id = p.user_id
     where m.status in ('active', 'complimentary')
       and m.valid_until between ${today}::date and (${today}::date + ${NON_RENEWAL_EXPIRATION_NOTICE_DAYS}::int)
       and not exists (
-        select 1 from idoc.subscriptions s2
+        select 1 from subscriptions s2
         where s2.profile_id = m.profile_id and s2.status in (${openStatuses}) and s2.cancel_at_period_end = false
       )
     on conflict (dedupe_key) do nothing
@@ -102,13 +102,13 @@ async function enqueueExpirationReminders(today: string): Promise<number> {
 
 async function enqueueGraceReminders(today: string): Promise<number> {
   const inserted = await db.execute(sql`
-    insert into idoc.notification_outbox (profile_id, kind, payload, dedupe_key)
+    insert into notification_outbox (profile_id, kind, payload, dedupe_key)
     select m.profile_id, 'membership.grace_reminder',
       jsonb_build_object('to', u.email, 'firstName', p.first_name, 'graceEndDate', coalesce(m.grace_ends_on,m.valid_until)),
       'membership.grace_reminder:' || m.profile_id || ':' || coalesce(m.grace_ends_on,m.valid_until)
-    from idoc.memberships m
-    join idoc.profiles p on p.id = m.profile_id
-    join idoc.users u on u.id = p.user_id
+    from memberships m
+    join profiles p on p.id = m.profile_id
+    join users u on u.id = p.user_id
     where m.status = 'grace'
       and (coalesce(m.grace_ends_on,m.valid_until) - ${GRACE_REMINDER_DAYS_BEFORE_END}::int) <= ${today}::date
       and coalesce(m.grace_ends_on,m.valid_until) > ${today}::date
@@ -128,11 +128,11 @@ async function transitionExpiredGraceMemberships(today: string): Promise<number>
   for (let iterations = 0; iterations < GRACE_EXPIRY_BATCH_LIMIT; iterations += 1) {
     const [expired] = await db.execute<{ id: number; profileId: number; validUntil: string }>(sql`
       with candidate as (
-        select id from idoc.memberships
+        select id from memberships
         where status = 'grace' and coalesce(grace_ends_on,valid_until) < ${today}::date
         order by id for update skip locked limit 1
       )
-      update idoc.memberships m set status = 'expired', grace_ends_on = null, updated_at = now()
+      update memberships m set status = 'expired', grace_ends_on = null, updated_at = now()
       from candidate where m.id = candidate.id
       returning m.id, m.profile_id as "profileId", m.valid_until as "validUntil"
     `);
@@ -153,12 +153,12 @@ async function transitionExpiredGraceMemberships(today: string): Promise<number>
 /** Starts non-recurring grace from the day after the paid-through date, never from scan time. */
 async function transitionNonRecurringTerms(today: string): Promise<number> {
   const changed = await db.execute(sql`
-    update idoc.memberships m set
+    update memberships m set
       status = case when m.valid_until + 5 < ${today}::date then 'expired' else 'grace' end,
       grace_ends_on = case when m.valid_until + 5 < ${today}::date then null else m.valid_until + 5 end,
       updated_at = now()
     where m.status in ('active', 'complimentary') and m.valid_until < ${today}::date
-      and not exists (select 1 from idoc.subscriptions s where s.profile_id=m.profile_id
+      and not exists (select 1 from subscriptions s where s.profile_id=m.profile_id
         and s.status in ('active','trialing','past_due','incomplete') and s.cancel_at_period_end=false)
     returning m.id
   `);
@@ -367,11 +367,11 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
   if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const kinds = sql.join(RENEWAL_NOTICE_KINDS.map((kind) => sql`${kind}`), sql`, `);
   const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
-    with candidate as (select id from idoc.notification_outbox where kind in (${kinds})
+    with candidate as (select id from notification_outbox where kind in (${kinds})
       and sent_at is null and dead_lettered_at is null and available_at <= now()
       and (lease_expires_at is null or lease_expires_at < now())
       order by available_at, id for update skip locked limit 1)
-    update idoc.notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
+    update notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
     from candidate where o.id = candidate.id
     returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload
   `);
@@ -404,13 +404,13 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
   if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
     with candidate as (
-      select id from idoc.notification_outbox
+      select id from notification_outbox
       where kind = ${STAGING_SEMINAR_CONFIRMATION_KIND}
         and sent_at is null and dead_lettered_at is null and available_at <= now()
         and (lease_expires_at is null or lease_expires_at < now())
       order by available_at, id for update skip locked limit 1
     )
-    update idoc.notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
+    update notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
     from candidate where o.id = candidate.id
     returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload
   `);

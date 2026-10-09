@@ -21,10 +21,10 @@ export async function listAllMembersForExport() {
   const rows = await db.execute<MemberExportRow>(sql`
     select p.first_name as "firstName", p.last_name as "lastName", u.email,
       m.status, m.valid_until as "validUntil"
-    from idoc.profiles p
-    join idoc.users u on u.id = p.user_id
+    from profiles p
+    join users u on u.id = p.user_id
     left join lateral (
-      select status, valid_until from idoc.memberships
+      select status, valid_until from memberships
       where profile_id = p.id order by valid_until desc, id desc limit 1
     ) m on true
     order by p.last_name
