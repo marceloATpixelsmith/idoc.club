@@ -24,6 +24,14 @@ export async function register() {
     const traceExporter = process.env.NEXT_RUNTIME === 'nodejs'
       ? newRelicTraceExporter()
       : undefined;
+    if (process.env.NEXT_RUNTIME === 'nodejs') {
+      // Operational diagnostics contain only configuration states, never secret values.
+      console.info('[idoc.otel] initialization', {
+        endpointConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
+        headerConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
+        directExporterEnabled: Boolean(traceExporter),
+      });
+    }
     registerOTel({
       serviceName: 'idoc.club',
       // Override automatic processors to prevent duplicate OTLP export when the drain changes state.
