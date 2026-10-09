@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import * as Sentry from '@sentry/nextjs';
 import { OTLPHttpProtoTraceExporter, registerOTel } from '@vercel/otel';
 
@@ -24,6 +25,14 @@ export async function register() {
     const traceExporter = process.env.NEXT_RUNTIME === 'nodejs'
       ? newRelicTraceExporter()
       : undefined;
+    if (process.env.NEXT_RUNTIME === 'nodejs') {
+      // Operational diagnostics contain only configuration states, never secret values.
+      console.info('[idoc.otel] initialization', {
+        endpointConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
+        headerConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
+        directExporterEnabled: Boolean(traceExporter),
+      });
+    }
     registerOTel({
       serviceName: 'idoc.club',
       // Override automatic processors to prevent duplicate OTLP export when the drain changes state.
@@ -31,6 +40,10 @@ export async function register() {
       // Do not export provider API keys, addresses, or query strings in fetch URLs.
       instrumentationConfig: { fetch: { ignoreUrls: [/.*/] } },
     });
+    if (process.env.NEXT_RUNTIME === 'nodejs' && traceExporter) {
+      // A non-user-data diagnostic span confirms the exporter can deliver telemetry.
+      trace.getTracer('idoc.observability').startSpan('idoc.otel.initialized').end();
+    }
   }
   if (process.env.NEXT_RUNTIME === 'nodejs') await import('./sentry.server.config');
   if (process.env.NEXT_RUNTIME === 'edge') await import('./sentry.edge.config');
