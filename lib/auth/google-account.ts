@@ -1,3 +1,4 @@
+import { loadSessionGate } from '@/lib/membership/session-gate-loader';
 import 'server-only';
 
 import { randomBytes } from 'node:crypto';
@@ -33,7 +34,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     user_id: number;
   }[]>`
     select user_id
-    from idoc.external_identities
+    from external_identities
     where issuer = ${identity.issuer}
       and subject = ${identity.subject}
     limit 1
@@ -44,7 +45,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
 
   if (userId) {
     await client`
-      update idoc.external_identities
+      update external_identities
       set last_used_at = now()
       where issuer = ${identity.issuer}
         and subject = ${identity.subject}
@@ -62,7 +63,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
     const passwordHash = await hashPassword(randomBytes(48).toString('base64url'));
     const rows = await client<{ id: number }[]>`
       with created_user as (
-        insert into idoc.users (
+        insert into users (
           email,
           password_hash,
           account_state,
@@ -83,7 +84,7 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
         )
         returning id
       )
-      insert into idoc.external_identities (
+      insert into external_identities (
         provider,
         issuer,
         subject,
@@ -114,6 +115,8 @@ export async function authenticateGoogleIdentity(identity: GoogleOidcIdentity): 
   if (!user || !user.emailVerifiedAt || !['active', 'onboarding'].includes(user.accountState)) {
     throw new GoogleAccountNotEligibleError();
   }
+  // A canceled membership past its paid-through date can no longer sign in, by any method.
+  if ((await loadSessionGate(user.id)).gate === 'ended') throw new GoogleAccountNotEligibleError();
 
   // An account that hasn't finished onboarding still needs the wizard, not wherever the caller asked
   // to land -- but a returnTo that's already dashboard-scoped (e.g. a signup's own

@@ -2,7 +2,7 @@
 
 import { LayoutDashboard, LogOut } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { type PointerEvent, type ReactNode, useRef, useState } from 'react';
 import useSWR, { mutate } from 'swr';
 import { signOut } from '@/app/(login)/actions';
@@ -36,6 +36,7 @@ export function AuthenticatedUserMenu({
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: user } = useSWR<PublicUser | null>('/api/user', fetcher);
+  const pathname = usePathname();
   const router = useRouter();
 
   function cancelClose() {
@@ -65,7 +66,11 @@ export function AuthenticatedUserMenu({
     await mutate('/api/user');
     setOpen(false);
     onNavigate?.();
-    router.push('/');
+    if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
+      router.push('/sign-in');
+    } else {
+      router.refresh();
+    }
   }
 
   if (!user?.email) return loggedOut;

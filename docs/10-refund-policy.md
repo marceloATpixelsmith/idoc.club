@@ -53,6 +53,6 @@ The refund acceptance evidence is mapped by `docs/27-stripe-payment-acceptance-g
 repository checks must stay executable and unskipped; an actual hosted provider run remains required
 before release and cannot be replaced by a source-code assertion or a manually inserted final row.
 
-### Administrator-canceled seminars
+## Entire-seminar cancellation exception
 
-The general rule above is superseded when an administrator cancels the seminar itself. All active registrations stop consuming capacity immediately. Confirmed Stripe payments are submitted for a full refund using the durable refund attempt and idempotency-key workflow. Provider-confirmed success sets both registration and payment status to `refunded`; a provider failure leaves registration status `canceled` and payment status `refund_failed`. Bank Transfer and Cash registrations are canceled without claiming an offline refund, preserving pending or paid payment state. Repeating cancellation is safe and retries only recoverable failed Stripe attempts; succeeded attempts are never duplicated.
+The discretionary rule above governs an individual registrant cancellation. Canceling the seminar itself is different: IDOC automatically attempts a full Stripe refund for every confirmed Stripe seminar payment, expires open Checkout Sessions, and reconciles a Checkout completion racing with cancellation. A failed provider attempt leaves the registration canceled and `refund_failed`, with durable evidence and an administrator retry path. Offline pending or manually paid records are never represented as Stripe refunds and retain their payment evidence for administrator follow-up.

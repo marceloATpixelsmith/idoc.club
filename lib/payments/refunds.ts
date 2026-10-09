@@ -1,9 +1,13 @@
 import 'server-only';
+import { assertLiveBillingAllowed, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
+import * as Sentry from '@sentry/nextjs';
 import type Stripe from 'stripe';
 import { client } from '@/lib/db/drizzle';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
+import { renderGuestSeminarRefundEmail } from '@/lib/notifications/email-template';
 import { getStripeServerClient } from './stripe-client';
 
 export class RefundError extends Error { constructor(message: string) { super(message); this.name = 'RefundError'; } }
@@ -18,69 +22,84 @@ function refundStatus(value: string | null): 'canceled' | 'failed' | 'pending' |
 }
 
 export async function refundSeminarRegistration(registrationIdValue: unknown, reasonValue: unknown, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundSeminarRegistration');
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
+  return refundSeminarRegistrationCore(registrationIdValue, reasonValue, actor.id, testStripe);
+}
+
+/** Authorization-free financial core for trusted admin/cancellation/reconciliation boundaries. */
+export async function refundSeminarRegistrationCore(registrationIdValue: unknown, reasonValue: unknown, actorId: number | null, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundSeminarRegistrationCore');
   const registrationId = Number(registrationIdValue); if (!Number.isInteger(registrationId) || registrationId <= 0) throw new RefundError('Registration not found.');
   const explanation = reason(reasonValue);
-  const [row] = await client<{ email: string; payment_status: string; price_cents: number; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,s.price_cents,coalesce(u.email,r.guest_email) email
-    from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
-    left join idoc.profiles p on p.id=r.profile_id left join idoc.users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
+  // The amount actually charged is the registration's own `expected_amount_cents` (set when the
+  // Checkout Session was created), not the seminar's current price -- a member and a guest were
+  // charged different prices, and refunding must match what Stripe actually collected either way.
+  const [row] = await client<{ email: string | null; first_name: string | null; payment_status: string; price_cents: number; profile_id: number | null; stripe_payment_intent_id: string | null }[]>`select r.payment_status,r.stripe_payment_intent_id,r.expected_amount_cents price_cents,r.profile_id,
+    coalesce(u.email,r.guest_email) email,coalesce(p.first_name,r.guest_name) first_name
+    from seminar_registrations r left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id where r.id=${registrationId} limit 1`;
   if (!row || !row.stripe_payment_intent_id) throw new RefundError('No Stripe seminar payment was found.');
   if (row.payment_status === 'refunded') throw new RefundError('This seminar payment has already been refunded.');
   if (row.payment_status !== 'paid' && row.payment_status !== 'refund_failed') throw new RefundError('Only a confirmed full seminar payment can be refunded.');
   const baseKey = `idoc-seminar-refund-${registrationId}-${row.stripe_payment_intent_id}`;
   const [priorAttempt] = await client<{ id: number; status: string; external_refund_id: string | null; failure_code: string | null }[]>`select id,status,external_refund_id,failure_code
-    from idoc.payment_refunds where seminar_registration_id=${registrationId} order by requested_at desc,id desc limit 1`;
+    from payment_refunds where seminar_registration_id=${registrationId} order by requested_at desc,id desc limit 1`;
   // Preserve the original idempotency key when Stripe's outcome is uncertain. A terminal Stripe
   // failure is different: Stripe has confirmed that no refund was created, so the administrator's
   // retry must create a new durable attempt and use a fresh provider idempotency key.
   const terminalFailure = priorAttempt?.status === 'failed' && priorAttempt.external_refund_id !== null &&
     priorAttempt.failure_code === null;
   const key = terminalFailure ? `${baseKey}-retry-${Date.now()}` : baseKey;
-  const [request] = await client<{ id: number }[]>`insert into idoc.payment_refunds(seminar_registration_id,idempotency_key,amount_cents,status,reason,administrator_id)
-    values(${registrationId},${key},${row.price_cents},'pending',${explanation},${actor.id}) on conflict(idempotency_key) do update set updated_at=now() returning id`;
+  const [request] = await client<{ id: number }[]>`insert into payment_refunds(seminar_registration_id,idempotency_key,amount_cents,status,reason,administrator_id)
+    values(${registrationId},${key},${row.price_cents},'pending',${explanation},${actorId}) on conflict(idempotency_key) do update set updated_at=now() returning id`;
   const stripe = testStripe ?? getStripeServerClient();
   try {
     const refund = await stripe.refunds.create({ amount: row.price_cents, metadata: { kind: 'seminar_registration', registrationId: String(registrationId),
       ...(row.email?.startsWith('stripe-e2e-') && row.email.endsWith('@example.test') ? { testRun: row.email } : {}) }, payment_intent: row.stripe_payment_intent_id }, { idempotencyKey: key });
     const status = refundStatus(refund.status);
     await client.begin(async (sql) => {
-      await sql`update idoc.payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
+      await sql`update payment_refunds set external_refund_id=${refund.id}::varchar,status=${status}::varchar,provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
         refunded_at=now(),updated_at=now() where id=${request.id}`;
-      if (status !== 'succeeded') await sql`update idoc.payment_refunds set refunded_at=null where id=${request.id}`;
-      await sql`update idoc.seminar_registrations set registration_status=${status === 'succeeded' ? 'refunded' : 'canceled'},canceled_at=coalesce(canceled_at,now()),refunded_at=${status === 'succeeded' ? new Date().toISOString() : null},
+      if (status !== 'succeeded') await sql`update payment_refunds set refunded_at=null where id=${request.id}`;
+      await sql`update seminar_registrations set registration_status='canceled',canceled_at=coalesce(canceled_at,now()),
         payment_status=${status === 'succeeded' ? 'refunded' : status === 'failed' ? 'refund_failed' : 'paid'},payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
-      await sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
+      await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actorId},'admin.seminar_payment.refund_requested','seminar_registration',${String(registrationId)},${JSON.stringify({ amountCents: row.price_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
+      if (status === 'succeeded' && row.profile_id !== null) await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key)
+        values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${row.profile_id},'seminar.refund_confirmed',${JSON.stringify({ amountCents: row.price_cents, firstName: row.first_name, refundId: refund.id, registrationId, to: row.email })}::jsonb,${`seminar.refund_confirmed:${refund.id}`})
+        on conflict(dedupe_key) do nothing`;
     });
-    // Notification delivery must never roll back a provider-confirmed refund. The member outbox
-    // requires a profile id, so guest delivery is handled separately from this profile-backed queue.
-    if (status === 'succeeded' && row.email) {
+    // A guest registration has no profile row, so notification_outbox (profile_id NOT NULL) can't
+    // queue this -- send directly and best-effort, matching the webhook-driven refund path.
+    if (status === 'succeeded' && row.profile_id === null && row.email) {
       try {
-        await client`insert into idoc.notification_outbox(profile_id,kind,payload,dedupe_key)
-          select r.profile_id,'seminar.refund_confirmed',jsonb_build_object('amountCents',${row.price_cents}::integer,'refundId',${refund.id}::varchar,'registrationId',${registrationId}::integer,'to',u.email,'firstName',p.first_name),${`seminar.refund_confirmed:${refund.id}`}
-          from idoc.seminar_registrations r join idoc.profiles p on p.id=r.profile_id join idoc.users u on u.id=p.user_id
-          where r.id=${registrationId} and r.profile_id is not null on conflict(dedupe_key) do nothing`;
-      } catch {
-        // Refund settlement is authoritative; notification failures are non-transactional.
-      }
+        const message = renderGuestSeminarRefundEmail(row.first_name ?? '');
+        await sendTransactionalEmail({
+          html: message.html,
+          subject: message.subject,
+          to: row.email,
+        }, { signal: AbortSignal.timeout(10_000) });
+      } catch { /* best-effort -- the refund itself already committed above */ }
     }
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
+    Sentry.captureException(error, { tags: { payment_operation: 'seminar_refund' } });
     // Never overwrite provider-confirmed evidence. A later local failure is a reconciliation issue, not a failed Stripe refund.
-    await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
-    await client`update idoc.seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
+    await client`update payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id} and external_refund_id is null`;
+    await client`update seminar_registrations set payment_status='refund_failed',payment_status_updated_at=now(),updated_at=now() where id=${registrationId}`;
     throw new RefundError('Stripe could not complete the refund. The payment was preserved for reconciliation.');
   }
 }
 
 export async function refundMembershipPayment(paymentIdValue: unknown, reasonValue: unknown, testStripe?: RefundStripeClient) {
+  assertLiveBillingAllowed('billing.refundMembershipPayment');
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const paymentId = Number(paymentIdValue); if (!Number.isInteger(paymentId) || paymentId <= 0) throw new RefundError('Payment not found.');
   const explanation = reason(reasonValue);
-  const [payment] = await client<{ amount_cents: number; external_payment_id: string | null; profile_id: number; source: string }[]>`select profile_id,source,external_payment_id,amount_cents from idoc.payments where id=${paymentId}`;
+  const [payment] = await client<{ amount_cents: number; external_payment_id: string | null; profile_id: number; source: string }[]>`select profile_id,source,external_payment_id,amount_cents from payments where id=${paymentId}`;
   if (!payment?.external_payment_id || !['stripe_recurring','stripe_one_time'].includes(payment.source)) throw new RefundError('Only a Stripe membership payment can be refunded.');
   const key = `idoc-membership-refund-${paymentId}-${payment.external_payment_id}`;
-  const [request] = await client<{ id: number }[]>`insert into idoc.payment_refunds(membership_payment_id,idempotency_key,amount_cents,status,reason,administrator_id)
+  const [request] = await client<{ id: number }[]>`insert into payment_refunds(membership_payment_id,idempotency_key,amount_cents,status,reason,administrator_id)
     values(${paymentId},${key},${payment.amount_cents},'pending',${explanation},${actor.id}) on conflict(idempotency_key) do update set updated_at=now() returning id`;
   const stripe = testStripe ?? getStripeServerClient();
   let paymentIntent = payment.external_payment_id;
@@ -94,27 +113,28 @@ export async function refundMembershipPayment(paymentIdValue: unknown, reasonVal
   try {
     const refund = await stripe.refunds.create({ amount: payment.amount_cents, metadata: { kind: 'membership_payment', paymentId: String(paymentId) }, payment_intent: paymentIntent }, { idempotencyKey: key });
     const status = refundStatus(refund.status);
-    await client`update idoc.payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
+    await client`update payment_refunds set external_refund_id=${refund.id},status=${status},provider_evidence=${JSON.stringify({ id: refund.id, status: refund.status })}::jsonb,
       refunded_at=${status === 'succeeded' ? new Date() : null},updated_at=now() where id=${request.id}`;
     if (status === 'succeeded' && payment.source === 'stripe_recurring') {
-      const [subscription] = await client<{ external_subscription_id: string }[]>`select external_subscription_id from idoc.subscriptions
+      const [subscription] = await client<{ external_subscription_id: string }[]>`select external_subscription_id from subscriptions
         where profile_id=${payment.profile_id} and status in ('active','trialing','past_due','incomplete') order by updated_at desc limit 1`;
       if (subscription) {
         if (!stripe.subscriptions) {
-          await client`insert into idoc.reconciliation_findings(kind,profile_id,summary,details) values('status_conflict',${payment.profile_id},'Membership refund succeeded but automatic renewal could not be disabled.',${JSON.stringify({ paymentId, refundId: refund.id })}::jsonb)`;
+          await client`insert into reconciliation_findings(kind,profile_id,summary,details) values('status_conflict',${payment.profile_id},'Membership refund succeeded but automatic renewal could not be disabled.',${JSON.stringify({ paymentId, refundId: refund.id })}::jsonb)`;
           throw new RefundError('The refund succeeded, but automatic renewal could not be disabled. Reconciliation is required.');
         }
         await stripe.subscriptions.cancel(subscription.external_subscription_id, {}, { idempotencyKey: `${key}-cancel-renewal` });
-        await client`update idoc.subscriptions set status='canceled',cancel_at_period_end=false,updated_at=now() where external_subscription_id=${subscription.external_subscription_id}`;
+        await client`update subscriptions set status='canceled',cancel_at_period_end=false,updated_at=now() where external_subscription_id=${subscription.external_subscription_id}`;
       }
-      await client`insert into idoc.renewal_preferences(profile_id,current_mode,transition_state) values(${payment.profile_id},'non_recurring','current')
+      await client`insert into renewal_preferences(profile_id,current_mode,transition_state) values(${payment.profile_id},'non_recurring','current')
         on conflict(profile_id) do update set current_mode='non_recurring',pending_mode=null,effective_on=null,transition_state='current',updated_at=now()`;
     }
-    await client`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.membership_payment.refund_requested','payment',${String(paymentId)},${JSON.stringify({ amountCents: payment.amount_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
+    await client`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.membership_payment.refund_requested','payment',${String(paymentId)},${JSON.stringify({ amountCents: payment.amount_cents, reason: explanation, refundId: refund.id, status })}::jsonb)`;
     if (status === 'failed') throw new RefundError('Stripe reported that the refund failed.');
   } catch (error) {
     if (error instanceof RefundError) throw error;
-    await client`update idoc.payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id}`;
+    Sentry.captureException(error, { tags: { payment_operation: 'membership_refund' } });
+    await client`update payment_refunds set status='failed',failure_code='stripe_request_failed',updated_at=now() where id=${request.id}`;
     throw new RefundError('Stripe could not complete the refund. The original payment was preserved.');
   }
 }

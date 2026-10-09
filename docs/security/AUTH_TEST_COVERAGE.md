@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **34 cases** — CI mapped 31, CI gaps 2, not applicable 1.
+Summary: **37 cases** — CI mapped 34, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -12,7 +12,7 @@ Summary: **34 cases** — CI mapped 31, CI gaps 2, not applicable 1.
 | LIVE-AUTH-004 | Google OAuth live flow preserves transaction binding and account-linking rules | mapped | required | AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005 |
 | LIVE-AUTH-005 | Logout and session invalidation prevent post-logout reuse | mapped | required | AUTH-SESSION-002, AUTH-SESSION-009, AUTH-SESSION-010 |
 | LIVE-AUTH-006 | Anonymous and incomplete-auth sessions cannot access protected pages or APIs | mapped | required | AUTH-AUTHZ-001, AUTH-FRAMEWORK-001, AUTH-API-004 |
-| LIVE-AUTH-007 | Unpaid/expired member access is restricted to the intended payment/membership flow | mapped | required | AUTH-AUTHZ-001 |
+| LIVE-AUTH-007 | Unpaid/expired member sees only the payment page while signed in | mapped | required | AUTH-AUTHZ-001 |
 | LIVE-AUTH-008 | Onboarding cannot be skipped or corrupted by direct navigation/query manipulation | mapped | required | AUTH-AUTHZ-001, AUTH-TRANSACTION-002 |
 | LIVE-AUTH-009 | Required TOTP enrollment cannot be bypassed and produces a usable factor | mapped | required | AUTH-MFA-001, AUTH-MFA-002 |
 | LIVE-AUTH-010 | Pending-MFA login state is isolated from fully authenticated authority | mapped | required | AUTH-MFA-002, AUTH-MFA-006 |
@@ -39,4 +39,7 @@ Summary: **34 cases** — CI mapped 31, CI gaps 2, not applicable 1.
 | LIVE-AUTH-031 | Cleanup and failure preservation are deterministic and auditable | gap | required | AUTH-OPERATIONS-011 |
 | LIVE-AUTH-032 | Invitation auth testing is explicitly not applicable to the current product model | na | N/A | AUTH-INVITE-001, AUTH-INVITE-002, AUTH-INVITE-003 |
 | LIVE-AUTH-033 | Ordinary member sessions use a 7-day idle timeout and 14-day absolute lifetime while privileged sessions retain strict limits | mapped | required | AUTH-SESSION-005, AUTH-SESSION-010 |
-| LIVE-AUTH-034 | Imported legacy members remediate credentials and complete a server-gated full profile review | mapped | required | AUTH-STORAGE-005, AUTH-PASSWORD-006, AUTH-AUTHZ-001 |
+| LIVE-AUTH-034 | Signup, password reset and password change reject passwords found in known data breaches | mapped | required | AUTH-PASSWORD-006, AUTH-PASSWORD-007 |
+| LIVE-AUTH-035 | Member archive and permanent deletion enforce authorization, billing guards, and audit retention | mapped | required | AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003 |
+| LIVE-AUTH-036 | Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004, AUTH-CSRF-003 |
+| LIVE-AUTH-037 | A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002 |

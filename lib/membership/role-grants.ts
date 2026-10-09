@@ -1,4 +1,7 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { z } from 'zod';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -30,7 +33,7 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Locking and checking the target's account_state here, before the role insert, closes a real
     // race with suspendUserAccount (lib/membership/account-suspension.ts): that function also locks
     // this same users row and rejects suspending a user who already holds an active grant, but
@@ -67,11 +70,13 @@ export async function grantApplicationRole(userId: number, untrustedInput: unkno
       afterJson: { role: input.role }, beforeJson: null,
       entityId: String(userId), entityType: 'user', reason: input.reason,
     });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      select id,'role_granted',email,${`role-granted:${inserted.id}`} from idoc.users where id=${userId}
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_granted',email,${`role-granted:${inserted.id}`} from users where id=${userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { grant: inserted };
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
 
 /**
@@ -87,7 +92,7 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
   const actor = await requireAccountAccess('administration');
   requireSuperAdmin(actor);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (input.role === 'super_admin') {
       const activeSuperAdmins = await tx.select({ id: applicationRoles.id }).from(applicationRoles)
         .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt)))
@@ -113,9 +118,11 @@ export async function revokeApplicationRole(userId: number, untrustedInput: unkn
       afterJson: null, beforeJson: { role: input.role },
       entityId: String(userId), entityType: 'user', reason: input.reason,
     });
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      select id,'role_revoked',email,${`role-revoked:${revoked.id}`} from idoc.users where id=${userId}
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'role_revoked',email,${`role-revoked:${revoked.id}`} from users where id=${userId}
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { revoked };
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }

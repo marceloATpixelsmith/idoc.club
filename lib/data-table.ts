@@ -30,19 +30,26 @@ export function getColumnPinningStyle<TData>({
     isPinned === "right" && column.getIsFirstColumn("right");
 
   return {
-    boxShadow: withBorder
-      ? isLastLeftPinnedColumn
-        ? "-4px 0 4px -4px var(--border) inset"
-        : isFirstRightPinnedColumn
-          ? "4px 0 4px -4px var(--border) inset"
-          : undefined
-      : undefined,
+    // A real 1px solid line matching the table's own outer border (not a soft inset shadow) -- so
+    // a pinned column (currently just Actions) reads as visually separated the same way the whole
+    // table is separated from the page around it.
+    borderLeft: withBorder && isFirstRightPinnedColumn ? "1px solid var(--border)" : undefined,
+    borderRight: withBorder && isLastLeftPinnedColumn ? "1px solid var(--border)" : undefined,
     left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
     position: isPinned ? "sticky" : "relative",
-    background: isPinned ? "var(--background)" : "var(--background)",
-    width: column.getSize(),
+    // A pinned column still needs an opaque backdrop so scrolled-under content can't show through
+    // it, but that backdrop must track context (the header's --surface-raised band, a hovered or
+    // selected body row's own highlight) rather than one flat, unchanging color -- and an inline
+    // style can never do that, since it always wins over any CSS class or :hover/[data-state]
+    // selector regardless of specificity. The actual opaque background for a pinned cell is set in
+    // app/globals.css via the [data-pinned] attribute this style is paired with, not here.
+    // Same reasoning as background: forcing every column to its (150px-default) getSize() is what
+    // kept every admin table column a rigid fixed-width box instead of shrinking to fit its actual
+    // data. A pinned column still needs a real width (getStart/getAfter's sticky-offset math for
+    // other pinned columns depends on it), but an unpinned column should size itself naturally.
+    width: isPinned ? column.getSize() : undefined,
     zIndex: isPinned ? 1 : undefined,
   };
 }

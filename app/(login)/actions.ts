@@ -1,5 +1,9 @@
 'use server';
 
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
+
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -25,6 +29,10 @@ import { revokeAllUserSessions, revokeSessionWithSignOutAudit } from '@/lib/auth
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
+import { setUiFlash } from '@/lib/ui/flash-state';
+import { loadSessionGate } from '@/lib/membership/session-gate-loader';
+import { paymentOnlyDestination } from '@/lib/membership/session-gate';
+import { supportEmailForServer } from '@/lib/runtime/configuration';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -63,29 +71,29 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     return { error: 'Invalid email or password. Please try again.', email };
   }
 
+  // The relationship ended: a membership canceled by the member or an administrator works through
+  // its paid-through date, after which the account can no longer sign in. Checked only after the
+  // password is verified, so this never reveals anything to someone who does not hold the credential.
+  const sessionGate = await loadSessionGate(foundUser.id);
+  if (sessionGate.gate === 'ended') {
+    return { error: `This membership has been canceled, so signing in is no longer available. Contact ${supportEmailForServer()} if you believe this is a mistake.`, email };
+  }
+
   if (passwordHashNeedsUpgrade(foundUser.passwordHash)) {
-    const policyAccepted = passwordSchema.safeParse(password).success;
-    const breach = await checkPasswordBreached(password);
-    if (!policyAccepted || breach.breached) {
-      if (breach.breached) {
-        await notifyWebmasterOfBreachedPasswordAttempt({ email: foundUser.email, source: 'legacy-login' });
-      }
-      return { error: 'For your security, reset your password before continuing. Use Forgot password below.', email };
-    }
     const upgradedHash = await hashPassword(password);
-    const [upgraded] = await db.update(users)
+    await db.update(users)
       .set({ passwordHash: upgradedHash, updatedAt: new Date() })
-      .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)))
-      .returning({ id: users.id });
-    if (!upgraded) {
-      return { error: 'Your credentials changed during sign-in. Please try again.', email };
-    }
+      .where(and(eq(users.id, foundUser.id), eq(users.passwordHash, foundUser.passwordHash)));
   }
 
   const role = await authoritativeMfaRole(foundUser.id);
   // An account that hasn't finished onboarding still needs the wizard, not the homepage -- only a
   // fully set-up account gets the "login lands on the homepage" destination.
-  const loginDestination = foundUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
+  // A member who has not paid (or whose membership lapsed) sees only the payment page, so that is
+  // where sign-in lands them rather than the homepage they would be redirected away from.
+  const loginDestination = sessionGate.gate === 'payment_only'
+    ? paymentOnlyDestination(foundUser.accountState)
+    : foundUser.accountState === 'onboarding' ? '/dashboard' : '/';
 
   if (!foundUser.emailVerifiedAt) {
     const origin = await requestOrigin();
@@ -129,7 +137,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
         await clearPendingLogin();
         return { error: 'Your sign-in session expired. Start again.', email };
       }
-      if (await beginPrimaryMfa(currentUser, 'password', currentUser.legacyProfileReviewRequired ? '/dashboard/profile?confirmDetails=1' : currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
+      if (await beginPrimaryMfa(currentUser, 'password', currentUser.accountState === 'onboarding' ? '/dashboard' : '/')) {
         await clearPendingLogin();
         redirect('/mfa');
       }
@@ -240,15 +248,17 @@ export const updatePassword = validatedActionWithUser(
         updatedAt: new Date(),
       }).where(and(eq(users.id, user.id), eq(users.sessionVersion, user.sessionVersion))).returning({ id: users.id });
       if (!changed) throw new Error('Your account changed. Sign in again.');
-      await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+      await tx.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
         values(${user.id},'account.password.changed','user',${String(user.id)},'self-service')`);
-      await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-        values(${user.id},'password_changed',${user.email},${`password-changed:${user.id}:${user.sessionVersion + 1}`})
+      await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+        values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_changed',${user.email},${`password-changed:${user.id}:${user.sessionVersion + 1}`})
         on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
     await consumeFreshStepUp();
     await clearSession();
-    redirect('/sign-in?password=changed');
+    await setUiFlash('password-changed', '/sign-in');
+    redirect('/sign-in');
   }
 );
 

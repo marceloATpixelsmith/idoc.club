@@ -67,9 +67,12 @@ export async function recordManualPayment(untrustedInput: unknown) {
 
     const membership = await lockLatestMembership(tx, input.profileId);
     const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: input.paidAt });
-    // A suspended membership stays suspended — a payment alone must not silently lift a suspension.
-    // Reinstatement is the dedicated reinstateMembership action (lib/membership/status-actions.ts).
-    const status = membership?.status === 'suspended' ? 'suspended' : (input.source === 'complimentary' ? 'complimentary' : 'active');
+    // A suspended or canceled membership keeps that status — a payment alone must not silently lift
+    // a suspension or reverse a cancellation. Reversal is the dedicated reinstateMembership action
+    // (lib/membership/status-actions.ts), which also writes its own audit entry.
+    const status = membership?.status === 'suspended' || membership?.status === 'canceled'
+      ? membership.status
+      : (input.source === 'complimentary' ? 'complimentary' : 'active');
     const [membershipRow] = membership
       ? await tx.update(memberships).set({ status, updatedAt: new Date(), validUntil })
         .where(eq(memberships.id, membership.id)).returning()

@@ -2,7 +2,6 @@
 
 import type { Column, Table } from "@tanstack/react-table";
 import { GripVertical, Settings2 } from "lucide-react";
-import { parseAsArrayOf, parseAsString, useQueryState } from "nuqs";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +18,6 @@ import {
   SortableOverlay,
 } from "@/components/ui/sortable";
 import { cn } from "@/lib/utils";
-import { getDefaultColumnOrder } from "@/lib/data-table";
 
 interface DataTableViewOptionsProps<TData>
   extends React.ComponentProps<typeof PopoverContent> {
@@ -33,8 +31,6 @@ export function DataTableViewOptions<TData>({
   className,
   ...props
 }: DataTableViewOptionsProps<TData>) {
-  const [savedOrder, setSavedOrder] = useQueryState('columnOrder', parseAsArrayOf(parseAsString, ',').withOptions({ shallow: true }));
-  const previousSavedOrder = React.useRef(savedOrder);
   const currentOrder = table.getState().columnOrder;
   const columns = table.getAllColumns()
     .filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide())
@@ -43,25 +39,20 @@ export function DataTableViewOptions<TData>({
       const bPosition = currentOrder.indexOf(b.id);
       return aPosition >= 0 && bPosition >= 0 ? aPosition - bPosition
         : (a.columnDef.meta?.label ?? a.id).localeCompare(b.columnDef.meta?.label ?? b.id, 'en');
-    });
-
-  React.useEffect(() => {
-    if (!savedOrder?.length) {
-      if (previousSavedOrder.current?.length) table.setColumnOrder(getDefaultColumnOrder(table.getAllColumns().map((column) => column.columnDef)));
-      previousSavedOrder.current = savedOrder;
-      return;
-    }
-    const ids = new Set(table.getAllColumns().map((column) => column.id));
-    const ordered = [...new Set(savedOrder.filter((id) => ids.has(id)))];
-    const next = [...ordered, ...table.getState().columnOrder.filter((id) => !ordered.includes(id))];
-    if (next.join(',') !== table.getState().columnOrder.join(',')) table.setColumnOrder(next);
-    previousSavedOrder.current = savedOrder;
-  }, [savedOrder, table]);
+    })
+    // Visible columns always list above hidden ones (stable sort preserves each group's relative
+    // order from above), so the checked columns a user is actively working with aren't scattered
+    // among a long tail of hidden ones.
+    .sort((a, b) => Number(b.getIsVisible()) - Number(a.getIsVisible()));
 
   function toggleColumn(column: (typeof columns)[number]) {
     const nextVisible = !column.getIsVisible();
     column.toggleVisibility(nextVisible);
-    if (!nextVisible) table.setSorting((sorting) => sorting.filter((item) => item.id !== column.id));
+    // Only touch sorting when the hidden column was actually part of the current sort, rather than
+    // firing a state update (and the persistence/refetch it triggers) on every hide regardless.
+    if (!nextVisible && table.getState().sorting.some((item) => item.id === column.id)) {
+      table.setSorting((sorting) => sorting.filter((item) => item.id !== column.id));
+    }
   }
 
   function onOrderChange(nextColumns: (typeof columns)) {
@@ -69,8 +60,15 @@ export function DataTableViewOptions<TData>({
     const fixed = currentOrder.filter((id) => !movable.includes(id) && id !== 'actions');
     const trailing = currentOrder.includes('actions') && !movable.includes('actions') ? ['actions'] : [];
     const nextOrder = [...fixed, ...movable, ...trailing];
+    // Preserve required adjacency for non-movable columns when another column is dragged.
+    // These constraints are declared by the column, not hard-coded to a specific table.
+    for (const column of table.getAllColumns()) {
+      const before = column.columnDef.meta?.lockedBefore;
+      if (!before || !nextOrder.includes(before) || !nextOrder.includes(column.id)) continue;
+      nextOrder.splice(nextOrder.indexOf(column.id), 1);
+      nextOrder.splice(nextOrder.indexOf(before), 0, column.id);
+    }
     table.setColumnOrder(nextOrder);
-    void setSavedOrder(nextOrder);
   }
 
   const labelFor = (column: Column<TData, unknown>) => column.columnDef.meta?.label ?? column.id;

@@ -5,6 +5,8 @@ import { getPublicUser } from '@/lib/db/queries';
 import { currentCsrfToken } from '@/lib/security/csrf';
 import { CsrfProvider } from '@/components/security/csrf-provider';
 import { SWRConfig } from 'swr';
+import { PrivacyNotice } from '@/components/site/privacy-notice';
+import { SitewideIconTooltips } from '@/components/site/sitewide-icon-tooltips';
 
 const archivo = Archivo({
   subsets: ['latin'],
@@ -76,6 +78,8 @@ export default async function RootLayout({
             }}
           >
             {children}
+            <PrivacyNotice />
+            <SitewideIconTooltips />
           </SWRConfig>
         </CsrfProvider>
       </body>

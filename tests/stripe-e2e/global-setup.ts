@@ -33,6 +33,11 @@ export default async function globalSetup() {
   if (!email || !/^stripe-e2e-[a-z0-9-]+@example\.test$/i.test(email)) {
     throw new Error('STRIPE_E2E_MEMBER_EMAIL must be an unmistakably test-only @example.test address.');
   }
+  // The application derives Stripe idempotency keys from profile ids, and Stripe keeps those keys
+  // for 24 hours. This disposable database restarts its sequences every run while each run creates a
+  // new Stripe Customer, so a second run inside 24 hours would reuse a key with different parameters.
+  // Start the profile sequence at a per-run offset so keys never collide across runs.
+  await sql`select setval(pg_get_serial_sequence('idoc.profiles','id'), ${1_000 + Math.floor(Math.random() * 2_000_000_000)})`;
   const [user] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
     values(${email},'stripe-e2e-disabled-password',now(),'active')
     returning id,session_version`;
@@ -65,9 +70,9 @@ export default async function globalSetup() {
   const [admin] = await sql`insert into idoc.users(email,password_hash,email_verified_at,account_state)
     values(${adminEmail},'stripe-e2e-disabled-password',now(),'active') returning id,session_version`;
   await sql`insert into idoc.application_roles(user_id,role) values(${admin.id},'administrator')`;
-  await sql`insert into idoc.seminars(title,description,seminar_date,start_time,end_time,timezone,location,capacity,price_cents,registration_deadline,status,payment_method_canonical_id,created_by_user_id,updated_by_user_id)
-    values('Stripe E2E Seminar A','Disposable Stripe E2E fixture',current_date + interval '30 days','10:00','12:00','Europe/Berlin','Test venue A',20,5000,now() + interval '14 days','published','online_stripe',${user.id},${user.id}),
-          ('Stripe E2E Seminar B','Disposable Stripe E2E fixture',current_date + interval '31 days','10:00','12:00','Europe/Berlin','Test venue B',20,7500,now() + interval '14 days','published','online_stripe',${user.id},${user.id})`;
+  await sql`insert into idoc.seminars(title,description,start_date,end_date,location,language,organizing_national_federation,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,created_by_user_id,updated_by_user_id)
+    values('Stripe E2E Seminar A','Disposable Stripe E2E fixture',current_date + interval '30 days',current_date + interval '30 days','Test venue A','en','IE',20,5000,7500,now() + interval '14 days','published',${user.id},${user.id}),
+          ('Stripe E2E Seminar B','Disposable Stripe E2E fixture',current_date + interval '31 days',current_date + interval '31 days','Test venue B','en','IE',20,7500,9000,now() + interval '14 days','published',${user.id},${user.id})`;
   const sessionId = randomUUID();
   const now = new Date();
   const expires = new Date(now.getTime() + 12 * 60 * 60 * 1000);

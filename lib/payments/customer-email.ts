@@ -1,6 +1,7 @@
 import 'server-only';
+import { assertLiveBillingAllowed, outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
-import Stripe from 'stripe';
+import { getStripeServerClient } from './stripe-client';
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -12,21 +13,23 @@ export type CustomerEmailStripeClient = {
 
 /** Updates an existing Stripe identity; it never creates a Customer or Subscription. */
 export async function updateStripeCustomerEmail(customerId: string, email: string, testStripe?: CustomerEmailStripeClient) {
+  assertLiveBillingAllowed('billing.updateStripeCustomerEmail');
   if (testStripe && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const key = process.env.STRIPE_SECRET_KEY;
   if (!testStripe && !key) throw new Error('Stripe Customer email synchronization is not configured.');
-  await (testStripe ?? new Stripe(key as string)).customers.update(customerId, { email });
+  await (testStripe ?? getStripeServerClient()).customers.update(customerId, { email });
 }
 
 /** Lease-safe retry worker. Payload identifiers are ignored; ownership and email are re-read. */
 export async function deliverNextStripeCustomerEmailSync(owner: string = randomUUID(), testStripe?: CustomerEmailStripeClient) {
+  if (outboxDeliveryHeld(true)) return { status: 'blocked' as const };
   if (testStripe && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   const [job] = await db.execute<{ attemptCount: number; id: number; profileId: number }>(sql`
-    with candidate as (select id from idoc.notification_outbox
+    with candidate as (select id from notification_outbox
       where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
       and available_at <= now() and (lease_expires_at is null or lease_expires_at < now())
       order by available_at,id for update skip locked limit 1)
-    update idoc.notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
+    update notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
     from candidate where o.id=candidate.id returning o.id,o.profile_id as "profileId",o.attempt_count as "attemptCount"
   `);
   if (!job) return { status: 'empty' as const };
@@ -62,9 +65,10 @@ export async function deliverNextStripeCustomerEmailSync(owner: string = randomU
 }
 
 export async function processStripeCustomerEmailSyncBatch() {
-  const summary = { deadLettered: 0, empty: 0, retried: 0, sent: 0 };
+  const summary = { blocked: 0, deadLettered: 0, empty: 0, retried: 0, sent: 0 };
   for (let index = 0; index < 20; index += 1) {
     const result = await deliverNextStripeCustomerEmailSync();
+    if (result.status === 'blocked') { summary.blocked += 1; break; }
     if (result.status === 'empty') { summary.empty += 1; break; }
     if (result.status === 'sent') summary.sent += 1;
     else if (result.status === 'retry') summary.retried += 1;

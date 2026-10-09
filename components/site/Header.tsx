@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Menu, X, ChevronDown, Facebook } from 'lucide-react';
+import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
@@ -34,6 +34,10 @@ const aboutLinks = [
 
 function isActive(pathname: string, href: string) {
   return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isAboutItemActive(pathname: string, href: string) {
+  return href === '/about' ? pathname === href : isActive(pathname, href);
 }
 
 function navClassName(active: boolean) {
@@ -76,7 +80,7 @@ function NavDropdown({
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`block px-5 py-3 text-[0.72rem] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+                  className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
                 >
                   {item.label}
                 </Link>
@@ -91,10 +95,9 @@ function NavDropdown({
 
 /** A signed-in member always gets a "My IDOC" entry back to their account area -- the dashboard
  * subpages dropdown once entitled, or a plain link to /dashboard/membership beforehand (never-paid or
- * post-grace-expired), where the membership page itself renders the payment controls. Support is excluded from the
- * dropdown for a privileged administrator/super_admin, who isn't a support member (they use the
- * separate /admin/support inbox) -- see dashboardNavItems. */
-function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; memberSupport: boolean; pathname: string }) {
+ * post-grace-expired), where the membership page itself renders the payment controls. Support is
+ * reached through Contact for eligible members; administrators use /admin/support. */
+function MyIdocNav({ entitled, pathname }: { entitled: boolean; pathname: string }) {
   if (!entitled) {
     return (
       <Link href="/dashboard/membership" className={navClassName(isActive(pathname, '/dashboard/membership'))}>
@@ -102,7 +105,7 @@ function MyIdocNav({ entitled, memberSupport, pathname }: { entitled: boolean; m
       </Link>
     );
   }
-  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={dashboardNavItems(memberSupport)} label="My IDOC" pathname={pathname} />;
+  return <NavDropdown href="/dashboard" isItemActive={isDashboardNavItemActive} items={dashboardNavItems()} label="My IDOC" pathname={pathname} />;
 }
 
 function MemberLoginLink({ className, onClick }: { className?: string; onClick?: () => void }) {
@@ -116,18 +119,17 @@ function MemberLoginLink({ className, onClick }: { className?: string; onClick?:
 export function Header({
   entitled,
   loggedOut,
-  memberSupport,
   showAdminDashboard,
   signedIn,
 }: {
   entitled: boolean;
   loggedOut?: ReactNode;
-  memberSupport: boolean;
   showAdminDashboard: boolean;
   signedIn: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const isAdminArea = pathname === '/admin' || pathname.startsWith('/admin/');
 
   return (
     <HeaderShell
@@ -135,66 +137,81 @@ export function Header({
       right={
         <>
           <div className="hidden items-center gap-10 lg:flex">
-            <nav className="flex items-center gap-7">
-              <Link href="/" className={navClassName(isActive(pathname, '/'))}>
-                Home
-              </Link>
-
-              <NavDropdown href="/about" items={aboutLinks} label="About IDOC" pathname={pathname} />
-
-              {topNavItems(signedIn).map((item) => (
-                <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
-                  {item.label}
+            {isAdminArea ? (
+              <div className="flex items-center gap-2 text-[0.8rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <UserCog aria-hidden="true" className="size-4 text-gold" />
+                <span>Admin Mode</span>
+              </div>
+            ) : (
+              <nav className="flex items-center gap-7">
+                <Link href="/" className={navClassName(isActive(pathname, '/'))}>
+                  Home
                 </Link>
-              ))}
 
-              {signedIn && <MyIdocNav entitled={entitled} memberSupport={memberSupport} pathname={pathname} />}
+                <NavDropdown href="/about" isItemActive={isAboutItemActive} items={aboutLinks} label="About IDOC" pathname={pathname} />
 
-              {/* Contact is hidden for every signed-in account that already has a working way back into
-                * the site (entitled members and privileged administrators/super_admins alike -- the
-                * former via My IDOC's own Support/Contact entry, the latter via /admin/support). An
-                * onboarding/unpaid member (payment-only My IDOC fallback, entitled false) still needs
-                * it, since they have no other path to reach the secretariat. */}
-              {(!signedIn || !entitled) && (
+                {topNavItems(signedIn).map((item) => (
+                  <Link key={item.href} href={item.href} className={navClassName(isActive(pathname, item.href))}>
+                    {item.label}
+                  </Link>
+                ))}
+
+                {signedIn && <MyIdocNav entitled={entitled} pathname={pathname} />}
+
                 <Link href={contactLink.href} className={navClassName(isActive(pathname, contactLink.href))}>
                   {contactLink.label}
                 </Link>
-              )}
 
-              <span className="text-border" aria-hidden="true">
-                |
-              </span>
-              <a
-                href="https://www.facebook.com/groups/646981818825549/"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="IDOC on Facebook"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <Facebook className="size-4" />
-              </a>
-            </nav>
+                <span className="text-border" aria-hidden="true">
+                  |
+                </span>
+                <a
+                  href="https://www.facebook.com/groups/646981818825549/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="IDOC on Facebook"
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Facebook className="size-4" />
+                </a>
+              </nav>
+            )}
 
             <Suspense fallback={<div className="h-9" />}>
               <AuthenticatedUserMenu
                 showAdminDashboard={showAdminDashboard}
-                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+                loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
               />
             </Suspense>
           </div>
 
-          <button
-            type="button"
-            aria-label="Toggle navigation"
-            onClick={() => setOpen((v) => !v)}
-            className="bg-transparent text-foreground lg:hidden"
-          >
-            {open ? <X className="size-6" /> : <Menu className="size-6" />}
-          </button>
+          {isAdminArea ? (
+            <div className="flex items-center gap-5 lg:hidden">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <UserCog aria-hidden="true" className="size-4 text-gold" />
+                <span>Admin Mode</span>
+              </div>
+              <Suspense fallback={<div className="h-9" />}>
+                <AuthenticatedUserMenu
+                  showAdminDashboard={showAdminDashboard}
+                  loggedOut={loggedOut ?? <MemberLoginLink className="rounded-full border border-gold/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold hover:text-primary-foreground" />}
+                />
+              </Suspense>
+            </div>
+          ) : (
+            <button
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setOpen((v) => !v)}
+              className="bg-transparent text-foreground lg:hidden"
+            >
+              {open ? <X className="size-6" /> : <Menu className="size-6" />}
+            </button>
+          )}
         </>
       }
       below={
-        open && (
+        open && !isAdminArea && (
           <nav className="border-t border-border bg-background px-5 py-4 lg:hidden">
             <ul className="flex flex-col gap-1">
               <li>
@@ -207,7 +224,7 @@ export function Header({
                 </Link>
               </li>
               <li className="pt-2">
-                <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                   About IDOC
                 </p>
                 <ul className="flex flex-col">
@@ -238,11 +255,11 @@ export function Header({
               {signedIn && (
                 entitled ? (
                   <li className="pt-2">
-                    <p className="px-1 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                    <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
                       My IDOC
                     </p>
                     <ul className="flex flex-col">
-                      {dashboardNavItems(memberSupport).map((item) => (
+                      {dashboardNavItems().map((item) => (
                         <li key={item.href}>
                           <Link
                             href={item.href}
@@ -267,17 +284,15 @@ export function Header({
                   </li>
                 )
               )}
-              {(!signedIn || !entitled) && (
-                <li>
-                  <Link
-                    href={contactLink.href}
-                    onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                  >
-                    {contactLink.label}
-                  </Link>
-                </li>
-              )}
+              <li>
+                <Link
+                  href={contactLink.href}
+                  onClick={() => setOpen(false)}
+                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  {contactLink.label}
+                </Link>
+              </li>
               <li>
                 <a
                   href="https://www.facebook.com/groups/646981818825549/"

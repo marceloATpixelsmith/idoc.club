@@ -5,7 +5,7 @@ export default function PrivacyPage() {
         <header className="space-y-3 border-b pb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Privacy Policy</h1>
           <p className="text-sm text-muted-foreground">International Dressage Officials Club (IDOC)</p>
-          <p className="text-sm text-muted-foreground">Last updated: 10 September 2026</p>
+          <p className="text-sm text-muted-foreground">Last updated: 2 October 2026</p>
           <p className="max-w-3xl text-muted-foreground">
             GDPR-aligned notice for IDOC membership, website, payments, events, and communications
           </p>
@@ -324,9 +324,15 @@ export default function PrivacyPage() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold">12. Cookies and similar technologies</h2>
           <p>
-            IDOC may use cookies and similar technologies that are strictly necessary to authenticate users,
+            IDOC uses cookies and similar technologies that are strictly necessary to authenticate users,
             maintain secure sessions, remember permitted device state, protect forms and login flows, prevent
-            abuse, and operate requested website features.
+            abuse, and operate requested website features. These essential technologies are not used for
+            advertising and are required for the requested service or its security.
+          </p>
+          <p>
+            IDOC does not currently use non-essential analytics or advertising cookies. The site may show a
+            compact informational notice about its essential-cookie use; dismissing that notice is not treated
+            as consent because no consent is requested for strictly necessary technologies.
           </p>
           <p>
             If IDOC introduces non-essential analytics, advertising, profiling, or similar tracking technologies

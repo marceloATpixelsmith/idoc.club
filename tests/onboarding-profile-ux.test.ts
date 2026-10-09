@@ -132,7 +132,7 @@ test('address entry is country-first with Geoapify-assisted structured populatio
 });
 
 test('Geoapify attribution is visually secondary to the address helper text', () => {
-  assert.match(source, /text-right text-\[10px\] text-gray-400/);
+  assert.match(source, /text-right text-xs text-gray-400/);
   assert.match(source, /underline decoration-gray-300 underline-offset-2/);
 });
 

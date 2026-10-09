@@ -11,7 +11,7 @@ function sha1(value: string) {
 }
 
 test('a password whose suffix appears in the range response is reported breached', async () => {
-  const password = 'correct horse battery staple';
+  const password = 'Password#1';
   const suffix = sha1(password).slice(5);
   let requestedUrl = '';
   globalThis.fetch = (async (input: RequestInfo | URL) => {

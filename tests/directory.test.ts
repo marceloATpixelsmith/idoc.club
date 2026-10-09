@@ -7,16 +7,18 @@ const memberDirectorySource = readFileSync('lib/directory/member-directory.ts', 
 const rateLimitSource = readFileSync('lib/security/rate-limit.ts', 'utf8');
 const concentrationMapSource = readFileSync('components/directory/concentration-map.tsx', 'utf8');
 const publicPageSource = readFileSync('app/(marketing)/about/members-directory/page.tsx', 'utf8');
-const memberPageSource = publicPageSource;
+const memberPageSource = readFileSync('components/directory/member-directory-table.tsx', 'utf8');
+const memberRouteSource = publicPageSource;
 const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx', 'utf8');
+const securityDoc = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /first_name|last_name|email|address|postal_code|latitude|longitude|\blat\b|\blng\b/i);
 });
 
 test('the public map never exposes a raw profile id or sequential database identifier', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from idoc.profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /p\.id\b/);
   assert.doesNotMatch(aggregateSource, /profileId|userId/);
 });
@@ -67,50 +69,58 @@ test('the paid member directory rate-limits searches per account and per origin 
   assert.match(rateLimitSource, /member_directory_search: 60/);
 });
 
-test('the paid member directory never selects or returns a name-adjacent contact field, exact address, or database identifier', () => {
+test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.first_name'), memberDirectorySource.indexOf('${from} where ${where} order'));
-  assert.doesNotMatch(select, /email|address|postal_code|"id"|profileId|userId|\bu\.\w/i);
+  assert.match(select, /coalesce\(u\.email_display, u\.email\) email/);
+  assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state = 'active'/);
+  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
+  assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
 });
 
-test('directory pagination uses a fixed, server-controlled page size and a bounded maximum page, never a client-supplied page size', () => {
-  assert.match(memberDirectorySource, /export const DIRECTORY_PAGE_SIZE = 25/);
-  assert.match(memberDirectorySource, /export const DIRECTORY_MAX_PAGE = 200/);
-  assert.doesNotMatch(memberDirectorySource, /pageSize.*=.*input\.|input\.pageSize/);
-  assert.match(memberDirectorySource, /Math\.min\(page, DIRECTORY_MAX_PAGE\)/);
-  assert.match(memberDirectorySource, /Math\.min\(counts\[0\]\?\.count \?\? 0, DIRECTORY_MAX_PAGE \* DIRECTORY_PAGE_SIZE\)/);
+test('directory page size matches the admin options and caps accessible results at 5,000 records', () => {
+  assert.match(memberDirectorySource, /DIRECTORY_PAGE_SIZE_OPTIONS = \[10, 25, 50, 100\]/);
+  assert.match(memberDirectorySource, /DIRECTORY_MAX_RESULTS = 5_000/);
+  assert.match(memberDirectorySource, /input\.pageSize/);
+  assert.match(memberDirectorySource, /Math\.min\(counts\[0\]\?\.count \?\? 0, DIRECTORY_MAX_RESULTS\)/);
+  assert.match(memberPageSource, /pageSizeOptions=\{PAGE_SIZES\}/);
 });
 
 test('directory search input length is capped, and search/filter values are escaped before use in a LIKE pattern', () => {
-  assert.match(memberDirectorySource, /firstString\(input\.q\)\?\.trim\(\)\.slice\(0, 100\)/);
+  assert.match(memberDirectorySource, /input\.q\)\?\.trim\(\)\.slice\(0, 100\)/);
   assert.match(memberDirectorySource, /replaceAll\('%', '\\\\%'\)\.replaceAll\('_', '\\\\_'\)/);
 });
 
 test('ordering is stable across pages: name first, then a non-exposed internal id as a pure tiebreaker', () => {
-  assert.match(memberDirectorySource, /p\.last_name asc, p\.first_name asc, p\.id asc/);
+  assert.match(memberDirectorySource, /p\.last_name asc nulls last/);
+  assert.match(memberDirectorySource, /p\.first_name asc nulls last/);
+  assert.match(memberDirectorySource, /p\.id asc/);
 });
 
 test('the website directory keeps unauthorized and failure states generic', () => {
-  assert.match(memberPageSource, /Active membership required/);
-  assert.match(memberPageSource, /DirectoryRateLimitedError/);
-  assert.match(memberPageSource, /directory could not be loaded/i);
+  assert.match(memberRouteSource, /Active membership required/);
+  assert.match(memberRouteSource, /DirectoryRateLimitedError/);
+  assert.match(memberRouteSource, /directory could not be loaded/i);
 });
 
-test('the paid directory page never renders a database identifier and uses only the row position as a React key', () => {
-  assert.doesNotMatch(memberPageSource, /row\.id\b|row\.profileId|row\.userId/);
-  assert.match(memberPageSource, /key=\{index\}/);
+test('the paid directory page offers email links and actions without rendering a database identifier', () => {
+  assert.doesNotMatch(memberPageSource, /row\.original\.(id|profileId|userId)\b/);
+  assert.match(memberPageSource, /href=\{`mailto:\$\{row\.original\.email\}`\}/);
+  assert.match(memberPageSource, /aria-label=\{`Email \$\{row\.original\.firstName\} \$\{row\.original\.lastName\}`\}/);
+  assert.match(memberPageSource, /id: 'actions'/);
 });
 
-test('every documented filter (membership type, federation, country, region) is present as a real form control', () => {
-  for (const name of ['q', 'membershipType', 'country', 'federation', 'region']) {
-    assert.match(memberPageSource, new RegExp(`name="${name}"`));
-  }
+test('directory facets use the shared table toolbar and omit the redundant Country column and filter', () => {
+  for (const id of ["'type'", "'federation'", "'region'"]) assert.ok(memberPageSource.includes(`id: ${id}`));
+  assert.match(memberPageSource, /DataTableToolbar/);
+  assert.match(memberPageSource, /variant: 'multiSelect'/);
+  assert.doesNotMatch(memberPageSource, /id: 'country'|label: 'Country'|name="country"/);
 });
 
 test('no Server Action or CSRF token is used by the directory surfaces: both are pure, re-authorized-on-every-request reads', () => {
   for (const source of [aggregateSource, memberDirectorySource, memberPageSource, publicPageSource]) {
     assert.doesNotMatch(source, /'use server'|requireCsrfToken/);
   }
-  assert.match(memberPageSource, /form method="get"/);
+  assert.doesNotMatch(memberPageSource, /form method="get"|type="submit"|>Search</);
 });
 
 test('the dashboard navigation omits Directory while the public website retains it', () => {
@@ -119,30 +129,61 @@ test('the dashboard navigation omits Directory while the public website retains 
 });
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
-  assert.match(memberPageSource, /activeTab = first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
-  assert.match(memberPageSource, /Map \/ Infographic/);
-  assert.match(memberPageSource, /Search Directory/);
-  assert.match(memberPageSource, /if \(activeTab === 'directory' && user\)/);
-  assert.match(memberPageSource, /getPublicMemberConcentration/);
+  assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberRouteSource, /Map \/ Infographic/);
+  assert.match(memberRouteSource, /Search Directory/);
+  assert.match(memberRouteSource, /if \(activeTab === 'directory' && user\)/);
+  assert.match(memberRouteSource, /getPublicMemberConcentration/);
 });
 
-test('directory filters resolve an array-valued (repeated-key) search parameter to "absent" before calling any string method on it', () => {
-  assert.match(memberDirectorySource, /function firstString\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
-  // Every filter field normalized() reads goes through firstString first, not a bare `.trim()`
-  // straight off the raw input -- the actual finding this fixes was `input.country?.trim()`
-  // throwing when `country` was an array.
-  for (const field of ['country', 'federation', 'membershipType', 'q', 'region']) {
-    assert.match(memberDirectorySource, new RegExp(`firstString\\(input\\.${field}\\)`));
+test('signed-out visitors see only the map, with no tabs and no directory even through a direct tab URL', () => {
+  assert.match(memberRouteSource, /const user = await getPublicUser\(\)/);
+  assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
+  assert.match(memberRouteSource, /\{user \? <nav aria-label="Members directory views"/);
+});
+
+test('directory facets accept multi-value query parameters safely', () => {
+  assert.match(memberDirectorySource, /function values\(value: RawFilterValue, limit: number\): string\[\]/);
+  assert.match(memberDirectorySource, /flatMap\(\(entry\) => entry\.split\(','\)\)/);
+  for (const field of ['federation', 'membershipType', 'region']) {
+    assert.match(memberDirectorySource, new RegExp(`values\\(input\\.${field}`));
   }
 });
 
 test('the paid directory page never passes a possibly-array searchParams value straight into a form field default', () => {
-  assert.match(memberPageSource, /function first\(value: string \| string\[\] \| undefined\) \{\s*\n\s*return Array\.isArray\(value\) \? undefined : value;/);
-  for (const field of ['q', 'membershipType', 'country', 'federation', 'region']) {
-    assert.match(memberPageSource, new RegExp(`first\\(params\\.${field}\\)`));
-  }
+  assert.match(publicPageSource, /function first\(value: string/);
+  assert.match(publicPageSource, /Array\.isArray\(value\) \? undefined : value/);
+  assert.match(memberPageSource, /useState\(Array\.isArray\(filters\.q\)/);
 });
 
 test('the public map page forces per-request dynamic rendering so it cannot be frozen as a static build-time snapshot', () => {
   assert.match(publicPageSource, /export const dynamic = 'force-dynamic';/);
+});
+
+test('multiple membership-type facets stay grouped with the other access and search predicates', () => {
+  assert.match(memberDirectorySource, /conditions\.push\(sql`\(\$\{sql\.join\(filters\.membershipType/);
+});
+
+test('directory defaults to the requested separate name, member detail, email, and contact columns', () => {
+  const columnBlock = memberPageSource.slice(memberPageSource.indexOf('id: \'firstName\''), memberPageSource.indexOf('], []),'));
+  const ids = [...columnBlock.matchAll(/id: \'([^\']+)\'/g)].map((match) => match[1]);
+  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions']);
+  assert.match(memberPageSource, /columnOrder: \['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'\]/);
+  assert.match(columnBlock, /header: header\('Member Type'\)/);
+  assert.match(columnBlock, /header: \(\) => <span>CONTACT<\/span>/);
+});
+
+test('descending name sorting applies the same direction to last and first names', () => {
+  assert.ok(memberDirectorySource.includes("...(id === 'name' || id === 'lastName' ? [sql`p.first_name ${direction} nulls last`] : [])"));
+});
+
+test('Reset appears for search-only state and cancels a pending debounced search', () => {
+  assert.match(memberPageSource, /isFiltered=\{hasFilters \|\| hasSearch\}/);
+  assert.match(memberPageSource, /debouncedSearch\.cancel\(\)/);
+  assert.match(memberPageSource, /searchRef\.current = ''/);
+});
+
+test('security documentation describes the bounded page-size choices and reachable-record cap', () => {
+  assert.match(securityDoc, /10, 25, 50, or 100 rows per page/);
+  assert.match(securityDoc, /total reachable depth is capped at 5,000 records/);
 });

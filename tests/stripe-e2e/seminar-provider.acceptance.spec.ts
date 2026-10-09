@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import Stripe from 'stripe';
+import { openSeminarRegistration } from './support/seminar-registration';
 import { withTestMembershipBoundary } from '../../lib/membership/test-boundary';
 import { refundSeminarRegistration } from '../../lib/payments/refunds';
+import { payWithTestCard } from './support/hosted-card';
 
 const memberEmail = process.env.STRIPE_E2E_MEMBER_EMAIL as string;
 const sql = postgres(process.env.TEST_DATABASE_URL as string, { max: 1 });
@@ -28,7 +30,8 @@ type Registration = {
 
 async function registration(): Promise<Registration> {
   const [row] = await sql<Registration[]>`select r.id registration_id,r.profile_id,r.seminar_id,r.registration_status,r.payment_status,
-    r.stripe_checkout_session_id,r.stripe_payment_intent_id,r.checkout_status,r.expected_amount_cents,r.currency,s.price_cents,
+    r.stripe_checkout_session_id,r.stripe_payment_intent_id,r.checkout_status,r.expected_amount_cents,r.currency,
+    coalesce(r.expected_amount_cents, case when r.profile_id is null then s.non_member_price_cents else s.member_price_cents end) price_cents,
     b.external_customer_id customer_id,(select count(*)::int from idoc.memberships m where m.profile_id=r.profile_id) membership_count,
     (select count(*)::int from idoc.audit_log a where a.entity_type='seminar_registration' and a.entity_id=r.id::text) audit_count
     from idoc.seminar_registrations r join idoc.seminars s on s.id=r.seminar_id
@@ -56,10 +59,7 @@ function completedEvent(session: Stripe.Checkout.Session, overrides: Partial<Str
 }
 
 async function fillStripeCard(page: import('@playwright/test').Page) {
-  await page.getByLabel(/card number/i).fill('4242424242424242');
-  await page.getByLabel(/expiration/i).fill('1230');
-  await page.getByLabel(/security code|cvc/i).fill('123');
-  await page.getByRole('button', { name: /pay|complete/i }).click();
+  await payWithTestCard(page);
   await page.waitForURL(/seminars/, { timeout: 60_000 });
 }
 
@@ -69,9 +69,7 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
   let paidRegistration: Registration;
 
   test('SEMINAR-CHECKOUT-PROVIDER retrieves the exact server-created Session and ignores client-controlled payment fields', async ({ page }) => {
-    await page.goto('/seminars?view=available');
-    const card = page.locator('section[aria-labelledby="available-seminars-heading"] li').filter({ hasText: 'Stripe E2E Seminar A' });
-    const button = card.getByRole('button', { name: /register/i });
+    const button = await openSeminarRegistration(page, 'Stripe E2E Seminar A');
     await button.evaluate((element) => {
       const form = element.closest('form');
       if (!form) throw new Error('Seminar registration form missing.');
@@ -83,7 +81,7 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
       if (seminar) seminar.dataset.authoritativeValue = seminar.value;
     });
     await button.dblclick();
-    await page.waitForURL(/checkout\.stripe\.com/);
+    await page.waitForURL(/checkout\.stripe\.com/, { waitUntil: 'domcontentloaded' });
     sessionUrl = page.url();
     const local = await registration();
     sessionId = local.stripe_checkout_session_id;
@@ -103,13 +101,12 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
   });
 
   test('SEMINAR-WEBHOOK-INTEGRITY rejects amount, currency, ownership, registration, seminar, Customer, and PaymentIntent mismatches then credits once', async ({ page }) => {
-    const paidBeforeMismatch = await stripe.checkout.sessions.retrieve(sessionId);
-    expect(paidBeforeMismatch.livemode).toBe(false);
-    await page.goto(sessionUrl);
-    await fillStripeCard(page);
+    // Post the forged events while the Checkout Session is still unpaid. A live webhook endpoint (or
+    // `stripe listen`) delivers the genuine completion as soon as the card is accepted, so doing it the
+    // other way round would race that delivery. Each forged payload claims `paid` but must be rejected.
     const provider = await stripe.checkout.sessions.retrieve(sessionId);
     expect(provider.livemode).toBe(false);
-    expect(provider.payment_status).toBe('paid');
+    expect(provider.payment_status).toBe('unpaid');
     const before = await registration();
     const mismatches: Partial<Stripe.Checkout.Session>[] = [
       { amount_total: before.price_cents + 1 }, { currency: 'usd' },
@@ -120,6 +117,12 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
     ];
     for (const mismatch of mismatches) await postVerifiedEvent(completedEvent(provider, { payment_status: 'paid', ...mismatch }));
     expect((await registration()).payment_status).toBe('pending');
+
+    await page.goto(sessionUrl);
+    await fillStripeCard(page);
+    expect((await stripe.checkout.sessions.retrieve(sessionId)).payment_status).toBe('paid');
+    // Let the genuine webhook land before the explicit delivery below so the audit counts are stable.
+    await expect.poll(async () => (await registration()).payment_status, { timeout: 60_000 }).toBe('paid');
 
     const paidProvider = await stripe.checkout.sessions.retrieve(sessionId);
     const event = completedEvent(paidProvider);
@@ -152,7 +155,8 @@ test.describe.serial('Stripe test-mode seminar acceptance', () => {
     const refund = await stripe.refunds.retrieve(evidence.external_refund_id, { expand: ['payment_intent'] });
     const intent = typeof refund.payment_intent === 'string'
       ? await stripe.paymentIntents.retrieve(refund.payment_intent) : refund.payment_intent;
-    expect((refund as unknown as Record<string, unknown>).livemode).toBe(false);
+    // Stripe Refund objects carry no `livemode`; the PaymentIntent it refunds does.
+    expect(intent?.livemode).toBe(false);
     expect(refund.amount).toBe(paidRegistration.price_cents);
     expect(refund.metadata).toMatchObject({ kind: 'seminar_registration', registrationId: String(paidRegistration.registration_id), testRun: memberEmail });
     expect(intent?.id).toBe(paidRegistration.stripe_payment_intent_id);

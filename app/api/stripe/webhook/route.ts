@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { processStripeEvent } from '@/lib/payments/webhook-handlers';
+import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
 import { logError } from '@/lib/observability/logger';
 import { stripeWebhookSecretForServer } from '@/lib/runtime/configuration';
 
@@ -29,7 +30,20 @@ export async function POST(request: Request) {
     );
   }
 
-  await processStripeEvent(event, stripe);
+  const status = await processStripeEvent(event, stripe);
 
-  return Response.json({ received: true });
+  // Staging and production share Postgres, but only production runs the scheduled notification cron.
+  // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after
+  // the Stripe transaction has committed. Production cannot claim these rows because its worker does
+  // not know this staging-only kind.
+  const checkoutSession = event.type === 'checkout.session.completed' ? event.data.object as Stripe.Checkout.Session : null;
+  const stagingOwnedEvent = checkoutSession?.metadata?.deliveryOwner === 'staging';
+  if (stagingOwnedEvent) {
+    const delivery = await processStagingSeminarConfirmationBatch();
+    if (delivery.retryable > 0 || delivery.deadLettered > 0) {
+      return Response.json({ error: 'Staging seminar confirmation delivery pending retry.' }, { status: 503 });
+    }
+  }
+
+  return Response.json({ received: true, status });
 }

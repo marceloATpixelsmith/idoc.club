@@ -8,8 +8,8 @@ const refunds = read('lib/payments/refunds.ts');
 const webhook = read('lib/payments/webhook-handlers.ts');
 const checkout = read('lib/seminars/checkout.ts');
 
-test('seminar Checkout remains dynamic one-time EUR pricing derived from the locked server record', () => {
-  assert.match(checkout, /s\.title,s\.price_cents/);
+test('seminar Checkout remains dynamic one-time EUR pricing derived from the locked server record, priced per registrant identity (member vs. guest)', () => {
+  assert.match(checkout, /s\.title,coalesce\(r\.expected_amount_cents, case when r\.profile_id is null then s\.non_member_price_cents else s\.member_price_cents end\) price_cents/);
   assert.match(checkout, /price_data: \{ currency: 'eur', product_data: \{ name: row\.title \}, unit_amount: row\.price_cents \}/);
   assert.match(checkout, /mode: 'payment'/);
   assert.match(checkout, /createSeminarCheckoutSession\(registrationIdValue: unknown/);

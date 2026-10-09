@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
+import { FormToggle } from '@/components/ui/form-toggle';
 import type { OrganizationAddress } from '@/lib/organization/settings';
 import { sanitizeBankInstructions } from '@/lib/organization/format';
 import { saveOrganizationSettings, type OrganizationSettingsState } from './actions';
@@ -33,14 +34,14 @@ export function OrganizationSettingsForm({ address, methods }: { address: Organi
     </fieldset>
     <fieldset className="space-y-6 rounded-lg border p-5"><legend className="px-2 text-lg font-bold uppercase tracking-wider text-gold">Seminar payment methods</legend>
       <section><h2 className="font-medium">{stripe.displayLabel}</h2><p className="text-sm text-muted-foreground">Required system default. Always enabled and protected.</p></section>
-      <section className="space-y-3"><label className="flex gap-3 font-medium"><input checked={bankEnabled} name="bankEnabled" onChange={(event) => setBankEnabled(event.target.checked)} type="checkbox" />Enable {bank.displayLabel}</label>
+      <section className="space-y-3"><FormToggle checked={bankEnabled} id="bankEnabled" label={`Enable ${bank.displayLabel}`} name="bankEnabled" onChange={(event) => setBankEnabled(event.currentTarget.checked)} />
         <div><label className="block text-sm font-medium" id="bank-instructions-label">Bank Transfer instructions{bankEnabled ? ' (required)' : ''}</label>
           <div aria-label="Formatting controls" className="mt-1 flex gap-2" role="toolbar"><button className="rounded border bg-transparent px-3 py-1" onClick={() => document.execCommand('bold')} type="button"><strong>Bold</strong></button><button className="rounded border bg-transparent px-3 py-1 italic" onClick={() => document.execCommand('italic')} type="button">Italic</button><button className="rounded border bg-transparent px-3 py-1" onClick={() => document.execCommand('insertUnorderedList')} type="button">List</button></div>
           <div aria-labelledby="bank-instructions-label" className="mt-2 min-h-32 rounded-md border p-3" contentEditable onInput={(event) => setInstructions(event.currentTarget.innerHTML)} role="textbox" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: sanitizedBankInstructions }} />
           <input name="bankInstructions" type="hidden" value={instructions} />
           <p className="mt-1 text-xs text-muted-foreground">Formatting is sanitized when saved. Instructions remain stored while disabled.</p></div>
       </section>
-      <label className="flex gap-3 font-medium"><input defaultChecked={cash.enabled} name="cashEnabled" type="checkbox" />Enable {cash.displayLabel}</label>
+      <FormToggle defaultChecked={cash.enabled} id="cashEnabled" label={`Enable ${cash.displayLabel}`} name="cashEnabled" />
     </fieldset>
     {state.error && <p aria-live="polite" className="text-sm text-red-500" role="alert">{state.error}</p>}
     {state.success && <p aria-live="polite" className="text-sm text-green-600">{state.success}</p>}

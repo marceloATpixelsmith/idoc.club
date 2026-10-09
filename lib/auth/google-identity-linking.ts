@@ -1,4 +1,7 @@
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
 import 'server-only';
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { client } from '@/lib/db/drizzle';
 import { GOOGLE_OIDC_PROVIDER, type GoogleOidcIdentity } from '@/lib/auth/google-oidc-reference';
@@ -45,7 +48,7 @@ function validateFreshEvidence(
 async function findGoogleIdentityForUser(userId: string): Promise<GoogleExternalIdentityRecord | null> {
   const rows = await client<{ user_id: number; issuer: string; subject: string }[]>`
     select user_id, issuer, subject
-    from idoc.external_identities
+    from external_identities
     where user_id=${Number(userId)} and provider='google'
     limit 1
   `;
@@ -58,30 +61,30 @@ async function atomicLink(input: {
   verificationTransactionId: string;
   verificationMethod: 'password';
 }): Promise<GoogleExternalIdentityAtomicLinkOutcome> {
-  return client.begin(async (sql) => {
+  const outcome = await client.begin(async (sql) => {
     const issuer = GOOGLE_OIDC_PROVIDER.issuer;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-subject:${issuer}:${input.subject}`}, 0))`;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-user:${input.userId}:${issuer}`}, 0))`;
 
     const owner = await sql<{ user_id: number }[]>`
-      select user_id from idoc.external_identities where issuer=${issuer} and subject=${input.subject} limit 1
+      select user_id from external_identities where issuer=${issuer} and subject=${input.subject} limit 1
     `;
     if (owner[0]) return owner[0].user_id === Number(input.userId) ? 'already-owned' : 'collision';
 
     const existing = await sql<{ subject: string }[]>`
-      select subject from idoc.external_identities where user_id=${Number(input.userId)} and provider='google' limit 1
+      select subject from external_identities where user_id=${Number(input.userId)} and provider='google' limit 1
     `;
     if (existing[0]) return existing[0].subject === input.subject ? 'already-owned' : 'different-google-identity-already-linked';
 
     const inserted = await sql<{ id: number }[]>`
-      insert into idoc.external_identities (provider, issuer, subject, user_id, created_at, last_used_at)
+      insert into external_identities (provider, issuer, subject, user_id, created_at, last_used_at)
       values ('google', ${issuer}, ${input.subject}, ${Number(input.userId)}, now(), now())
       returning id
     `;
     if (!inserted[0]) throw new GoogleIdentityLinkingError();
 
     await sql`
-      insert into idoc.audit_log (actor_id, action, entity_type, entity_id, after_json, reason)
+      insert into audit_log (actor_id, action, entity_type, entity_id, after_json, reason)
       values (
         ${Number(input.userId)},
         'auth.google_identity.linked',
@@ -92,13 +95,15 @@ async function atomicLink(input: {
       )
     `;
     await sql`
-      insert into idoc.auth_security_notification_outbox (user_id, kind, recipient_email, dedupe_key)
-      select id, 'google_identity_linked', email, ${`google-linked:${input.verificationTransactionId}`}
-      from idoc.users where id=${Number(input.userId)}
+      insert into auth_security_notification_outbox (dead_lettered_at,last_error_code,user_id, kind, recipient_email, dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id, 'google_identity_linked', email, ${`google-linked:${input.verificationTransactionId}`}
+      from users where id=${Number(input.userId)}
       on conflict (dedupe_key) where dedupe_key is not null do nothing
     `;
     return 'linked';
   });
+  if (outcome === 'linked') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return outcome;
 }
 
 async function atomicUnlink(input: {
@@ -108,19 +113,19 @@ async function atomicUnlink(input: {
   verificationMethod: 'password';
 }): Promise<boolean> {
   if (input.verificationMethod !== 'password') return false;
-  return client.begin(async (sql) => {
+  const outcome = await client.begin(async (sql) => {
     const issuer = GOOGLE_OIDC_PROVIDER.issuer;
     await sql`select pg_advisory_xact_lock(hashtextextended(${`google-user:${input.userId}:${issuer}`}, 0))`;
     const current = await sql<{ id: number; subject: string }[]>`
-      select id, subject from idoc.external_identities
+      select id, subject from external_identities
       where user_id=${Number(input.userId)} and provider='google' and issuer=${issuer}
       for update
     `;
     if (!current[0] || current[0].subject !== input.subject) return false;
 
-    await sql`delete from idoc.external_identities where id=${current[0].id}`;
+    await sql`delete from external_identities where id=${current[0].id}`;
     await sql`
-      insert into idoc.audit_log (actor_id, action, entity_type, entity_id, before_json, reason)
+      insert into audit_log (actor_id, action, entity_type, entity_id, before_json, reason)
       values (
         ${Number(input.userId)},
         'auth.google_identity.unlinked',
@@ -131,13 +136,15 @@ async function atomicUnlink(input: {
       )
     `;
     await sql`
-      insert into idoc.auth_security_notification_outbox (user_id, kind, recipient_email, dedupe_key)
-      select id, 'google_identity_unlinked', email, ${`google-unlinked:${input.verificationTransactionId}`}
-      from idoc.users where id=${Number(input.userId)}
+      insert into auth_security_notification_outbox (dead_lettered_at,last_error_code,user_id, kind, recipient_email, dedupe_key)
+      select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id, 'google_identity_unlinked', email, ${`google-unlinked:${input.verificationTransactionId}`}
+      from users where id=${Number(input.userId)}
       on conflict (dedupe_key) where dedupe_key is not null do nothing
     `;
     return true;
   });
+  if (outcome) dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return outcome;
 }
 
 export async function linkGoogleIdentity(input: {

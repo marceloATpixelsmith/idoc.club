@@ -1,4 +1,5 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -11,13 +12,14 @@ import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const MAX_ATTEMPTS = 6;
 export async function deliverProfileChangeNotification(_outboxId?: number, owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const rows = await db.execute<{ attemptCount: number; id: number }>(sql`
-    with candidate as (select id from idoc.notification_outbox where kind='administrator.profile_changed'
+    with candidate as (select id from notification_outbox where kind='administrator.profile_changed'
       and sent_at is null and dead_lettered_at is null and available_at <= now()
       and (lease_expires_at is null or lease_expires_at < now())
       ${_outboxId ? sql`and id=${_outboxId}` : sql``}
       order by available_at,id for update skip locked limit 1)
-    update idoc.notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
+    update notification_outbox o set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
     from candidate where o.id=candidate.id returning o.id, o.attempt_count as "attemptCount"
   `);
   const record = rows[0];

@@ -14,9 +14,8 @@ export type MainNavAccess = {
    * mirrors the same convenience check app/(dashboard)/dashboard/layout.tsx uses for the sidebar,
    * never an authorization boundary on its own. */
   entitled: boolean;
-  /** entitled && not privileged -- an administrator/super_admin is never a support *member* (see
-   * lib/support/inbox.ts's requireSupportMember, which rejects them), so the header must never
-   * offer Support (inside the My IDOC dropdown) to one of them. */
+  /** Entitled ordinary member capability for rendering member ticketing at Contact. The support
+   * data and server actions still enforce ownership and authorization independently. */
   memberSupport: boolean;
   /** A signed-in, non-entitled (never-paid or post-grace-expired) member still needs a way back
    * into the payment flow from the header -- the "My IDOC" nav item falls back to a plain link to

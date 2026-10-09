@@ -1,4 +1,5 @@
 import 'server-only';
+import { communicationHoldFields } from '@/lib/runtime/member-launch-hold';
 
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -13,8 +14,8 @@ import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
-import { memberProfileSchema, type MemberProfileInput } from './validation';
-import { isPrivilegedActor, mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
+import { memberProfileSchema, type AdminBoardProfileInput, type MemberProfileInput } from './validation';
+import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
 import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
@@ -44,22 +45,18 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const session = injectedActor ? null : await getSession();
   const userId = injectedActor?.id ?? session?.user.id;
   if (!userId) throw new AuthorizationError();
-  const [account] = await db.select({ accountState: users.accountState, legacyProfileReviewRequired: users.legacyProfileReviewRequired })
+  const [account] = await db.select({ accountState: users.accountState })
     .from(users).where(eq(users.id, userId)).limit(1);
   if (!account) throw new AuthorizationError();
-  const grants = await db.select({ role: applicationRoles.role }).from(applicationRoles)
-    .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt)));
+  const [grants, profile] = await Promise.all([
+    db.select({ role: applicationRoles.role }).from(applicationRoles)
+      .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))),
+    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
+  ]);
   const actor = { id: userId, roles: grants.map(({ role }) => role) };
-  if (account.legacyProfileReviewRequired && !isPrivilegedActor(actor)) {
-    if (account.accountState !== 'active' || !['account', 'profile_review'].includes(operation)) {
-      throw new AuthorizationError();
-    }
-    return actor;
-  }
-  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
-  const latest = profile
+  const latest = profile[0]
     ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
-      .from(memberships).where(eq(memberships.profileId, profile.id))
+      .from(memberships).where(eq(memberships.profileId, profile[0].id))
       .orderBy(desc(memberships.validUntil)).limit(1)
     : [];
   const entitled = latest[0]
@@ -98,26 +95,13 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
-/** Minimal official-profile projection for the required legacy review screen. It deliberately
- * excludes membership entitlement, billing, subscription, and payment-history data. */
-export async function getOwnLegacyProfileReviewData() {
-  const actor = await authenticatedActor('profile_review');
-  const [profile] = await db.select().from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
-  if (!profile) return null;
-  const roles = await db.select().from(professionalRoles).where(and(
-    eq(professionalRoles.profileId, profile.id),
-    isNull(professionalRoles.effectiveTo),
-  ));
-  return { profile, roles };
-}
-
 export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsent?: OnboardingConsentInput) {
   const input = memberProfileSchema.parse(untrustedInput);
   const consent = validatedConsent(untrustedConsent);
   const actor = await authenticatedActor('onboarding');
   const result = await db.transaction(async (tx) => {
     const [account] = await tx.execute<{ account_state: string; email: string }>(sql`
-      select account_state, email from idoc.users where id = ${actor.id} for update
+      select account_state, email from users where id = ${actor.id} for update
     `);
     if (!account || account.account_state !== 'onboarding') {
       throw new Error('This account is not eligible for onboarding.');
@@ -155,13 +139,14 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   return result.profile;
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { legacyProfileReview?: boolean; reason?: string }) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { board?: AdminBoardProfileInput; reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
-  const actor = await authenticatedActor(options?.legacyProfileReview ? 'profile_review' : 'profile_mutation');
+  const actor = await authenticatedActor('profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
-  const isAdminEdit = actor.id !== existing.userId;
+  const isAdminEdit = actor.id !== existing.userId || options?.board !== undefined;
+  if (options?.board !== undefined) requireAdministrator(actor);
   const reason = options?.reason?.trim() ?? '';
   if (isAdminEdit && reason.length === 0) throw new Error('An administrative reason is required for this correction.');
 
@@ -170,7 +155,8 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
       .where(and(eq(professionalRoles.profileId, profileId), isNull(professionalRoles.effectiveTo)));
     const now = new Date();
     const profileValues = profileColumns(input);
-    const [updated] = await tx.update(profiles).set({ ...profileValues, updatedAt: now })
+    const boardValues = options?.board ?? {};
+    const [updated] = await tx.update(profiles).set({ ...profileValues, ...boardValues, updatedAt: now })
       .where(eq(profiles.id, profileId)).returning();
     injectProfileTransactionFailure('profile-write');
     const desiredByType = new Map(input.roles.map((role) => [role.roleType, role]));
@@ -203,32 +189,10 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     });
     injectProfileTransactionFailure('audit-insertion');
     if (!isAdminEdit) {
-      await tx.update(users).set({ legacyProfileReviewRequired: false, legacyProfileReviewedAt: now, updatedAt: now })
-        .where(and(eq(users.id, actor.id), eq(users.legacyProfileReviewRequired, true)));
-      await tx.insert(notificationOutbox).values({ kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
+      await tx.insert(notificationOutbox).values({ ...communicationHoldFields(), kind: 'administrator.profile_changed', payload: { actorId: actor.id }, profileId });
     }
     injectProfileTransactionFailure('notification-insertion');
     return updated;
-  });
-}
-
-/** Explicit administrator-only reset; normal profile edits can never silently re-open review. */
-export async function resetLegacyProfileReview(userId: number, reason: string) {
-  const actor = await authenticatedActor('administration');
-  requireAdministrator(actor);
-  const normalizedReason = reason.trim();
-  if (!normalizedReason) throw new Error('An administrative reason is required.');
-  return db.transaction(async (tx) => {
-    const [updated] = await tx.update(users).set({
-      legacyProfileReviewRequired: true,
-      legacyProfileReviewedAt: null,
-      updatedAt: new Date(),
-    }).where(eq(users.id, userId)).returning({ id: users.id });
-    if (!updated) throw new Error('Member not found.');
-    await tx.insert(auditLog).values({
-      action: 'admin.legacy_profile_review.reset', actorId: actor.id,
-      entityId: String(userId), entityType: 'user', reason: normalizedReason,
-    });
   });
 }
 
@@ -263,23 +227,17 @@ export async function deleteOwnAccount() {
 }
 
 /**
- * Self-service membership cancellation -- distinct from both deleteOwnAccount (which mangles the
- * login email and denies all future sign-in) and disableAutomaticRenewal/the Renewal Mode control
- * (which only stops future billing while access continues through the paid-through date). This
- * ends access immediately, reusing suspendMembership's own proven status/access semantics ('canceled'
- * plus a backdated valid_until was tried first and rejected: it can violate memberships_dates_check
- * when starts_on is today, silently rolling back the whole cancellation while leaving access and any
- * subscription active) -- 'suspended' denies access regardless of valid_until without touching it at
- * all, so no date arithmetic and no constraint risk. The distinct audit action name
- * ('member.membership_canceled' vs admin suspension's 'admin.membership.suspended') is what
- * distinguishes a self-cancellation from an administrator's suspension-for-cause in the record; nothing
- * in the schema needs to. The login/profile record itself is untouched -- a member can sign back in
- * later, though (like any other non-entitled member) they land on the My Membership payment view, not an entitled-member dashboard
- * view of the canceled membership. Best-effort cancels any open Stripe subscription immediately (not
- * at-period-end) and unsubscribes from the marketing mailing list; neither failure blocks the
- * membership-level cancellation, which is unconditional and DB-only. handleInvoicePaid and
- * handleInvoicePaymentFailed both check for this 'suspended' status before touching entitlement, so a
- * Stripe event already in flight at the moment of cancellation can never silently revive it.
+ * Self-service membership cancellation -- distinct from deleteOwnAccount (which mangles the login
+ * email and denies all future sign-in) and from disableAutomaticRenewal/the Renewal Mode control
+ * (which only stops future billing and leaves the membership active). Like every cancellation, by
+ * the member or an administrator, it works through the end of the current paid cycle: the
+ * membership becomes 'canceled' with valid_until untouched (so no date constraint is at risk), the
+ * member keeps full access until that date, any open Stripe subscription is set to end at period
+ * end rather than renew, and the member is removed from the mailing list. Once the paid-through
+ * date passes, the relationship is over: lib/membership/session-gate.ts ends the session and sign-in
+ * is refused. Neither the Stripe call nor the mailing-list removal can block the membership-level
+ * cancellation, which is unconditional and DB-only. handleInvoicePaid and handleInvoicePaymentFailed
+ * leave a 'canceled' membership alone, so an in-flight Stripe event cannot silently revive it.
  */
 export async function cancelOwnMembership(testStripeClient?: CancellationStripeClient) {
   const actor = await authenticatedActor('billing_boundary');
@@ -291,7 +249,7 @@ export async function cancelOwnMembership(testStripeClient?: CancellationStripeC
     const current = await lockLatestMembership(tx, profile.id);
     if (!current) throw new Error('No membership on file to cancel.');
     const [updated] = await tx.update(memberships).set({
-      status: 'suspended', updatedAt: new Date(),
+      status: 'canceled', updatedAt: new Date(),
     }).where(eq(memberships.id, current.id)).returning();
     await tx.insert(auditLog).values({
       action: 'member.membership_canceled', actorId: actor.id,

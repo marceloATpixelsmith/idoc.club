@@ -175,7 +175,7 @@ export function DataTableSortList<TData>({
           <Button
             data-idoc-table-control
             variant="outline"
-            className="font-normal"
+            className="h-8 font-normal"
             onKeyDown={onTriggerKeyDown}
             disabled={disabled}
           >
@@ -184,7 +184,7 @@ export function DataTableSortList<TData>({
             {sorting.length > 0 && (
               <Badge
                 variant="secondary"
-                className="h-[18.24px] rounded-[3.2px] px-[5.12px] font-mono font-normal text-[10.4px]"
+                className="h-[18.24px] rounded-[3.2px] px-[5.12px] font-mono font-normal text-xs"
               >
                 {sorting.length}
               </Badge>

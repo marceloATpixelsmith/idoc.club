@@ -17,8 +17,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
+import { getDatabaseSchemaName } from './schema-name';
 
-export const idocSchema = pgSchema('idoc');
+export const idocSchema = pgSchema(getDatabaseSchemaName());
 
 export const users = idocSchema.table('users', {
   id: serial('id').primaryKey(),
@@ -38,9 +39,6 @@ export const users = idocSchema.table('users', {
   // creating a first password while disconnecting Google (app/(dashboard)/dashboard/security/actions.ts).
   // Existing rows are backfilled by this column's own migration.
   passwordSetAt: timestamp('password_set_at'),
-  /** Set only by the trusted legacy importer. Completion is an auditable, one-time member action. */
-  legacyProfileReviewRequired: boolean('legacy_profile_review_required').notNull().default(false),
-  legacyProfileReviewedAt: timestamp('legacy_profile_reviewed_at', { withTimezone: true }),
   accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
   sessionVersion: integer('session_version').notNull().default(0),
   role: varchar('role', { length: 20 }).notNull().default('member'),
@@ -51,7 +49,6 @@ export const users = idocSchema.table('users', {
 }, (table) => [
   uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
-  check('users_legacy_profile_review_state_check', sql`NOT legacy_profile_review_required OR legacy_profile_reviewed_at IS NULL`),
 ]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
@@ -215,16 +212,20 @@ export const applicationRoles = idocSchema.table('application_roles', {
 export const profiles = idocSchema.table('profiles', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().unique().references(() => users.id),
-  // Nullable only at the trusted legacy-import boundary. The official member form requires every
-  // applicable value before first-login review can be completed.
-  firstName: varchar('first_name', { length: 100 }),
-  lastName: varchar('last_name', { length: 100 }),
-  address1: varchar('address_1', { length: 200 }),
+  firstName: varchar('first_name', { length: 100 }).notNull(),
+  lastName: varchar('last_name', { length: 100 }).notNull(),
+  phone: varchar('phone', { length: 20 }),
+  address1: varchar('address_1', { length: 200 }).notNull(),
   address2: varchar('address_2', { length: 200 }),
-  city: varchar('city', { length: 100 }),
-  stateProvince: varchar('state_province', { length: 100 }),
-  postalCode: varchar('postal_code', { length: 30 }),
-  countryCode: varchar('country_code', { length: 2 }),
+  city: varchar('city', { length: 100 }).notNull(),
+  stateProvince: varchar('state_province', { length: 100 }).notNull(),
+  postalCode: varchar('postal_code', { length: 30 }).notNull(),
+  countryCode: varchar('country_code', { length: 2 }).notNull(),
+  isBoardMember: boolean('is_board_member').notNull().default(false),
+  boardTitle: varchar('board_title', { length: 120 }),
+  boardSubtitle: varchar('board_subtitle', { length: 160 }),
+  boardFacebookUrl: varchar('board_facebook_url', { length: 500 }),
+  boardPhotoUrl: text('board_photo_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -324,7 +325,7 @@ export const profileChangeHistory = idocSchema.table('profile_change_history', {
 
 export const auditLog = idocSchema.table('audit_log', {
   id: serial('id').primaryKey(),
-  actorId: integer('actor_id').references(() => users.id),
+  actorId: integer('actor_id').references(() => users.id, { onDelete: 'set null' }),
   action: varchar('action', { length: 100 }).notNull(),
   entityType: varchar('entity_type', { length: 50 }).notNull(),
   entityId: varchar('entity_id', { length: 100 }).notNull(),
@@ -349,7 +350,7 @@ export const administratorTablePreferences = idocSchema.table('administrator_tab
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('administrator_table_preferences_user_table_unique').on(table.userId, table.tableIdentifier),
-  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'content_pages')`),
+  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'seminar_registrations')`),
 ]);
 
 /** Member-owned, immutable threaded support. Public UUIDs keep internal sequence IDs out of URLs. */
@@ -366,7 +367,7 @@ export const supportConversations = idocSchema.table('support_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`),
+  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`),
   check('support_conversations_status_check', sql`${table.status} in ('open', 'admin_responded', 'member_replied', 'closed')`),
   check('support_conversations_subject_length_check', sql`char_length(${table.subject}) between 1 and 160`),
   index('support_conversations_member_activity_idx').on(table.memberUserId, table.updatedAt),
@@ -411,7 +412,7 @@ export const supportCategoryDefaults = idocSchema.table('support_category_defaul
   administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
   updatedBy: integer('updated_by').notNull().references(() => users.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support')`)]);
+}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`)]);
 
 /** Administrator-authored News/Blog articles. `publicationDate` is the administrator-set target date
  * (also the displayed article date); `publishedAt` is the actual timestamp the article went live,
@@ -424,6 +425,10 @@ export const newsArticles = idocSchema.table('news_articles', {
   title: varchar('title', { length: 200 }).notNull(),
   subtitle: varchar('subtitle', { length: 300 }),
   contentHtml: text('content_html').notNull(),
+  articleType: varchar('article_type', { length: 10 }).notNull().default('news'),
+  audience: varchar('audience', { length: 20 }).array().notNull().default(sql`array['public']::varchar[]`),
+  thumbnailUrl: text('thumbnail_url'),
+  externalUrl: text('external_url'),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
   publicationDate: timestamp('publication_date', { withTimezone: true }).notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
@@ -434,11 +439,15 @@ export const newsArticles = idocSchema.table('news_articles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check('news_articles_status_check', sql`${table.status} in ('draft', 'scheduled', 'published', 'archived')`),
+  check('news_articles_type_check', sql`${table.articleType} in ('news', 'blog')`),
+  check('news_articles_audience_check', sql`cardinality(${table.audience}) between 1 and 3 and ${table.audience} <@ array['public','members','judge','steward','veterinarian']::varchar[] and ((${table.audience} && array['public','members']::varchar[] and cardinality(${table.audience}) = 1) or (not (${table.audience} && array['public','members']::varchar[]) and ${table.audience} <@ array['judge','steward','veterinarian']::varchar[]))`),
   check('news_articles_slug_format_check', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
   check('news_articles_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
   check('news_articles_subtitle_length_check', sql`${table.subtitle} is null or char_length(${table.subtitle}) between 1 and 300`),
-  check('news_articles_content_length_check', sql`char_length(${table.contentHtml}) between 1 and 20000`),
+  check('news_articles_external_url_check', sql`${table.externalUrl} is null or ${table.externalUrl} ~* '^https?://'`),
+  check('news_articles_content_length_check', sql`(${table.externalUrl} is null and char_length(${table.contentHtml}) between 1 and 20000) or (${table.externalUrl} is not null and char_length(${table.contentHtml}) between 0 and 20000)`),
   index('news_articles_publication_queue_idx').on(table.status, table.publicationDate),
+  index('news_articles_type_publication_idx').on(table.articleType, table.status, table.publicationDate),
 ]);
 
 /** Revisioned CMS pages with explicit union/intersection audience rules. */
@@ -480,21 +489,44 @@ export const contentPageRevisions = idocSchema.table('content_page_revisions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('content_page_revisions_number_unique').on(table.pageId, table.revisionNumber)]);
 
-/** Administrator-authored seminars. Payment choice belongs to each registration; seminar date
- * and time are stored without a separate timezone and interpreted consistently as UTC. Price becomes
- * immutable at the application layer once any registration exists. */
+/** Administrator-authored seminars. Payment method is deliberately not a seminar-level field:
+ * every seminar accepts whichever canonical `seminar_payment_methods` are currently enabled
+ * (Organization Settings, migration 0038) -- Online via Stripe always, Bank Transfer/Cash at the
+ * Event whenever enabled -- and the registrant picks one at registration time
+ * (`seminarRegistrations.paymentMethodCanonicalId`, migration 0055). A seminar may span multiple
+ * calendar days (`startDate` and `endDate`) -- a single-day seminar has `endDate = startDate`. Two prices apply uniformly to
+ * every seminar (migration 0056): `memberPriceCents` for an entitled logged-in member,
+ * `nonMemberPriceCents` for a guest registrant. Both prices become immutable at the application
+ * layer once any registration exists (lib/seminars/seminars.ts), and `capacity` may only be
+ * lowered to at least the current active-registration count. */
 export const seminars = idocSchema.table('seminars', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').notNull(),
-  seminarDate: date('seminar_date').notNull(),
-  startTime: time('start_time').notNull(),
-  endTime: time('end_time').notNull(),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  // Legacy rollout columns retained temporarily for compatibility with main; date-only code does not use them.
+  startTime: time('start_time'),
+  endTime: time('end_time'),
+  timezone: varchar('timezone', { length: 60 }),
   location: text('location').notNull(),
+  language: varchar('language', { length: 35 }).notNull().default('en'),
+  organizingNationalFederation: varchar('organizing_national_federation', { length: 2 }).notNull().default('IE'),
+  courseDirectors: text('course_directors').notNull().default(''),
+  participantProfile: text('participant_profile').notNull().default(''),
+  courseVenueInformation: text('course_venue_information').notNull().default(''),
+  application: text('application').notNull().default(''),
+  accommodationInformation: text('accommodation_information').notNull().default(''),
   capacity: integer('capacity').notNull(),
-  priceCents: integer('price_cents').notNull(),
+  memberPriceCents: integer('member_price_cents').notNull(),
+  nonMemberPriceCents: integer('non_member_price_cents').notNull(),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
+  isFei: boolean('is_fei').notNull().default(false),
+  // The FEI/officiating "level(s)" this seminar applies to -- zero or more of level_1/level_2/level_3,
+  // or the single special value all_levels (which always displays as the literal string "All levels"
+  // rather than being combined with the individual levels; see lib/seminars/format.ts formatLevels).
+  levels: varchar('levels', { length: 20 }).array().notNull().default(sql`'{}'::varchar(20)[]`),
   createdByUserId: integer('created_by_user_id').notNull().references(() => users.id),
   updatedByUserId: integer('updated_by_user_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -502,30 +534,48 @@ export const seminars = idocSchema.table('seminars', {
 }, (table) => [
   check('seminars_status_check', sql`${table.status} in ('draft', 'published', 'canceled')`),
   check('seminars_title_length_check', sql`char_length(${table.title}) between 1 and 200`),
-  check('seminars_description_length_check', sql`char_length(${table.description}) between 1 and 10000`),
   check('seminars_location_length_check', sql`char_length(${table.location}) between 1 and 2000`),
   check('seminars_capacity_check', sql`${table.capacity} > 0`),
-  check('seminars_price_check', sql`${table.priceCents} >= 0`),
-  check('seminars_time_order_check', sql`${table.endTime} > ${table.startTime}`),
-  index('seminars_status_date_idx').on(table.status, table.seminarDate),
+  check('seminars_member_price_check', sql`${table.memberPriceCents} >= 0`),
+  check('seminars_non_member_price_check', sql`${table.nonMemberPriceCents} >= 0`),
+  check('seminars_date_order_check', sql`${table.endDate} >= ${table.startDate}`),
+  check('seminars_language_length_check', sql`char_length(${table.language}) between 2 and 35`),
+  // all_levels always stands alone (lib/seminars/seminars.ts's parseLevels enforces this at the
+  // application layer) -- this constraint enforces the same invariant at the database layer, so a
+  // write that bypasses parseLevels (a manual repair, a future import) can never persist the
+  // contradictory ['all_levels', 'level_1'] that formatLevels would otherwise silently misrepresent.
+  check('seminars_levels_valid_check', sql`${table.levels} <@ ARRAY['level_1','level_2','level_3','all_levels']::varchar(20)[] and (not ('all_levels' = any(${table.levels})) or cardinality(${table.levels}) = 1)`),
+  index('seminars_status_date_idx').on(table.status, table.startDate),
 ]);
 
-/** One row per authenticated-member or guest registration; canceling reuses the same row (registration_status flips back
- * to 'registered' on re-registration) rather than inserting a second row, so the unique constraint
- * on (seminar_id, profile_id) is a real, permanent duplicate-registration guard, not just a
- * point-in-time check. `paymentStatus` and `registrationStatus` are deliberately independent
- * columns -- canceling a registration never overwrites its payment history and vice versa. */
+/** One row per registration, member or guest; canceling reuses the same row (registration_status
+ * flips back to 'registered' on re-registration) rather than inserting a second row, so the unique
+ * constraint on (seminar_id, profile_id) is a real, permanent duplicate-registration guard for a
+ * member, not just a point-in-time check. A guest registrant (no IDOC account) has `profileId`
+ * null and `guestName`/`guestEmail` set instead -- exactly one of the two identities is ever
+ * present (migration 0056); a partial unique index guards against the same guest email
+ * double-registering the same seminar the same way the member index does. `paymentStatus` and
+ * `registrationStatus` are deliberately independent columns -- canceling a registration never
+ * overwrites its payment history and vice versa. `paymentMethodCanonicalId` is the registrant's
+ * own choice at registration time (migration 0055), not inherited from the seminar -- re-registering
+ * after canceling may pick a different one. `paymentReference` is an optional administrator note
+ * recorded when manually confirming a bank-transfer/cash payment (migration 0056), mirroring
+ * `payments.reference`'s evidence trail for membership payments. */
 export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   id: serial('id').primaryKey(),
   seminarId: integer('seminar_id').notNull().references(() => seminars.id),
   profileId: integer('profile_id').references(() => profiles.id),
-  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
+  /** Legacy compatibility bridge: current code writes the structured fields below as well as this
+   * combined value until production has promoted the expand migration. */
+  guestName: varchar('guest_name', { length: 200 }),
   guestFirstName: varchar('guest_first_name', { length: 100 }),
   guestLastName: varchar('guest_last_name', { length: 100 }),
   guestEmail: varchar('guest_email', { length: 255 }),
   guestPhone: varchar('guest_phone', { length: 40 }),
   registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
+  paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
+  paymentReference: text('payment_reference'),
   stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }).unique(),
   expectedAmountCents: integer('expected_amount_cents'),
@@ -539,15 +589,14 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   markedPaidByUserId: integer('marked_paid_by_user_id').references(() => users.id),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
   canceledAt: timestamp('canceled_at', { withTimezone: true }),
-  refundedAt: timestamp('refunded_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled', 'refunded')`),
+  check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled')`),
   check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback')`),
   check('seminar_registrations_expected_amount_check', sql`${table.expectedAmountCents} is null or ${table.expectedAmountCents} >= 0`),
   check('seminar_registrations_currency_check', sql`${table.currency} = 'EUR'`),
   check('seminar_registrations_checkout_status_check', sql`${table.checkoutStatus} is null or ${table.checkoutStatus} in ('open', 'complete', 'expired', 'superseded')`),
-  check('seminar_registrations_identity_check', sql`(${table.profileId} is not null and num_nonnulls(${table.guestFirstName},${table.guestLastName},${table.guestEmail},${table.guestPhone}) = 0) or (${table.profileId} is null and num_nonnulls(${table.guestFirstName},${table.guestLastName},${table.guestEmail},${table.guestPhone}) = 4)`),
+  check('seminar_registrations_registrant_identity_check', sql`(${table.profileId} is not null and ${table.guestName} is null and ${table.guestEmail} is null) or (${table.profileId} is null and ${table.guestName} is not null and ${table.guestEmail} is not null)`),
   uniqueIndex('seminar_registrations_seminar_profile_unique').on(table.seminarId, table.profileId),
   uniqueIndex('seminar_registrations_seminar_guest_email_unique').on(table.seminarId, sql`lower(${table.guestEmail})`).where(sql`${table.profileId} is null`),
   index('seminar_registrations_seminar_status_idx').on(table.seminarId, table.registrationStatus),
@@ -557,7 +606,7 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
 export const notificationOutbox = idocSchema.table('notification_outbox', {
   id: serial('id').primaryKey(),
   kind: varchar('kind', { length: 50 }).notNull(),
-  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  profileId: integer('profile_id').references(() => profiles.id),
   payload: jsonb('payload').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp('sent_at', { withTimezone: true }),

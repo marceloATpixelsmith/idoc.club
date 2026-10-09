@@ -1,36 +1,47 @@
 'use client';
 
-import type { ColumnDef, HeaderContext, VisibilityState } from '@tanstack/react-table';
-import { Archive, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Gavel, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, X } from 'lucide-react';
+import type { ColumnDef, ColumnFiltersState, HeaderContext, VisibilityState } from '@tanstack/react-table';
+import type { MouseEvent } from 'react';
+import { Archive, Bell, CircleCheck, CircleX, Clock3, CreditCard, Download, FlaskConical, Headphones, Mail, Pencil, Shield, Stethoscope, UserCog, UserRound, UsersRound, X } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { DataTable } from '@/components/data-table/data-table';
-import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
+import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
+import { DataTableColumnHeader, DataTableStaticHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
+import { BulkArchiveMembersSelected } from '@/components/admin/bulk-archive-members';
+import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { CountryFlag } from '@/components/ui/country-flag';
 import { ActionBar, ActionBarClose, ActionBarGroup, ActionBarItem, ActionBarSelection } from '@/components/ui/action-bar';
-import { useDataTable } from '@/hooks/use-data-table';
+import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
+import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
 import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries';
 import { IDOC_REGIONS } from '@/lib/membership/validation';
+import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
 
 type Filters = {
-  country?: string; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federation?: string; filters?: string;
-  membershipType?: string; page: number; pageSize: number; q?: string; region?: string; sort: string; status: string;
+  countries?: string[]; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federations?: string[];
+  membershipTypes?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
 };
 
-const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions'] as const;
+// 'actions' is deliberately excluded here: it's non-hideable (see the column def below) and has
+// no accessorFn, so it never appears in the View popover to be restored -- a saved preference
+// predating this column (or missing it) must never be able to hide it with no way back.
+const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
+const MULTI_SELECT_FILTERS = ['status', 'type', 'federation', 'country', 'region'] as const;
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
-  { label: 'Archived Members', value: 'archived' },
+  { label: 'Archived Members', value: 'archived' }, { label: 'Board Members', value: 'board_member' },
   { label: 'Administrators', value: 'administrator' }, { label: 'Superadmins', value: 'super_admin' },
   { label: 'Onboarding Users', value: 'onboarding' }, { label: 'Test Members', value: 'test' },
 ];
@@ -41,8 +52,8 @@ const TYPE_OPTIONS = [
 const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
 const TYPE_DISPLAY = {
-  judge: { icon: Gavel, label: 'JUDGE' }, steward: { icon: Shield, label: 'STEWARD' },
-  combo: { icon: Gavel, label: 'JUDGE & STEWARD' }, veterinarian: { icon: Stethoscope, label: 'VETERINARIAN' },
+  judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: HorseshoeIcon, label: 'STEWARD' },
+  combo: { icon: Bell, label: 'JUDGE & STEWARD' }, veterinarian: { icon: Stethoscope, label: 'VETERINARIAN' },
 };
 const STATUS_DISPLAY = {
   active: { icon: CircleCheck, label: 'ACTIVE' }, expired: { icon: Clock3, label: 'EXPIRED' },
@@ -51,135 +62,180 @@ const STATUS_DISPLAY = {
   test: { icon: FlaskConical, label: 'TEST' }, without_active: { icon: CircleX, label: 'WITHOUT ACTIVE MEMBERSHIP' },
 };
 
-function visibleState(searchParams: URLSearchParams, initial?: string[]): VisibilityState {
-  const explicit = searchParams.getAll('column');
-  const selected = explicit.length > 0 ? explicit : initial;
-  if (!selected) return {};
-  return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, selected.includes(column)]));
+function visibleState(initial?: string[]): VisibilityState {
+  if (!initial) return {};
+  return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, initial.includes(column)]));
 }
-
-function memberHref(searchParams: URLSearchParams, profileId: number) { const params = new URLSearchParams(searchParams.toString()); params.set('profileId', String(profileId)); return params.toString(); }
 
 function header(id: string) {
   return ({ column }: HeaderContext<AdminMemberRow, unknown>) => <DataTableColumnHeader column={column} label={COLUMN_LABELS[id] ?? id} />;
 }
 
-export function MembersTable({ filters, initialColumnOrder, initialVisibleColumns, pageSize, rows, total }: { defaultActive: boolean; filters: Filters; initialColumnOrder?: string; initialVisibleColumns?: string[]; pageSize: number; rows: AdminMemberRow[]; total: number }) {
+/** A column filter's react-table value is always an array here (every filterable column here is
+ * `variant: 'multiSelect'`); comma-join it to match the persisted-preference/query-param shape
+ * every server-side filter parser already accepts (see lib/admin/resource-list-query.ts's `many()`). */
+function filterToken(columnFilters: ColumnFiltersState, id: string): string | undefined {
+  const value = columnFilters.find((filter) => filter.id === id)?.value;
+  const list = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  return list.length ? list.join(',') : undefined;
+}
+
+export function MembersTable({ filters, initialColumnOrder, initialVisibleColumns, pageSize, rows, total }: { filters: Filters; initialColumnOrder?: string; initialVisibleColumns?: string[]; pageSize: number; rows: AdminMemberRow[]; total: number }) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [search, setSearch] = useState(filters.q ?? '');
+  const [expiresFrom, setExpiresFrom] = useState(filters.expiresFrom);
+  const [expiresTo, setExpiresTo] = useState(filters.expiresTo);
   const [isPending, startTransition] = useTransition();
-  const initialVisibility = useMemo(() => visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns), []);
+  function openMember(event: MouseEvent, href: string) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    startTransition(() => router.push(href));
+  }
+
   const columns = useMemo<ColumnDef<AdminMemberRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all members on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.firstName ?? row.original.email} ${row.original.lastName ?? ''}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => row.original.profileId ? <Link className="font-medium underline" href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}>{row.original.firstName} {row.original.lastName}</Link> : <span className="text-muted-foreground">Profile not completed</span> },
+    { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => <span className="inline-flex items-center gap-2 font-medium uppercase">{row.original.profileId ? <>{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</> : <span className="text-muted-foreground">Profile not completed</span>}{row.original.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" data-icon-tooltip="Super Admin" role="img" />}{row.original.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" data-icon-tooltip="Administrator" role="img" />}{row.original.isBoardMember && <UsersRound aria-label="Board Member" className="size-4 shrink-0 text-gold" data-icon-tooltip="Board Member" role="img" />}</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
-    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'select' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" />{row.original.membershipType === 'combo' && <Shield aria-hidden="true" className="size-4 shrink-0" />}{type.label}</span> : '—'; } },
-    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'select' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" />{status.label}</span> : row.original.status.toUpperCase(); } },
-    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.federation ? countryNameForCode(row.original.federation) : '—' },
-    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.country ? countryNameForCode(row.original.country) : '—' },
-    { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'select' }, cell: ({ row }) => row.original.region ?? '—' },
+    { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip={type.label} />{row.original.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip="STEWARD" />}{type.label}</span> : '—'; } },
+    { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip={status.label} />{status.label}</span> : row.original.status.toUpperCase(); } },
+    { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.federation)}<CountryFlag code={row.original.federation} /></span> : '—' },
+    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.country)}<CountryFlag code={row.original.country} /></span> : '—' },
+    { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.region ?? '—' },
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
     { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
-    { id: 'actions', enableHiding: true, enableSorting: false, size: 120, header: 'Actions', cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?${memberHref(searchParams, row.original.profileId)}`}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`/admin/payments?profileId=${row.original.profileId}`}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
-  ], [pathname, searchParams]);
+    { id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 150, header: () => <DataTableStaticHeader className="text-gold" label="Actions" />, cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild={row.original.hasSupportHistory} aria-label="Support conversations" disabled={!row.original.hasSupportHistory} size="icon-sm" title={row.original.hasSupportHistory ? 'Support conversations' : 'No support conversations on file'} variant="ghost">{row.original.hasSupportHistory ? <Link href={`/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`} onClick={(event) => openMember(event, `/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`)}><Headphones aria-hidden="true" /></Link> : <Headphones aria-hidden="true" />}</Button><Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
+  ], [pathname]);
+  const defaultColumnOrder = ['select', 'name', 'status', 'type', 'expires', 'region', 'email', 'federation', 'country', 'lastPayment', 'updated', 'actions'];
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
+  // Facet filters (status/type/federation/country/region) are applied server-side from saved
+  // preferences regardless of this initial state, so this must mirror what the server actually
+  // applied -- otherwise the toolbar shows no active facets while the table is already filtered,
+  // and the next unrelated change persists `undefined` for these, silently clearing the saved view.
+  const initialColumnFilters: ColumnFiltersState = [
+    { id: 'type', value: filters.membershipTypes ?? [] },
+    { id: 'status', value: filters.statuses ?? [] },
+    { id: 'federation', value: filters.federations ?? [] },
+    { id: 'country', value: filters.countries ?? [] },
+    { id: 'region', value: filters.regions ?? [] },
+  ].filter((filter) => filter.value.length > 0);
+
+  // Persists to the database and refetches via a same-URL router.refresh() -- deliberately never
+  // writes any of this to the URL. `overrides` lets a single caller (e.g. Reset) atomically change
+  // several pieces of state that don't all live in the same place (search text, date range, table
+  // state) without racing multiple separate persist calls against each other.
+  function persistAndRefresh(state: DataTableLiveState, overrides?: { expiresFrom?: string; expiresTo?: string; q?: string }) {
+    const effectiveSearch = overrides && 'q' in overrides ? overrides.q : search;
+    const effectiveFrom = overrides && 'expiresFrom' in overrides ? overrides.expiresFrom : expiresFrom;
+    const effectiveTo = overrides && 'expiresTo' in overrides ? overrides.expiresTo : expiresTo;
+    const columns = OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false);
+    void persistTablePreferences('memberships', {
+      columnOrder: table.getState().columnOrder.join(','),
+      columns,
+      country: filterToken(state.columnFilters, 'country'),
+      expiresFrom: effectiveFrom,
+      expiresTo: effectiveTo,
+      federation: filterToken(state.columnFilters, 'federation'),
+      page: state.pagination.pageIndex + 1,
+      pageSize: state.pagination.pageSize,
+      q: effectiveSearch || undefined,
+      region: filterToken(state.columnFilters, 'region'),
+      sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
+      status: filterToken(state.columnFilters, 'status'),
+      type: filterToken(state.columnFilters, 'type'),
+    }).finally(() => startTransition(() => router.refresh()));
+  }
+
   const { table } = useDataTable({
     columns, data: rows,
-    // Simple (non-advanced) mode is required for the auto-rendered faceted filters below to sync
-    // through `column.setFilterValue` -- advanced mode no-ops that path.
     enableAdvancedFilter: false,
     getRowId: (row) => row.profileId ? `profile-${row.profileId}` : `user-${row.userId}`,
-    initialState: { columnOrder: (searchParams.get('columnOrder') ?? initialColumnOrder)?.split(','), columnVisibility: initialVisibility, pagination: { pageIndex: filters.page - 1, pageSize }, sorting: initialSorting },
+    initialState: { columnFilters: initialColumnFilters, columnOrder: initialColumnOrder?.split(',') ?? defaultColumnOrder, columnVisibility: visibleState(initialVisibleColumns), pagination: { pageIndex: filters.page - 1, pageSize }, sorting: initialSorting },
+    onLiveStateChange: (state) => persistAndRefresh(state),
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
-    queryKeys: { page: 'page', perPage: 'pageSize', sort: 'sort' },
-    shallow: false,
     startTransition,
   });
 
-  // Persisted under the same key the live URL/column use (`type`, the membership-type column's
-  // id) so that redirecting a saved preference back into the URL reproduces a value the
-  // toolbar's own filter state -- keyed by column id -- picks up, not just the server query.
-  function filterPreferenceFields(params: URLSearchParams) {
-    return {
-      country: params.get('country') ?? undefined,
-      expiresFrom: params.get('expiresFrom') ?? undefined,
-      expiresTo: params.get('expiresTo') ?? undefined,
-      federation: params.get('federation') ?? undefined,
-      q: params.get('q') ?? undefined,
-      region: params.get('region') ?? undefined,
-      sort: params.get('sort') ?? undefined,
-      status: params.get('status') ?? undefined,
-      type: params.get('type') ?? undefined,
-    };
-  }
-
-  useEffect(() => setSearch(filters.q ?? ''), [filters.q]);
+  // Column visibility/order changes aren't covered by onStateChange above (that only fires for
+  // pagination/sorting/columnFilters), so persist them here on their own change, immediately --
+  // a deliberate one-off click, not something to debounce.
+  const skipNextColumnPersist = useRef(true);
+  const visibilityKey = JSON.stringify(table.getState().columnVisibility);
+  const orderKey = table.getState().columnOrder.join(',');
   useEffect(() => {
-    table.setColumnVisibility(visibleState(new URLSearchParams(searchParams.toString()), initialVisibleColumns));
+    if (skipNextColumnPersist.current) { skipNextColumnPersist.current = false; return; }
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: table.getState().pagination, sorting: table.getState().sorting });
     table.resetRowSelection();
-  }, [searchParams, initialVisibleColumns, table]);
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    const preferences = {
-      ...filterPreferenceFields(params),
-      columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false),
-      columnOrder: params.get('columnOrder') ?? initialColumnOrder,
-      pageSize: Number(params.get('pageSize') ?? pageSize),
-    };
-    void persistTablePreferences('memberships', preferences);
-  }, [pageSize, searchParams, table]);
-  useEffect(() => {
-    const state = table.getState();
-    const columns = OPTIONAL_COLUMNS.filter((column) => state.columnVisibility[column] !== false);
-    const params = new URLSearchParams(searchParams.toString());
-    const current = params.getAll('column');
-    if (current.length === columns.length && current.every((value, index) => value === columns[index])) return;
-    params.delete('column');
-    for (const column of columns) params.append('column', column);
-    void persistTablePreferences('memberships', { ...filterPreferenceFields(params), columns, columnOrder: params.get('columnOrder') ?? initialColumnOrder, pageSize: state.pagination.pageSize });
-    router.replace(`${pathname}?${params}`, { scroll: false });
-  }, [table.getState().columnVisibility]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires exactly when visibility/order change, reading everything else fresh at call time.
+  }, [visibilityKey, orderKey]);
 
-  function update(values: Record<string, string | undefined>) {
-    const params = new URLSearchParams(searchParams.toString());
-    // Purge the retired advanced filter-builder's params so a stale/shared URL carrying them
-    // doesn't keep silently narrowing results the current toolbar shows no indication of.
-    params.delete('filters');
-    params.delete('joinOperator');
-    for (const [key, value] of Object.entries(values)) {
-      if (value) params.set(key, value); else params.delete(key);
-    }
-    params.delete('page');
-    startTransition(() => router.push(`${pathname}?${params}`));
+  function resetAll() {
+    setSearch('');
+    setExpiresFrom(undefined);
+    setExpiresTo(undefined);
+    setDateResetSignal((signal) => signal + 1);
+    // The `true` argument forces a blank reset ([]) -- omitting it resets to `initialState.columnFilters`
+    // instead, which is non-empty whenever a facet (e.g. a saved "Active Members" status) was already
+    // applied at mount, silently restoring that same selection instead of clearing it.
+    table.resetColumnFilters(true);
+    persistAndRefresh(
+      { columnFilters: [], pagination: table.getState().pagination, sorting: table.getState().sorting },
+      { expiresFrom: undefined, expiresTo: undefined, q: undefined },
+    );
   }
-  const debouncedSearch = useDebouncedCallback((value: string) => update({ q: value || undefined }), 300);
-  const exportParams = new URLSearchParams(searchParams.toString()); exportParams.delete('page'); exportParams.delete('profileId'); exportParams.delete('column');
-  const selected = table.getSelectedRowModel().rows.length;
+
+  // A manual filter change (search, date range) must return to page 1 -- otherwise staying on
+  // page N of a now-narrower result set can show an empty table, or even "Page N of 1".
+  const debouncedSearchPersist = useDebouncedCallback((value: string) => {
+    persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { q: value });
+  }, 300);
+
+  /** Built fresh at click time from current state -- a query string on a one-off GET download
+   * link is exactly the short-lived, single-step use of URL params this app still uses; it never
+   * touches the browser's address bar. */
+  function currentExportParams() {
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (expiresFrom) params.set('expiresFrom', expiresFrom);
+    if (expiresTo) params.set('expiresTo', expiresTo);
+    for (const key of MULTI_SELECT_FILTERS) {
+      const value = filterToken(table.getState().columnFilters, key);
+      if (value) params.set(key, value);
+    }
+    const sorting = table.getState().sorting;
+    if (sorting.length) params.set('sort', JSON.stringify(sorting));
+    return params;
+  }
+
+  const exportParams = currentExportParams();
+  const selectedRows = table.getSelectedRowModel().rows;
+  const selected = selectedRows.length;
+  const actionBarVisibility = useActionBarVisibility(selected);
   const selectedExportParams = new URLSearchParams(exportParams.toString());
   for (const row of table.getSelectedRowModel().rows) selectedExportParams.append('selectedUserId', String(row.original.userId));
-  const manuallyFiltered = ['expiresFrom', 'expiresTo'].some((key) => searchParams.has(key));
-  const hasActiveView = [...searchParams.keys()].some((key) => !['column', 'page', 'pageSize', 'profileId'].includes(key));
+  const [dateDraftActive, setDateDraftActive] = useState(false);
+  const [dateResetSignal, setDateResetSignal] = useState(0);
+  const manuallyFiltered = Boolean(expiresFrom || expiresTo) || dateDraftActive;
+  const hasActiveView = Boolean(search) || Boolean(expiresFrom) || Boolean(expiresTo) || table.getState().columnFilters.length > 0;
 
   return <>
     <TablePreferenceSync table="memberships" />
-    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={(open) => { if (!open) table.resetRowSelection(); }} open={selected > 0}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{hasActiveView ? 'No users match this view' : 'No users exist'}</strong><span className="mt-1 block text-muted-foreground">{hasActiveView ? 'Edit or clear filters to broaden the result set.' : 'Users appear here after account creation.'}</span></div>} actionBar={<ActionBar onOpenChange={actionBarVisibility.onOpenChange} open={actionBarVisibility.open}><ActionBarSelection>{selected} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => { const anchor = document.createElement('a'); anchor.href = `/api/admin/export/members?${selectedExportParams}`; anchor.download = 'selected-members.csv'; anchor.click(); }}>Export selected CSV</ActionBarItem><BulkArchiveMembersSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.userId))} /><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.userId))} table="members" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}
         isFiltered={manuallyFiltered}
-        onReset={() => update({ expiresFrom: undefined, expiresTo: undefined, q: undefined })}
+        pending={isPending}
+        onReset={resetAll}
         leading={<>
-          <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); debouncedSearch(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
-          <DateRangeFilter from={filters.expiresFrom} label="Expires" onChange={(expiresFrom, expiresTo) => update({ expiresFrom, expiresTo })} to={filters.expiresTo} />
+          <Input aria-label="Search member name or email" className="h-8 w-40 lg:w-56" onChange={(event) => { setSearch(event.target.value); table.setPageIndex(0); debouncedSearchPersist(event.target.value); }} placeholder="Search name or email…" type="search" value={search} />
+          <DateRangeFilter from={expiresFrom} label="Expires" onChange={(from, to) => { setExpiresFrom(from); setExpiresTo(to); table.setPageIndex(0); persistAndRefresh({ columnFilters: table.getState().columnFilters, pagination: { ...table.getState().pagination, pageIndex: 0 }, sorting: table.getState().sorting }, { expiresFrom: from, expiresTo: to }); }} onDraftActiveChange={setDateDraftActive} resetSignal={dateResetSignal} to={expiresTo} />
         </>}
-        trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}
-      >
+      />
+      <DataTableActionsRow count={`${total} matching members`} table={table} trailing={<Button asChild aria-label="Download These results" data-idoc-table-control size="icon-sm" variant="outline"><Link aria-label="Download These results" download href={`/api/admin/export/members?${exportParams}`} title="Download These results"><Download aria-hidden="true" /></Link></Button>}>
         <DataTableSortList table={table} />
-      </DataTableToolbar>
-      <p aria-live="polite" className="px-1 text-sm text-muted-foreground">{total} matching members</p>
+      </DataTableActionsRow>
     </DataTable>
   </>;
 }

@@ -17,11 +17,11 @@
     "test:integration-db": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/run-integration-db.ts",
     "test:security-e2e": "playwright test -c playwright.security.config.ts",
     "test:security": "pnpm test:integration-db && pnpm test:security-e2e",
-    "test:stripe-e2e": "playwright test -c playwright.stripe.config.ts",
+    "test:stripe-e2e": "node --conditions=react-server node_modules/@playwright/test/cli.js test -c playwright.stripe.config.ts",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "node --conditions=react-server --import tsx lib/db/seed.ts",
     "db:generate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate",
-    "db:migrate": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs migrate",
+    "db:migrate": "node --conditions=react-server --import tsx scripts/migrate-selected-schema.ts",
     "db:studio": "node --conditions=react-server node_modules/drizzle-kit/bin.cjs studio",
     "google:rotate-secret": "node --conditions=react-server --import tsx scripts/rotate-google-oauth-secret.ts",
     "validate:stripe-readiness": "node scripts/validate-stripe-readiness.mjs",
@@ -38,11 +38,18 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@opentelemetry/api": "^1.9.1",
+    "@sentry/nextjs": "^10.22.0",
     "@tailwindcss/postcss": "4.1.7",
     "@tanstack/react-table": "^8.21.3",
+    "@tiptap/core": "^3.6.6",
+    "@tiptap/pm": "^3.6.6",
+    "@tiptap/react": "^3.6.6",
+    "@tiptap/starter-kit": "^3.6.6",
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
+    "@vercel/otel": "^2.1.3",
     "autoprefixer": "^10.4.21",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
@@ -82,7 +89,7 @@
   "pnpm": {
     "overrides": {
       "postcss": ">=8.5.18",
-      "sharp": ">=0.35.0"
+      "sharp": ">=0.35.5"
     },
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",

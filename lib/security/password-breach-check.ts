@@ -29,7 +29,10 @@ export async function checkPasswordBreached(password: string): Promise<PasswordB
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(`${RANGE_URL}${prefix}`, {
-      headers: { 'Add-Padding': 'true' },
+      headers: {
+        'Add-Padding': 'true',
+        'User-Agent': 'IDOC.club password breach check',
+      },
       signal: controller.signal,
     });
     if (!response.ok) {

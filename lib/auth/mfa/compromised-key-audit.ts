@@ -10,6 +10,6 @@ import { db } from '@/lib/db/drizzle';
 // runtime to audit against -- it is a deployment/environment-variable change, covered instead by
 // standard secret-rotation change-management, per docs/07).
 export async function auditCompromisedMfaKeyRejection(subjectId: string, keyId: string) {
-  await db.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+  await db.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
     values(${Number(subjectId)},'auth.mfa.compromised_key_rejected','user',${subjectId},${keyId})`);
 }

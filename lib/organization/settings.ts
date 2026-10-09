@@ -56,6 +56,6 @@ export async function updateOrganizationSettings(actor: Actor, input: { address:
         afterJson: { enabled, instructionsChanged, instructionsPresent: method.canonicalId === 'bank_transfer' ? Boolean(effectiveBankInstructions) : false } });
     }
     // Reassert the immutable system invariant even if a hostile client submitted extra fields.
-    await tx.execute(sql`update idoc.seminar_payment_methods set enabled=true, system_protected=true, display_label='Online via Stripe', display_order=10, instructions_html=null where canonical_id='online_stripe'`);
+    await tx.execute(sql`update seminar_payment_methods set enabled=true, system_protected=true, display_label='Online via Stripe', display_order=10, instructions_html=null where canonical_id='online_stripe'`);
   });
 }

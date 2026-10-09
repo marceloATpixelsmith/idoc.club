@@ -15,6 +15,24 @@ invisible/pasted characters, `lib/db/schema.ts` edited without its matching migr
 left stale after a navigation/auth UI refactor -- each pattern hit CI more than once. Your checklist below
 targets those specifically, on top of the ordinary checks.
 
+## Ground rule: scale effort to risk, per `AGENTS.md`
+
+Per `AGENTS.md`'s "Efficient agent operation" section: size verification to what docs/26 actually requires
+for this diff, not to maximum thoroughness by default. Concretely:
+
+- A small, single-concern fixup stacked on a commit already verified clean gets a typecheck plus the
+  specific test file(s) it touches -- not a repeat of the full unit/integration/e2e/build battery -- unless
+  the fixup itself touches schema, auth, or another genuinely high-risk area per docs/26.
+- Do not spin up a fresh clone/worktree, a full dependency reinstall, or a full `pnpm build` for a small,
+  low-risk change when the target checkout is already known clean and current. Reserve that overhead for
+  changes docs/26 actually classifies as needing it (e.g. verifying a commit that isn't the shared
+  checkout's current HEAD).
+- Never run two verification passes -- your own or another instance of this agent -- over the same commit
+  in parallel or back-to-back. If a verification is already in flight or already completed for a commit,
+  reuse that result instead of duplicating it.
+- Report only pass/fail per check plus what's needed to act (a fix, a blocker) -- skip narrating the checks
+  you ran that simply passed with nothing to say beyond that.
+
 ## Ground rule: run the repo's own commands, don't invent yours
 
 `package.json` already defines the exact command chains CI runs. Use them verbatim -- never approximate

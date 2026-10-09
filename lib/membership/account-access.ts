@@ -9,7 +9,7 @@ export type AccountState = 'active' | 'deleted' | 'migrated_pending' | 'onboardi
 // replace an authenticator) and additionally require current entitlement -- unless the actor is
 // privileged, since an administrator correcting a member's own profile is never themselves that
 // member's entitlement.
-export type AccountFunction = 'account' | 'account_mutation' | 'administration' | 'billing_boundary' | 'member' | 'onboarding' | 'profile' | 'profile_mutation' | 'profile_review' | 'renewal';
+export type AccountFunction = 'account' | 'account_mutation' | 'administration' | 'billing_boundary' | 'member' | 'onboarding' | 'profile' | 'profile_mutation' | 'renewal';
 
 /** An administrator/super_admin is never a member and must never be gated by membership payment
  * status anywhere -- the dashboard paywall included. Shared here so every call site (the account

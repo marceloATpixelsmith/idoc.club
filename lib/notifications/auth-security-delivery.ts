@@ -1,10 +1,12 @@
 import 'server-only';
+import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
 import { sendTransactionalEmail } from './brevo-transactional';
 import { renderTransactionalEmail } from './email-template';
 import type { AuthSecurityKind } from './auth-security-events';
+import { formatDateTime } from '@/lib/format';
 
 const MAX_ATTEMPTS = 6;
 
@@ -13,7 +15,7 @@ const MAX_ATTEMPTS = 6;
 // the exact class of bug a Codex review caught in this pull request: a kind with no content-map
 // entry throws 'Unsupported security notification kind' below, retries MAX_ATTEMPTS times, and is
 // dead-lettered without ever reaching the account owner.
-const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject: string }> = {
+export const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject: string }> = {
   account_reinstated: { heading: 'Account access restored', subject: 'Your IDOC account access was restored' },
   account_suspended: { heading: 'Account suspended', subject: 'Your IDOC account was suspended' },
   authenticator_enrolled: { heading: 'Authenticator enabled', subject: 'Authenticator enabled for IDOC' },
@@ -36,6 +38,7 @@ const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; subject
 };
 
 export async function deliverNextAuthSecurityNotification(owner: string = randomUUID()) {
+  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const rows = await client<{
     id: number;
     user_id: number;
@@ -52,14 +55,14 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   }[]>`
     with candidate as (
       select o.id
-      from idoc.auth_security_notification_outbox o
+      from auth_security_notification_outbox o
       where o.sent_at is null and o.dead_lettered_at is null and o.available_at <= now()
         and (o.lease_expires_at is null or o.lease_expires_at < now())
       order by o.available_at, o.id
       for update skip locked
       limit 1
     )
-    update idoc.auth_security_notification_outbox o
+    update auth_security_notification_outbox o
     set lease_owner=${owner}, lease_expires_at=now()+interval '5 minutes'
     from candidate
     where o.id=candidate.id
@@ -73,7 +76,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     if (!message) throw new Error('Unsupported security notification kind.');
     const html = renderTransactionalEmail({
       heading: message.heading,
-      bodyHtml: `<p>${message.heading} on ${new Date(record.created_at).toISOString()}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
+      bodyHtml: `<p>${message.heading} on ${formatDateTime(record.created_at)}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
       footerNote: 'This is a security notification for your IDOC account.',
     });
     await sendTransactionalEmail({
@@ -83,7 +86,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
       to: record.recipient_email,
     });
     const done = await client`
-      update idoc.auth_security_notification_outbox
+      update auth_security_notification_outbox
       set sent_at=now(), attempt_count=attempt_count+1, last_attempt_at=now(), last_error_code=null,
           lease_owner=null, lease_expires_at=null
       where id=${record.id} and lease_owner=${owner} and sent_at is null
@@ -101,7 +104,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     // values itself before they reach the driver; raw `client` calls have to do the same
     // conversion explicitly.
     await client`
-      update idoc.auth_security_notification_outbox
+      update auth_security_notification_outbox
       set attempt_count=${attempt}, last_attempt_at=now(), last_error_code='temporary_delivery_failure',
           available_at=now()+(${delay} * interval '1 second'),
           dead_lettered_at=${deadLettered ? new Date().toISOString() : null},
@@ -113,9 +116,10 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
 }
 
 export async function processAuthSecurityNotificationBatch(limit = 25) {
-  const summary = { deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0 };
+  const summary = { blocked: 0, deadLettered: 0, delivered: 0, leaseLost: 0, retryable: 0 };
   for (let index = 0; index < limit; index += 1) {
     const result = await deliverNextAuthSecurityNotification();
+    if (result.status === 'blocked') { summary.blocked += 1; break; }
     if (result.status === 'empty') break;
     if (result.status === 'dead_lettered') summary.deadLettered += 1;
     else if (result.status === 'delivered') summary.delivered += 1;

@@ -390,15 +390,113 @@
     {
       "idx": 55,
       "version": "7",
-      "when": 1790611959751,
-      "tag": "0055_seminar_registration_choices_and_guests",
+      "when": 1790625600000,
+      "tag": "0055_seminar_registration_payment_method",
       "breakpoints": true
     },
     {
       "idx": 56,
       "version": "7",
-      "when": 1791244800000,
-      "tag": "0056_legacy_member_first_login",
+      "when": 1790625700000,
+      "tag": "0056_seminars_multiday_dual_price_guest",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1790625800000,
+      "tag": "0057_seminar_fei_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1790625900000,
+      "tag": "0058_seminar_levels",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1790626000000,
+      "tag": "0059_seminar_guest_contact_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790712000000,
+      "tag": "0060_member_profile_phone",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790713000000,
+      "tag": "0061_seminar_date_only_rich_information",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790750000000,
+      "tag": "0062_repair_seminar_description_constraint",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0063_guest_notification_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790985600000,
+      "tag": "0064_news_article_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790992800000,
+      "tag": "0065_news_external_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1791065400000,
+      "tag": "0066_member_archive_permanent_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791327600000,
+      "tag": "0067_news_legacy_thumbnail_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791378000000,
+      "tag": "0068_support_other_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1791378600000,
+      "tag": "0069_board_member_profile_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1791381600000,
+      "tag": "0070_news_article_audience",
       "breakpoints": true
     }
   ]

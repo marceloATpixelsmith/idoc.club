@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { PageHeader } from '@/components/site/PageHeader';
 import { formatOrganizationAddress, getPublicOrganizationAddress } from '@/lib/organization/settings';
 import { ContactForm } from './contact-form';
+import { getMainNavAccess } from '@/lib/auth/user-menu-access';
+import { MemberSupportHome } from '@/components/support/member-support-home';
 
 export const metadata: Metadata = {
   title: 'Contact IDOC',
@@ -14,6 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ContactPage() {
+  const navAccess = await getMainNavAccess();
+  if (navAccess.memberSupport) {
+    return <><PageHeader eyebrow="Member support" title="Contact" intro="Create a support ticket and follow replies from the IDOC team." /><MemberSupportHome /></>;
+  }
   const addressLines = formatOrganizationAddress(await getPublicOrganizationAddress());
   return (
     <>

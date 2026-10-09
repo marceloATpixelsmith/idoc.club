@@ -10,6 +10,9 @@ import {
   verifyToken,
 } from '@/lib/auth/session';
 import { touchSession } from '@/lib/auth/session-registry';
+import { readActiveSession } from '@/lib/auth/session-registry';
+import { paymentOnlyAllows, paymentOnlyDestination } from '@/lib/membership/session-gate';
+import { loadSessionGate } from '@/lib/membership/session-gate-loader';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
 import { contentSecurityPolicy } from '@/lib/security/content-security-policy';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
@@ -112,6 +115,36 @@ export async function middleware(request: NextRequest) {
 
   try {
     const parsed = await verifyToken(canonicalCookie.value);
+
+    // Membership gate (docs/02): a signed-in member who has not paid, or whose membership lapsed,
+    // sees only the payment page; a member whose canceled membership has run past its paid-through
+    // date is signed out and cannot sign back in. Administrators are never gated. Static files are
+    // never gated (the payment page needs them). This is a policy layer on top of -- never instead
+    // of -- the server-side authorization every action and data read performs, so a lookup failure
+    // leaves the request to those checks rather than signing a valid session out.
+    if (!/\.[A-Za-z0-9]+$/.test(pathname)) {
+      let gate: Awaited<ReturnType<typeof loadSessionGate>> | null = null;
+      try {
+        // Only a session the registry still honors is gated; an invalid one is left to the
+        // existing handling, which sends it to sign in.
+        if (await readActiveSession(parsed.sessionId, parsed.user.id)) gate = await loadSessionGate(parsed.user.id);
+      } catch { /* best-effort policy layer */ }
+      const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url), 307);
+      if (gate?.gate === 'ended') {
+        const isAuthPage = pathname === '/sign-in' || pathname.startsWith('/sign-in/');
+        const ended = pathname.startsWith('/api/')
+          ? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+          : isAuthPage ? next() : redirectTo('/sign-in');
+        ended.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
+        return finish(ended);
+      }
+      if (gate?.gate === 'payment_only' && !paymentOnlyAllows(pathname)) {
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          return finish(new NextResponse('Membership payment is required.', { status: 403 }));
+        }
+        return finish(redirectTo(paymentOnlyDestination(gate.accountState)));
+      }
+    }
     const res = next();
 
     if (request.method === 'GET') {

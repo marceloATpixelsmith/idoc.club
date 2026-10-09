@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { and, eq, isNull } from 'drizzle-orm';
+import { deliverNextAuthSecurityNotification } from '../lib/notifications/auth-security-delivery.ts';
 import { completePasswordReset, verifyPasswordResetOtp } from '../app/(login)/recover-password/actions.ts';
 import { getPendingPasswordReset, startPendingPasswordReset } from '../lib/auth/pending-password-reset.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
@@ -41,7 +42,7 @@ class TestCookies implements MutableCookieStore {
   set(name: string, value: string) { value ? this.values.set(name, value) : this.values.delete(name); }
 }
 
-beforeEach(resetIdoc);
+beforeEach(async () => { process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false'; await resetIdoc(); });
 after(closeHarness);
 
 async function redirected(operation: () => Promise<unknown>) {
@@ -137,7 +138,9 @@ test('AUTH-RECOVERY: a privileged account resets via TOTP only -- a wrong code i
   assert.equal((authorized as { verification?: string })?.verification, 'totp');
 });
 
-test('AUTH-RECOVERY: completing a reset revokes every existing session, creates no new one, and enqueues a security notification', async () => {
+for (const held of [false, true]) {
+test(`AUTH-RECOVERY: completing a reset revokes sessions and records a ${held ? 'terminal held' : 'deliverable'} notification`, async () => {
+  process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = held ? 'true' : 'false';
   const user = await createUser();
   const cookies = new TestCookies();
   const csrfToken = await issueTestCsrfToken(cookies, null);
@@ -162,12 +165,24 @@ test('AUTH-RECOVERY: completing a reset revokes every existing session, creates 
   // completePasswordReset never calls setSession -- the reset flow itself creates no new session,
   // it only redirects to the sign-in page for a fresh, deliberate login.
   assert.equal(cookies.get(sessionCookieName()), undefined);
-  const [notification] = await sql`select kind, recipient_email as "recipientEmail" from idoc.auth_security_notification_outbox where user_id=${user.id}`;
+  const [notification] = await sql`select kind, recipient_email as "recipientEmail", dead_lettered_at,last_error_code,attempt_count,sent_at from idoc.auth_security_notification_outbox where user_id=${user.id}`;
   assert.equal(notification.kind, 'password_reset_completed');
   assert.equal(notification.recipientEmail, user.email);
   const [updatedRow] = await sql`select session_version as "sessionVersion" from idoc.users where id=${user.id}`;
   assert.equal(updatedRow.sessionVersion, fullUser.sessionVersion + 1);
+  assert.equal(notification.attempt_count, 0);
+  assert.equal(notification.sent_at, null);
+  if (held) {
+    assert.ok(notification.dead_lettered_at);
+    assert.equal(notification.last_error_code, 'member_launch_hold');
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
+    assert.deepEqual(await deliverNextAuthSecurityNotification(), { status: 'empty' });
+  } else {
+    assert.equal(notification.dead_lettered_at, null);
+    assert.equal(notification.last_error_code, null);
+  }
 });
+}
 
 test('AUTH-RECOVERY: a request carrying neither a valid general token nor the real pending nonce still fails closed on both verify and complete', async () => {
   const user = await createUser();

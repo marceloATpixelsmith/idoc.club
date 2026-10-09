@@ -20,6 +20,7 @@ import {
   parseGoogleOauthIntent,
 } from '@/lib/auth/google-oauth-intent';
 import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { setUiFlashOnResponse } from '@/lib/ui/flash-state';
 import { logError, logWarn } from '@/lib/observability/logger';
 import { notifyWebmasterOfGoogleOauthFailure } from '@/lib/notifications/google-oauth-failure-alert';
 
@@ -30,7 +31,7 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   const intent = parseGoogleOauthIntent(request.nextUrl.searchParams.get('intent'));
   const failureRedirect = () =>
-    NextResponse.redirect(new URL(`${googleOauthFailureRedirectPath(intent)}?google=failed`, request.url), 302);
+    setUiFlashOnResponse(NextResponse.redirect(new URL(googleOauthFailureRedirectPath(intent), request.url), 302), 'google-auth-failed', googleOauthFailureRedirectPath(intent));
 
   // Names which step was in flight when an error that isn't a GoogleOidcError (and so carries no
   // precise `.code`) is thrown, so the logged/alerted reason still points at a subsystem instead of

@@ -53,7 +53,7 @@ test('trusted ordinary login rechecks current privilege and reloads the user bef
   assert.ok(trusted.indexOf('await clearPendingLogin()') < trusted.indexOf('await setSession(foundUser)'));
   assert.match(trusted, /const \[currentUser\] = await db\.select\(\)\.from\(users\)/);
   assert.match(trusted, /!currentUser \|\| currentUser\.deletedAt \|\| !\['active', 'onboarding'\]\.includes\(currentUser\.accountState\)/);
-  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', currentUser\.legacyProfileReviewRequired \? '\/dashboard\/profile\?confirmDetails=1' : currentUser\.accountState === 'onboarding' \? '\/dashboard' : '\/'\)/);
+  assert.match(trusted, /beginPrimaryMfa\(currentUser, 'password', currentUser\.accountState === 'onboarding' \? '\/dashboard' : '\/'\)/);
   assert.doesNotMatch(trusted, /beginPrimaryMfa\(foundUser, 'password', loginDestination\)/);
 });
 

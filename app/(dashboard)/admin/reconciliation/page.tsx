@@ -8,6 +8,12 @@ const KIND_LABELS: Record<string, string> = {
   repeated_failure: 'Repeated payment failures',
   status_conflict: 'Subscription status conflict',
   unlinked_customer: 'Unlinked Stripe Customer',
+  pending_schedule_conflict: 'Pending renewal schedule conflict',
+  seminar_payment_conflict: 'Seminar payment conflict',
+  refund_conflict: 'Refund conflict',
+  missing_refund: 'Missing refund',
+  dispute: 'Payment dispute',
+  chargeback: 'Chargeback',
 };
 
 export default async function AdminReconciliationPage() {
@@ -16,10 +22,10 @@ export default async function AdminReconciliationPage() {
   const [lastRun, findings] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings()]);
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
-    <h1 className="text-2xl font-semibold">Stripe reconciliation</h1>
+    <h1 className="text-3xl font-semibold text-gold">Stripe Reconciliation</h1>
     <p className="mt-2 text-sm text-foreground">
-      A read-only daily comparison of local subscription/billing state against live Stripe data. Act on findings using the existing member tools
-      (suspend/reinstate, correct entitlement) from the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link>.
+      A read-only daily comparison of membership billing and seminar registration payment state against live Stripe data. For membership findings, use the existing member tools
+      (suspend/reinstate, correct entitlement) from the <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/members">Members page</Link>. Review seminar payment findings in <Link className="text-primary underline underline-offset-4 hover:opacity-80" href="/admin/seminars/registrations">Seminar Registrations</Link>.
     </p>
 
     <section className="mt-6 max-w-2xl border rounded-lg p-4">
@@ -39,16 +45,17 @@ export default async function AdminReconciliationPage() {
     <section className="mt-8">
       <h2 className="font-medium text-foreground">Current findings</h2>
       <AdminReadOnlyTable
-        columns={[{ id: 'kind', label: 'Kind' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+        columns={[{ id: 'category', label: 'Category' }, { id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+        dateColumn="detected"
         empty="No findings from the last run."
         rows={findings.map((finding) => ({
-          id: String(finding.id), kind: KIND_LABELS[finding.kind] ?? finding.kind,
+          id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
           summary: finding.summary, member: finding.profileId ? 'View member' : '—',
           link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
           detected: finding.createdAt.toISOString(),
         }))}
         searchLabel="Search reconciliation findings"
-        statusColumn="kind"
+        statusColumn="category"
         tableType="reconciliation"
       />
     </section>

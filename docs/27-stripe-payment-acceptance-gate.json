@@ -102,7 +102,7 @@
           "evidence": [
             "refundSeminarRegistration",
             "stripe.refunds.retrieve",
-            "(refund as unknown as Record<string, unknown>).livemode",
+            "intent?.livemode",
             "refund.amount",
             "intent?.currency",
             "already been refunded"

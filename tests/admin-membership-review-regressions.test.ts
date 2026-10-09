@@ -7,10 +7,11 @@ const memberTable = readFileSync(new URL('../app/(dashboard)/admin/members/membe
 const memberQueries = readFileSync(new URL('../lib/membership/admin-memberships.ts', import.meta.url), 'utf8');
 const revenueReport = readFileSync(new URL('../lib/payments/revenue-report.ts', import.meta.url), 'utf8');
 const revenuePage = readFileSync(new URL('../app/(dashboard)/admin/revenue/page.tsx', import.meta.url), 'utf8');
-const adminSupportThreadPage = readFileSync(new URL('../app/(dashboard)/admin/support/[publicId]/page.tsx', import.meta.url), 'utf8');
+const adminSupportPage = readFileSync(new URL('../app/(dashboard)/admin/support/page.tsx', import.meta.url), 'utf8');
 
-test('member pagination preserves every normalized active filter while replacing only page', () => {
-  assert.match(memberTable, /queryKeys: \{ page: 'page', perPage: 'pageSize', sort: 'sort' \}/);
+test('member pagination change persists the full current filter/sort/column state alongside the new page, since everything is read fresh from local state at persist time rather than a page-only URL param replacement', () => {
+  assert.match(memberTable, /onLiveStateChange: \(state\) => persistAndRefresh\(state\)/);
+  assert.match(memberTable, /page: state\.pagination\.pageIndex \+ 1,/);
   assert.match(memberTable, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
   assert.match(memberTable, /<DataTable table=\{table\}/);
 });
@@ -31,8 +32,8 @@ test('membership roster composes the official Dice UI controls and a real select
   assert.doesNotMatch(memberTable, /<table className=/);
 });
 
-test('URL/history-driven search control remains controlled', () => {
-  assert.match(memberTable, /useEffect\(\(\) => setSearch\(filters\.q \?\? ''\), \[filters\.q\]\)/);
+test('the search input is a controlled component seeded once from the server-supplied (database-backed) initial filter value, with no URL to resynchronize it from afterward', () => {
+  assert.match(memberTable, /const \[search, setSearch\] = useState\(filters\.q \?\? ''\);/);
   assert.match(memberTable, /value=\{search\}/);
 });
 
@@ -42,10 +43,17 @@ test('malformed page parameters fall back before SQL offset is calculated', () =
   assert.doesNotMatch(memberQueries, /Math\.trunc\(input\.page/);
 });
 
-test('an array-valued (repeated-key) filter is resolved to its first value before any string method is called on it', () => {
+test('a scalar filter (page, q, sort, expiresFrom/To) resolves an array-valued (repeated-key) value to its first entry before any string method is called on it', () => {
   assert.match(memberQueries, /function firstValue\(value: RawFilterValue\): string \| undefined \{\s*\n\s*return Array\.isArray\(value\) \? value\[0\] : value;/);
-  for (const field of ['country', 'expiresFrom', 'expiresTo', 'federation', 'membershipType', 'q', 'region', 'sort', 'status']) {
+  for (const field of ['expiresFrom', 'expiresTo', 'q', 'sort']) {
     assert.match(memberQueries, new RegExp(`firstValue\\(input\\.${field}\\)`));
+  }
+});
+
+test('a multi-select filter (country, federation, region, membershipType, status) collapses both a repeated-key array and a comma-joined single value into a deduped token list, matching any of them', () => {
+  assert.match(memberQueries, /function allValues\(value: RawFilterValue\): string\[\] \{/);
+  for (const field of ['country', 'federation', 'membershipType', 'region', 'status', 'type']) {
+    assert.match(memberQueries, new RegExp(`allValues\\(input\\.${field}\\)`));
   }
 });
 
@@ -80,8 +88,9 @@ test('the revenue page has an explicit empty state for both breakdown tables, no
   assert.match(revenuePage, /report\.overTime\.length === 0/);
 });
 
-test('the admin support thread page resolves an array-valued returnTo parameter to its first value before calling startsWith on it', () => {
-  assert.match(adminSupportThreadPage, /searchParams: Promise<Record<string, string \| string\[\] \| undefined>>/);
-  assert.match(adminSupportThreadPage, /const returnToParam = Array\.isArray\(query\.returnTo\) \? query\.returnTo\[0\] : query\.returnTo;/);
-  assert.match(adminSupportThreadPage, /returnToParam\?\.startsWith\('\/admin\/support'\) \? returnToParam : '\/admin\/support'/);
+test('the admin Support table resolves repeated drawer/search parameters before using them', () => {
+  assert.match(adminSupportPage, /memberEmail\?: string \| string\[\]/);
+  assert.match(adminSupportPage, /supportId\?: string \| string\[\]/);
+  assert.match(adminSupportPage, /Array\.isArray\(params\.supportId\)/);
+  assert.match(adminSupportPage, /SupportDetailDrawer/);
 });

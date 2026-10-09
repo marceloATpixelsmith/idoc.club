@@ -9,41 +9,6 @@ const ARGON2_PASSES = 3;
 const ARGON2_PARALLELISM = 1;
 const ARGON2_TAG_LENGTH = 32;
 const ARGON2_SALT_LENGTH = 16;
-const WP_PORTABLE_ALPHABET = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-
-function encodePortable(input: Buffer, count: number) {
-  let output = '';
-  let index = 0;
-  do {
-    let value = input[index++];
-    output += WP_PORTABLE_ALPHABET[value & 0x3f];
-    if (index < count) value |= input[index] << 8;
-    output += WP_PORTABLE_ALPHABET[(value >> 6) & 0x3f];
-    if (index++ >= count) break;
-    if (index < count) value |= input[index] << 16;
-    output += WP_PORTABLE_ALPHABET[(value >> 12) & 0x3f];
-    if (index++ >= count) break;
-    output += WP_PORTABLE_ALPHABET[(value >> 18) & 0x3f];
-  } while (index < count);
-  return output;
-}
-
-/** WordPress portable phpass ($P$/$H$) verifier. Invalid cost/salt/length values fail closed
- * before any expensive loop. The comparison covers the complete stored representation. */
-function compareWordPressPortable(password: string, storedHash: string) {
-  if (!/^\$[PH]\$[./0-9A-Za-z]{31}$/.test(storedHash)) return false;
-  const countLog2 = WP_PORTABLE_ALPHABET.indexOf(storedHash[3]);
-  // WordPress production phpass uses a bounded work factor (normally 8/13). Refuse attacker-
-  // supplied excessive costs rather than turning a login request into billions of MD5 rounds.
-  if (countLog2 < 7 || countLog2 > 20) return false;
-  const salt = storedHash.slice(4, 12);
-  let digest = crypto.createHash('md5').update(salt, 'binary').update(password, 'utf8').digest();
-  for (let count = 1 << countLog2; count > 0; count -= 1) {
-    digest = crypto.createHash('md5').update(digest).update(password, 'utf8').digest();
-  }
-  const candidate = `${storedHash.slice(0, 12)}${encodePortable(digest, 16)}`;
-  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(storedHash));
-}
 
 type Argon2Parameters = {
   memory: number;
@@ -119,15 +84,6 @@ export async function comparePasswords(plainTextPassword: string, storedHash: st
 
   // Compatibility boundary for credentials created before the canonical Argon2id retrofit.
   if (/^\$2[aby]\$/.test(storedHash)) return compareBcrypt(plainTextPassword, storedHash);
-  if (/^\$[PH]\$/.test(storedHash)) return compareWordPressPortable(plainTextPassword, storedHash);
-  // WordPress 6.8+ bcrypt hashes pre-hash the UTF-8 password with SHA-384/base64. WordPress uses
-  // the `$wp` marker specifically so these cannot be confused with ordinary bcrypt credentials.
-  if (/^\$wp\$2y\$/.test(storedHash)) {
-    const digest = crypto.createHmac('sha384', 'wp-sha384')
-      .update(plainTextPassword.trim(), 'utf8')
-      .digest('base64');
-    return compareBcrypt(digest, storedHash.slice(3));
-  }
   return false;
 }
 

@@ -6,6 +6,8 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { validateTestDatabaseUrl } from '../../lib/db/test-database-url';
 import { startGoogleMockIdp } from './google-mock-idp';
+import { startStripeMock } from './stripe-mock';
+import { E2E_CONTROL_FILE, E2E_MAIL_SINK } from './support/e2e-env';
 
 const STATES = ['member-a', 'member-b', 'onboarding', 'expired', 'suspended', 'administrator', 'administrator-no-profile', 'recovery-administrator', 'super-administrator'] as const;
 const AUTH_SECRET = process.env.AUTH_SECRET ?? 'security-e2e-only-auth-secret-32-bytes';
@@ -103,29 +105,34 @@ export default async function globalSetup() {
       .setIssuedAt()
       .setExpirationTime(Math.floor(expires.getTime() / 1000))
       .sign(new TextEncoder().encode(AUTH_SECRET));
-    const storageState = (domain: string) => JSON.stringify({
-      cookies: [
-        {
-          name: 'idoc-session',
-          value: token,
-          domain,
-          path: '/',
-          expires: Math.floor(expires.getTime() / 1000),
-          httpOnly: true,
-          secure: false,
-          sameSite: 'Lax',
-        },
-      ],
+    // The same session for both hostnames the app answers on: the browser reaches it as 127.0.0.1,
+    // but Next's dev server rewrites middleware redirects onto `localhost`, and a host-only cookie
+    // would not follow the browser there.
+    const storageState = (domains: string[]) => JSON.stringify({
+      cookies: domains.map((domain) => ({
+        name: 'idoc-session',
+        value: token,
+        domain,
+        path: '/',
+        expires: Math.floor(expires.getTime() / 1000),
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      })),
       origins: [],
     });
-    await writeFile(`.security-e2e/${name}.json`, storageState('127.0.0.1'));
+    await writeFile(`.security-e2e/${name}.json`, storageState(['127.0.0.1', 'localhost']));
   }
   await sql.end();
 
   // Started once here (not per-spec) so every spec file in the suite shares one running mock IdP,
   // the same way every spec shares one migrated database -- torn down in the global teardown below.
   const mockIdp = await startGoogleMockIdp();
+  const stripeMock = await startStripeMock();
+  await writeFile(E2E_MAIL_SINK, '');
+  await writeFile(E2E_CONTROL_FILE, JSON.stringify({ brevo: 'ok', hibp: { mode: 'clean', passwords: [] } }));
   return async () => {
     await mockIdp.close();
+    await stripeMock.close();
   };
 }

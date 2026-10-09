@@ -6,7 +6,7 @@ const policy = readFileSync('lib/auth/password-policy.ts', 'utf8');
 const component = readFileSync('components/auth/password-create-step.tsx', 'utf8');
 
 test('password policy requires length and all composition categories without advertising the maximum', () => {
-  assert.match(policy, /label: 'At least 12 characters'/);
+  assert.match(policy, /label: 'At least 10 characters'/);
   assert.match(policy, /label: 'At least one uppercase letter'/);
   assert.match(policy, /label: 'At least one lowercase letter'/);
   assert.match(policy, /label: 'At least one number'/);

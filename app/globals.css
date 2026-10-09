@@ -81,6 +81,14 @@
   --font-display: var(--font-archivo), "Archivo", system-ui, sans-serif;
   --font-sans: var(--font-barlow), "Barlow", system-ui, sans-serif;
 
+  /* Raise the two smallest shared type steps sitewide so admin metadata, table controls,
+   * captions, and public secondary text remain comfortably readable without inflating
+   * normal body copy or headings. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -181,6 +189,27 @@
     cursor: pointer;
   }
 
+  /*
+   * Native selects across the app use a consistent chevron icon and reserve comfortable
+   * space at the right edge. This replaces the browser's cramped default caret while
+   * leaving Radix/custom select triggers untouched.
+   */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23d3af37' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+  }
+
+  /* KEEP INLINE TABLE STATUS VALUES CLEAR OF THE GLOBAL NATIVE SELECT CHEVRON. */
+  select.idoc-inline-status-select {
+    background-image: none;
+    padding-right: 0;
+  }
+
   button:disabled,
   [type='button']:disabled,
   [type='submit']:disabled,
@@ -217,18 +246,44 @@
  */
 button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(.idoc-auth-google-button):not(.idoc-auth-link):not(.idoc-auth-secondary):not(.idoc-auth-password__toggle):not(.idoc-auth-turnstile__retry):not(.idoc-auth-recovery-codes__copy-button):not(:where([data-idoc-table-panel] *)) {
   background: var(--gold);
+  border-radius: 9999px;
   color: var(--primary-foreground);
 }
 
+/* Administrator form-field labels and legends use one visual casing rule everywhere. This
+ * keeps native labels, Radix labels, radio legends, and checkbox labels consistent without forcing
+ * each feature form to duplicate presentation classes. Existing uppercase acronyms remain uppercase. */
+body:has([data-idoc-admin-root]) form label,
+body:has([data-idoc-admin-root]) form legend:not([class*='uppercase']),
+body:has([data-idoc-admin-root]) form [data-slot='label'] {
+  text-transform: capitalize;
+}
+
+/* Admin visual rule: interface icons use the IDOC brand gold consistently across navigation,
+ * tables, forms, dialogs, and action controls. Checkbox/radio glyphs are excluded because those
+ * controls use currentColor for their state indicator rather than acting as standalone icons. */
+body:has([data-idoc-admin-root]) svg {
+  color: var(--gold);
+}
+
+.idoc-secondary-button,
 [data-idoc-table-control],
 [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   background: var(--surface-raised);
   border-width: 1px;
+  border-style: dotted;
   border-color: var(--input);
+  border-radius: 9999px;
   color: var(--foreground);
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
 [data-idoc-table-control] svg {
@@ -236,6 +291,22 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   opacity: 0.85;
 }
 
+.idoc-secondary-button--dotted {
+  border-style: dotted;
+}
+
+/* Administrator table controls keep the shared blue/dotted button geometry and weight, but
+ * use natural Title Case labels instead of the site's ordinary all-caps button treatment. The
+ * body:has() scope keeps public controls (including seminar registration controls that reuse
+ * data-idoc-table-control) uppercase, while still reaching Radix-portaled table panels. */
+body:has([data-idoc-admin-root]) [data-idoc-table-control],
+body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)),
+body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trigger'] {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.idoc-secondary-button:hover,
 [data-idoc-table-control]:hover,
 [data-idoc-table-control][data-state='open'],
 [data-idoc-table-panel] [data-slot='button']:not(:where([data-slot='calendar'] *)):hover {
@@ -278,11 +349,56 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   background: var(--accent);
 }
 
+/* Match the table header row to the toolbar's filter/sort/view button surface, so the header
+ * reads as a distinct band rather than blending into the row background below it. Every sortable
+ * column's header renders a Radix dropdown trigger, which always carries an aria-expanded
+ * attribute (true or false) -- TableRow's own `has-aria-expanded:bg-muted/50` therefore matches
+ * unconditionally on header rows (not just while a menu is actually open) and, since it sets an
+ * explicit background directly on the <tr>, silently wins over the <thead>'s background below.
+ * The extra selector here targets that <tr> directly with higher specificity so it wins instead. */
+[data-idoc-table-root] [data-slot='table-header'],
+[data-idoc-table-root] [data-slot='table-header'] [data-slot='table-row'] {
+  background: var(--surface-raised);
+}
+
+/* A pinned column (currently just Actions) needs a genuinely opaque background so content
+ * scrolling underneath it can't show through -- but it must still track context instead of one
+ * flat, unchanging color: the header's --surface-raised band, and a hovered or selected body row's
+ * own highlight (approximated as an opaque color_mix, since a translucent hover:bg-muted/50 would
+ * let scrolled content bleed through a pinned cell). This lives in CSS, not getColumnPinningStyle's
+ * inline style, because an inline style can never react to :hover or [data-state] selectors. */
+[data-idoc-table-root] [data-pinned] {
+  background: var(--background);
+}
+[data-idoc-table-root] [data-slot='table-header'] [data-pinned] {
+  background: var(--surface-raised);
+}
+[data-idoc-table-root] [data-slot='table-row']:hover [data-pinned] {
+  background: color-mix(in oklab, var(--muted) 50%, var(--background));
+}
+[data-idoc-table-root] [data-slot='table-row'][data-state='selected'] [data-pinned] {
+  background: var(--muted);
+}
+
 @utility eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/*
+ * List-section label ("Available seminars", "Past seminars"): a small, wide-tracked
+ * uppercase gold heading that sits clearly above the card titles and the muted
+ * uppercase meta lines beneath them, without competing with them in size.
+ */
+@utility section-label {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--gold);
 }
@@ -349,50 +465,158 @@ button:not([data-slot='button']):not([class*='bg-']):not(.idoc-auth-button):not(
   }
 }
 
-
-@keyframes navigation-loading-blink {
-  0%, 100% {
-    opacity: 0.25;
-    transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
-  }
-
-  50% {
-    opacity: 1;
-    transform: translateX(var(--navigation-loading-star-x)) scale(1);
-  }
+/* Public HTML produced by the shared Tiptap editor. Tailwind Preflight removes list markers,
+ * and the typography plugin is not installed, so rich text needs an explicit scoped presentation. */
+.idoc-rich-content {
+  color: var(--foreground);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
 }
 
-.navigation-loading-star {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  background: var(--gold);
-  clip-path: polygon(50% 0%, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0% 50%, 39% 38%);
-  filter: drop-shadow(0 0 8px color-mix(in oklch, var(--gold) 55%, transparent));
-  animation: navigation-loading-blink 1.2s ease-in-out infinite;
+.idoc-rich-content > :first-child {
+  margin-block-start: 0;
 }
 
-.navigation-loading-star--one {
-  --navigation-loading-star-x: -34px;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
+.idoc-rich-content > :last-child {
+  margin-block-end: 0;
 }
 
-.navigation-loading-star--two {
-  --navigation-loading-star-x: 0px;
-  animation-delay: 0.2s;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
+.idoc-rich-content p {
+  margin-block: 1em;
 }
 
-.navigation-loading-star--three {
-  --navigation-loading-star-x: 34px;
-  animation-delay: 0.4s;
-  transform: translateX(var(--navigation-loading-star-x)) scale(0.82);
+.idoc-rich-content h1,
+.idoc-rich-content h2,
+.idoc-rich-content h3,
+.idoc-rich-content h4 {
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin-block: 1.25em 0.5em;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .navigation-loading-star {
-    animation: none;
-    opacity: 1;
-    transform: translateX(var(--navigation-loading-star-x)) scale(1);
-  }
+.idoc-rich-content h1 {
+  font-size: 2rem;
+}
+
+.idoc-rich-content h2 {
+  font-size: 1.5rem;
+}
+
+.idoc-rich-content h3 {
+  font-size: 1.25rem;
+}
+
+.idoc-rich-content h4 {
+  font-size: 1.125rem;
+}
+
+.idoc-rich-content ul,
+.idoc-rich-content ol {
+  margin-block: 1em;
+  padding-inline-start: 1.5rem;
+}
+
+.idoc-rich-content ul {
+  list-style-type: disc;
+}
+
+.idoc-rich-content ol {
+  list-style-type: decimal;
+}
+
+.idoc-rich-content ul ul {
+  list-style-type: circle;
+}
+
+.idoc-rich-content ul ul ul {
+  list-style-type: square;
+}
+
+.idoc-rich-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.idoc-rich-content li + li {
+  margin-block-start: 0.35em;
+}
+
+.idoc-rich-content blockquote {
+  border-inline-start: 3px solid var(--gold);
+  color: var(--muted-foreground);
+  margin-block: 1.5em;
+  padding-inline-start: 1rem;
+}
+
+.idoc-rich-content strong {
+  font-weight: 700;
+}
+
+.idoc-rich-content em {
+  font-style: italic;
+}
+
+.idoc-rich-content s {
+  text-decoration: line-through;
+}
+
+.idoc-rich-content u {
+  text-decoration: underline;
+  text-underline-offset: 0.1em;
+}
+
+.idoc-rich-content a {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.idoc-rich-content pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-block: 1.25em;
+  overflow-x: auto;
+  padding: 1rem;
+}
+
+.idoc-rich-content code:not(pre code) {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 0.2rem;
+  padding: 0.1em 0.3em;
+}
+
+.idoc-rich-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin-block: 1.5em;
+}
+
+.idoc-rich-content--compact {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.idoc-rich-content--compact h1 {
+  font-size: 1.5rem;
+}
+
+.idoc-rich-content--compact h2 {
+  font-size: 1.25rem;
+}
+
+.idoc-rich-content--compact h3 {
+  font-size: 1.125rem;
+}
+
+
+/* Images inserted into shared Tiptap rich text remain responsive in public article and seminar views. */
+.idoc-rich-content img {
+  display: block;
+  height: auto;
+  margin-block: 1rem;
+  max-width: 100%;
 }

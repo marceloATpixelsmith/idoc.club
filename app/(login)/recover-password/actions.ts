@@ -1,9 +1,14 @@
 'use server';
 
+import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
+import { processAuthSecurityNotificationBatch } from '@/lib/notifications/auth-security-delivery';
+
+import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
+import { setUiFlash } from '@/lib/ui/flash-state';
 import { db } from '@/lib/db/drizzle';
 import { authSessions, users } from '@/lib/db/schema';
 import { hashPassword, rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
@@ -181,12 +186,14 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
     if (!updated) throw new Error('Password reset target became unavailable.');
     await tx.update(authSessions).set({ revokedAt: new Date(), revokeReason: 'password-reset', updatedAt: new Date() })
       .where(and(eq(authSessions.userId, user.id), isNull(authSessions.revokedAt)));
-    await tx.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,reason)
+    await tx.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,reason)
       values(${user.id},'account.password_reset.completed','user',${String(user.id)},${pending.verification})`);
-    await tx.execute(sql`insert into idoc.auth_security_notification_outbox(user_id,kind,recipient_email,dedupe_key)
-      values(${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
+    await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+      values(${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${user.id},'password_reset_completed',${user.email},${`password-reset:${user.id}:${updated.sessionVersion}`})
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   });
+  dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   await clearPendingPasswordReset();
-  redirect('/sign-in?reset=success');
+  await setUiFlash('password-reset-success', '/sign-in');
+  redirect('/sign-in');
 }, { skipCsrf: true });

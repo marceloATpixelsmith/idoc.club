@@ -52,8 +52,8 @@ test('deletion enforces the retention rule: only draft or archived articles may 
 });
 
 test('public queries never return draft, scheduled, or archived articles, even by exact slug', () => {
-  const publicQueries = source.match(/export async function (?:listPublicArticles|getPublicArticleBySlug)[\s\S]*?\n\}/g) ?? [];
-  assert.equal(publicQueries.length, 2);
+  const publicQueries = source.match(/export async function (?:listPublicArticles|listAllPublicArticles|getPublicArticleBySlug)[\s\S]*?\n\}/g) ?? [];
+  assert.equal(publicQueries.length, 3);
   for (const query of publicQueries) {
     assert.match(query, /status='published'/);
     assert.match(query, /publication_date<=now\(\)/);
@@ -65,9 +65,10 @@ test('the public article page 404s rather than rendering when the article is not
   assert.match(publicPage, /alternates: \{ canonical/);
 });
 
-test('the public listing page has an explicit empty state and pagination', () => {
+test('the public News listing has an explicit empty state and renders every published News article', () => {
   assert.match(listPage, /No news articles have been published yet/);
-  assert.match(listPage, /hasNext/);
+  assert.match(listPage, /listAllPublicArticles\('news'\)/);
+  assert.doesNotMatch(listPage, /hasNext|Previous|Next/);
 });
 
 test('the admin article table uses the shared Dice UI resource controls and server sorting', () => {
@@ -88,8 +89,8 @@ test('article HTML is only ever rendered through the one sanitizing view compone
 
 test('the admin content editor re-sanitizes previously-stored article HTML immediately before rendering it, not just at the last save', () => {
   assert.match(articleContentEditor, /sanitizeArticleContent\(initialHtml\)/);
-  assert.match(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: sanitizedInitialHtml \}\}/);
-  assert.doesNotMatch(articleContentEditor, /dangerouslySetInnerHTML=\{\{ __html: initialHtml \}\}/);
+  assert.match(articleContentEditor, /<SimpleEditorField initialHtml=\{sanitizeArticleContent\(initialHtml\)\}/);
+  assert.doesNotMatch(articleContentEditor, /<SimpleEditorField initialHtml=\{initialHtml\}/);
 });
 
 test('sanitizeArticleContent strips scripts, event handlers, and unsafe link schemes while preserving safe formatting', () => {
@@ -101,6 +102,17 @@ test('sanitizeArticleContent strips scripts, event handlers, and unsafe link sch
   assert.doesNotMatch(clean, /javascript:/);
   assert.doesNotMatch(clean, /<img/);
   assert.match(clean, /<strong>world<\/strong>/);
+  assert.equal(sanitizeArticleContent('<h1>Heading</h1><p><u>under</u> <s>strike</s></p>'), '<h1>Heading</h1><p><u>under</u> <s>strike</s></p>');
+  assert.equal(sanitizeArticleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>'), '<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="A &amp; B"></p>');
+  assert.equal(
+    sanitizeArticleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="Horse" width="640"></p>'),
+    '<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/v123/idoc/rich-content/photo.jpg" alt="Horse" width="640"></p>',
+  );
+  assert.doesNotMatch(
+    sanitizeArticleContent('<img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="Horse" width="99999">'),
+    /width=/,
+  );
+  assert.doesNotMatch(sanitizeArticleContent('<img src="https://evil.example/photo.jpg" alt="x">'), /<img/);
   assert.match(clean, /<a href="https:\/\/idoc\.club">good<\/a>/);
 });
 
@@ -110,10 +122,13 @@ test('sanitizeArticleContent is idempotent: re-sanitizing an already-sanitized h
   const twice = sanitizeArticleContent(once);
   assert.equal(twice, once, 'a second sanitization pass over already-sanitized content must be a no-op, not further escaping');
   assert.doesNotMatch(twice, /&amp;amp;/);
+  const withImage = '<img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="A &amp; B">';
+  assert.equal(sanitizeArticleContent(sanitizeArticleContent(withImage)), sanitizeArticleContent(withImage));
 });
 
 test('hasVisibleContent rejects markup that renders no visible text', () => {
   assert.equal(hasVisibleContent('<p>&nbsp;</p>'), false);
   assert.equal(hasVisibleContent('<p></p>'), false);
   assert.equal(hasVisibleContent('<p>Real content</p>'), true);
+  assert.equal(hasVisibleContent('<p><img src="https://res.cloudinary.com/z6xv27qx/image/upload/photo.jpg" alt="Horse"></p>'), true);
 });

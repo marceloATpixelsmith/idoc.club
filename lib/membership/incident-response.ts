@@ -27,7 +27,7 @@ import { taggedSubject } from '@/lib/notifications/alert-severity';
 // self-service primitives that were never designed to be driven from an admin context.
 
 // Capped well under the narrowest column this reference (with its "incident:" prefix, 9 chars) gets
-// stamped into: idoc.auth_sessions.revoke_reason is only varchar(80) -- the tightest of the three
+// stamped into: auth_sessions.revoke_reason is only varchar(80) -- the tightest of the three
 // revocation tables this touches -- so 70 leaves headroom on every one of them, not just the widest.
 const incidentInputSchema = z.object({
   incidentReference: z.string().trim().min(1, 'An incident reference is required').max(70),
@@ -55,7 +55,7 @@ function isForceRevokeIncidentRaceViolation(error: unknown): boolean {
  * Immediately and durably revokes every form of standing authority a user holds: every session
  * (bumping sessionVersion so an already-signed cookie can never be replayed back in, matching
  * suspendUserAccount's mechanism), every remembered/trusted login device, and every MFA factor
- * (idoc.mfa_factors, see schema.ts). Unlike
+ * (mfa_factors, see schema.ts). Unlike
  * suspendUserAccount, this deliberately does not change users.account_state: the account itself may
  * still be legitimate (a stolen laptop, a leaked session, a suspected credential compromise) and the
  * owner should be able to sign back in and re-enroll MFA once they've regained control, not be
@@ -144,7 +144,7 @@ export async function forceRevokeAllAuthority(userId: number, untrustedInput: un
     bodyHtml: `<p>A Super Admin force-revoked all standing authority (every session, every remembered/trusted device, and every MFA factor) for member <b>#${userId}</b>.</p>
 <p>Incident reference: <b>${escapeHtml(input.incidentReference)}</b></p>
 <p>Reason: ${escapeHtml(input.reason)}</p>
-<p>This is a deliberate, audited operator action (see idoc.audit_log for the full record). No response is required unless this incident reference is unfamiliar to you.</p>`,
+<p>This is a deliberate, audited operator action (see audit_log for the full record). No response is required unless this incident reference is unfamiliar to you.</p>`,
     footerNote: 'IDOC security monitoring.',
     heading: 'Member authority force-revoked',
   });

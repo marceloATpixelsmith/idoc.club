@@ -20,7 +20,7 @@ export async function recordGoogleOauthSecretRotation(input: {
   reason: 'scheduled_rotation' | 'rollback' | 'compromise_response';
   actorId?: number | null;
 }): Promise<void> {
-  await db.execute(sql`insert into idoc.audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason)
+  await db.execute(sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason)
     values (${input.actorId ?? null},${ROTATION_ACTION},'system',${ROTATION_ENTITY_ID},
       ${input.fromVersion === null ? null : sql`${JSON.stringify({ version: input.fromVersion })}::jsonb`},
       ${JSON.stringify({ version: input.toVersion })}::jsonb, ${input.reason})`);
@@ -44,7 +44,7 @@ export async function recordActiveGoogleOauthSecretRotation(
     const rows = await tx.execute<{
       after_json: { version: string };
       created_at: string;
-    }>(sql`select after_json,created_at from idoc.audit_log
+    }>(sql`select after_json,created_at from audit_log
       where action=${ROTATION_ACTION} and entity_type='system' and entity_id=${ROTATION_ENTITY_ID}
       order by created_at desc, id desc limit 1`);
     const latest = rows[0];
@@ -57,7 +57,7 @@ export async function recordActiveGoogleOauthSecretRotation(
       };
     }
     const fromVersion = latest?.after_json.version ?? null;
-    const inserted = await tx.execute<{ created_at: string }>(sql`insert into idoc.audit_log(
+    const inserted = await tx.execute<{ created_at: string }>(sql`insert into audit_log(
       actor_id,action,entity_type,entity_id,before_json,after_json,reason
     ) values (
       ${actorId},${ROTATION_ACTION},'system',${ROTATION_ENTITY_ID},
@@ -75,7 +75,7 @@ export async function recordActiveGoogleOauthSecretRotation(
 
 export async function latestGoogleOauthSecretRotation(): Promise<{ toVersion: string; fromVersion: string | null; reason: string; createdAtMs: number } | null> {
   const rows = await db.execute<{ before_json: { version: string } | null; after_json: { version: string }; reason: string; created_at: string }>(
-    sql`select before_json,after_json,reason,created_at from idoc.audit_log
+    sql`select before_json,after_json,reason,created_at from audit_log
       where action=${ROTATION_ACTION} and entity_type='system' and entity_id=${ROTATION_ENTITY_ID}
       order by created_at desc, id desc limit 1`,
   );

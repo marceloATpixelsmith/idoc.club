@@ -56,6 +56,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/admin/payments/actions.ts': { recordManualPaymentForm: 'delegates-to-data-access', refundMembershipPaymentForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/security/actions.ts': { recordGoogleOauthRotationEvidenceForm: 'delegates-to-data-access' },
   'app/(dashboard)/dashboard/support/actions.ts': {
+    closeOwnConversation: 'delegates-to-data-access',
     createSupportConversation: 'delegates-to-data-access', replyToSupportConversation: 'delegates-to-data-access',
   },
   'app/(dashboard)/admin/support/actions.ts': {
@@ -67,17 +68,20 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
     unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
   },
-  'app/(dashboard)/admin/pages/actions.ts': {
-    archivePage: 'delegates-to-data-access', createContentPage: 'delegates-to-data-access',
-    deletePage: 'delegates-to-data-access', updateContentPage: 'delegates-to-data-access',
-  },
+  'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access', updateAdminTableInlineField: 'delegates-to-data-access' },
   'app/(dashboard)/admin/seminars/actions.ts': {
-    cancelSeminarAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', markSeminarRegistrationPaidAction: 'delegates-to-data-access',
-    publishSeminarAction: 'delegates-to-data-access', refundSeminarRegistrationAction: 'delegates-to-data-access', revertSeminarToDraftAction: 'delegates-to-data-access', updateSeminarAction: 'delegates-to-data-access',
+    createAdminSeminarRegistrationAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
+    refundSeminarRegistrationAction: 'delegates-to-data-access', setAdminRegistrationStatusAction: 'delegates-to-data-access',
+    updateSeminarAction: 'delegates-to-data-access', updateSeminarRegistrationDetailsAction: 'delegates-to-data-access',
   },
   'app/(dashboard)/dashboard/seminars/actions.ts': {
-    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerForSeminarAction: 'delegates-to-data-access',
+    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerAtNonMemberPriceAction: 'delegates-to-data-access',
+    registerForSeminarAction: 'delegates-to-data-access',
   },
+  // Anonymous guest seminar registration: no session on either side, the same shape as the
+  // pre-authentication login/signup actions and the public contact form -- it just happens to live
+  // in (marketing) rather than (login).
+  'app/(marketing)/seminars/actions.ts': { registerAsGuestForSeminarAction: 'pre-authentication', startGuestSeminarStripeCheckoutAction: 'pre-authentication' },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
@@ -99,9 +103,11 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
   'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
+  'app/api/admin/export/seminar-all-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/selected-reports/route.ts': 'requireAdministrator',
   'app/api/admin/table-preferences/[table]/route.ts': 'authenticated-admin-csrf-owner-boundary',
+  'app/api/admin/tiptap-image/route.ts': 'authenticated-admin-csrf-boundary',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',
   'app/api/auth/google/link/start/route.ts': 'authenticated-fresh-verification-oauth-boundary',
   'app/api/auth/google/link/status/route.ts': 'authenticated-account-boundary',
@@ -114,11 +120,18 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
+  'app/api/cron/seminar-cancellation-resolution/route.ts': 'shared-secret-header',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
+  'app/api/qstash/jobs/route.ts': 'qstash-signed-jwt-body-and-destination',
   'app/api/brevo/webhook/route.ts': 'shared-secret-query-param',
   'app/api/stripe/checkout/route.ts': 'stateless-redirect-no-data-access',
   'app/api/stripe/webhook/route.ts': 'stripe-signature',
   'app/api/team/route.ts': 'always-404-no-data-access',
+  'app/api/ui/flash/consume/route.ts': 'http-only-cookie-delete-no-data-access',
+  'app/api/ui/flash/membership-checkout/[checkoutId]/route.ts': 'authenticated-owner-bound-checkout-evidence',
+  'app/api/ui/flash/membership-renew/route.ts': 'authenticated-navigation-flash',
+  'app/api/ui/flash/renewal-setup-complete/route.ts': 'authenticated-owner-bound-renewal-evidence',
+  'app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts': 'public-opaque-return-flash-no-data-access',
   'app/api/user/route.ts': 'requireAccountAccess',
 };
 
@@ -285,6 +298,21 @@ test('the address autocomplete Route Handler authenticates and rate-limits befor
   assert.match(source, /Retry-After/);
 });
 
+test('the Tiptap image upload Route Handler checks CSRF and administrator access before accepting or uploading files', () => {
+  const source = readFileSync(path.join(root, 'app/api/admin/tiptap-image/route.ts'), 'utf8');
+  const csrf = source.indexOf('await requireCsrfTokenValue(');
+  const accountAccess = source.indexOf("await requireAccountAccess('administration')");
+  const administrator = source.indexOf('requireAdministrator(actor)');
+  const contentLength = source.indexOf("request.headers.get('content-length')");
+  const formData = source.indexOf('await request.formData()');
+  const upload = source.indexOf("uploadCloudinaryImage(image, 'idoc/rich-content')");
+  assert.ok(csrf >= 0 && accountAccess > csrf && administrator > accountAccess);
+  assert.ok(contentLength > administrator && formData > contentLength && upload > formData);
+  assert.match(source, /MAX_IMAGE_UPLOAD_BYTES \+ 64 \* 1024/);
+  assert.match(source, /error\.name === 'AuthorizationError'/);
+  assert.match(source, /error\.name === 'CsrfError'/);
+});
+
 test('the compatibility team Route Handler never touches the database', () => {
   const source = readFileSync(path.join(root, 'app/api/team/route.ts'), 'utf8'); assert.doesNotMatch(source, /\bdb\./); assert.match(source, /status: 404/);
 });
@@ -311,6 +339,10 @@ test('the renewal-notice Cron Route Handlers are gated by the shared secret befo
   for (const file of ['app/api/cron/renewal-notice-scan/route.ts', 'app/api/cron/renewal-notice-delivery/route.ts']) {
     const source = readFileSync(path.join(root, file), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
   }
+});
+
+test('the seminar-cancellation-resolution Cron Route Handler is gated by the shared secret before batch processing', () => {
+  const source = readFileSync(path.join(root, 'app/api/cron/seminar-cancellation-resolution/route.ts'), 'utf8'); assert.match(source, /handleAccountDeliveryCron\(request, \{/); assert.match(source, /secret: cronSecretForServer\(\)/);
 });
 
 test('the reconciliation-scan Cron Route Handler is gated by the shared secret before batch processing', () => {
