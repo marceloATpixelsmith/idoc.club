@@ -60,7 +60,7 @@ export function serverDurationMetricPayload(spans: readonly ServerSpan[]) {
     resourceMetrics: [{
       resource: { attributes: [{ key: 'service.name', value: { stringValue: 'idoc.club' } }] },
       scopeMetrics: [{
-        scope: { name: 'idoc.nextjs.http-server-span-metrics' },
+        scope: { name: 'membership.nextjs.http-server-span-metrics' },
         metrics: [{
           name: 'http.server.duration',
           description: 'HTTP server request duration from existing Next.js server spans',
@@ -87,9 +87,9 @@ export async function sendServerDurationMetrics(
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    if (!response.ok) console.warn('[idoc.otel] metric export failed', { status: response.status });
+    if (!response.ok) console.warn('[telemetry] metric export failed', { status: response.status });
   } catch {
-    console.warn('[idoc.otel] metric export unavailable');
+    console.warn('[telemetry] metric export unavailable');
   } finally {
     clearTimeout(timer);
   }
