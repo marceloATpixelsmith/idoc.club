@@ -71,7 +71,7 @@ test('the current schema exports exactly generate the authoritative migration sn
     ], { cwd: fileURLToPath(root) });
 
     const generated = JSON.parse(await readFile(join(temporary, 'meta', '0000_snapshot.json'), 'utf8'));
-    const authoritative = JSON.parse(await readFile(new URL('meta/0070_snapshot.json', migrations), 'utf8'));
+    const authoritative = JSON.parse(await readFile(new URL('meta/0071_snapshot.json', migrations), 'utf8'));
     for (const snapshot of [generated, authoritative]) {
       delete snapshot.id;
       delete snapshot.prevId;
@@ -80,4 +80,33 @@ test('the current schema exports exactly generate the authoritative migration sn
   } finally {
     await rm(temporary, { force: true, recursive: true });
   }
+});
+
+
+test('permanent data promotion keeps a narrow content-only runtime boundary', async () => {
+  const source = await readFile(new URL('../lib/admin/data-promotion.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../lib/db/migrations/0071_permanent_data_promotion.sql', import.meta.url), 'utf8');
+
+  assert.match(source, /export type PromotionDataset = 'news' \| 'organization' \| 'seminar'/);
+  assert.match(source, /EXPECTED_ROLE = 'idoc_data_promoter'/);
+  assert.match(source, /DATA_PROMOTION_DATABASE_URL/);
+  assert.match(source, /DATA_PROMOTION_PLAN_SECRET/);
+  assert.match(source, /process\.env\.DB_SCHEMA !== 'idoc_staging'/);
+  assert.match(source, /process\.env\.VERCEL_GIT_COMMIT_REF !== 'staging'/);
+  assert.doesNotMatch(source, /process\.env\.POSTGRES_URL/);
+
+  const productionWrites = [...source.matchAll(/(?:insert\s+into|update|delete\s+from)\s+idoc_production\.([a-z_]+)/gi)]
+    .map((match) => match[1]);
+  assert.deepEqual(new Set(productionWrites), new Set(['news_articles', 'seminars', 'organization_settings', 'audit_log']));
+  assert.doesNotMatch(source, /(?:insert\s+into|update|delete\s+from)\s+idoc_production\.(?:users|profiles|memberships|payments|subscriptions|seminar_registrations|auth_sessions|mfa_factors)/i);
+
+  assert.match(source, /Production seminar already has registrations/);
+  assert.match(source, /broaden the Production article audience/);
+  assert.match(source, /pg_advisory_xact_lock/);
+  assert.match(source, /Staging or Production changed after preview/);
+
+  assert.match(migration, /news_articles[\s\S]*promotion_key[\s\S]*gen_random_uuid/);
+  assert.match(migration, /seminars[\s\S]*promotion_key[\s\S]*gen_random_uuid/);
+  assert.match(migration, /news_articles_promotion_key_unique/);
+  assert.match(migration, /seminars_promotion_key_unique/);
 });
