@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import postgres from 'postgres';
+import { sanitizeArticleContent } from '@/lib/news/sanitize';
 
 export type PromotionDataset = 'news' | 'organization' | 'seminar';
 export type PromotionAction = 'create' | 'reject' | 'skip' | 'update';
@@ -427,7 +428,7 @@ async function applyNews(tx: PromotionSql, source: Row, target: Row | null, acto
     if (collision.length) throw new DataPromotionError('The Production article slug now conflicts with another record.');
     const result = await rows<{ id: number }>(tx,
       'insert into idoc_production.news_articles (promotion_key,slug,title,subtitle,content_html,article_type,audience,thumbnail_url,external_url,status,publication_date,published_at,archived_at,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14) returning id',
-      [String(source.promotion_key), String(source.slug), String(source.title), source.subtitle, String(source.content_html),
+      [String(source.promotion_key), String(source.slug), String(source.title), source.subtitle, sanitizeArticleContent(String(source.content_html)),
         String(source.article_type), source.audience, source.thumbnail_url, source.external_url, String(source.status),
         source.publication_date, source.published_at, source.archived_at, actorId]);
     return result[0].id;
@@ -437,7 +438,7 @@ async function applyNews(tx: PromotionSql, source: Row, target: Row | null, acto
   if (collision.length) throw new DataPromotionError('The Production article slug now conflicts with another record.');
   await rows(tx,
     'update idoc_production.news_articles set slug=$1,title=$2,subtitle=$3,content_html=$4,article_type=$5,audience=$6,thumbnail_url=$7,external_url=$8,status=$9,publication_date=$10,published_at=$11,archived_at=$12,updated_by_user_id=$13,updated_at=now() where id=$14 returning id',
-    [String(source.slug), String(source.title), source.subtitle, String(source.content_html), String(source.article_type),
+    [String(source.slug), String(source.title), source.subtitle, sanitizeArticleContent(String(source.content_html)), String(source.article_type),
       source.audience, source.thumbnail_url, source.external_url, String(source.status), source.publication_date,
       source.published_at, source.archived_at, actorId, Number(target.id)]);
   return Number(target.id);
@@ -447,11 +448,11 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
   if (!target) {
     const result = await rows<{ id: number }>(tx,
       'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24) returning id',
-      [String(source.promotion_key), String(source.title), String(source.description), canonicalValue(source.start_date),
+      [String(source.promotion_key), String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date),
         canonicalValue(source.end_date), source.start_time, source.end_time, source.timezone, String(source.location),
         String(source.language), String(source.organizing_national_federation), String(source.course_directors),
-        String(source.participant_profile), String(source.course_venue_information), String(source.application),
-        String(source.accommodation_information), Number(source.capacity), Number(source.member_price_cents),
+        sanitizeArticleContent(String(source.participant_profile)), sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)),
+        sanitizeArticleContent(String(source.accommodation_information)), Number(source.capacity), Number(source.member_price_cents),
         Number(source.non_member_price_cents), source.registration_deadline, String(source.status), Boolean(source.is_fei),
         source.levels, actorId]);
     return result[0].id;
@@ -463,10 +464,10 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
   }
   await rows(tx,
     'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,start_time=$5,end_time=$6,timezone=$7,location=$8,language=$9,organizing_national_federation=$10,course_directors=$11,participant_profile=$12,course_venue_information=$13,application=$14,accommodation_information=$15,capacity=$16,member_price_cents=$17,non_member_price_cents=$18,registration_deadline=$19,status=$20,is_fei=$21,levels=$22,updated_by_user_id=$23,updated_at=now() where id=$24 returning id',
-    [String(source.title), String(source.description), canonicalValue(source.start_date), canonicalValue(source.end_date),
+    [String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date), canonicalValue(source.end_date),
       source.start_time, source.end_time, source.timezone, String(source.location), String(source.language),
-      String(source.organizing_national_federation), String(source.course_directors), String(source.participant_profile),
-      String(source.course_venue_information), String(source.application), String(source.accommodation_information),
+      String(source.organizing_national_federation), String(source.course_directors), sanitizeArticleContent(String(source.participant_profile)),
+      sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)), sanitizeArticleContent(String(source.accommodation_information)),
       Number(source.capacity), Number(source.member_price_cents), Number(source.non_member_price_cents),
       source.registration_deadline, String(source.status), Boolean(source.is_fei), source.levels, actorId, Number(target.id)]);
   return Number(target.id);
@@ -488,7 +489,7 @@ export async function executePromotionPlan(token: string, stagingActorId: number
     const tx = transaction as unknown as PromotionSql;
     await rows(tx, 'select pg_advisory_xact_lock(hashtext($1))', ['idoc-data-promotion:' + payload.operationId]);
     const existing = await rows(tx,
-      "select id from idoc_staging.audit_log where action='admin.data_promotion.succeeded' and entity_type='data_promotion' and entity_id=$1 limit 1",
+      "select id from idoc_staging.promotion_audit_success where entity_id=$1 limit 1",
       [payload.operationId]);
     if (existing.length) return { duplicate: true, operationId: payload.operationId };
 
@@ -543,7 +544,7 @@ export async function executePromotionPlan(token: string, stagingActorId: number
 export async function listPromotionHistory(limit = 25): Promise<PromotionHistoryItem[]> {
   await verifyBoundary();
   const result = await rows<{ after_json: unknown; created_at: Date; entity_id: string }>(promotionSql(),
-    "select entity_id,after_json,created_at from idoc_staging.audit_log where action='admin.data_promotion.succeeded' and entity_type='data_promotion' order by created_at desc limit $1",
+    "select entity_id,after_json,created_at from idoc_staging.promotion_audit_success order by created_at desc limit $1",
     [Math.min(Math.max(limit, 1), 100)]);
   return result.map((row) => {
     const payload = row.after_json && typeof row.after_json === 'object'
