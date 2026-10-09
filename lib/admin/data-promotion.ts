@@ -516,6 +516,10 @@ export async function executePromotionPlan(token: string, stagingActorId: number
         [payload.dataset, Number(planned.sourceId)]);
       const source = await sourceRow(tx, payload.dataset, planned.sourceId);
       if (!source) throw new DataPromotionError('A staging record was deleted after preview. Generate a new preview.');
+      const sourceIdentity = payload.dataset === 'organization' ? 'organization:1' : String(source.promotion_key);
+      if (sourceIdentity !== planned.promotionKey) {
+        throw new DataPromotionError('The staging promotion identity changed after preview. Generate a new preview.');
+      }
       const target = await targetRow(tx, payload.dataset, source, true);
       const fields = recordFields(payload.dataset);
       if (digestRecord(source, fields) !== planned.sourceHash || digestRecord(target, fields) !== planned.targetHash) {
