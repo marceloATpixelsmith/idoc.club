@@ -1,4 +1,3 @@
-import { trace } from '@opentelemetry/api';
 import * as Sentry from '@sentry/nextjs';
 import { OTLPHttpProtoTraceExporter, registerOTel } from '@vercel/otel';
 
@@ -40,10 +39,6 @@ export async function register() {
       // Do not export provider API keys, addresses, or query strings in fetch URLs.
       instrumentationConfig: { fetch: { ignoreUrls: [/.*/] } },
     });
-    if (process.env.NEXT_RUNTIME === 'nodejs' && traceExporter) {
-      // A non-user-data diagnostic span confirms the exporter can deliver telemetry.
-      trace.getTracer('idoc.observability').startSpan('idoc.otel.initialized').end();
-    }
   }
   if (process.env.NEXT_RUNTIME === 'nodejs') await import('./sentry.server.config');
   if (process.env.NEXT_RUNTIME === 'edge') await import('./sentry.edge.config');
