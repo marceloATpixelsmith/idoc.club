@@ -1,0 +1,57 @@
+name: Manual Promotion Migration 0071
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_schema:
+        description: Schema to migrate (run staging first; Production requires a separate approval)
+        required: true
+        type: choice
+        options:
+          - idoc_staging
+          - idoc_production
+      backup_reference:
+        description: Verified Render backup/snapshot identifier and time; must exist before running
+        required: true
+        type: string
+      confirmation:
+        description: Type APPLY-0071-idoc_staging or APPLY-0071-idoc_production exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-0071-maintenance
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/staging' && ((inputs.target_schema == 'idoc_staging' && inputs.confirmation == 'APPLY-0071-idoc_staging') || (inputs.target_schema == 'idoc_production' && inputs.confirmation == 'APPLY-0071-idoc_production'))
+    name: Apply 0071 to ${{ inputs.target_schema }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.target_schema == 'idoc_production' && 'idoc-db-production-maintenance' || 'idoc-db-staging-maintenance' }}
+    steps:
+      - name: Check out protected staging code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply schema-specific migration
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          PROMOTION_TARGET_SCHEMA: ${{ inputs.target_schema }}
+          PROMOTION_BACKUP_REFERENCE: ${{ inputs.backup_reference }}
+          PROMOTION_CONFIRM: ${{ inputs.confirmation }}
+        run: node scripts/apply-promotion-0071.mjs
