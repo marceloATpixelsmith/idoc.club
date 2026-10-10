@@ -6,7 +6,6 @@ import postgres from 'postgres';
 import { rewriteMigrationSql } from './schema-migration-sql.mjs';
 
 const schema = process.env.PROMOTION_TARGET_SCHEMA;
-const reference = process.env.PROMOTION_BACKUP_REFERENCE?.trim();
 const confirmation = process.env.PROMOTION_CONFIRM;
 const url = process.env.IDOC_MIGRATION_DATABASE_URL;
 if (!['idoc_staging', 'idoc_production'].includes(schema))
@@ -17,9 +16,9 @@ if (confirmation !== `APPLY-0071-${schema}`)
 {
     throw new Error('Explicit schema-specific confirmation is required');
 }
-if (!reference || reference.length < 8 || /^(none|unknown|pending|not available)$/i.test(reference))
+if (process.env.IDOC_BACKUP_VERIFIED !== 'true')
 {
-    throw new Error('A verified database backup reference is required');
+    throw new Error('Verified pre-migration backup step has not completed');
 }
 if (!url)
 {
@@ -62,7 +61,9 @@ async function verifyInstalledMigration(tx,targetSchema,expectedHash)
             (SELECT COUNT(*)::integer FROM pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
                 JOIN pg_namespace n ON n.oid = t.relnamespace
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(c.conkey)
                 WHERE n.nspname = ${targetSchema} AND c.contype = 'u'
+                AND array_length(c.conkey, 1) = 1 AND a.attname = 'promotion_key'
                 AND ((t.relname = 'news_articles' AND c.conname = 'news_articles_promotion_key_unique')
                   OR (t.relname = 'seminars' AND c.conname = 'seminars_promotion_key_unique'))) AS unique_constraints,
             (SELECT COUNT(*)::integer FROM pg_proc p
@@ -99,6 +100,15 @@ try
     {
         throw new Error('Wrong database or missing target schema');
     }
+    const fingerprint = await sql`SELECT md5(coalesce(inet_server_addr()::text,'') || ':' ||
+        coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text ||
+        ':' || current_database() || ':' ||
+        (SELECT oid::text FROM pg_database WHERE datname=current_database())) AS value`;
+    if (!/^[a-f0-9]{32}$/.test(process.env.IDOC_BACKUP_SERVER_FINGERPRINT ?? '') ||
+        fingerprint[0].value !== process.env.IDOC_BACKUP_SERVER_FINGERPRINT)
+    {
+        throw new Error('Pre-migration backup was taken from a different PostgreSQL server; migration refused');
+    }
     const migration = rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), schema);
     const statements = migration.split('--> statement-breakpoint').map(x => x.trim()).filter(Boolean);
     const hash = createHash('sha256').update(migration).digest('hex');
@@ -132,8 +142,7 @@ try
         await tx.unsafe('INSERT INTO "' + schema + '".__drizzle_migrations (hash, created_at) VALUES ($1, $2)', [hash, 1791566400000]);
         return await verifyInstalledMigration(tx, schema, hash);
     });
-    console.log(JSON.stringify({ result: 'migration_0071_applied', schema, backupReference: reference,
-        database: identity[0].database, operator: identity[0].operator, verification: validation }));
+    console.log(JSON.stringify({ result: 'migration_0071_applied', schema, database: identity[0].database, operator: identity[0].operator, verification: validation }));
 }
 finally
 {
