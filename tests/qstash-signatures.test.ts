@@ -51,3 +51,11 @@ test('unsigned QStash requests never run', async () => {
   const unsigned = new Request(callback, { method: 'POST', body });
   assert.equal(await verifyQStashRequest(unsigned, body), false);
 });
+
+test('accepts a signature for the per-job destination URL used to label schedules', async () => {
+  const labelled = `${callback}?job=account-delivery`;
+  const req = new Request(labelled, { method: 'POST', headers: { 'Upstash-Signature': await signature(current, hash, labelled) }, body });
+  assert.equal(await verifyQStashRequest(req, body), true);
+  const other = new Request(`${callback}?job=clock-skew-check`, { method: 'POST', headers: { 'Upstash-Signature': await signature(current, hash, labelled) }, body });
+  assert.equal(await verifyQStashRequest(other, body), false);
+});

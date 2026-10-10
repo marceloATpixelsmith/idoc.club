@@ -19,7 +19,11 @@ const jobs = {
   'new-relic-weekly-health-check': '0 8 * * 1',
 };
 for (const [job, cron] of Object.entries(jobs)) {
-  const response = await fetch(new URL(`/v2/schedules/${url.href}`, api), {
+  // The ?job= query makes each schedule's destination distinct in the Upstash console; the signed body stays authoritative.
+  // The destination is a path parameter of the API call, so its own query string must be percent-encoded.
+  const destination = new URL(url);
+  destination.searchParams.set('job', job);
+  const response = await fetch(new URL(`/v2/schedules/${destination.href.replace('?', '%3F')}`, api), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

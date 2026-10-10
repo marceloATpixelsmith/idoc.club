@@ -16,7 +16,7 @@ test('QStash signs destination and request body, and requires both rotation keys
   const source = read('lib/background/qstash.ts');
   assert.match(source, /jwtVerify\(signature/);
   assert.match(source, /issuer: 'Upstash'/);
-  assert.match(source, /payload\.sub === destination/);
+  assert.match(source, /destinations\.includes\(payload\.sub\)/);
   assert.match(source, /payload\.body\.replace/);
   assert.match(source, /QSTASH_NEXT_SIGNING_KEY/);
   assert.match(source, /QSTASH_CURRENT_SIGNING_KEY/);
