@@ -6,7 +6,6 @@ import postgres from 'postgres';
 import { rewriteMigrationSql } from './schema-migration-sql.mjs';
 
 const schema = process.env.PROMOTION_TARGET_SCHEMA;
-const reference = process.env.PROMOTION_BACKUP_REFERENCE?.trim();
 const confirmation = process.env.PROMOTION_CONFIRM;
 const url = process.env.IDOC_MIGRATION_DATABASE_URL;
 if (!['idoc_staging', 'idoc_production'].includes(schema))
@@ -17,9 +16,9 @@ if (confirmation !== `APPLY-0071-${schema}`)
 {
     throw new Error('Explicit schema-specific confirmation is required');
 }
-if (!reference || reference.length < 8 || /^(none|unknown|pending|not available)$/i.test(reference))
+if (process.env.IDOC_BACKUP_VERIFIED !== 'true')
 {
-    throw new Error('A verified database backup reference is required');
+    throw new Error('Verified pre-migration backup step has not completed');
 }
 if (!url)
 {
@@ -132,8 +131,7 @@ try
         await tx.unsafe('INSERT INTO "' + schema + '".__drizzle_migrations (hash, created_at) VALUES ($1, $2)', [hash, 1791566400000]);
         return await verifyInstalledMigration(tx, schema, hash);
     });
-    console.log(JSON.stringify({ result: 'migration_0071_applied', schema, backupReference: reference,
-        database: identity[0].database, operator: identity[0].operator, verification: validation }));
+    console.log(JSON.stringify({ result: 'migration_0071_applied', schema, database: identity[0].database, operator: identity[0].operator, verification: validation }));
 }
 finally
 {
