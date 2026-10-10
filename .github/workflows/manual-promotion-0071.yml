@@ -64,6 +64,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client-17 awscli gnupg
       - name: Mandatory IDOC offsite pre-migration backup
+        id: backup
         env:
           DATABASE_BACKUP_URL: ${{ secrets.IDOC_BACKUP_DATABASE_URL }}
           IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
@@ -80,4 +81,5 @@ jobs:
           PROMOTION_TARGET_SCHEMA: ${{ inputs.target_schema }}
           PROMOTION_CONFIRM: ${{ inputs.confirmation }}
           IDOC_BACKUP_VERIFIED: 'true'
+          IDOC_BACKUP_SERVER_FINGERPRINT: ${{ steps.backup.outputs.server_fingerprint }}
         run: node scripts/apply-promotion-0071.mjs
