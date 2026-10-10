@@ -100,6 +100,15 @@ try
     {
         throw new Error('Wrong database or missing target schema');
     }
+    const fingerprint = await sql`SELECT md5(coalesce(inet_server_addr()::text,'') || ':' ||
+        coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text ||
+        ':' || current_database() || ':' ||
+        (SELECT oid::text FROM pg_database WHERE datname=current_database())) AS value`;
+    if (!/^[a-f0-9]{32}$/.test(process.env.IDOC_BACKUP_SERVER_FINGERPRINT ?? '') ||
+        fingerprint[0].value !== process.env.IDOC_BACKUP_SERVER_FINGERPRINT)
+    {
+        throw new Error('Pre-migration backup was taken from a different PostgreSQL server; migration refused');
+    }
     const migration = rewriteMigrationSql(await readFile('lib/db/migrations/0071_permanent_data_promotion.sql', 'utf8'), schema);
     const statements = migration.split('--> statement-breakpoint').map(x => x.trim()).filter(Boolean);
     const hash = createHash('sha256').update(migration).digest('hex');
