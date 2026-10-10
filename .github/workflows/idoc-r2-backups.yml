@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   backup:
+    if: github.ref == 'refs/heads/main'
     name: Back up IDOC schemas to R2
     runs-on: ubuntu-latest
     environment: idoc-db-backups
