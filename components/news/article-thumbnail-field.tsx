@@ -71,7 +71,7 @@ export function ArticleThumbnailField({ allowRemoval = false, id, initialImageUr
             ref={fileInputRef}
             type="file"
           />
-          <p className="text-sm text-muted-foreground">JPG, PNG, WEBP, or AVIF. Maximum 5 MB.</p>
+          <p className="text-sm text-muted-foreground">JPG, PNG, WEBP, or AVIF. Maximum 4 MB.</p>
         </div>
         {allowRemoval && initialImageUrl ? (
           <label className="flex items-center gap-2 text-sm">
