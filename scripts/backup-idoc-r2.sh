@@ -10,7 +10,7 @@ umask 077
 : "${IDOC_BACKUP_ENCRYPTION_PASSPHRASE:?}"
 : "${BACKUP_KIND:?}"
 [[ "$BACKUP_KIND" == "daily" || "$BACKUP_KIND" == "pre-migration" ]] || exit 2
-for command in pg_dump pg_restore aws gpg sha256sum; do command -v "$command" >/dev/null; done
+for command in psql pg_dump pg_restore aws gpg sha256sum; do command -v "$command" >/dev/null; done
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
@@ -24,13 +24,11 @@ pg_target="$(psql "$DATABASE_BACKUP_URL" -Atqc 'SELECT current_database()')"
 [[ "$pg_target" == "ayni_space" ]] || { echo "::error::Wrong database"; exit 1; }
 for schema in idoc_staging idoc_production; do
   # CUSTOM ARCHIVE IS PER-SCHEMA, INCLUDING DATA, TABLES, INDEXES AND SEQUENCES.
-  PGURI="$DATABASE_BACKUP_URL" pg_dump --dbname="$DATABASE_BACKUP_URL" \
+  pg_dump --dbname="$DATABASE_BACKUP_URL" \
     --schema="$schema" --format=custom --no-owner --no-acl --file="$tmp/$schema.dump"
   pg_restore --list "$tmp/$schema.dump" > "$tmp/$schema.toc"
   grep -q "SCHEMA.*$schema" "$tmp/$schema.toc" || { echo "::error::Missing schema in archive"; exit 1; }
-  if grep -E 'SCHEMA - (?!idoc_staging|idoc_production)' "$tmp/$schema.toc" >/dev/null 2>&1; then
-    echo "::error::Unexpected schema in archive"; exit 1
-  fi
+
   printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
     --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$tmp/$schema.dump.gpg" "$tmp/$schema.dump"
   object="idoc/ayni_space/$BACKUP_KIND/$timestamp-$run/$schema.dump.gpg"
