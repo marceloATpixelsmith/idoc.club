@@ -23,6 +23,10 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
   AND current_user = 'idoc_backup_reader'
   AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user
     AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls))
+  AND NOT EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname <> current_user AND pg_has_role(current_user,r.oid,'MEMBER'))
+  AND NOT EXISTS (SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname IN ('idoc_staging','idoc_production') AND t.relkind='S'
+      AND has_sequence_privilege(current_user,t.oid,'USAGE,UPDATE'))
   AND NOT EXISTS (SELECT 1 FROM pg_namespace n
     WHERE n.nspname NOT IN ('idoc_staging','idoc_production')
       AND n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'
@@ -39,6 +43,9 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
            OR has_schema_privilege(current_user,n.oid,'CREATE')))
   THEN 'ok' ELSE 'deny' END")"
 [[ "$role_check" == ok ]] || { echo "::error::Backup role privileges or database identity invalid"; exit 1; }
+fingerprint="$(psql -Atqc "SELECT md5(coalesce(inet_server_addr()::text,'') || ':' || coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text || ':' || current_database() || ':' || (SELECT oid::text FROM pg_database WHERE datname=current_database()))")"
+[[ "$fingerprint" =~ ^[a-f0-9]{32}$ ]] || exit 1
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'server_fingerprint=%s\\n' "$fingerprint" >> "$GITHUB_OUTPUT"; fi
 # ONE pg_dump SNAPSHOT CONTAINS BOTH SCHEMAS AND RETAINS OWNER/ACL DETAILS.
 pg_dump --schema=idoc_staging --schema=idoc_production --format=custom --file="$tmp/idoc.dump"
 pg_restore --list "$tmp/idoc.dump" > "$tmp/toc"
