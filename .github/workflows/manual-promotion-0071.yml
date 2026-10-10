@@ -79,4 +79,5 @@ jobs:
           IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           PROMOTION_TARGET_SCHEMA: ${{ inputs.target_schema }}
           PROMOTION_CONFIRM: ${{ inputs.confirmation }}
+          IDOC_BACKUP_VERIFIED: 'true'
         run: node scripts/apply-promotion-0071.mjs
