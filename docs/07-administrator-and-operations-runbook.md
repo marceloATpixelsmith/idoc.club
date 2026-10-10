@@ -1135,6 +1135,15 @@ Vercel builds run `pnpm build` (Next.js build) only; they MUST NOT run `pnpm db:
 Run `pnpm db:migrate` only as an explicit, separately authorized maintenance action using schema-owner credentials, scoped to the target `DB_SCHEMA`, after backups and migration review. The command uses `scripts/migrate-selected-schema.ts`, which rewrites schema-qualified migration SQL to the selected schema. Never put schema-owner credentials in the normal Vercel `POSTGRES_URL` or expose them to Preview branches. Verify migration journal state and run the migration separately before deploying application code that requires it. The Vercel Build Command must be `pnpm build` (not `pnpm db:migrate && next build` or a conditional variant). Production remains a separate staging-reviewed promotion, not an automatic staging merge.
 
 
+
+### Browser monitoring (staging only)
+
+`components/observability/new-relic-browser.tsx` loads the New Relic Browser agent (the bundled `@newrelic/browser-agent` npm package, no third-party script origin) with only the page-view, page-view-timing (Core Web Vitals) and JavaScript-error features. It is inert unless configured and **only runs on the `staging` branch Preview deployment** (`lib/observability/browser-agent-config.ts`). The Content-Security-Policy gains `https://bam.nr-data.net` in `connect-src` only when the agent is configured. Privacy limits and the production consent gate are in `docs/05` §5.1.
+
+1. In New Relic (US account `8600002`): **Add data → Browser monitoring → Place agent**. Choose the **npm (copy/paste)** option so New Relic generates the application; name it `idoc.club staging`. From the generated snippet note `accountID`, `agentID`, `applicationID` and the browser `licenseKey` (looks like `NRJS-…`). These are public identifiers.
+2. In Vercel **Project Settings → Environment Variables**, add `NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID`, `NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID`, `NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID` and `NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY` for the **Preview** target restricted to Git branch `staging`. (`NEXT_PUBLIC_NEW_RELIC_BROWSER_TRUST_KEY` is optional and defaults to the account ID.) They are inlined at build time, so redeploy `staging` afterwards.
+3. Verify on `staging.idoc.club`: open a few pages with the browser dev tools Network tab and confirm requests to `bam.nr-data.net` succeed with no Content-Security-Policy console errors and no cookies set by the agent; then in New Relic **Browser → idoc.club staging** confirm page views, Core Web Vitals and a deliberately thrown test error appear, and that no page content, form values or query strings are present.
+4. Roll back by removing the four variables and redeploying; the agent then does not load and the CSP drops the New Relic origin.
 ## Permanent staging-to-production data promotion
 
 ### Scope and security boundary
