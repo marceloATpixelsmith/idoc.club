@@ -61,7 +61,9 @@ async function verifyInstalledMigration(tx,targetSchema,expectedHash)
             (SELECT COUNT(*)::integer FROM pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
                 JOIN pg_namespace n ON n.oid = t.relnamespace
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(c.conkey)
                 WHERE n.nspname = ${targetSchema} AND c.contype = 'u'
+                AND array_length(c.conkey, 1) = 1 AND a.attname = 'promotion_key'
                 AND ((t.relname = 'news_articles' AND c.conname = 'news_articles_promotion_key_unique')
                   OR (t.relname = 'seminars' AND c.conname = 'seminars_promotion_key_unique'))) AS unique_constraints,
             (SELECT COUNT(*)::integer FROM pg_proc p
