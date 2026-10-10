@@ -19,13 +19,12 @@ run="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto
 # POSTGRESQL URL IS NEVER PLACED IN A PROCESS ARGUMENT.
 export PGCONNECT_TIMEOUT=20
-export PGDATABASE_BACKUP_URL="$DATABASE_BACKUP_URL"
-pg_target="$(psql "$DATABASE_BACKUP_URL" -Atqc 'SELECT current_database()')"
+export PGDATABASE="$DATABASE_BACKUP_URL"
+pg_target="$(psql -Atqc 'SELECT current_database()')"
 [[ "$pg_target" == "ayni_space" ]] || { echo "::error::Wrong database"; exit 1; }
 for schema in idoc_staging idoc_production; do
   # CUSTOM ARCHIVE IS PER-SCHEMA, INCLUDING DATA, TABLES, INDEXES AND SEQUENCES.
-  pg_dump --dbname="$DATABASE_BACKUP_URL" \
-    --schema="$schema" --format=custom --no-owner --no-acl --file="$tmp/$schema.dump"
+  pg_dump --schema="$schema" --format=custom --no-owner --no-acl --file="$tmp/$schema.dump"
   pg_restore --list "$tmp/$schema.dump" > "$tmp/$schema.toc"
   grep -q "SCHEMA.*$schema" "$tmp/$schema.toc" || { echo "::error::Missing schema in archive"; exit 1; }
 
