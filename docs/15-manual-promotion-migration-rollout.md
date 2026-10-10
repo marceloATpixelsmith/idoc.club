@@ -1,3 +1,5 @@
+> **Backup change:** The maintenance workflow now creates and verifies a new encrypted offsite backup of both IDOC schemas before applying migration 0071. See [IDOC R2 Backup and Recovery](16-idoc-r2-backup-recovery.md). The former manually typed backup-reference field is no longer used.
+
 # Migration 0071: controlled activation
 
 The permanent promotion implementation was merged into `staging` in PR #430, but schema migration 0071 is not yet applied to either live IDOC schema. The **Manual Promotion Migration 0071** GitHub Actions workflow prepares a narrowly scoped, manually triggered migration. It does not run on pushes, PRs, builds, or deployments.
@@ -13,9 +15,9 @@ The permanent promotion implementation was merged into `staging` in PR #430, but
 
 ## Execute (explicitly, schema by schema)
 
-From GitHub **Actions → Manual Promotion Migration 0071 → Run workflow**, choose the `staging` branch. Select `idoc_staging`, provide the verified backup reference and type exactly `APPLY-0071-idoc_staging`. Review the successful run's **verification** output (two UUID columns with defaults, two unique constraints, two protected locking functions, one protected audit view, exactly one 0071 ledger entry), then independently verify those results with read-only database queries before proceeding.
+From GitHub **Actions → Manual Promotion Migration 0071 → Run workflow**, choose the `staging` branch. Select `idoc_staging`, allow the mandatory fresh verified R2 IDOC-schema backup step to finish, then type exactly `APPLY-0071-idoc_staging`. Review the successful run's **verification** output (two UUID columns with defaults, two unique constraints, two protected locking functions, one protected audit view, exactly one 0071 ledger entry), then independently verify those results with read-only database queries before proceeding.
 
-Only after staging verification, manually dispatch a **new** run targeting `idoc_production`, with the same validated backup reference or a newer validated backup, and confirmation `APPLY-0071-idoc_production`. Production should require GitHub environment reviewer approval. This is a Production **schema migration**, not a Production application release or data promotion. It is never executed automatically.
+Only after staging verification, manually dispatch a **new** run targeting `idoc_production`, with its own mandatory newly verified backup, and confirmation `APPLY-0071-idoc_production`. Production should require GitHub environment reviewer approval. This is a Production **schema migration**, not a Production application release or data promotion. It is never executed automatically.
 
 The runner uses one transaction per selected schema, an advisory lock, the shared SQL-rewrite function, and **exact checks of every existing Drizzle migration timestamp and SHA-256 hash against the committed, schema-rewritten SQL files through 0070**. It inserts the `0071` hash/timestamp in `__drizzle_migrations` inside the same transaction and validates the new schema objects, default values, uniqueness constraints, restricted PUBLIC privileges and ledger entry before committing. Safe counts are included in the job output. The Production runner also requires staging to have the expected 0071 hash and installed functions/view/columns. Errors roll back the migration and ledger together; repeated runs are rejected.
 
