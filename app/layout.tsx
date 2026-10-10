@@ -7,7 +7,6 @@ import { CsrfProvider } from '@/components/security/csrf-provider';
 import { SWRConfig } from 'swr';
 import { PrivacyNotice } from '@/components/site/privacy-notice';
 import { SitewideIconTooltips } from '@/components/site/sitewide-icon-tooltips';
-import { NewRelicBrowser } from '@/components/observability/new-relic-browser';
 
 const archivo = Archivo({
   subsets: ['latin'],
@@ -81,7 +80,6 @@ export default async function RootLayout({
             {children}
             <PrivacyNotice />
             <SitewideIconTooltips />
-            <NewRelicBrowser />
           </SWRConfig>
         </CsrfProvider>
       </body>

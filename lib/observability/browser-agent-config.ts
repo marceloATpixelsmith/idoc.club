@@ -98,7 +98,7 @@ export function browserAgentConfig(
     init: {
       // Page views, Core Web Vitals and JavaScript errors only. Everything that could capture page
       // content, form input, request URLs or a user session is off, and its feature module is not
-      // bundled (see components/observability/new-relic-browser.tsx).
+      // bundled (see lib/observability/new-relic-browser.ts).
       privacy: { cookies_enabled: false },
       distributed_tracing: { enabled: false },
       ajax: { enabled: false },
