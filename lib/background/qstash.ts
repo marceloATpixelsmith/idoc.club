@@ -55,14 +55,17 @@ export async function verifyQStashRequest(request: Request, rawBody: string): Pr
   const current = process.env.QSTASH_CURRENT_SIGNING_KEY;
   const next = process.env.QSTASH_NEXT_SIGNING_KEY;
   if (!signature || !current || !next) return false;
-  const destination = qstashCallbackUrl();
+  // Schedules append ?job=<name> so the Upstash console can tell them apart; the signed body stays authoritative.
+  const destinations = [qstashCallbackUrl()];
+  const job = new URL(request.url).searchParams.get('job');
+  if (job && /^[a-z-]+$/.test(job)) destinations.push(`${destinations[0]}?job=${job}`);
   const hash = createHash('sha256').update(rawBody).digest('base64url');
   for (const key of [current, next]) {
     try {
       const { payload } = await jwtVerify(signature, new TextEncoder().encode(key), {
         issuer: 'Upstash', algorithms: ['HS256'], requiredClaims: ['sub', 'exp', 'nbf'],
       });
-      if (payload.sub === destination && typeof payload.body === 'string' && payload.body.replace(/=+$/, '') === hash) return true;
+      if (typeof payload.sub === 'string' && destinations.includes(payload.sub) && typeof payload.body === 'string' && payload.body.replace(/=+$/, '') === hash) return true;
     } catch { /* signing-key rotation: try the other configured key */ }
   }
   return false;
