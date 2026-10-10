@@ -20,14 +20,15 @@ const jobs = {
 };
 for (const [job, cron] of Object.entries(jobs)) {
   // The ?job= query makes each schedule's destination distinct in the Upstash console; the signed body stays authoritative.
+  // The destination is a path parameter of the API call, so its own query string must be percent-encoded.
   const destination = new URL(url);
   destination.searchParams.set('job', job);
-  const response = await fetch(new URL(`/v2/schedules/${destination.href}`, api), {
+  const response = await fetch(new URL(`/v2/schedules/${destination.href.replace('?', '%3F')}`, api), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Upstash-Cron': cron,
-      'Upstash-Schedule-Id': `${new URL(origin).hostname.startsWith('staging') ? 'staging' : 'prod'}-${job}`,
+      'Upstash-Schedule-Id': `idoc-${new URL(origin).hostname}-${job}`,
       'Upstash-Method': 'POST',
       'Upstash-Retries': '3',
       'Content-Type': 'application/json',
