@@ -29,11 +29,12 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
       AND (has_schema_privilege(current_user,n.oid,'CREATE')
            OR (has_schema_privilege(current_user,n.oid,'USAGE')
                AND EXISTS (SELECT 1 FROM pg_class t WHERE t.relnamespace=n.oid
-                   AND t.relkind IN ('r','p','v','m','S')
+                   AND t.relkind IN ('r','p','v','m')
                    AND has_table_privilege(current_user,t.oid,'SELECT')))))
   AND NOT EXISTS (SELECT 1 FROM pg_class t
     JOIN pg_namespace n ON n.oid=t.relnamespace
     WHERE n.nspname IN ('idoc_staging','idoc_production')
+      AND t.relkind IN ('r','p','v','m')
       AND (has_table_privilege(current_user,t.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
            OR has_schema_privilege(current_user,n.oid,'CREATE')))
   THEN 'ok' ELSE 'deny' END")"
