@@ -10,6 +10,15 @@ export async function deleteMembers(ids: string[], actorId: number) {
     if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
     const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
     if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
+    const authored = await sql<{ source: string }[]>`
+      select 'news' source from news_articles where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
+      union all select 'seminars' from seminars where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
+      union all select 'pages' from content_pages where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
+      union all select 'revisions' from content_page_revisions where created_by_user_id in ${sql(numeric)}
+      union all select 'defaults' from support_category_defaults where administrator_user_id in ${sql(numeric)} or updated_by in ${sql(numeric)}
+      union all select 'invitations' from invitations where invited_by in ${sql(numeric)}
+      limit 1`;
+    if (authored.length) throw new Error('Retained authored records reference this account. Archive it instead.');
     const profileIds = rows.flatMap((row) => row.profile_id === null ? [] : [row.profile_id]);
     const activeSubscriptions = profileIds.length ? await sql<{ count: number }[]>`select count(*)::int as count from subscriptions where profile_id in ${sql(profileIds)} and status in ('active','trialing','past_due','incomplete')` : [{ count: 0 }];
     if (activeSubscriptions[0]?.count) throw new Error('Cancel active billing subscriptions before permanently deleting selected members.');
