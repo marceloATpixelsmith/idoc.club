@@ -1144,10 +1144,29 @@ Run `pnpm db:migrate` only as an explicit, separately authorized maintenance act
 
 `lib/observability/new-relic-browser.ts`, started from `instrumentation-client.ts` before hydration, loads the New Relic Browser agent (the bundled `@newrelic/browser-agent` npm package, no third-party script origin) with only the page-view, page-view-timing (Core Web Vitals) and JavaScript-error features. It is inert unless configured and **only runs on the `staging` branch Preview deployment** (`lib/observability/browser-agent-config.ts`). The Content-Security-Policy gains `https://bam.nr-data.net` in `connect-src` only when the agent is configured. Privacy limits and the production consent gate are in `docs/05` §5.1.
 
-1. In New Relic (US account `8600002`): **Add data → Browser monitoring → Place agent**. Choose the **npm (copy/paste)** option so New Relic generates the application; name it `idoc.club staging`. From the generated snippet note `accountID`, `agentID`, `applicationID` and the browser `licenseKey` (looks like `NRJS-…`). These are public identifiers.
+1. In New Relic (US account `8600002`): **Integrations & Agents → Browser monitoring → Install with NPM**, so New Relic generates the application; name it `idoc.club-browser-staging`. From the generated snippet note `accountID`, `agentID`, `applicationID` and the browser `licenseKey` (looks like `NRJS-…`). These are public identifiers.
 2. In Vercel **Project Settings → Environment Variables**, add `NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID`, `NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID` and `NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY` for the **Preview** target restricted to Git branch `staging`. The account ID is **not** a separate variable: `next.config.ts` exposes the existing shared team variable `NEW_RELIC_ACCOUNT_ID` to the browser bundle as `NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID` at build time, so that shared variable must be linked to this project for the Preview target. (`NEXT_PUBLIC_NEW_RELIC_BROWSER_TRUST_KEY` is optional and defaults to the account ID.) They are inlined at build time, so redeploy `staging` afterwards. If the account ID is not visible to the build the agent stays off and the CSP omits the New Relic origin, so check the response's `connect-src` after the deploy.
 3. Verify on `staging.idoc.club`: open a few pages with the browser dev tools Network tab and confirm requests to `bam.nr-data.net` succeed with no Content-Security-Policy console errors and no cookies set by the agent; then in New Relic **Browser → idoc.club staging** confirm page views, Core Web Vitals and a deliberately thrown test error appear, and that no page content, form values or query strings are present.
 4. Roll back by removing the four variables and redeploying; the agent then does not load and the CSP drops the New Relic origin.
+### Synthetic monitoring (staging)
+
+Four New Relic **ping** monitors check `staging.idoc.club` from three public locations (Washington DC, Frankfurt and São Paulo) every 5 minutes. Ping monitors do not count against the Free edition's 500 monthly synthetic checks (New Relic "Monitor limits"). They share these settings: tags `site:idoc` and `environment:staging`, **Verify SSL** on, **Redirect is failure** on, **Bypass HEAD request** on so the response body can be checked, and Apdex target 7.
+
+| Monitor | URL | Response must contain |
+| --- | --- | --- |
+| `IDOC staging: app and database liveness` | `/api/health` | `"status":"ok"` |
+| `IDOC staging: homepage` | `/` | `International Dressage Officials Club` |
+| `IDOC staging: sign-in page` | `/sign-in` | `Forgot password` |
+| `IDOC staging: seminars page` | `/seminars` | `Seminars &amp; Courses` |
+
+Create a monitor in **Synthetic monitoring → Create monitor → Availability** (Ping). Confirm results in **Query your data**:
+
+```
+SELECT count(*) FROM SyntheticCheck WHERE monitorName LIKE 'IDOC staging:%' FACET monitorName, result SINCE 30 minutes ago
+```
+
+Monitor names are site-specific on purpose; shared tooling such as notification destinations uses generic names so other apps can reuse them. Alerting on these monitors is task 08. The checks are unauthenticated only: no credentials are stored in New Relic, and a production equivalent has not been created.
+
 ## Permanent staging-to-production data promotion
 
 ### Scope and security boundary
