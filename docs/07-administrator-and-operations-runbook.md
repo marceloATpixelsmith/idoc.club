@@ -1179,7 +1179,7 @@ Alerts for the four staging ping monitors are New Relic alerts in account `86000
 | Workflow | `IDOC website (staging): email operations admin` | Filters on the policy only (no priority filter, so any future warning condition in the policy also notifies). |
 | Notification destination | `Email: operations admin` | Shared and deliberately generic so any future app's workflow can reuse it. The address is recorded as `PIXELSMITH_ADMIN_EMAIL`. |
 
-Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"`. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Production alert routing, other signals (error rate, latency, background jobs) and acknowledgement or escalation are still to do.
+Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"` and the recovery produced a closed email. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Production alert routing, other signals (error rate, latency, background jobs) and acknowledgement or escalation are still to do.
 
 ## Permanent staging-to-production data promotion
 
