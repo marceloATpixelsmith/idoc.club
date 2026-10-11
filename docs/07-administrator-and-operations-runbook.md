@@ -1176,10 +1176,17 @@ Alerts for the four staging ping monitors are New Relic alerts in account `86000
 | --- | --- | --- |
 | Alert policy | `IDOC website (staging)` | Issue preference **One issue per condition**, so each page's failure is one issue even though three locations report it. |
 | Conditions (4) | `IDOC staging: app and database liveness failing`, `IDOC staging: homepage failing`, `IDOC staging: sign-in page failing`, `IDOC staging: seminars page failing` | One monitor each. Static critical threshold: `Failures` (`SyntheticCheck` with `result = 'FAILED'`) above 0 at least once in 1 minute, event timer streaming. New Relic registers a monitor failure only after three failed attempts from a location. |
-| Workflow | `IDOC website (staging): email operations admin` | Filters on the policy only (no priority filter, so any future warning condition in the policy also notifies). |
+| Workflow | `IDOC website (staging): email operations admin` | Filters on the policy **and `priority = CRITICAL`** (read back from New Relic 2026-10-11). A future warning-level condition in the policy will not email unless the filter is changed. |
 | Notification destination | `Email: operations admin` | Shared and deliberately generic so any future app's workflow can reuse it. The address is recorded as `PIXELSMITH_ADMIN_EMAIL`. |
 
-Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"` and the recovery produced a closed email. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Production alert routing, other signals (error rate, latency, background jobs) and acknowledgement or escalation are still to do.
+Two application conditions were added to the same policy on 2026-10-11 and read back through NerdGraph (both critical, 15-minute window, Event timer, no gap fill, one issue per condition):
+
+| Condition | Query (all `Span`, `service.name = 'idoc.club'`, `span.kind = 'server'`, `vcs.ref.head.name = 'staging'`) | Threshold |
+| --- | --- | --- |
+| `IDOC staging: application errors` | `count(*)` where `otel.status_code = 'ERROR'` | above 4, at least once in 15 minutes (staging had 4 error spans in the 7 days before it was created) |
+| `IDOC staging: slow responses` | `count(*)` where `duration.ms > 5000` | above 2, at least once in 15 minutes (no span exceeded 5 seconds in the 7 days before it was created; the 95th percentile was about 2 seconds) |
+
+`vcs.ref.head.name` is the span attribute that separates the `staging` branch from other `preview` deployments. A count of slow requests is used instead of a percentile because staging traffic is low (43 to 701 requests a day), which makes percentiles unreliable. Neither condition has fired yet. Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"` and the recovery produced a closed email. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Production alert routing, other signals (error rate, latency, background jobs) and acknowledgement or escalation are still to do.
 
 ## Permanent staging-to-production data promotion
 
