@@ -574,6 +574,7 @@ This section is the authoritative production-auth configuration inventory. The a
 | `NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID` | Optional public identifier of the New Relic Browser application (numeric), used by the staging-only browser agent. | **Differs per environment**: each Browser application has its own ID. Staging: Preview target, Git branch `staging` only. Production: not set (see above). |
 | `NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY` | Optional public New Relic Browser licence key (`NRJS-…`), shipped to every visitor's browser by design; not the account ingest key. | **To be confirmed per environment** when a production Browser application is created (it may be shared across the account's browser apps). Staging: Preview target, Git branch `staging` only. Production: not set. |
 | `NEW_RELIC_ACCOUNT_ID` (shared team variable, already documented above) | Numeric New Relic account ID; also exposed to the browser bundle as `NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID` by `next.config.ts` for the staging-only browser agent. | **Same in every environment** (`8600002`). It must be linked to this project for the Preview target; no separate browser copy exists. |
+| `PIXELSMITH_ADMIN_EMAIL` (shared team variable, Production and Preview) | General operations contact address for any app in the Pixelsmith portfolio. A record of which address the shared New Relic notification destination `Email: operations admin` uses; New Relic cannot read Vercel variables, so the address is entered in New Relic separately. Not read by any IDOC code. | **Does not differ** between production and staging (shared). |
 
 **Transactional sender invariant:** every message emitted through Brevo from `accounts@idoc.club`—including signup/login OTPs, verification, password/security/MFA-related notices, account notifications, membership/seminar confirmations, operational alerts, and contact-form mail—must use the single `lib/notifications/brevo-transactional.ts` transport. That transport sets the visible sender name to `Accounts`; application code must not call Brevo's SMTP endpoint directly.
 | `BREVO_WEBHOOK_KEY` | Required server-only random text of at least 32 characters. Brevo does not sign webhook deliveries, so this value is instead required as a `key` query parameter on the Notify URL configured in Brevo's dashboard for bounce/complaint events. | Rotate by updating both the Notify URL in Brevo's dashboard and this value together; a mismatch causes webhook deliveries to be rejected (400) until both sides agree. Distinct per environment. |
@@ -1166,6 +1167,19 @@ SELECT count(*) FROM SyntheticCheck WHERE monitorName LIKE 'IDOC staging:%' FACE
 ```
 
 Monitor names are site-specific on purpose; shared tooling such as notification destinations uses generic names so other apps can reuse them. Alerting on these monitors is task 08. The checks are unauthenticated only: no credentials are stored in New Relic, and a production equivalent has not been created.
+
+### Alert routing for staging synthetic checks
+
+Alerts for the four staging ping monitors are New Relic alerts in account `8600002`:
+
+| Piece | Name | Notes |
+| --- | --- | --- |
+| Alert policy | `IDOC website (staging)` | Issue preference **One issue per condition**, so each page's failure is one issue even though three locations report it. |
+| Conditions (4) | `IDOC staging: app and database liveness failing`, `IDOC staging: homepage failing`, `IDOC staging: sign-in page failing`, `IDOC staging: seminars page failing` | One monitor each. Static critical threshold: `Failures` (`SyntheticCheck` with `result = 'FAILED'`) above 0 at least once in 1 minute, event timer streaming. New Relic registers a monitor failure only after three failed attempts from a location. |
+| Workflow | `IDOC website (staging): email operations admin` | Filters on the policy only (no priority filter, so any future warning condition in the policy also notifies). |
+| Notification destination | `Email: operations admin` | Shared and deliberately generic so any future app's workflow can reuse it. The address is recorded as `PIXELSMITH_ADMIN_EMAIL`. |
+
+Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"`. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Production alert routing, other signals (error rate, latency, background jobs) and acknowledgement or escalation are still to do.
 
 ## Permanent staging-to-production data promotion
 
