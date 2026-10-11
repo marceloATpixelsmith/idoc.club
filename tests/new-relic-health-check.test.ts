@@ -11,6 +11,15 @@ test('weekly New Relic health check is scheduled Monday 08:00 UTC and reachable 
   assert.doesNotMatch(read('vercel.json'), /new-relic-health-check/);
 });
 
+test('hourly Postgres export is QStash-only, dispatched as POST, and registered for the staging host only', () => {
+  assert.match(read('lib/background/qstash.ts'), /'postgres-metrics-export': '0 \* \* \* \*'/);
+  assert.match(read('scripts/configure-qstash-schedules.mjs'), /'postgres-metrics-export': '0 \* \* \* \*'/);
+  assert.match(read('scripts/configure-qstash-schedules.mjs'), /stagingOnly\.has\(job\) && !isStagingHost/);
+  assert.match(read('scripts/configure-qstash-schedules.mjs'), /hostname === 'staging\.idoc\.club'/);
+  assert.match(read('app/api/qstash/jobs/route.ts'), /'postgres-metrics-export': \(request\) => postgresMetricsExport\(new Request\(request\.url, \{ method: 'POST'/);
+  assert.doesNotMatch(read('vercel.json'), /postgres-metrics/);
+});
+
 test('health check route uses the shared cron secret and the check keeps credentials out of output', () => {
   assert.match(read('app/api/cron/new-relic-health-check/route.ts'), /secret: cronSecretForServer\(\)/);
   const source = read('lib/observability/new-relic-health-check.ts');
