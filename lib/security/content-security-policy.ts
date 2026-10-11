@@ -1,7 +1,11 @@
+import { browserAgentConnectOrigin } from '../observability/browser-agent-config.ts';
+
 export function contentSecurityPolicy(
   nonce: string,
   environment: string | undefined = process.env.NODE_ENV,
   sentryDsn: string | undefined = process.env.NEXT_PUBLIC_SENTRY_DSN,
+  // Empty unless the staging-only New Relic browser agent is fully configured.
+  browserAgentOrigin: string = browserAgentConnectOrigin(),
 ): string {
   const developmentEval = environment === 'production' ? '' : " 'unsafe-eval'";
   let sentryOrigin = '';
@@ -24,7 +28,7 @@ export function contentSecurityPolicy(
     // Next.js and Tailwind currently emit framework/style attributes without a nonce hook. This is
     // deliberately the sole production unsafe-inline exception; scripts never receive it.
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' https://challenges.cloudflare.com${sentryOrigin}`,
+    `connect-src 'self' https://challenges.cloudflare.com${sentryOrigin}${browserAgentOrigin ? ` ${browserAgentOrigin}` : ''}`,
     'frame-src https://challenges.cloudflare.com',
   ].join('; ');
 }
