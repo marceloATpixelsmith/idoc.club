@@ -1,12 +1,14 @@
 // New Relic Browser (real-user monitoring) configuration. The browser licence key, account and
-// application IDs are public identifiers shipped to every visitor, not secrets. Everything here is
+// application IDs are public identifiers shipped to every visitor, not secrets. The account ID is
+// not a separate variable: next.config.ts maps the existing shared NEW_RELIC_ACCOUNT_ID to
+// NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID at build time. Everything here is
 // inert unless ALL identifiers are present AND the deployment is the staging branch, so production
 // cannot start sending browser telemetry through a stray environment variable; enabling production
 // is a deliberate code change.
 export const NEW_RELIC_BEACON_HOST = 'bam.nr-data.net';
 
 export type BrowserAgentEnvironment = Partial<{
-  NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID: string;
+  NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID: string;
   NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID: string;
   NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID: string;
   NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY: string;
@@ -23,7 +25,7 @@ const LICENSE_KEY = /^[A-Za-z0-9-]{8,64}$/;
 // Literal property reads so Next inlines the NEXT_PUBLIC_* values into client and edge bundles.
 export function browserAgentEnvironmentFromProcess(): BrowserAgentEnvironment {
   return {
-    NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID: process.env.NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID,
+    NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID: process.env.NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID,
     NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID: process.env.NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID,
     NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID:
       process.env.NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID,
@@ -77,7 +79,7 @@ export function browserAgentConfig(
   environment: BrowserAgentEnvironment = browserAgentEnvironmentFromProcess(),
 ): BrowserAgentConfig | null {
   if (!isStagingDeployment(environment)) return null;
-  const accountID = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID?.trim() ?? '';
+  const accountID = environment.NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID?.trim() ?? '';
   const agentID = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID?.trim() ?? '';
   const applicationID = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID?.trim() ?? '';
   const licenseKey = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY?.trim() ?? '';
