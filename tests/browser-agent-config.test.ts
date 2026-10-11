@@ -9,7 +9,7 @@ import {
 import { contentSecurityPolicy } from '../lib/security/content-security-policy.ts';
 
 const configured: BrowserAgentEnvironment = {
-  NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID: '8600002',
+  NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID: '8600002',
   NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID: '1234567890',
   NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID: '1234567890',
   NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY: 'NRJS-0123456789abcdef012',
@@ -39,7 +39,7 @@ test('browser agent rejects missing or malformed identifiers', () => {
   for (const key of Object.keys(configured) as (keyof BrowserAgentEnvironment)[]) {
     assert.equal(browserAgentConfig({ ...staging, [key]: undefined }), null, `${key} is required`);
   }
-  assert.equal(browserAgentConfig({ ...staging, NEXT_PUBLIC_NEW_RELIC_BROWSER_ACCOUNT_ID: '86 0002' }), null);
+  assert.equal(browserAgentConfig({ ...staging, NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID: '86 0002' }), null);
   assert.equal(browserAgentConfig({ ...staging, NEXT_PUBLIC_NEW_RELIC_BROWSER_LICENSE_KEY: 'bad key;<script>' }), null);
 });
 
