@@ -38,3 +38,12 @@ test('the compact essential-cookie notice is mounted sitewide without pretending
   assert.doesNotMatch(notice, /Accept all|Reject all|Allow analytics/);
   assert.match(privacy, /IDOC does not currently use non-essential analytics or advertising cookies\./);
 });
+
+test('the privacy policy discloses cookie-free browser performance and error monitoring and its legal basis', () => {
+  assert.match(privacy, /Performance and error monitoring/);
+  assert.match(privacy, /New Relic Browser agent/);
+  assert.match(privacy, /does not set cookies or store information in your browser/);
+  assert.match(privacy, /Measure and improve website performance and detect browser-side errors/);
+  assert.match(privacy, /legitimate interest in the security, reliability, and performance/);
+  assert.match(privacy, /Last updated: 12 October 2026/);
+});

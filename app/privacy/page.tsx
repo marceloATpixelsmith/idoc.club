@@ -5,7 +5,7 @@ export default function PrivacyPage() {
         <header className="space-y-3 border-b pb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Privacy Policy</h1>
           <p className="text-sm text-muted-foreground">International Dressage Officials Club (IDOC)</p>
-          <p className="text-sm text-muted-foreground">Last updated: 2 October 2026</p>
+          <p className="text-sm text-muted-foreground">Last updated: 12 October 2026</p>
           <p className="max-w-3xl text-muted-foreground">
             GDPR-aligned notice for IDOC membership, website, payments, events, and communications
           </p>
@@ -97,6 +97,7 @@ export default function PrivacyPage() {
             <li>IP address, browser and device information, request timestamps, and requested pages or endpoints.</li>
             <li>Cookies, session identifiers, anti-bot or security signals, rate-limit information, and similar technical data.</li>
             <li>Application, server, audit, security, and error logs.</li>
+            <li>Page-load timing, Core Web Vitals, and JavaScript error reports sent from your browser to our performance-monitoring provider, described in section 12. Error messages are filtered to remove email-shaped text before they are sent.</li>
             <li>Information used to investigate fraud, abuse, account compromise, failed or duplicate payments, and technical faults.</li>
           </ul>
 
@@ -182,6 +183,11 @@ export default function PrivacyPage() {
                   <td className="p-3">Protect systems, prevent abuse, investigate incidents, and maintain audit evidence</td>
                   <td className="p-3">Legitimate interests; legal obligation where applicable</td>
                   <td className="p-3">Cybersecurity, fraud prevention, accountability, service integrity, and defense of legal claims</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="p-3">Measure and improve website performance and detect browser-side errors</td>
+                  <td className="p-3">Legitimate interests</td>
+                  <td className="p-3">Keeping the website fast and reliable for members and visitors, and finding and fixing faults that would otherwise go unnoticed</td>
                 </tr>
                 <tr>
                   <td className="p-3">Comply with accounting, tax, regulatory, legal, or dispute obligations</td>
@@ -333,6 +339,18 @@ export default function PrivacyPage() {
             IDOC does not currently use non-essential analytics or advertising cookies. The site may show a
             compact informational notice about its essential-cookie use; dismissing that notice is not treated
             as consent because no consent is requested for strictly necessary technologies.
+          </p>
+          <p>
+            <strong>Performance and error monitoring.</strong> IDOC uses the New Relic Browser agent to measure
+            page-load timing, Core Web Vitals, and JavaScript errors so that we can keep the website fast and
+            find faults. This monitoring does not set cookies or store information in your browser, does not
+            record sessions, keystrokes, form entries, or the content of pages, does not capture network
+            requests, and is not used for advertising, profiling, or tracking you across other websites. Each
+            report is sent to New Relic, our monitoring provider, together with technical information such as
+            the page address, browser and device type, and your IP address, which New Relic receives as part of
+            the request. Error messages are filtered to remove email-shaped text before they are sent.
+            We rely on our legitimate interest in the security, reliability, and performance of the service for
+            this processing. You can object to it as described in section 13.
           </p>
           <p>
             If IDOC introduces non-essential analytics, advertising, profiling, or similar tracking technologies
