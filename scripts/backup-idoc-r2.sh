@@ -19,10 +19,10 @@ run="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto PGCONNECT_TIMEOUT=20
 # Recent AWS CLI v2 adds default checksums that S3-compatible stores such as R2 may reject; only send them when an operation requires them.
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-export PGDATABASE="$DATABASE_BACKUP_URL"
+# libpq only expands a connection URL when it is passed as the database argument, not through the PGDATABASE environment variable.
 # FAIL CLOSED IF CREDENTIALS CAN MODIFY DATA OR READ NON-IDOC SCHEMAS.
 # The role check below exempts only the pg_stat_statements monitoring views in schema public: they are SELECTable by PUBLIC by design (aggregate statistics; other roles' query text is hidden), so without the exemption the cross-application read check would always deny.
-role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
+role_check="$(psql "$DATABASE_BACKUP_URL" -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
   AND current_user = 'idoc_backup_reader'
   AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user
     AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls))
@@ -47,11 +47,11 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
            OR has_schema_privilege(current_user,n.oid,'CREATE')))
   THEN 'ok' ELSE 'deny' END")"
 [[ "$role_check" == ok ]] || { echo "::error::Backup role privileges or database identity invalid"; exit 1; }
-fingerprint="$(psql -Atqc "SELECT md5(coalesce(inet_server_addr()::text,'') || ':' || coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text || ':' || current_database() || ':' || (SELECT oid::text FROM pg_database WHERE datname=current_database()))")"
+fingerprint="$(psql "$DATABASE_BACKUP_URL" -Atqc "SELECT md5(coalesce(inet_server_addr()::text,'') || ':' || coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text || ':' || current_database() || ':' || (SELECT oid::text FROM pg_database WHERE datname=current_database()))")"
 [[ "$fingerprint" =~ ^[a-f0-9]{32}$ ]] || exit 1
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'server_fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"; fi
 # ONE pg_dump SNAPSHOT CONTAINS BOTH SCHEMAS AND RETAINS OWNER/ACL DETAILS.
-pg_dump --schema=idoc_staging --schema=idoc_production --format=custom --file="$tmp/idoc.dump"
+pg_dump --dbname="$DATABASE_BACKUP_URL" --schema=idoc_staging --schema=idoc_production --format=custom --file="$tmp/idoc.dump"
 pg_restore --list "$tmp/idoc.dump" > "$tmp/toc"
 for schema in idoc_staging idoc_production; do
   grep -q "SCHEMA - $schema " "$tmp/toc" || { echo "::error::Missing $schema in archive"; exit 1; }
