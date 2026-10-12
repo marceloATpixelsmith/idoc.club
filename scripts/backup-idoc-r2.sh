@@ -19,7 +19,26 @@ run="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto PGCONNECT_TIMEOUT=20
 # Recent AWS CLI v2 adds default checksums that S3-compatible stores such as R2 may reject; only send them when an operation requires them.
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-export PGDATABASE="$DATABASE_BACKUP_URL"
+# libpq does not read a connection URL from PGDATABASE, and putting the URL in a command-line argument would expose the credential in the process list.
+# Split it into the standard PG* environment variables instead (environment values are not part of a process's command line).
+conn_env="$(python3 - <<'PY'
+import os, shlex, sys
+from urllib.parse import urlparse, unquote, parse_qsl
+u = urlparse(os.environ['DATABASE_BACKUP_URL'])
+if u.scheme not in ('postgres', 'postgresql') or not (u.hostname and u.username and u.path.strip('/')):
+    sys.exit('Backup database URL is not a complete postgres URL')
+env = {'PGHOST': u.hostname, 'PGPORT': str(u.port or 5432), 'PGUSER': unquote(u.username),
+       'PGPASSWORD': unquote(u.password or ''), 'PGDATABASE': unquote(u.path.lstrip('/'))}
+for key, value in parse_qsl(u.query, keep_blank_values=True):
+    if key != 'sslmode' or not value or 'PGSSLMODE' in env:
+        sys.exit('Unsupported or empty backup database URL option: ' + key)
+    env['PGSSLMODE'] = value
+for key, value in env.items():
+    print('export %s=%s' % (key, shlex.quote(value)))
+PY
+)"
+eval "$conn_env"
+unset DATABASE_BACKUP_URL conn_env
 # FAIL CLOSED IF CREDENTIALS CAN MODIFY DATA OR READ NON-IDOC SCHEMAS.
 # The role check below exempts only the pg_stat_statements monitoring views in schema public: they are SELECTable by PUBLIC by design (aggregate statistics; other roles' query text is hidden), so without the exemption the cross-application read check would always deny.
 role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'

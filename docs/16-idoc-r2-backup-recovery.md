@@ -16,13 +16,15 @@ Provide these to the `idoc-db-backups`, `idoc-db-staging-maintenance`, and `idoc
 
 | Secret or variable | Value |
 |---|---|
-| Secret `IDOC_BACKUP_DATABASE_URL` | Database `ayni_space` connection string for a dedicated **read-only** backup role: `CONNECT` to database, `USAGE` on the two IDOC schemas and read access to their tables/sequences only. Name the role **`idoc_backup_reader`** (the script enforces it); prohibit any cross-app schema reads or writes. No other application schema grants and no DDL/DML grants |
+| Secret `IDOC_BACKUP_DATABASE_URL` | Database `ayni_space` connection URL (`postgresql://USER:PASSWORD@HOST:PORT/ayni_space`, with an optional `?sslmode=...`; see the format rules below) for a dedicated **read-only** backup role: `CONNECT` to database, `USAGE` on the two IDOC schemas and read access to their tables/sequences only. Name the role **`idoc_backup_reader`** (the script enforces it); prohibit any cross-app schema reads or writes. No other application schema grants and no DDL/DML grants |
 | Secret `IDOC_BACKUP_ENCRYPTION_PASSPHRASE` | Newly generated strong, independent random GPG encryption passphrase; retain a separate recoverable copy outside GitHub |
 | Secret `IDOC_R2_ACCOUNT_ID` | Cloudflare R2 account identifier |
 | Variable `IDOC_R2_BUCKET` | Private, dedicated IDOC backup bucket name |
 | Secret `IDOC_R2_ACCESS_KEY_ID` | R2 S3-compatible API token access key, restricted to the dedicated bucket |
 | Secret `IDOC_R2_SECRET_ACCESS_KEY` | Matching R2 S3-compatible secret key |
 | Existing secret `IDOC_MIGRATION_DATABASE_URL` | Schema-owner migration connection URL, **only** in the protected maintenance environments; never used by scheduled backups |
+
+**Format of `IDOC_BACKUP_DATABASE_URL`.** The backup script parses the URL itself and hands the parts to `psql` and `pg_dump` through the standard `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`/`PGSSLMODE` environment variables, so the credential never appears in a process command line. It must be a complete `postgres://` or `postgresql://` URL with a user, host and database name; a password containing special characters (`@ : / % #` and so on) must be percent-encoded. The **only** query option accepted is a single, non-empty `sslmode` (for example `?sslmode=require`). Any other option (such as `application_name`, `channel_binding` or `options`), an empty value (`?sslmode=`), a repeated `sslmode`, or a URL that is not a complete postgres URL stops the script with a clear error before any database connection is made, in both the nightly workflow and the mandatory pre-migration backup. If the database provider adds a required option to its connection string, remove it from the secret or extend the allow-list in `scripts/backup-idoc-r2.sh` and its test in the same pull request.
 
 The backup role check (in `scripts/backup-idoc-r2.sh`) refuses a role that can read any schema outside the two IDOC schemas. It exempts exactly one thing: the `pg_stat_statements` and `pg_stat_statements_info` views in schema `public`, which PostgreSQL makes SELECTable by PUBLIC (aggregate statistics only; other roles' query text is hidden) and which the Postgres monitoring export relies on. Without that exemption the check would always deny while the extension is installed in `public`.
 
