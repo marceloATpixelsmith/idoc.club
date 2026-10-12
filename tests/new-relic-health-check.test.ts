@@ -42,3 +42,9 @@ test('queries are scoped to the invoking deployment environment', async () => {
   assert.match(source, /deployment\.environment\.name = '\$\{environment\}'/);
   assert.match(source, /healthQueries\(environment\)/);
 });
+
+test('schedule script sends the destination query as a literal ?job= (never percent-encoded)', () => {
+  const script = read('scripts/configure-qstash-schedules.mjs');
+  assert.match(script, /\/v2\/schedules\/\$\{destination\.href\}/);
+  assert.doesNotMatch(script, /replace\('\?', '%3F'\)/);
+});
