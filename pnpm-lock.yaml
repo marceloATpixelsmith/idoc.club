@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  fflate: '>=0.8.3'
   postcss: '>=8.5.18'
   sharp: '>=0.35.5'
 
@@ -24,6 +25,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.1.0)
+      '@newrelic/browser-agent':
+        specifier: ^1.323.0
+        version: 1.323.0
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -916,6 +920,25 @@ packages:
     engines: {node: ^22.20 || ^24.12 || >=25}
     cpu: [x64]
     os: [linux]
+
+  '@newrelic/browser-agent@1.323.0':
+    resolution: {integrity: sha512-geevV3bzUXvSPTZT1GadH/6Lv0Sa7NJgQtrBEDI9+IFpbODVJIe9vOeVzAm2GJLnhxCAsQ0pvymVHk+EeccfYg==}
+    engines: {node: '>=12.17.0 < 13.0.0 || >=13.7.0'}
+
+  '@newrelic/rrdom@1.1.2':
+    resolution: {integrity: sha512-fL49rcPCxT4sgCv6xIvopsq+fVHDRbp8Hb9C7QMVvk3G94wB5UKyVDkI+ubL/5HXLqaX6D06f7SWXJcxmoPZKw==}
+
+  '@newrelic/rrweb-snapshot@1.1.2':
+    resolution: {integrity: sha512-iaKS4WSoDGkYdOy3GaqqYneeHz+2GcbQDEl2sR52nNkyEzt6ewiesBYcDCFkGk5QmqoYCQnokry66baJfCyUzw==}
+
+  '@newrelic/rrweb-types@1.1.2':
+    resolution: {integrity: sha512-OEQBcT2J4xxArFQ45EYkDVBc9NT3fS7DIgganl4mZS6mZdLnK4UVrR3iSfSiEetIqGp/q6X+hCOqcgJll7NPjQ==}
+
+  '@newrelic/rrweb-utils@1.1.2':
+    resolution: {integrity: sha512-L1X22OJbJCExp3IEClx6Nh1+sw3O+t79oAgGlBLlkDV/saFSbMpg09K2NLIWpkSxZs7yzouvRSeHh8QiDlA9bg==}
+
+  '@newrelic/rrweb@1.1.2':
+    resolution: {integrity: sha512-OU66VA1PjC9UsFo7NzHgyp2OZIt4QHidbl45tAAUf+JQESwiLF6WvzJvajju7374D7TgZzV+L9cq3f+sIxKFXQ==}
 
   '@next/env@15.6.0-canary.61':
     resolution: {integrity: sha512-8SOJYA/qr5Y3APMAun3N3CT5uZ3xZXUlxrH32X7eDoo4nADvpGfkW/ncjAAqUNf1nuFy4GVpxcZBwm5TyCHpHQ==}
@@ -2290,6 +2313,9 @@ packages:
   '@tiptap/starter-kit@3.31.3':
     resolution: {integrity: sha512-WKof9RewdmGHvWJ1wn0/HVNG2mV+HOgVRyJkKekuM9fgr6BZAAH/xZsWE1eon+94JnQ+KtK2ThydXQM/qc6b2A==}
 
+  '@types/css-font-loading-module@0.0.7':
+    resolution: {integrity: sha512-nl09VhutdjINdWyXxHWN/w9zlNCfr60JUqJbd24YXUuCwgeL0TpFSdElCwb6cxfB6ybE19Gjj4g0jsgkXxKv1Q==}
+
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -2370,6 +2396,9 @@ packages:
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
 
+  '@xstate/fsm@1.6.5':
+    resolution: {integrity: sha512-b5o1I6aLNeYlU/3CPlj/Z91ybk1gUsKT+5NAJI+2W4UjvS5KLG28K9v5UvNoFVjHV8PajVZ00RH3vnjyQO7ZAw==}
+
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
 
@@ -2423,6 +2452,10 @@ packages:
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
+
+  base64-arraybuffer@1.0.2:
+    resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
+    engines: {node: '>= 0.6.0'}
 
   baseline-browser-mapping@2.11.19:
     resolution: {integrity: sha512-Grytf1xOxOEMTGRwx6rLGKkTabd4vMg3VrKdj/7joCmV0qgh4QwMMO6xh34YEXQqirAuUdgQGa5orJQQ+69RBw==}
@@ -2729,6 +2762,9 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   find-up@4.1.0:
     resolution: {integrity: sha512-PpOwAdQ/YlXQ2vj8a3h8IipDuYRi3wceVQQGYWxNINccq40Anw7BlsEXCMbt1Zt+OLA6Fq9suIpIWD0OsnISlw==}
     engines: {node: '>=8'}
@@ -3017,6 +3053,9 @@ packages:
   minizlib@3.1.0:
     resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
     engines: {node: '>= 18'}
+
+  mitt@3.0.1:
+    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
 
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
@@ -3477,6 +3516,9 @@ packages:
   watchpack@2.5.2:
     resolution: {integrity: sha512-6i/00NBjP4yGPs+caKSyRfpTF/8Torsu0MOW3mMzIbhgISFder8i7xbqgHlLMwJrdiN8ndBV3UA1/AfzPSr+jg==}
     engines: {node: '>=10.13.0'}
+
+  web-vitals@6.2.1:
+    resolution: {integrity: sha512-rLcLXA2sx6+9dE88NHFubwTtGxpK4yYBLj6qHPdFoCaLr0cXGb4efOqtKLlm4loGA4OEKHIQKMKzZkKyOh5ctw==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -4071,6 +4113,35 @@ snapshots:
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
+
+  '@newrelic/browser-agent@1.323.0':
+    dependencies:
+      '@newrelic/rrweb': 1.1.2
+      fflate: 0.8.3
+      web-vitals: 6.2.1
+
+  '@newrelic/rrdom@1.1.2':
+    dependencies:
+      '@newrelic/rrweb-snapshot': 1.1.2
+
+  '@newrelic/rrweb-snapshot@1.1.2':
+    dependencies:
+      postcss: 8.5.26
+
+  '@newrelic/rrweb-types@1.1.2': {}
+
+  '@newrelic/rrweb-utils@1.1.2': {}
+
+  '@newrelic/rrweb@1.1.2':
+    dependencies:
+      '@newrelic/rrdom': 1.1.2
+      '@newrelic/rrweb-snapshot': 1.1.2
+      '@newrelic/rrweb-types': 1.1.2
+      '@newrelic/rrweb-utils': 1.1.2
+      '@types/css-font-loading-module': 0.0.7
+      '@xstate/fsm': 1.6.5
+      base64-arraybuffer: 1.0.2
+      mitt: 3.0.1
 
   '@next/env@15.6.0-canary.61': {}
 
@@ -5472,6 +5543,8 @@ snapshots:
       '@tiptap/extensions': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)
       '@tiptap/pm': 3.31.3
 
+  '@types/css-font-loading-module@0.0.7': {}
+
   '@types/estree@1.0.9': {}
 
   '@types/json-schema@7.0.15': {}
@@ -5580,6 +5653,8 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
+  '@xstate/fsm@1.6.5': {}
+
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
@@ -5628,6 +5703,8 @@ snapshots:
       postcss-value-parser: 4.2.0
 
   balanced-match@4.0.4: {}
+
+  base64-arraybuffer@1.0.2: {}
 
   baseline-browser-mapping@2.11.19: {}
 
@@ -5872,6 +5949,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.3: {}
+
   find-up@4.1.0:
     dependencies:
       locate-path: 5.0.0
@@ -6076,6 +6155,8 @@ snapshots:
   minizlib@3.1.0:
     dependencies:
       minipass: 7.1.3
+
+  mitt@3.0.1: {}
 
   module-details-from-path@1.0.4: {}
 
@@ -6613,6 +6694,8 @@ snapshots:
   watchpack@2.5.2:
     dependencies:
       graceful-fs: 4.2.11
+
+  web-vitals@6.2.1: {}
 
   webidl-conversions@3.0.1: {}
 

@@ -1,0 +1,42 @@
+name: IDOC R2 Schema Backups
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idoc-r2-daily-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    name: Back up IDOC schemas to R2
+    runs-on: ubuntu-latest
+    environment: idoc-db-backups
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17 awscli gnupg
+      - name: Create and verify offsite backups
+        env:
+          DATABASE_BACKUP_URL: ${{ secrets.IDOC_BACKUP_DATABASE_URL }}
+          IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.IDOC_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.IDOC_R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
+          BACKUP_KIND: daily
+        run: bash scripts/backup-idoc-r2.sh

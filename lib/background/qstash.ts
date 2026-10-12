@@ -13,6 +13,8 @@ export const QSTASH_JOBS = {
   'data-retention-purge': '0 8 * * *',
   'news-scheduled-publish': '15 8 * * *',
   'new-relic-weekly-health-check': '0 8 * * 1',
+  // Staging only: the route 404s elsewhere, so the schedule script registers it for the staging host alone.
+  'postgres-metrics-export': '0 * * * *',
 } as const;
 
 export type QStashJob = keyof typeof QSTASH_JOBS;

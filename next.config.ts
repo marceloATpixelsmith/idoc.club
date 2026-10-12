@@ -11,6 +11,14 @@ const baseSecurityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The New Relic account ID is a public identifier already held in the shared team variable
+  // NEW_RELIC_ACCOUNT_ID (server-only). Expose that same value to the browser bundle at build time
+  // for the New Relic Browser agent (staging and production) instead of keeping a second, duplicate variable.
+  env: {
+    ...(process.env.NEW_RELIC_ACCOUNT_ID
+      ? { NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID: process.env.NEW_RELIC_ACCOUNT_ID }
+      : {})
+  },
   async headers() {
     return [
       {

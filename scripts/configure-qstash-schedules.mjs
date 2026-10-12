@@ -1,4 +1,4 @@
-// Register stable QStash schedules only after setting the staging resource credentials.
+// Register stable QStash schedules only after setting the credentials of the EU QStash resource (eu-central-1), which staging and production both use. Never the US resource.
 // Run: node scripts/configure-qstash-schedules.mjs
 // Requires: QSTASH_TOKEN, QSTASH_CALLBACK_BASE_URL; optional QSTASH_URL.
 const token = process.env.QSTASH_TOKEN;
@@ -17,13 +17,19 @@ const jobs = {
   'data-retention-purge': '0 8 * * *',
   'news-scheduled-publish': '15 8 * * *',
   'new-relic-weekly-health-check': '0 8 * * 1',
+  'postgres-metrics-export': '0 * * * *',
 };
+// This job's route only runs on the staging branch; registering it for the production host would produce hourly 404s and retries.
+const stagingOnly = new Set(['postgres-metrics-export']);
+const isStagingHost = new URL(origin).hostname === 'staging.idoc.club';
 for (const [job, cron] of Object.entries(jobs)) {
+  if (stagingOnly.has(job) && !isStagingHost) { console.log(`${job}: skipped (staging host only)`); continue; }
   // The ?job= query makes each schedule's destination distinct in the Upstash console; the signed body stays authoritative.
-  // The destination is a path parameter of the API call, so its own query string must be percent-encoded.
+  // The destination is a path parameter of the API call. Its query string must stay a literal `?job=...`: percent-encoding
+  // the `?` makes QStash store (and later call) a destination ending in `%3Fjob=...`, which is not the route.
   const destination = new URL(url);
   destination.searchParams.set('job', job);
-  const response = await fetch(new URL(`/v2/schedules/${destination.href.replace('?', '%3F')}`, api), {
+  const response = await fetch(new URL(`/v2/schedules/${destination.href}`, api), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
