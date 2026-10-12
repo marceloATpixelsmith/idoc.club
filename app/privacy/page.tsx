@@ -344,11 +344,12 @@ export default function PrivacyPage() {
             <strong>Performance and error monitoring.</strong> IDOC uses the New Relic Browser agent to measure
             page-load timing, Core Web Vitals, and JavaScript errors so that we can keep the website fast and
             find faults. This monitoring does not set cookies or store information in your browser, does not
-            record sessions, keystrokes, form entries, or the content of pages, does not capture network
+            record session replays, keystrokes, form entries, or the content of pages, does not capture network
             requests, and is not used for advertising, profiling, or tracking you across other websites. Each
             report is sent to New Relic, our monitoring provider, together with technical information such as
             the page address, browser and device type, and your IP address, which New Relic receives as part of
-            the request. Error messages are filtered to remove email-shaped text before they are sent.
+            the request, and a random identifier the monitoring code generates for each page visit so that
+            reports from the same visit can be grouped. We do not add your account or member details to these reports. Error messages are filtered to remove email-shaped text before they are sent.
             We rely on our legitimate interest in the security, reliability, and performance of the service for
             this processing. You can object to it as described in section 13.
           </p>

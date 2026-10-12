@@ -41,6 +41,8 @@ test('the compact essential-cookie notice is mounted sitewide without pretending
 
 test('the privacy policy discloses cookie-free browser performance and error monitoring and its legal basis', () => {
   assert.match(privacy, /Performance and error monitoring/);
+  assert.match(privacy, /random identifier the monitoring code generates for each page visit/);
+  assert.doesNotMatch(privacy, /does not\s+record sessions,/);
   assert.match(privacy, /New Relic Browser agent/);
   assert.match(privacy, /does not set cookies or store information in your browser/);
   assert.match(privacy, /Measure and improve website performance and detect browser-side errors/);
