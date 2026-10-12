@@ -51,5 +51,9 @@ test('the backup script splits the database URL into PG* environment variables a
   assert.match(script, /conn_env="\$\(python3/); // assignment so a parse failure stops the script under set -e
   assert.match(script, /eval "\$conn_env"/);
   assert.match(script, /unset DATABASE_BACKUP_URL/);
-  assert.match(script, /Unsupported backup database URL option/);
+  assert.match(script, /parse_qsl\(u\.query, keep_blank_values=True\)/); // blank option values must be rejected, not dropped
+  assert.match(script, /Unsupported or empty backup database URL option/);
+  const runbook = readFileSync('docs/16-idoc-r2-backup-recovery.md', 'utf8');
+  assert.match(runbook, /Format of `IDOC_BACKUP_DATABASE_URL`/);
+  assert.match(runbook, /only\*\* query option accepted is a single, non-empty `sslmode`/);
 });

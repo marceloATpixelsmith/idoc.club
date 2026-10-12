@@ -29,9 +29,9 @@ if u.scheme not in ('postgres', 'postgresql') or not (u.hostname and u.username 
     sys.exit('Backup database URL is not a complete postgres URL')
 env = {'PGHOST': u.hostname, 'PGPORT': str(u.port or 5432), 'PGUSER': unquote(u.username),
        'PGPASSWORD': unquote(u.password or ''), 'PGDATABASE': unquote(u.path.lstrip('/'))}
-for key, value in parse_qsl(u.query):
-    if key != 'sslmode':
-        sys.exit('Unsupported backup database URL option: ' + key)
+for key, value in parse_qsl(u.query, keep_blank_values=True):
+    if key != 'sslmode' or not value or 'PGSSLMODE' in env:
+        sys.exit('Unsupported or empty backup database URL option: ' + key)
     env['PGSSLMODE'] = value
 for key, value in env.items():
     print('export %s=%s' % (key, shlex.quote(value)))
