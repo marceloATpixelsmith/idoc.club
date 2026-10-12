@@ -1176,10 +1176,23 @@ Alerts for the four staging ping monitors are New Relic alerts in account `86000
 | --- | --- | --- |
 | Alert policy | `IDOC website (staging)` | Issue preference **One issue per condition**, so each page's failure is one issue even though three locations report it. |
 | Conditions (4) | `IDOC staging: app and database liveness failing`, `IDOC staging: homepage failing`, `IDOC staging: sign-in page failing`, `IDOC staging: seminars page failing` | One monitor each. Static critical threshold: `Failures` (`SyntheticCheck` with `result = 'FAILED'`) above 0 at least once in 1 minute, event timer streaming. New Relic registers a monitor failure only after three failed attempts from a location. |
-| Workflow | `IDOC website: email operations admin` (renamed 2026-10-12 from `IDOC website (staging): email operations admin`) | Filters on policy `IDOC website (staging)` or `IDOC website (production)` **and `priority = CRITICAL`** (read back from New Relic 2026-10-12). A future warning-level condition will not email unless the filter is changed. New Relic allows only one workflow per notification channel, which is why one workflow serves both policies; add any future IDOC policy to its filter instead of creating a second workflow on the same destination. |
+| Workflow | `IDOC and shared infrastructure: email operations admin` (renamed 2026-10-12 from `IDOC website (staging): email operations admin`, then again when the shared Postgres policy was added) | Filters on policies `IDOC website (staging)`, `IDOC website (production)` or `Shared infrastructure: Postgres` **and `priority = CRITICAL`** (read back from New Relic 2026-10-12). A future warning-level condition will not email unless the filter is changed. New Relic allows only one workflow per notification channel, which is why one workflow serves both policies; add any future IDOC policy to its filter instead of creating a second workflow on the same destination. |
 | Notification destination | `Email: operations admin` | Shared and deliberately generic so any future app's workflow can reuse it. The address is recorded as `PIXELSMITH_ADMIN_EMAIL`. |
 
 Production: policy `IDOC website (production)` (one issue per condition) was created on 2026-10-12 with `IDOC production: application errors` (above 2 in 15 minutes) and `IDOC production: slow responses` (more than 2 spans over 5 seconds in 15 minutes). Both use `deployment.environment.name = 'production'` instead of the staging branch filter and the same 15-minute, Event timer, critical settings; the baseline was zero error spans and zero spans over 5 seconds in the previous 7 days. They email through the shared workflow above. The four production synthetic monitors and their liveness conditions are listed below. These are New Relic configuration only; the monitors send ordinary page requests to `redesign.idoc.club`.
+
+Shared Postgres alerts (policy `Shared infrastructure: Postgres`, created 2026-10-12 and read back; the database is shared across applications, so the names are generic). All use the `postgres.*` gauges exported hourly under service `idoc.club-postgres` and are critical:
+
+| Condition | Rule | Why |
+| --- | --- | --- |
+| `Postgres: metrics export did not report` | no `postgres.*` data for 3 hours (loss of signal) | the hourly export did not run or New Relic did not receive it |
+| `Postgres: connections high (over 80 of 100)` | `max(postgres.connections)` above 80 in an hour | `max_connections` is 103 with 3 reserved, leaving 100 usable |
+| `Postgres: database size high (over 800 MB of 1 GB disk)` | `max(postgres.database.size)` above 800,000,000 bytes | disk is 1 GB with autoscaling off |
+| `Postgres: waiting locks` | `max(postgres.locks.waiting)` above 5 | sustained lock contention |
+
+Deadlocks are exported but have no condition: the gauge is a cumulative count and a one-point-per-hour window cannot express an increase. Figures are database-wide (`ayni_space`), not IDOC-only.
+
+**Hourly export schedule (registered 2026-10-12):** QStash schedule `idoc-staging.idoc.club-postgres-metrics-export` (`0 * * * *`) in the EU resource, staging host only. It was registered by hand with the `?job=postgres-metrics-export` query as a literal part of the destination, because passing the destination with a percent-encoded `?` made QStash store a literal `%3F`; `scripts/configure-qstash-schedules.mjs` encodes the `?`, so check what it stores before relying on it for a new job. A test message to the destination was **delivered with HTTP 200** and all six `postgres.*` gauges arrived in New Relic. The first scheduled run (01:00 UTC) is checked separately.
 
 Production checks and job alerts (created 2026-10-12 through NerdGraph, read back afterwards):
 
