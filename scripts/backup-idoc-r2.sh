@@ -85,4 +85,13 @@ printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-
   --passphrase-fd 0 --decrypt --output "$tmp/roundtrip.dump" "$tmp/roundtrip.gpg"
 cmp "$tmp/idoc.dump" "$tmp/roundtrip.dump"
 pg_restore --list "$tmp/roundtrip.dump" > /dev/null
+# OPTIONAL RESTORE CHECK (nightly workflow only): hand the verified archive to a separate workflow step that runs
+# scripts/restore-check-idoc.sh with NO credentials. pg_restore executes SQL taken from the archive, so it must never run in a
+# process that holds the database password, the R2 keys or the encryption passphrase.
+if [[ "${IDOC_RESTORE_CHECK:-}" == true ]]; then
+  : "${RESTORE_CHECK_INPUT_DIR:?}"
+  mkdir -p "$RESTORE_CHECK_INPUT_DIR"; chmod 700 "$RESTORE_CHECK_INPUT_DIR"
+  cp "$tmp/roundtrip.dump" "$RESTORE_CHECK_INPUT_DIR/archive.dump"
+  cp "$tmp/toc" "$RESTORE_CHECK_INPUT_DIR/toc"
+fi
 echo "Verified IDOC-only backup object=$object sha256=$(sha256sum "$tmp/roundtrip.gpg" | cut -d' ' -f1)"
