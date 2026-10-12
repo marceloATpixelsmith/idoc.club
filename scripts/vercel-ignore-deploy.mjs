@@ -1,5 +1,6 @@
 const branch = process.env.VERCEL_GIT_COMMIT_REF;
 const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
+const triggeringPullRequestId = process.env.VERCEL_GIT_PULL_REQUEST_ID?.trim();
 
 async function main()
 {
@@ -31,7 +32,9 @@ async function main()
       (pullRequest) =>
       {
         return Boolean(pullRequest.merged_at)
-          && pullRequest.base?.ref === branch;
+          && pullRequest.base?.ref === branch
+          && (!triggeringPullRequestId
+            || String(pullRequest.number) === triggeringPullRequestId);
       },
     );
 
