@@ -29,9 +29,9 @@ if u.scheme not in ('postgres', 'postgresql') or not (u.hostname and u.username 
     sys.exit('Backup database URL is not a complete postgres URL')
 env = {'PGHOST': u.hostname, 'PGPORT': str(u.port or 5432), 'PGUSER': unquote(u.username),
        'PGPASSWORD': unquote(u.password or ''), 'PGDATABASE': unquote(u.path.lstrip('/'))}
-for key, value in parse_qsl(u.query):
-    if key != 'sslmode':
-        sys.exit('Unsupported backup database URL option: ' + key)
+for key, value in parse_qsl(u.query, keep_blank_values=True):
+    if key != 'sslmode' or not value or 'PGSSLMODE' in env:
+        sys.exit('Unsupported or empty backup database URL option: ' + key)
     env['PGSSLMODE'] = value
 for key, value in env.items():
     print('export %s=%s' % (key, shlex.quote(value)))
@@ -85,4 +85,33 @@ printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-
   --passphrase-fd 0 --decrypt --output "$tmp/roundtrip.dump" "$tmp/roundtrip.gpg"
 cmp "$tmp/idoc.dump" "$tmp/roundtrip.dump"
 pg_restore --list "$tmp/roundtrip.dump" > /dev/null
+# OPTIONAL RESTORE CHECK (nightly workflow only): restore the decrypted archive into a throwaway PostgreSQL cluster that
+# lives only inside this job (unix socket, no network listener, no credentials) and require every table in both schemas back.
+if [[ "${IDOC_RESTORE_CHECK:-}" == true ]]; then
+  pgbin="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)"
+  scratch="$tmp/restore-check"; sock="$tmp/sock"; mkdir -p "$sock"
+  "$pgbin/initdb" -D "$scratch" -A trust -U restore_check >/dev/null
+  "$pgbin/pg_ctl" -D "$scratch" -o "-p 55433 -k $sock -c listen_addresses=''" -l "$tmp/restore-server.log" -w start >/dev/null
+  trap '"$pgbin/pg_ctl" -D "$scratch" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
+  restore_env=(env -u PGSSLMODE PGHOST="$sock" PGPORT=55433 PGUSER=restore_check PGPASSWORD= PGDATABASE=postgres)
+  "${restore_env[@]}" "$pgbin/createdb" restore_check_db
+  # Ownership and grants name roles that do not exist in the scratch cluster, so they are skipped; structure and data are not.
+  if ! "${restore_env[@]}" "$pgbin/pg_restore" --no-owner --no-privileges --dbname=restore_check_db "$tmp/roundtrip.dump" 2>"$tmp/restore-errors.log"; then
+    echo "::error::Restore check failed: $(grep -c '^pg_restore: error:' "$tmp/restore-errors.log" || true) restore error(s)"
+    # Only the error summary lines are printed; detail lines can contain row values.
+    grep '^pg_restore: error:' "$tmp/restore-errors.log" | head -5 | cut -c1-200 || true
+    exit 1
+  fi
+  restore_summary=""
+  for schema in idoc_staging idoc_production; do
+    expected="$(grep -cE "^[0-9]+; [0-9]+ [0-9]+ TABLE $schema " "$tmp/toc" || true)"
+    actual="$("${restore_env[@]}" "$pgbin/psql" -d restore_check_db -Atqc "SELECT count(*) FROM information_schema.tables WHERE table_schema = '$schema' AND table_type = 'BASE TABLE'")"
+    if [[ "$expected" -lt 1 || "$expected" != "$actual" ]]; then
+      echo "::error::Restore check failed: $schema has $actual restored table(s), archive lists $expected"
+      exit 1
+    fi
+    restore_summary="$restore_summary $schema=$actual"
+  done
+  echo "Restore check passed (tables restored:$restore_summary)"
+fi
 echo "Verified IDOC-only backup object=$object sha256=$(sha256sum "$tmp/roundtrip.gpg" | cut -d' ' -f1)"
