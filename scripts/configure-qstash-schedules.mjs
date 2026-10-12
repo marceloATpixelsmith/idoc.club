@@ -25,10 +25,11 @@ const isStagingHost = new URL(origin).hostname === 'staging.idoc.club';
 for (const [job, cron] of Object.entries(jobs)) {
   if (stagingOnly.has(job) && !isStagingHost) { console.log(`${job}: skipped (staging host only)`); continue; }
   // The ?job= query makes each schedule's destination distinct in the Upstash console; the signed body stays authoritative.
-  // The destination is a path parameter of the API call, so its own query string must be percent-encoded.
+  // The destination is a path parameter of the API call. Its query string must stay a literal `?job=...`: percent-encoding
+  // the `?` makes QStash store (and later call) a destination ending in `%3Fjob=...`, which is not the route.
   const destination = new URL(url);
   destination.searchParams.set('job', job);
-  const response = await fetch(new URL(`/v2/schedules/${destination.href.replace('?', '%3F')}`, api), {
+  const response = await fetch(new URL(`/v2/schedules/${destination.href}`, api), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
