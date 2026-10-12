@@ -43,10 +43,13 @@ test('backup workflows rely on the runner AWS CLI and the script avoids R2-incom
   assert.match(script, /AWS_RESPONSE_CHECKSUM_VALIDATION=when_required/);
 });
 
-test('the backup script passes the database URL as the connection argument, not via PGDATABASE', () => {
+test('the backup script splits the database URL into PG* environment variables and never passes it as an argument', () => {
   const script = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
-  // libpq does not expand a connection URL from the PGDATABASE environment variable (psql fell back to the local socket).
-  assert.doesNotMatch(script, /export PGDATABASE/);
-  assert.equal((script.match(/psql "\$DATABASE_BACKUP_URL" -Atqc/g) ?? []).length, 2);
-  assert.match(script, /pg_dump --dbname="\$DATABASE_BACKUP_URL"/);
+  // libpq does not expand a connection URL from PGDATABASE (psql fell back to the local socket), and a URL argument would put the credential in the process list.
+  assert.doesNotMatch(script, /export PGDATABASE=\"\$DATABASE_BACKUP_URL\"/);
+  assert.doesNotMatch(script, /psql "\$DATABASE_BACKUP_URL"|--dbname=/);
+  assert.match(script, /conn_env="\$\(python3/); // assignment so a parse failure stops the script under set -e
+  assert.match(script, /eval "\$conn_env"/);
+  assert.match(script, /unset DATABASE_BACKUP_URL/);
+  assert.match(script, /Unsupported backup database URL option/);
 });
