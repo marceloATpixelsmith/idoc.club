@@ -12,6 +12,7 @@ import { GET as retention } from '@/app/api/cron/data-retention-purge/route';
 import { GET as clockSkew } from '@/app/api/cron/clock-skew-check/route';
 import { GET as newsPublishing } from '@/app/api/cron/news-scheduled-publish/route';
 import { GET as newRelicHealthCheck } from '@/app/api/cron/new-relic-health-check/route';
+import { POST as postgresMetricsExport } from '@/app/api/internal/postgres-metrics/route';
 
 const handlers: Record<QStashJob, (request: Request) => Promise<Response>> = {
   'account-delivery': accountDelivery,
@@ -23,6 +24,8 @@ const handlers: Record<QStashJob, (request: Request) => Promise<Response>> = {
   'data-retention-purge': retention,
   'news-scheduled-publish': newsPublishing,
   'new-relic-weekly-health-check': newRelicHealthCheck,
+  // The export route is POST-only and keeps its own staging-branch and CRON_SECRET guards.
+  'postgres-metrics-export': (request) => postgresMetricsExport(new Request(request.url, { method: 'POST', headers: request.headers })),
 };
 
 /** Signed QStash only. Reuse the same cron handlers to avoid diverging business behavior. */
