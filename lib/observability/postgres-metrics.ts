@@ -19,6 +19,9 @@ export type PostgresMetrics = {
 // requests, and is never logged or returned.
 const RENDER_POSTGRES_ID = 'dpg-d3c3gd2li9vc73d8n3o0-a';
 const RENDER_METRIC_PATHS = { cpuCores: 'cpu', cpuLimitCores: 'cpu-limit', memoryBytes: 'memory', memoryLimitBytes: 'memory-limit' } as const;
+// Render reports each series with a unit (its specification example even shows `GB`). Only the units
+// observed from the live API are accepted; any other unit makes the gauge absent instead of mislabelled.
+const RENDER_METRIC_UNITS: Record<string, string> = { cpu: 'cpu', 'cpu-limit': 'cpu', memory: 'bytes', 'memory-limit': 'bytes' };
 
 async function readRenderMetricValue(path: string, key: string, nowMs: number): Promise<number | undefined> {
   const url = new URL(`https://api.render.com/v1/metrics/${path}`);
@@ -34,7 +37,8 @@ async function readRenderMetricValue(path: string, key: string, nowMs: number): 
     cache: 'no-store',
   });
   if (!response.ok) return undefined;
-  const series = (await response.json()) as Array<{ values?: Array<{ value?: unknown }> }>;
+  const series = (await response.json()) as Array<{ unit?: unknown; values?: Array<{ value?: unknown }> }>;
+  if (series?.[0]?.unit !== RENDER_METRIC_UNITS[path]) return undefined;
   const latest = series?.[0]?.values?.at(-1)?.value;
   return typeof latest === 'number' && Number.isFinite(latest) && latest >= 0 ? latest : undefined;
 }
