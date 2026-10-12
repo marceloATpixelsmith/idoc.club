@@ -27,3 +27,24 @@ test('statement gauges are cumulative per idoc_ role, use no statement text, and
   // Lifetime per-statement averages were removed because they never recover after one slow run.
   assert.doesNotMatch(contents, /mean_exec_time|slowest_mean/);
 });
+
+test('Render CPU and memory gauges use fixed GET requests, keep the key out of output, and are optional', async () => {
+  const source = await import('node:fs/promises');
+  const contents = await source.readFile('lib/observability/postgres-metrics.ts', 'utf8');
+  assert.match(contents, /https:\/\/api\.render\.com\/v1\/metrics\//);
+  assert.match(contents, /dpg-d3c3gd2li9vc73d8n3o0-a/);
+  assert.match(contents, /authorization: `Bearer \$\{key\}`/);
+  assert.match(contents, /AbortSignal\.timeout\(5000\)/);
+  assert.match(contents, /if \(!key\) return undefined;/);
+  // The key is read in exactly one place and never logged or placed in any returned payload.
+  assert.equal((contents.match(/RENDER_API_KEY/g) ?? []).length, 2); // the read and the comment
+  assert.doesNotMatch(contents, /console\.(log|info|warn|error)/);
+  // The series unit is validated so a scaled unit (for example GB) can never be labelled as bytes.
+  assert.match(contents, /RENDER_METRIC_UNITS/);
+  assert.match(contents, /series\?\.\[0\]\?\.unit !== RENDER_METRIC_UNITS\[path\]\) return undefined;/);
+  assert.match(contents, /toISOString\(\)\.replace/); // RFC 3339 times, as Render's specification requires
+  assert.match(contents, /postgres\.memory\.usage/);
+  assert.match(contents, /postgres\.cpu\.limit/);
+  // Only GET requests; no method override anywhere in this file.
+  assert.doesNotMatch(contents, /method:\s*['"](POST|PUT|PATCH|DELETE)/);
+});
