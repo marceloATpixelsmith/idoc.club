@@ -30,3 +30,15 @@ test('both backup workflows import the PostgreSQL signing key without a terminal
     assert.match(readFileSync(file, 'utf8'), /sudo gpg --batch --yes --dearmor -o/, file);
   }
 });
+
+test('backup workflows rely on the runner AWS CLI and the script avoids R2-incompatible default checksums', () => {
+  for (const file of ['.github/workflows/idoc-r2-backups.yml', '.github/workflows/manual-promotion-0071.yml']) {
+    const workflow = readFileSync(file, 'utf8');
+    // ubuntu-latest (Ubuntu 24.04) has no `awscli` apt package; the runner image ships AWS CLI v2.
+    assert.doesNotMatch(workflow, /apt-get install[^\n]*awscli/, file);
+    assert.match(workflow, /aws --version/, file);
+  }
+  const script = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
+  assert.match(script, /AWS_REQUEST_CHECKSUM_CALCULATION=when_required/);
+  assert.match(script, /AWS_RESPONSE_CHECKSUM_VALIDATION=when_required/);
+});

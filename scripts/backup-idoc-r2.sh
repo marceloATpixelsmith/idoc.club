@@ -17,6 +17,8 @@ endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 run="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto PGCONNECT_TIMEOUT=20
+# Recent AWS CLI v2 adds default checksums that S3-compatible stores such as R2 may reject; only send them when an operation requires them.
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
 export PGDATABASE="$DATABASE_BACKUP_URL"
 # FAIL CLOSED IF CREDENTIALS CAN MODIFY DATA OR READ NON-IDOC SCHEMAS.
 # The role check below exempts only the pg_stat_statements monitoring views in schema public: they are SELECTable by PUBLIC by design (aggregate statistics; other roles' query text is hidden), so without the exemption the cross-application read check would always deny.
