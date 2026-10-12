@@ -43,4 +43,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
           BACKUP_KIND: daily
           IDOC_RESTORE_CHECK: 'true'
+          RESTORE_CHECK_INPUT_DIR: ${{ runner.temp }}/idoc-restore-input
         run: bash scripts/backup-idoc-r2.sh
+      # Deliberately no env: here and no secrets: this step executes SQL taken from the archive (pg_restore), so it must not be able to read credentials.
+      - name: Restore check (runs with no credentials)
+        run: bash scripts/restore-check-idoc.sh "${{ runner.temp }}/idoc-restore-input"
+      - name: Remove restore input
+        if: always()
+        run: rm -rf "${{ runner.temp }}/idoc-restore-input"
