@@ -4,7 +4,7 @@ export function contentSecurityPolicy(
   nonce: string,
   environment: string | undefined = process.env.NODE_ENV,
   sentryDsn: string | undefined = process.env.NEXT_PUBLIC_SENTRY_DSN,
-  // Empty unless the staging-only New Relic browser agent is fully configured.
+  // Empty unless the New Relic browser agent (staging and production) is fully configured.
   browserAgentOrigin: string = browserAgentConnectOrigin(),
 ): string {
   const developmentEval = environment === 'production' ? '' : " 'unsafe-eval'";

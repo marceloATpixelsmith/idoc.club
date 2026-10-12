@@ -3,7 +3,7 @@ import { browserAgentConfig, browserAgentEnvironmentFromProcess } from './browse
 let started = false;
 
 // Starts the New Relic Browser agent (real-user monitoring) from instrumentation-client.ts, which
-// Next runs before hydration, so client startup errors are in scope. Staging only and inert unless
+// Next runs before hydration, so client startup errors are in scope. Staging and production only, and inert unless
 // configured; see browser-agent-config.ts. Only the page-view, page-view-timing (Core Web Vitals)
 // and JavaScript-error feature modules are imported: session replay, session trace, AJAX capture
 // and generic/user-action events are not bundled at all. The agent code is a dynamic import behind

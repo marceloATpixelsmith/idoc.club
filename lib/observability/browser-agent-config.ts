@@ -2,9 +2,10 @@
 // application IDs are public identifiers shipped to every visitor, not secrets. The account ID is
 // not a separate variable: next.config.ts maps the existing shared NEW_RELIC_ACCOUNT_ID to
 // NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID at build time. Everything here is
-// inert unless ALL identifiers are present AND the deployment is the staging branch, so production
-// cannot start sending browser telemetry through a stray environment variable; enabling production
-// is a deliberate code change.
+// inert unless ALL identifiers are present AND the deployment is either the staging branch's
+// Preview deployment or the Production deployment. Pull-request previews and any other branch stay
+// off even if the variables are inherited. Staging and production each have their own New Relic
+// Browser application, so their identifiers differ per Vercel environment.
 export const NEW_RELIC_BEACON_HOST = 'bam.nr-data.net';
 
 export type BrowserAgentEnvironment = Partial<{
@@ -66,19 +67,21 @@ export type BrowserAgentConfig = {
   };
 };
 
-// Staging means the dedicated always-on Preview deployment of the `staging` branch. This looks only
-// at Vercel's own environment and branch, deliberately not at any manually set environment label.
-function isStagingDeployment(environment: BrowserAgentEnvironment): boolean {
+// Enabled deployments: the dedicated always-on Preview deployment of the `staging` branch, and the
+// Production deployment. This looks only at Vercel's own environment and branch, deliberately not at
+// any manually set environment label.
+function isEnabledDeployment(environment: BrowserAgentEnvironment): boolean {
   const vercelEnvironment = environment.VERCEL_ENV ?? environment.NEXT_PUBLIC_VERCEL_ENV;
   const gitRef = environment.VERCEL_GIT_COMMIT_REF ?? environment.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF;
+  if (vercelEnvironment === 'production') return true;
   return vercelEnvironment === 'preview' && gitRef === 'staging';
 }
 
-// Returns null (agent disabled) unless every identifier is well formed and this is staging.
+// Returns null (agent disabled) unless every identifier is well formed and this is staging or production.
 export function browserAgentConfig(
   environment: BrowserAgentEnvironment = browserAgentEnvironmentFromProcess(),
 ): BrowserAgentConfig | null {
-  if (!isStagingDeployment(environment)) return null;
+  if (!isEnabledDeployment(environment)) return null;
   const accountID = environment.NEXT_PUBLIC_NEW_RELIC_ACCOUNT_ID?.trim() ?? '';
   const agentID = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_AGENT_ID?.trim() ?? '';
   const applicationID = environment.NEXT_PUBLIC_NEW_RELIC_BROWSER_APPLICATION_ID?.trim() ?? '';
