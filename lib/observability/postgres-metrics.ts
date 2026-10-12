@@ -8,8 +8,8 @@ export type PostgresMetrics = {
   deadlocks: number;
   waitingLocks: number;
   databaseBytes: number;
-  /** Aggregates from pg_stat_statements; absent when the extension is missing or unreadable. */
-  statements?: { tracked: number; slowestMeanMs: number; slowCount: number };
+  /** Cumulative totals per IDOC application role from pg_stat_statements; absent when the extension is missing or unreadable. */
+  statements?: Array<{ role: string; calls: number; execMs: number }>;
 };
 
 // Built-in aggregate statistics only. No SQL text, member records, credentials or
@@ -38,23 +38,25 @@ export async function readPostgresMetrics(): Promise<PostgresMetrics> {
   };
 }
 
-// Counts and timings only: the statement text column is never selected, and statements called fewer
-// than five times (one-off migrations, schema introspection) are ignored for the slow figures.
-// Optional by design: if pg_stat_statements is not installed or the role cannot read it, the
-// export continues without these three gauges.
+// Cumulative totals only (calls and total execution time) per IDOC application role (`idoc_*`), so
+// shared-database maintenance and tooling traffic is excluded and New Relic derives the recent
+// average from the change between hourly points rather than from lifetime per-statement averages.
+// The statement text column is never selected. Optional by design: if pg_stat_statements is not
+// installed or the role cannot read it, the export continues without these gauges.
 async function readStatementAggregates(): Promise<PostgresMetrics['statements']> {
   try {
     const rows = await client`
-      SELECT
-        count(*)::float8 AS tracked,
-        coalesce(max(mean_exec_time) FILTER (WHERE calls >= 5), 0)::float8 AS slowest_mean_ms,
-        count(*) FILTER (WHERE calls >= 5 AND mean_exec_time > 1000)::float8 AS slow_count
-      FROM pg_stat_statements
-      WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+      SELECT r.rolname AS role, sum(s.calls)::float8 AS calls, sum(s.total_exec_time)::float8 AS exec_ms
+      FROM pg_stat_statements s
+      JOIN pg_roles r ON r.oid = s.userid
+      WHERE s.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+        AND starts_with(r.rolname, 'idoc_')
+      GROUP BY r.rolname
     `;
-    const r = rows[0];
-    if (!r) return undefined;
-    return { tracked: Number(r.tracked), slowestMeanMs: Number(r.slowest_mean_ms), slowCount: Number(r.slow_count) };
+    const result = rows
+      .map((r) => ({ role: String(r.role), calls: Number(r.calls), execMs: Number(r.exec_ms) }))
+      .filter((r) => /^idoc_[a-z0-9_]+$/.test(r.role));
+    return result.length > 0 ? result : undefined;
   } catch {
     return undefined;
   }
@@ -69,15 +71,19 @@ export function postgresMetricsPayload(values: PostgresMetrics, timeMs: number) 
     ['postgres.deadlocks', values.deadlocks, '1'],
     ['postgres.locks.waiting', values.waitingLocks, '1'],
     ['postgres.database.size', values.databaseBytes, 'By'],
-    ...(values.statements ? [
-      ['postgres.statements.tracked', values.statements.tracked, '1'],
-      ['postgres.statements.slowest_mean', values.statements.slowestMeanMs, 'ms'],
-      ['postgres.statements.slow', values.statements.slowCount, '1'],
-    ] as const : []),
   ] as const;
-  if (definitions.some(([, value]) => !Number.isFinite(value) || value < 0)) {
+  const statements = values.statements ?? [];
+  if (definitions.some(([, value]) => !Number.isFinite(value) || value < 0)
+    || statements.some((row) => !Number.isFinite(row.calls) || !Number.isFinite(row.execMs) || row.calls < 0 || row.execMs < 0)) {
     throw new Error('Invalid PostgreSQL statistics');
   }
+  const statementGauge = (name: string, unit: string, pick: (row: { calls: number; execMs: number }) => number) => ({
+    name, unit,
+    gauge: { dataPoints: statements.map((row) => ({
+      timeUnixNano, asDouble: pick(row),
+      attributes: [{ key: 'db.role', value: { stringValue: row.role } }],
+    })) },
+  });
   return {
     resourceMetrics: [{
       resource: { attributes: [
@@ -88,10 +94,16 @@ export function postgresMetricsPayload(values: PostgresMetrics, timeMs: number) 
       ] },
       scopeMetrics: [{
         scope: { name: 'postgres.aggregate.stats' },
-        metrics: definitions.map(([name, value, unit]) => ({
-          name, unit,
-          gauge: { dataPoints: [{ timeUnixNano, asDouble: value }] },
-        })),
+        metrics: [
+          ...definitions.map(([name, value, unit]) => ({
+            name, unit,
+            gauge: { dataPoints: [{ timeUnixNano, asDouble: value }] },
+          })),
+          ...(statements.length > 0 ? [
+            statementGauge('postgres.statements.calls', '1', (row) => row.calls),
+            statementGauge('postgres.statements.exec_time', 'ms', (row) => row.execMs),
+          ] : []),
+        ],
       }],
     }],
   };
