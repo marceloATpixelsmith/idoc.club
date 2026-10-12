@@ -28,8 +28,10 @@ jobs:
           sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          # The restore check starts its own throwaway cluster, so do not let the package create and start a system one.
+          sudo sed -i 's/^#\?create_main_cluster = .*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf || true
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client-17 gnupg
+          sudo apt-get install -y postgresql-17 postgresql-client-17 gnupg
           aws --version
       - name: Create and verify offsite backups
         env:
@@ -40,4 +42,5 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
           BACKUP_KIND: daily
+          IDOC_RESTORE_CHECK: 'true'
         run: bash scripts/backup-idoc-r2.sh
