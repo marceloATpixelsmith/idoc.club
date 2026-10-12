@@ -1192,7 +1192,7 @@ Shared Postgres alerts (policy `Shared infrastructure: Postgres`, created 2026-1
 
 Deadlocks are exported but have no condition: the gauge is a cumulative count and a one-point-per-hour window cannot express an increase. Figures are database-wide (`ayni_space`), not IDOC-only.
 
-**Hourly export schedule (registered 2026-10-12):** QStash schedule `idoc-staging.idoc.club-postgres-metrics-export` (`0 * * * *`) in the EU resource, staging host only. It was registered by hand with the `?job=postgres-metrics-export` query as a literal part of the destination, because passing the destination with a percent-encoded `?` made QStash store a literal `%3F`; `scripts/configure-qstash-schedules.mjs` encodes the `?`, so check what it stores before relying on it for a new job. A test message to the destination was **delivered with HTTP 200** and all six `postgres.*` gauges arrived in New Relic. The first scheduled run (01:00 UTC) is checked separately.
+**Hourly export schedule (registered 2026-10-12):** QStash schedule `idoc-staging.idoc.club-postgres-metrics-export` (`0 * * * *`) in the EU resource, staging host only. It was registered by hand with the `?job=postgres-metrics-export` query as a literal part of the destination, because passing the destination with a percent-encoded `?` made QStash store a literal `%3F`; `scripts/configure-qstash-schedules.mjs` encodes the `?`, so check what it stores before relying on it for a new job. A test message to the destination was **delivered with HTTP 200** and all six `postgres.*` gauges arrived in New Relic. The first scheduled run on 2026-10-12 at 01:00 UTC was also delivered with HTTP 200 and wrote all six gauges.
 
 Production checks and job alerts (created 2026-10-12 through NerdGraph, read back afterwards):
 
