@@ -23,3 +23,10 @@ test('both backup workflows read the IDOC-prefixed R2 account ID secret', () => 
     assert.doesNotMatch(workflow, /CLOUDFLARE_R2_ACCOUNT_ID/, file);
   }
 });
+
+test('both backup workflows import the PostgreSQL signing key without a terminal', () => {
+  for (const file of ['.github/workflows/idoc-r2-backups.yml', '.github/workflows/manual-promotion-0071.yml']) {
+    // Without --batch --yes, gpg prompts on /dev/tty to overwrite an existing key file and the runner step fails.
+    assert.match(readFileSync(file, 'utf8'), /sudo gpg --batch --yes --dearmor -o/, file);
+  }
+});
