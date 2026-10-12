@@ -581,7 +581,7 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
 });
 
 
-test('guest registration completion always returns to seminar detail with one-time success flash', () => {
+test('guest registration completion only flashes success after confirmed paid registration', () => {
   const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
   const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
   const flashRoute = readFileSync('app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts', 'utf8');
@@ -591,7 +591,10 @@ test('guest registration completion always returns to seminar detail with one-ti
   assert.match(guestActions, /setUiFlash\('seminar-registration-success', targetPath\)/);
   assert.match(guestActions, /return \{ redirectTo: targetPath \}/);
   assert.match(checkout, /createGuestSeminarCheckoutSession[\s\S]*seminar-checkout\/success/);
-  assert.match(flashRoute, /status === 'success' \? 'seminar-registration-success'/);
+  assert.match(flashRoute, /registration_status='registered' and payment_status='paid'/);
+  assert.match(flashRoute, /if \(rows.length === 0\)/);
+  assert.match(flashRoute, /Refresh:/);
+  assert.match(checkout, /session_id=\{CHECKOUT_SESSION_ID\}/);
   assert.match(detailPage, /flash === 'seminar-registration-success'/);
   assert.match(detailPage, /Registration completed successfully/);
 });
