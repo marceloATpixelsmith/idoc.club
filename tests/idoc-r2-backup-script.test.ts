@@ -15,3 +15,11 @@ test('the backup role check exempts only the public pg_stat_statements monitorin
   assert.match(script, /n\.nspname NOT IN \('idoc_staging','idoc_production'\)/);
   assert.match(script, /has_table_privilege\(current_user,t\.oid,'SELECT'\)/);
 });
+
+test('both backup workflows read the IDOC-prefixed R2 account ID secret', () => {
+  for (const file of ['.github/workflows/idoc-r2-backups.yml', '.github/workflows/manual-promotion-0071.yml']) {
+    const workflow = readFileSync(file, 'utf8');
+    assert.match(workflow, /R2_ACCOUNT_ID: \$\{\{ secrets\.IDOC_R2_ACCOUNT_ID \}\}/, file);
+    assert.doesNotMatch(workflow, /CLOUDFLARE_R2_ACCOUNT_ID/, file);
+  }
+});

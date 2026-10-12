@@ -33,7 +33,7 @@ Redeploy staging, verify the Super Admin interface and perform the controlled dr
 
 | Name | Where | Value |
 | --- | --- | --- |
-| `IDOC_BACKUP_DATABASE_URL`, `IDOC_BACKUP_ENCRYPTION_PASSPHRASE`, `CLOUDFLARE_R2_ACCOUNT_ID`, `IDOC_R2_ACCESS_KEY_ID`, `IDOC_R2_SECRET_ACCESS_KEY`, `IDOC_R2_BUCKET` | GitHub maintenance environments | Dedicated read-only IDOC backup role, GPG key, R2 credentials and bucket (full instructions in document 16) |
+| `IDOC_BACKUP_DATABASE_URL`, `IDOC_BACKUP_ENCRYPTION_PASSPHRASE`, `IDOC_R2_ACCOUNT_ID`, `IDOC_R2_ACCESS_KEY_ID`, `IDOC_R2_SECRET_ACCESS_KEY`, `IDOC_R2_BUCKET` | GitHub maintenance environments | Dedicated read-only IDOC backup role, GPG key, R2 credentials and bucket (full instructions in document 16) |
 | `IDOC_MIGRATION_DATABASE_URL` | GitHub **environment secret**, in each protected maintenance environment (temporary) | Schema-owner connection URL to `ayni_space`; remove/rotate after completion |
 | `DATA_PROMOTION_DATABASE_URL` | Vercel **staging branch only** (later step) | Connection URL for narrowly privileged `idoc_data_promoter` |
 | `DATA_PROMOTION_PLAN_SECRET` | Vercel **staging branch only** (later step) | New independent random secret of at least 32 bytes |

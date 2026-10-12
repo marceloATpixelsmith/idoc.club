@@ -18,7 +18,7 @@ Provide these to the `idoc-db-backups`, `idoc-db-staging-maintenance`, and `idoc
 |---|---|
 | Secret `IDOC_BACKUP_DATABASE_URL` | Database `ayni_space` connection string for a dedicated **read-only** backup role: `CONNECT` to database, `USAGE` on the two IDOC schemas and read access to their tables/sequences only. Name the role **`idoc_backup_reader`** (the script enforces it); prohibit any cross-app schema reads or writes. No other application schema grants and no DDL/DML grants |
 | Secret `IDOC_BACKUP_ENCRYPTION_PASSPHRASE` | Newly generated strong, independent random GPG encryption passphrase; retain a separate recoverable copy outside GitHub |
-| Secret `CLOUDFLARE_R2_ACCOUNT_ID` | Cloudflare R2 account identifier |
+| Secret `IDOC_R2_ACCOUNT_ID` | Cloudflare R2 account identifier |
 | Variable `IDOC_R2_BUCKET` | Private, dedicated IDOC backup bucket name |
 | Secret `IDOC_R2_ACCESS_KEY_ID` | R2 S3-compatible API token access key, restricted to the dedicated bucket |
 | Secret `IDOC_R2_SECRET_ACCESS_KEY` | Matching R2 S3-compatible secret key |

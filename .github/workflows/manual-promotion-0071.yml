@@ -68,7 +68,7 @@ jobs:
         env:
           DATABASE_BACKUP_URL: ${{ secrets.IDOC_BACKUP_DATABASE_URL }}
           IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
-          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.IDOC_R2_ACCOUNT_ID }}
           R2_BUCKET: ${{ vars.IDOC_R2_BUCKET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
