@@ -20,17 +20,25 @@ const staging: BrowserAgentEnvironment = {
   VERCEL_GIT_COMMIT_REF: 'staging',
 };
 
-test('browser agent is disabled unless configured on the staging branch deployment', () => {
+test('browser agent runs only when configured on the staging branch or production deployment', () => {
   assert.equal(browserAgentConfig({}), null);
   assert.equal(browserAgentConfig(configured), null);
-  assert.equal(browserAgentConfig({ ...configured, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'main' }), null);
   assert.equal(browserAgentConfig({ ...configured, VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/x' }), null);
+  assert.equal(browserAgentConfig({ ...configured, VERCEL_ENV: 'development' }), null);
   assert.ok(browserAgentConfig(staging));
+  assert.ok(browserAgentConfig({ ...configured, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'main' }));
+});
+
+test('production without every identifier stays off', () => {
+  const production: BrowserAgentEnvironment = { ...configured, VERCEL_ENV: 'production' };
+  for (const key of Object.keys(configured) as (keyof BrowserAgentEnvironment)[]) {
+    assert.equal(browserAgentConfig({ ...production, [key]: undefined }), null, `${key} is required in production`);
+  }
 });
 
 test('browser agent ignores a manually set environment label', () => {
   assert.equal(
-    browserAgentConfig({ ...configured, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'main', NEXT_PUBLIC_VERCEL_ENV: 'preview', NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: 'staging' }),
+    browserAgentConfig({ ...configured, VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/x', NEXT_PUBLIC_VERCEL_ENV: 'production', NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: 'main' }),
     null,
   );
 });
@@ -63,11 +71,12 @@ test('browser agent redacts email-shaped text from reported error messages', () 
   assert.equal('Failed for member@example.org today'.replace(rule.regex, rule.replacement), 'Failed for [redacted-email] today');
 });
 
-test('CSP allows the New Relic beacon only when the staging agent is configured, and never adds a script origin', () => {
+test('CSP allows the New Relic beacon only when the agent is configured on staging or production, and never adds a script origin', () => {
   const off = contentSecurityPolicy('nonce', 'production', undefined, browserAgentConnectOrigin({}));
   const on = contentSecurityPolicy('nonce', 'production', undefined, browserAgentConnectOrigin(staging));
   assert.doesNotMatch(off, /nr-data\.net/);
   assert.match(on.match(/connect-src[^;]+/)?.[0] ?? '', /https:\/\/bam\.nr-data\.net/);
   assert.doesNotMatch(on.match(/script-src[^;]+/)?.[0] ?? '', /newrelic|nr-data/);
-  assert.equal(browserAgentConnectOrigin({ ...staging, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'main' }), '');
+  assert.equal(browserAgentConnectOrigin({ ...configured, VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/x' }), '');
+  assert.equal(browserAgentConnectOrigin({ ...configured, VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'main' }), `https://${NEW_RELIC_BEACON_HOST}`);
 });
