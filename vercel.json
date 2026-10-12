@@ -33,5 +33,12 @@
       "schedule": "0 0 * * *"
     }
   ],
-  "buildCommand": "pnpm build"
+  "buildCommand": "pnpm build",
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true,
+      "staging": true
+    }
+  }
 }
