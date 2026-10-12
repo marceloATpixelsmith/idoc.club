@@ -19,6 +19,7 @@ run="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto PGCONNECT_TIMEOUT=20
 export PGDATABASE="$DATABASE_BACKUP_URL"
 # FAIL CLOSED IF CREDENTIALS CAN MODIFY DATA OR READ NON-IDOC SCHEMAS.
+# The role check below exempts only the pg_stat_statements monitoring views in schema public: they are SELECTable by PUBLIC by design (aggregate statistics; other roles' query text is hidden), so without the exemption the cross-application read check would always deny.
 role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
   AND current_user = 'idoc_backup_reader'
   AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user
@@ -34,6 +35,7 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
            OR (has_schema_privilege(current_user,n.oid,'USAGE')
                AND EXISTS (SELECT 1 FROM pg_class t WHERE t.relnamespace=n.oid
                    AND t.relkind IN ('r','p','v','m')
+                   AND NOT (n.nspname='public' AND t.relname IN ('pg_stat_statements','pg_stat_statements_info'))
                    AND has_table_privilege(current_user,t.oid,'SELECT')))))
   AND NOT EXISTS (SELECT 1 FROM pg_class t
     JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -45,7 +47,7 @@ role_check="$(psql -Atqc "SELECT CASE WHEN current_database() = 'ayni_space'
 [[ "$role_check" == ok ]] || { echo "::error::Backup role privileges or database identity invalid"; exit 1; }
 fingerprint="$(psql -Atqc "SELECT md5(coalesce(inet_server_addr()::text,'') || ':' || coalesce(inet_server_port()::text,'') || ':' || pg_postmaster_start_time()::text || ':' || current_database() || ':' || (SELECT oid::text FROM pg_database WHERE datname=current_database()))")"
 [[ "$fingerprint" =~ ^[a-f0-9]{32}$ ]] || exit 1
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'server_fingerprint=%s\\n' "$fingerprint" >> "$GITHUB_OUTPUT"; fi
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'server_fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"; fi
 # ONE pg_dump SNAPSHOT CONTAINS BOTH SCHEMAS AND RETAINS OWNER/ACL DETAILS.
 pg_dump --schema=idoc_staging --schema=idoc_production --format=custom --file="$tmp/idoc.dump"
 pg_restore --list "$tmp/idoc.dump" > "$tmp/toc"
