@@ -8,6 +8,8 @@ export type PostgresMetrics = {
   deadlocks: number;
   waitingLocks: number;
   databaseBytes: number;
+  /** Aggregates from pg_stat_statements; absent when the extension is missing or unreadable. */
+  statements?: { tracked: number; slowestMeanMs: number; slowCount: number };
 };
 
 // Built-in aggregate statistics only. No SQL text, member records, credentials or
@@ -26,6 +28,7 @@ export async function readPostgresMetrics(): Promise<PostgresMetrics> {
   const r = rows[0];
   if (!r) throw new Error('PostgreSQL statistics unavailable');
   return {
+    statements: await readStatementAggregates(),
     connections: Number(r.connections),
     transactionsCommitted: Number(r.committed),
     transactionsRolledBack: Number(r.rolled_back),
@@ -33,6 +36,28 @@ export async function readPostgresMetrics(): Promise<PostgresMetrics> {
     waitingLocks: Number(r.waiting_locks),
     databaseBytes: Number(r.db_bytes),
   };
+}
+
+// Counts and timings only: the statement text column is never selected, and statements called fewer
+// than five times (one-off migrations, schema introspection) are ignored for the slow figures.
+// Optional by design: if pg_stat_statements is not installed or the role cannot read it, the
+// export continues without these three gauges.
+async function readStatementAggregates(): Promise<PostgresMetrics['statements']> {
+  try {
+    const rows = await client`
+      SELECT
+        count(*)::float8 AS tracked,
+        coalesce(max(mean_exec_time) FILTER (WHERE calls >= 5), 0)::float8 AS slowest_mean_ms,
+        count(*) FILTER (WHERE calls >= 5 AND mean_exec_time > 1000)::float8 AS slow_count
+      FROM pg_stat_statements
+      WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+    `;
+    const r = rows[0];
+    if (!r) return undefined;
+    return { tracked: Number(r.tracked), slowestMeanMs: Number(r.slowest_mean_ms), slowCount: Number(r.slow_count) };
+  } catch {
+    return undefined;
+  }
 }
 
 export function postgresMetricsPayload(values: PostgresMetrics, timeMs: number) {
@@ -44,6 +69,11 @@ export function postgresMetricsPayload(values: PostgresMetrics, timeMs: number) 
     ['postgres.deadlocks', values.deadlocks, '1'],
     ['postgres.locks.waiting', values.waitingLocks, '1'],
     ['postgres.database.size', values.databaseBytes, 'By'],
+    ...(values.statements ? [
+      ['postgres.statements.tracked', values.statements.tracked, '1'],
+      ['postgres.statements.slowest_mean', values.statements.slowestMeanMs, 'ms'],
+      ['postgres.statements.slow', values.statements.slowCount, '1'],
+    ] as const : []),
   ] as const;
   if (definitions.some(([, value]) => !Number.isFinite(value) || value < 0)) {
     throw new Error('Invalid PostgreSQL statistics');
