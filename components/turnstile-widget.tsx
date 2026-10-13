@@ -16,6 +16,11 @@ declare global {
 }
 
 const SCRIPT_LOAD_TIMEOUT_MS = 10_000;
+// A widget that rendered but never produced a token (seen after a server-action redirect, e.g. the
+// password-reset return to /sign-in, where only a manual refresh recovered it) is re-rendered in
+// place rather than leaving the gated submit button disabled. Never touches the <Script> element.
+const TOKEN_WATCHDOG_MS = 6_000;
+const TOKEN_WATCHDOG_ATTEMPTS = 3;
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 export function TurnstileWidget({
@@ -35,6 +40,8 @@ export function TurnstileWidget({
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const tokenIssuedRef = useRef(false);
+  const challengeVisibleRef = useRef(false);
   // Lazily checks window.turnstile at mount time as a fast path, but the real fix below is using
   // next/script's onReady callback rather than onLoad. onLoad fires exactly once per script src,
   // globally across the whole app -- so on a client-side (soft) navigation to a second page whose
@@ -64,6 +71,7 @@ export function TurnstileWidget({
       return styles.display !== 'none' && styles.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     });
 
+    challengeVisibleRef.current = hasVisibleContent;
     setChallengeVisible(hasVisibleContent);
   }, []);
 
@@ -73,11 +81,15 @@ export function TurnstileWidget({
       window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
     }
+    tokenIssuedRef.current = false;
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         action,
         appearance: 'interaction-only',
-        callback: onVerify,
+        callback: (token: string) => {
+          tokenIssuedRef.current = token.length > 0;
+          onVerify?.(token);
+        },
         'error-callback': () => setFailed(true),
         'expired-callback': () => onVerify?.(''),
         sitekey: siteKey,
@@ -98,6 +110,17 @@ export function TurnstileWidget({
       return undefined;
     }
     renderWidget();
+    let attempts = 1;
+    const watchdog = window.setInterval(() => {
+      if (tokenIssuedRef.current || attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
+        window.clearInterval(watchdog);
+        return;
+      }
+      // Never reset a challenge the visitor is currently looking at or solving.
+      if (challengeVisibleRef.current) return;
+      attempts += 1;
+      renderWidget();
+    }, TOKEN_WATCHDOG_MS);
     const container = containerRef.current;
     const mutationObserver = container ? new MutationObserver(updateChallengeVisibility) : null;
     const resizeObserver = container ? new ResizeObserver(updateChallengeVisibility) : null;
@@ -107,6 +130,7 @@ export function TurnstileWidget({
     }
     updateChallengeVisibility();
     return () => {
+      window.clearInterval(watchdog);
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
       mutationObserver?.disconnect();
@@ -121,8 +145,16 @@ export function TurnstileWidget({
   // disabled with no explanation. Surface an actionable message once a load is overdue.
   useEffect(() => {
     if (scriptLoaded) return undefined;
+    // After a client-side navigation the resident script's onReady can be missed; pick it up by
+    // polling window.turnstile instead of waiting for the failure timeout.
+    const poll = window.setInterval(() => {
+      if (window.turnstile) setScriptLoaded(true);
+    }, 250);
     const timer = window.setTimeout(() => setFailed(true), SCRIPT_LOAD_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearInterval(poll);
+      window.clearTimeout(timer);
+    };
   }, [scriptLoaded]);
 
   // Two prior attempts at "retry" here tried to force api.js to load a second time -- first by

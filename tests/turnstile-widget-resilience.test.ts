@@ -89,3 +89,12 @@ test('visible challenges and Turnstile errors preserve layout space', () => {
   assert.match(widget, /getBoundingClientRect\(\)/);
   assert.match(widget, /setChallengeVisible\(hasVisibleContent\)/);
 });
+
+test('a widget that rendered but issued no token (e.g. after a server-action redirect) is re-rendered in place a bounded number of times, and a missed onReady is recovered by polling window.turnstile', () => {
+  assert.match(widget, /TOKEN_WATCHDOG_MS/);
+  assert.match(widget, /TOKEN_WATCHDOG_ATTEMPTS/);
+  assert.match(widget, /tokenIssuedRef\.current/);
+  assert.match(widget, /window\.clearInterval\(watchdog\)/);
+  assert.match(widget, /challengeVisibleRef\.current\) return/);
+  assert.match(widget, /if \(window\.turnstile\) setScriptLoaded\(true\)/);
+});
