@@ -16,13 +16,13 @@ export async function tracedFetch(
   service: OutboundService,
   url: string,
   init: RequestInit,
-  tracer: Tracer = trace.getTracer('idoc.outbound'),
+  tracer: Tracer = trace.getTracer('idoc-outbound'),
 ): Promise<Response> {
   const domain = SERVICE_DOMAINS[service];
   const method = init.method ?? 'GET';
   return tracer.startActiveSpan(
     `${method} ${domain}`,
-    { kind: SpanKind.CLIENT, attributes: { 'idoc.integration': service, 'url.domain': domain, 'http.request.method': method } },
+    { kind: SpanKind.CLIENT, attributes: { 'integration.name': service, 'url.domain': domain, 'http.request.method': method } },
     async (span) => {
       try {
         const response = await fetch(url, init);

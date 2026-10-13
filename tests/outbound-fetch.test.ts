@@ -32,7 +32,7 @@ test('a successful call records the vendor, fixed domain and HTTP status only', 
     tracedFetch('brevo', 'https://api.brevo.com/v3/smtp/email?secret=1', { method: 'POST', body: 'to=user@example.test' }, tracer));
   assert.equal(response.status, 201);
   assert.deepEqual(record.attributes, {
-    'idoc.integration': 'brevo', 'url.domain': 'api.brevo.com', 'http.request.method': 'POST', 'http.status_code': 201,
+    'integration.name': 'brevo', 'url.domain': 'api.brevo.com', 'http.request.method': 'POST', 'http.status_code': 201,
   });
   assert.equal(record.name, 'POST api.brevo.com');
   assert.equal(record.status, undefined);
