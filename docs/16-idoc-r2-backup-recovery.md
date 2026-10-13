@@ -178,7 +178,9 @@ Choose A or B. Neither is automatic.
 
 **9A. Recover a few rows or one table (the usual case).**
 
-1. From the scratch database, export only what you need as plain SQL, for example: `"$PGBIN/pg_dump" -d restore_check_db --data-only --column-inserts --table=idoc_production.<table> > recovered-<table>.sql`.
+First name the schema you are recovering into, in the terminal you will use, and read it back before running anything: `read -r TARGET_SCHEMA` then type exactly `idoc_staging` or `idoc_production`, and `echo "Target schema: $TARGET_SCHEMA"`. Every command below uses `$TARGET_SCHEMA`; never retype the schema name by hand. The two schemas live in the same database, so a wrong schema name changes the wrong environment.
+
+1. From the scratch database, export only what you need as plain SQL, for example: `"$PGBIN/pg_dump" -d restore_check_db --data-only --column-inserts --table="$TARGET_SCHEMA".<table> > recovered-<table>.sql`.
 2. Read the file. Remove everything you do not intend to put back. Check that it contains no rows for other people that would overwrite newer data.
 3. Ask a second person to review the SQL before it is run.
 4. Run it against the live database, inside one transaction (`BEGIN; ... COMMIT;`), using a login that has write access to that schema, and only after taking a fresh backup (run the **IDOC R2 Schema Backups** workflow from GitHub Actions and wait for it to pass).
@@ -186,15 +188,25 @@ Choose A or B. Neither is automatic.
 
 **9B. Replace a whole schema (a planned maintenance window, with a second person approving).**
 
-This has not been rehearsed. Before using it on `idoc_production`, do all of it on `idoc_staging` first and correct this section with whatever is different.
+This has not been rehearsed. Before using it on `idoc_production`, do all of it on `idoc_staging` first and correct this section with whatever is different. The commands use a variable so that the same steps serve both schemas, and you must confirm it before the rename and the restore:
+
+```
+read -r TARGET_SCHEMA            # type exactly: idoc_staging   (rehearsal)   or   idoc_production
+case "$TARGET_SCHEMA" in idoc_staging|idoc_production) ;; *) echo "Not a valid target"; return 1 2>/dev/null || exit 1 ;; esac
+STAMP=$(date -u +%Y%m%d)
+echo "About to replace schema: $TARGET_SCHEMA (the old copy will be kept as ${TARGET_SCHEMA}_replaced_${STAMP})"
+printf "Type the schema name again to confirm: "; read -r CONFIRM; [ "$CONFIRM" = "$TARGET_SCHEMA" ] || { echo "Not confirmed"; return 1 2>/dev/null || exit 1; }
+```
+
+The backup holds **both** schemas, so the restore command must always name the one schema you are replacing. If the schema-owner login can change both schemas, a wrong name here changes the wrong environment; rehearse on `idoc_staging` and read the variable back before every step.
 
 1. Decide who approves and who runs it. Record the backup object path from Part 3, the reason, and the time.
 2. Take a fresh backup (run **IDOC R2 Schema Backups**, wait for it to pass), so the current damaged state is also recoverable.
 3. Stop writes to that schema. No application switch for this is documented, so decide how to do it for that window (for example, accept downtime on staging; for production, a maintenance announcement and a plan agreed with the second person).
-4. Using the schema-owner login (`IDOC_MIGRATION_DATABASE_URL`), keep the damaged schema rather than dropping it: `ALTER SCHEMA idoc_production RENAME TO idoc_production_replaced_YYYYMMDD;`.
-5. Restore the chosen schema from the archive into the live database: `pg_restore --no-owner --dbname=<live database> --schema=idoc_production idoc.dump`, connected as the schema-owner login (`--no-privileges` is only needed if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
+4. Using the schema-owner login (`IDOC_MIGRATION_DATABASE_URL`), keep the damaged schema rather than dropping it: `ALTER SCHEMA "$TARGET_SCHEMA" RENAME TO "${TARGET_SCHEMA}_replaced_${STAMP}";` (in `psql`, set the values first with `\set target "$TARGET_SCHEMA"` or paste the confirmed names; do not retype them from memory).
+5. Restore the chosen schema from the archive into the live database: `pg_restore --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (`--no-privileges` is only needed if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
 6. Verify (row counts, newest rows, that the application works on the affected environment, and that `idoc_backup_reader` can still read the schema). Run **IDOC R2 Schema Backups** again; the role check in the script will fail if the grants are wrong.
-7. Keep `idoc_production_replaced_YYYYMMDD` for at least a week after you are satisfied, then drop it with the second person's agreement.
+7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it with the second person's agreement.
 
 ### Part 10: What to do if something fails
 
