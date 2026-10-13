@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
+import { Bell, Stethoscope } from 'lucide-react';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country';
 import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { CsrfField } from '@/components/security/csrf-field';
+import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
 import type { MemberClassification } from '@/lib/membership/classification';
 import { completeOnboarding } from './actions';
 
@@ -29,12 +31,21 @@ type AddressSuggestion = {
   stateProvince: string;
 };
 
-const TYPE_OPTIONS: { value: Classification; label: string; description: string }[] = [
-  { value: 'judge', label: 'Judge', description: 'Officiate dressage competitions as a licensed judge.' },
-  { value: 'steward', label: 'Steward', description: 'Oversee competition rules and welfare on the ground.' },
-  { value: 'judge_steward', label: 'Judge + Steward', description: 'Hold both official capacities.' },
-  { value: 'veterinarian', label: 'Veterinarian', description: 'Provide veterinary oversight at competitions.' },
+// Icons match the established member-type icons (admin members table): Bell = Judge,
+// Horseshoe = Steward, both = Judge + Steward, Stethoscope = Veterinarian.
+const TYPE_OPTIONS: { value: Classification; label: string; icons: ('judge' | 'steward' | 'veterinarian')[] }[] = [
+  { value: 'judge', label: 'Judge', icons: ['judge'] },
+  { value: 'steward', label: 'Steward', icons: ['steward'] },
+  { value: 'judge_steward', label: 'Judge + Steward', icons: ['judge', 'steward'] },
+  { value: 'veterinarian', label: 'Veterinarian', icons: ['veterinarian'] },
 ];
+
+function TypeIcon({ type }: { type: 'judge' | 'steward' | 'veterinarian' }) {
+  const className = 'size-5 shrink-0 text-gold';
+  if (type === 'judge') return <Bell aria-hidden="true" className={className} />;
+  if (type === 'steward') return <HorseshoeIcon aria-hidden="true" className={className} data-icon-tooltip="" />;
+  return <Stethoscope aria-hidden="true" className={className} />;
+}
 
 function isDetailsFormComplete(form: HTMLFormElement, classification: Classification | null): boolean {
   if (!classification || !form.checkValidity()) return false;
@@ -191,19 +202,26 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
 
   if (step === 'type') {
     return (
-      <AuthShell description="Select the official capacity that best describes you. You can hold more than one." title="What kind of official are you?" wide>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <AuthShell description="Select the official capacity that best describes you. You can hold more than one." hideVisual title="What kind of official are you?" wide>
+        <div aria-label="Official type" className="flex flex-col gap-3" role="radiogroup">
           {TYPE_OPTIONS.map((option) => (
-            <button
-              aria-pressed={classification === option.value}
-              className={`cursor-pointer rounded-lg border p-4 text-left transition-all ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border bg-transparent hover:border-input'}`}
+            <label
+              className={`flex w-full cursor-pointer items-center gap-4 rounded-lg border px-5 py-4 text-left transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border bg-transparent hover:border-input'}`}
               key={option.value}
-              onClick={() => { setClassification(option.value); setDetailsComplete(false); }}
-              type="button"
             >
-              <div className="font-medium text-foreground">{option.label}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{option.description}</div>
-            </button>
+              <input
+                checked={classification === option.value}
+                className="sr-only"
+                name="officialType"
+                onChange={() => { setClassification(option.value); setDetailsComplete(false); }}
+                type="radio"
+                value={option.value}
+              />
+              <span className="flex shrink-0 items-center gap-1.5">
+                {option.icons.map((icon) => <TypeIcon key={icon} type={icon} />)}
+              </span>
+              <span className="font-medium text-foreground">{option.label}</span>
+            </label>
           ))}
         </div>
         <Button className="mt-6 w-full" disabled={!classification} onClick={() => setStep('details')} size="lg" type="button">
@@ -214,7 +232,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
   }
 
   return (
-    <AuthShell description="All fields are required unless marked optional." title="Complete your profile" wide>
+    <AuthShell description="All fields are required unless marked optional." hideVisual title="Complete your profile" wide>
       <form
         action={action}
         className="space-y-9"
