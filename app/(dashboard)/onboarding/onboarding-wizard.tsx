@@ -205,19 +205,23 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
       <AuthShell description="Select the official capacity that best describes you. You can hold more than one." hideVisual title="What kind of official are you?" wide>
         <div aria-label="Official type" className="flex flex-col gap-3" role="radiogroup">
           {TYPE_OPTIONS.map((option) => (
-            <button
-              aria-checked={classification === option.value}
-              className={`flex w-full cursor-pointer items-center gap-4 rounded-lg border px-5 py-4 text-left transition-all ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border bg-transparent hover:border-input'}`}
+            <label
+              className={`flex w-full cursor-pointer items-center gap-4 rounded-lg border px-5 py-4 text-left transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${classification === option.value ? 'border-primary bg-primary/10 ring-2 ring-primary shadow-[0_0_24px_rgba(201,168,76,0.22)]' : 'border-border bg-transparent hover:border-input'}`}
               key={option.value}
-              onClick={() => { setClassification(option.value); setDetailsComplete(false); }}
-              role="radio"
-              type="button"
             >
+              <input
+                checked={classification === option.value}
+                className="sr-only"
+                name="officialType"
+                onChange={() => { setClassification(option.value); setDetailsComplete(false); }}
+                type="radio"
+                value={option.value}
+              />
               <span className="flex shrink-0 items-center gap-1.5">
                 {option.icons.map((icon) => <TypeIcon key={icon} type={icon} />)}
               </span>
               <span className="font-medium text-foreground">{option.label}</span>
-            </button>
+            </label>
           ))}
         </div>
         <Button className="mt-6 w-full" disabled={!classification} onClick={() => setStep('details')} size="lg" type="button">

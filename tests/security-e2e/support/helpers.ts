@@ -115,7 +115,7 @@ export function authError(page: Page) {
 /** Completes the real onboarding wizard for a veterinarian (the shortest classification: no
  * federation/region/official-status fields). */
 export async function completeOnboardingWizard(page: Page, names = { first: 'Ada', last: 'Lovelace' }) {
-  await page.getByRole('radio', { name: /^Veterinarian/ }).click();
+  await page.getByRole('radio', { name: /^Veterinarian/ }).check({ force: true });
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('First name').fill(names.first);
   await page.getByLabel('Last name').fill(names.last);

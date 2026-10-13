@@ -71,7 +71,7 @@ test('a canonical membership URL parameter survives signup and preselects an emp
   assert.match(pendingSignup, /membership: MemberClassification \| null/);
   assert.match(dashboardPage, /initialClassification=\{parseMemberClassification\(membership\)\}/);
   assert.match(source, /useState<Classification \| null>\(initialClassification\)/);
-  assert.match(source, /aria-checked=\{classification === option\.value\}/);
+  assert.match(source, /checked=\{classification === option\.value\}/);
   assert.match(source, /ring-2 ring-primary/);
 });
 
