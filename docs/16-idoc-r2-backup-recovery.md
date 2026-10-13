@@ -212,7 +212,7 @@ The backup holds **both** schemas, so the restore command must always name the o
    SQL
    ```
 
-   The `\echo` line prints the real names before the statement runs; stop (Ctrl+C) if they are not exactly what you confirmed above. Do not retype the names from memory.
+   The `\echo` line only records in your terminal which names were used (they were already confirmed above, before this command); check it afterwards, and never retype the names from memory.
 5. Restore the chosen schema from the archive into the live database: `pg_restore --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (`--no-privileges` is only needed if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
 6. Verify (row counts, newest rows, that the application works on the affected environment, and that `idoc_backup_reader` can still read the schema). Run **IDOC R2 Schema Backups** again; the role check in the script will fail if the grants are wrong.
 7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it with the second person's agreement.
