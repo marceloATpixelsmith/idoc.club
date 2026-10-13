@@ -1,6 +1,7 @@
 import 'server-only';
 import { assertMemberCommunicationsAllowed } from '@/lib/runtime/member-launch-hold';
 import { brevoApiKeyForServer, brevoFromEmailForServer } from '@/lib/runtime/configuration';
+import { tracedFetch } from '@/lib/observability/outbound-fetch';
 
 export interface TransactionalEmail {
   html: string;
@@ -17,7 +18,7 @@ export async function sendTransactionalEmail(message: TransactionalEmail, option
   assertMemberCommunicationsAllowed('email.transactional');
   const apiKey = brevoApiKeyForServer();
   const fromEmail = brevoFromEmailForServer();
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+  const response = await tracedFetch('brevo', 'https://api.brevo.com/v3/smtp/email', {
     body: JSON.stringify({
       headers: message.messageId ? { 'X-Idoc-Message-Id': message.messageId } : undefined,
       htmlContent: message.html,
