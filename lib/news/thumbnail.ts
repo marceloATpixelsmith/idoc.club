@@ -2,6 +2,8 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
+import { tracedFetch } from '@/lib/observability/outbound-fetch';
+
 export const MAX_IMAGE_UPLOAD_BYTES = 4 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 
@@ -37,7 +39,7 @@ export async function uploadCloudinaryImage(file: File, folder: string): Promise
   upload.set('folder', folder);
   upload.set('signature', signature);
 
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+  const response = await tracedFetch('cloudinary', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     body: upload,
     method: 'POST',
   });
