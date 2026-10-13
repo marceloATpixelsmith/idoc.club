@@ -1,6 +1,6 @@
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16">
+    <div className="mx-auto max-w-4xl px-6 py-16">
       <article className="space-y-8 text-foreground">
         <header className="space-y-3 border-b pb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Privacy Policy</h1>
@@ -473,6 +473,6 @@ export default function PrivacyPage() {
           </address>
         </section>
       </article>
-    </main>
+    </div>
   );
 }
