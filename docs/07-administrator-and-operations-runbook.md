@@ -1228,7 +1228,7 @@ Production checks and job alerts (created 2026-10-12 through NerdGraph, read bac
 
 **Dashboards (created 2026-10-12 through NerdGraph, account `8600002`, public read-only):** `IDOC production overview` (`deployment.environment.name = 'production'`), `IDOC staging overview` (`vcs.ref.head.name = 'staging'`) and `Shared infrastructure: Postgres and Vercel`. Each IDOC dashboard shows requests, error spans, response time, requests over 5 seconds, the slowest routes by 95th percentile, website check results and background-job runs by HTTP status. The shared dashboard shows the Postgres export gauges (database-wide, not IDOC-only), Vercel edge, build and external-request log volumes. They are separate on purpose so staging, production and shared infrastructure are never mixed. The layout was not inspected visually when created; adjust in the New Relic dashboard editor if needed.
 
-Two application conditions were added to the same policy on 2026-10-11 and read back through NerdGraph (both critical, 15-minute window, Event timer, no gap fill, one issue per condition):
+Two application conditions were added to the same policy on 2026-10-11 and read back through NerdGraph (both critical, 15-minute window, Event timer, one issue per condition; created with no gap fill, and since 2026-10-13 a static gap fill of 0 so the issue closes once the events stop):
 
 | Condition | Query (all `Span`, `service.name = 'idoc.club'`, `span.kind = 'server'`, `vcs.ref.head.name = 'staging'`) | Threshold |
 | --- | --- | --- |
