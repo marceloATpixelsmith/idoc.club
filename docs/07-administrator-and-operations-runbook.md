@@ -100,6 +100,12 @@ Working project document. Update this document when project decisions change.
 
 News/Blog and seminar rich-text fields use the shared Tiptap editor. Administrators may select an inserted Cloudinary image and drag its lower-right resize handle. The editor persists the chosen width as a numeric HTML `width` attribute. Server sanitization accepts that attribute only for otherwise-approved Cloudinary image URLs and only when the width is between 120 and 2000 pixels; invalid or out-of-range widths are removed. The public rendering path re-sanitizes the saved HTML and preserves the same validated width, while responsive styling prevents an image from overflowing its content container.
 
+## Wiping a test email from staging (Beekeeper Studio)
+
+To reuse any email (not only `@pixelsmith.space` test addresses) for a one-off signup test on `staging.idoc.club`, open `scripts/staging-hard-delete-user.sql` in Beekeeper Studio connected to the Render database, set `v_email` (and the same email in the final verification `SELECT`), and run it. Set `v_dry_run := true` first to see per-table row counts; the script rolls back after reporting.
+
+It hard-deletes the user and everything tied to them (roles, MFA, sessions, tokens, billing rows, registrations, support messages, profile history, and matching `audit_log` rows) inside one transaction, using the same `idoc.allow_member_permanent_delete` switch as the Members admin permanent delete plus a transaction-scoped disable of the `audit_log` immutability trigger. It only touches `idoc_staging`, refuses administrator accounts and authors of retained content unless overridden, and needs the schema-owner connection (otherwise set `v_purge_audit_log := false`). It deletes database rows only; cancel any Stripe test-mode subscription separately. `scripts/e2e-delete-test-account.sql` remains the cleanup for the live auth audit, which keeps the immutable audit trail.
+
 ## Codex pull-request review request
 
 Codex automated review is advisory. When a pull request is opened or updated, the workflow requests a Codex review and exits promptly without polling. The `codex/review-complete` status is informational only and is not required by either branch ruleset; it does not certify review completion. Any Codex comments or inline findings remain visible for the author to address, while fast and risk-classified full CI workflows determine test readiness.
