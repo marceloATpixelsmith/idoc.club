@@ -20,6 +20,7 @@ import { RolesSection } from './roles-section';
 import { ExtendExpirationForm } from './extend-expiration-form';
 import { ManualPaymentForm } from '../payments/manual-payment-form';
 import { MembershipRefundForm } from '../payments/refund-form';
+import { formatTableDate } from '@/lib/format';
 
 type Selected = NonNullable<Awaited<ReturnType<typeof getPrivateMember>>>;
 type ActiveRole = Awaited<ReturnType<typeof listActiveRoles>>[number];
@@ -122,12 +123,12 @@ export function MemberDetailSheet({
           <TabsContent className="space-y-4" value="overview">
             <Section title="Seminar history">
               <div className="overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Seminar</th><th className="p-2 text-left">Date</th><th className="p-2 text-left">Registration</th><th className="p-2 text-left">Payment</th><th className="p-2 text-left">Seminar status</th><th className="p-2 text-left">Location</th></tr></thead><tbody>
-                {seminarHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={6}>No seminar history is associated with this member.</td></tr> : seminarHistory.map((seminar) => <tr className="border-t" key={seminar.id}><td className="p-2">{seminar.title}</td><td className="p-2">{seminar.seminarDate}</td><td className="p-2">{seminar.registrationStatus}</td><td className="p-2">{seminar.paymentStatus}</td><td className="p-2">{seminar.seminarStatus}</td><td className="p-2">{seminar.location}</td></tr>)}
+                {seminarHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={6}>No seminar history is associated with this member.</td></tr> : seminarHistory.map((seminar) => <tr className="border-t" key={seminar.id}><td className="p-2">{seminar.title}</td><td className="p-2">{formatTableDate(seminar.seminarDate)}</td><td className="p-2">{seminar.registrationStatus}</td><td className="p-2">{seminar.paymentStatus}</td><td className="p-2">{seminar.seminarStatus}</td><td className="p-2">{seminar.location}</td></tr>)}
               </tbody></table></div>
             </Section>
             <Section title="Payment history">
               <div className="overflow-x-auto"><table className="min-w-full border text-sm"><thead><tr><th className="p-2 text-left">Payment date</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Origin</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>
-                {paymentHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={5}>No payments have been recorded for this member.</td></tr> : paymentHistory.map((payment, index) => <tr className="border-t" key={`${payment.paidAt.toISOString()}-${index}`}><td className="p-2">{payment.paidAt.toISOString()}</td><td className="p-2">{money(payment.amountCents, payment.currency)}</td><td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td><td className="p-2">{payment.source.startsWith('stripe_') ? 'Stripe' : 'Manual'}</td><td className="p-2">{payment.reference ?? '—'}</td></tr>)}
+                {paymentHistory.length === 0 ? <tr><td className="p-4 text-muted-foreground" colSpan={5}>No payments have been recorded for this member.</td></tr> : paymentHistory.map((payment, index) => <tr className="border-t" key={`${payment.paidAt.toISOString()}-${index}`}><td className="p-2">{formatTableDate(payment.paidAt)}</td><td className="p-2">{money(payment.amountCents, payment.currency)}</td><td className="p-2">{PAYMENT_SOURCE_LABELS[payment.source] ?? payment.source}</td><td className="p-2">{payment.source.startsWith('stripe_') ? 'Stripe' : 'Manual'}</td><td className="p-2">{payment.reference ?? '—'}</td></tr>)}
               </tbody></table></div>
             </Section>
           </TabsContent>
@@ -164,7 +165,7 @@ export function MemberDetailSheet({
               </Section>
               <Section title="Stripe payment history">
                 {stripePayments.length === 0 ? <p className="text-sm">No refundable Stripe payments.</p> : <div className="space-y-3">{stripePayments.map((payment) => <article className="border-t pt-3 first:border-t-0 first:pt-0" key={payment.id}>
-                  <p className="text-sm">{payment.source} · {new Intl.NumberFormat('en-IE', { currency: payment.currency, style: 'currency' }).format(payment.amount_cents / 100)} · {new Date(payment.paid_at).toLocaleDateString()}</p>
+                  <p className="text-sm">{payment.source} · {new Intl.NumberFormat('en-IE', { currency: payment.currency, style: 'currency' }).format(payment.amount_cents / 100)} · {formatTableDate(payment.paid_at)}</p>
                   {payment.refund_status === 'succeeded' ? <p className="text-sm font-medium">Refunded</p> : <MembershipRefundForm onSuccess={closeAndRefresh} paymentId={String(payment.id)} profileId={String(profile.id)} />}
                 </article>)}</div>}
               </Section>
@@ -223,7 +224,7 @@ export function MemberDetailSheet({
                   {auditHistory.map((entry) => (
                     <tr key={entry.id} className="border-b align-top">
                       <td className="p-2">{entry.action}</td>
-                      <td className="p-2">{entry.createdAt.toISOString()}</td>
+                      <td className="p-2">{formatTableDate(entry.createdAt)}</td>
                       <td className="p-2">{entry.reason ?? '—'}</td>
                       <td className="p-2">
                         <details>

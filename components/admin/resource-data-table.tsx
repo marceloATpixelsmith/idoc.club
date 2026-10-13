@@ -291,7 +291,7 @@ export function ResourceDataTable({
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
     const header = (id: ResourceColumn, label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => (
       <DataTableColumnHeader
-        className={tableType === 'news' && id !== 'title' ? 'w-full min-w-0 justify-between whitespace-normal px-1 text-left leading-tight' : undefined}
+        className={tableType === 'news' ? 'whitespace-nowrap' : undefined}
         column={column}
         label={label}
       />
@@ -459,20 +459,24 @@ export function ResourceDataTable({
   const [dateResetSignal, setDateResetSignal] = useState(0);
   const manuallyFiltered = Boolean(from || to) || dateDraftActive;
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
+  // Auto table layout: every non-title column shrinks to fit its widest header or cell on one line
+  // (nowrap + width 1%), and Title takes whatever width remains, wrapping only when it must.
+  const shrinkToContent = { whiteSpace: 'nowrap', width: '1%' } as const;
   const newsColumnStyles = tableType === 'news'
     ? {
-      select: { width: '42px' },
-      type: { width: '120px' },
-      status: { width: '130px' },
-      access: { width: '130px' },
-      publication: { width: '165px' },
-      updated: { width: '160px' },
-      actions: { width: '92px' },
+      select: shrinkToContent,
+      title: { minWidth: '16rem', width: '100%' },
+      type: shrinkToContent,
+      status: shrinkToContent,
+      access: shrinkToContent,
+      publication: shrinkToContent,
+      updated: shrinkToContent,
+      actions: shrinkToContent,
     }
     : undefined;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} tableClassName={tableType === 'news' ? 'table-fixed' : undefined} columnStyles={newsColumnStyles} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} columnStyles={newsColumnStyles} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}

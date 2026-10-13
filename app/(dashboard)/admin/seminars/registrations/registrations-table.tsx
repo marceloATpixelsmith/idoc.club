@@ -23,6 +23,7 @@ import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { PAYMENT_STATUS_LABELS, PAYMENT_STATUSES, type PaymentStatus, registrationDisplayLabel } from '@/lib/seminars/status';
 import { PaymentMethodIcon, PaymentStatusIcon, paymentMethodLabel } from '@/components/seminars/payment-method-icon';
+import { formatTableDate } from '@/lib/format';
 
 type AdminRegistrationRow = {
   canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; id: number; is_guest: boolean;
@@ -71,7 +72,7 @@ export function RegistrationsTable({
     { id: 'registrantType', accessorFn: (row) => row.is_guest ? 'guest' : 'member', enableColumnFilter: true, enableHiding: false, header: () => null, meta: { label: 'Registrant Type', options: REGISTRANT_TYPE_OPTIONS, variant: 'multiSelect' }, cell: () => null },
     { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
     { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <div><span className="inline-flex items-center gap-2 font-medium"><PaymentStatusIcon status={row.original.payment_status} />{registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus).toUpperCase()}</span><span className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><PaymentMethodIcon method={row.original.payment_method_canonical_id} />{paymentMethodLabel(row.original.payment_method_canonical_id)}</span></div> },
-    { id: 'registered', accessorKey: 'registered_at', header: header('registered'), meta: { label: 'Registered' }, cell: ({ row }) => new Date(row.original.registered_at).toLocaleString() },
+    { id: 'registered', accessorKey: 'registered_at', header: header('registered'), meta: { label: 'Registered' }, cell: ({ row }) => formatTableDate(row.original.registered_at) },
     {
       id: 'actions', enableHiding: false, enableSorting: false, size: 90,
       header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,
