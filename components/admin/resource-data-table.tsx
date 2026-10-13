@@ -291,7 +291,7 @@ export function ResourceDataTable({
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
     const header = (id: ResourceColumn, label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => (
       <DataTableColumnHeader
-        className={tableType === 'news' && (id === 'publication' || id === 'updated') ? 'w-full min-w-0 justify-between whitespace-nowrap px-1' : undefined}
+        className={tableType === 'news' && id !== 'title' ? 'w-full min-w-0 justify-between whitespace-nowrap px-1' : undefined}
         column={column}
         label={label}
       />
@@ -462,8 +462,8 @@ export function ResourceDataTable({
   const newsColumnStyles = tableType === 'news'
     ? {
       select: { width: '42px' },
-      type: { width: '90px' },
-      status: { width: '122px' },
+      type: { width: '170px' },
+      status: { width: '140px' },
       access: { width: '130px' },
       publication: { width: '180px' },
       updated: { width: '190px' },
