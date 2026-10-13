@@ -203,7 +203,16 @@ The backup holds **both** schemas, so the restore command must always name the o
 1. Decide who approves and who runs it. Record the backup object path from Part 3, the reason, and the time.
 2. Take a fresh backup (run **IDOC R2 Schema Backups**, wait for it to pass), so the current damaged state is also recoverable.
 3. Stop writes to that schema. No application switch for this is documented, so decide how to do it for that window (for example, accept downtime on staging; for production, a maintenance announcement and a plan agreed with the second person).
-4. Using the schema-owner login (`IDOC_MIGRATION_DATABASE_URL`), keep the damaged schema rather than dropping it: `ALTER SCHEMA "$TARGET_SCHEMA" RENAME TO "${TARGET_SCHEMA}_replaced_${STAMP}";` (in `psql`, set the values first with `\set target "$TARGET_SCHEMA"` or paste the confirmed names; do not retype them from memory).
+4. Using the schema-owner login (`IDOC_MIGRATION_DATABASE_URL`), keep the damaged schema rather than dropping it. A shell variable is not expanded inside `psql`, so pass the two confirmed names to `psql` as variables and refer to them with `:"name"` (which quotes them as identifiers). Connect with the owner login's `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` variables set in this terminal (never as a URL on the command line), then run:
+
+   ```
+   "$PGBIN/psql" -v ON_ERROR_STOP=1 -v target="$TARGET_SCHEMA" -v old="${TARGET_SCHEMA}_replaced_${STAMP}" <<'SQL'
+   \echo Renaming :"target" to :"old"
+   ALTER SCHEMA :"target" RENAME TO :"old";
+   SQL
+   ```
+
+   The `\echo` line prints the real names before the statement runs; stop (Ctrl+C) if they are not exactly what you confirmed above. Do not retype the names from memory.
 5. Restore the chosen schema from the archive into the live database: `pg_restore --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (`--no-privileges` is only needed if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
 6. Verify (row counts, newest rows, that the application works on the affected environment, and that `idoc_backup_reader` can still read the schema). Run **IDOC R2 Schema Backups** again; the role check in the script will fail if the grants are wrong.
 7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it with the second person's agreement.
