@@ -23,6 +23,7 @@ import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { CATEGORY_LABELS, STATUS_LABELS, SUPPORT_CATEGORIES, SUPPORT_STATUSES, type SupportCategory } from '@/lib/support/inbox-options';
+import { formatTableDate } from '@/lib/format';
 
 type AdminSupportRow = { assignee_name: string; category: SupportCategory; member_email: string; member_name: string; profile_id: number | null; public_id: string; status: string; subject: string; total_count: number; unread: boolean; updated_at: Date; };
 
@@ -66,7 +67,7 @@ export function SupportInboxTable({ administrators, filters, initialColumnOrder,
     { id: 'category', accessorKey: 'category', enableColumnFilter: true, header: header('category'), meta: { label: 'Category', options: CATEGORY_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => CATEGORY_LABELS[row.original.category] },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => STATUS_LABELS[row.original.status] },
     { id: 'assigned', accessorKey: 'assignee_name', enableColumnFilter: true, header: header('assigned'), meta: { label: 'Assigned Administrator', options: [{ label: 'Unassigned', value: 'unassigned' }, ...administrators], variant: 'multiSelect' }, cell: ({ row }) => row.original.assignee_name || 'Unassigned' },
-    { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity Date' }, cell: ({ row }) => new Date(row.original.updated_at).toLocaleString() },
+    { id: 'activity', accessorKey: 'updated_at', header: header('activity'), meta: { label: 'Activity Date' }, cell: ({ row }) => formatTableDate(row.original.updated_at) },
     {
       id: 'actions', enableHiding: false, enableSorting: false, size: 90,
       header: () => <DataTableStaticHeader className="text-gold" label="Actions" />,

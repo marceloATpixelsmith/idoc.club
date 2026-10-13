@@ -19,9 +19,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { getDefaultColumnOrder } from '@/lib/data-table';
+import { formatTableDate } from '@/lib/format';
 
 export type ReadOnlyRow = { id: string; link?: string; [key: string]: string | undefined };
 type DateFilterValue = { from?: string; to?: string };
+
+// Any ISO timestamp cell (created/sent/detected...) is shown as dd/mm/yyyy; the raw value stays in
+// the row for filtering, sorting, and export.
+function formatReadOnlyCell(value: string | undefined) {
+  if (!value) return '—';
+  return /^\d{4}-\d{2}-\d{2}T/.test(value) ? formatTableDate(value) : value;
+}
 
 export function AdminReadOnlyTable({
   columns: definitions, dateColumn, empty, rows, searchLabel, statusColumn, tableType,
@@ -69,7 +77,7 @@ export function AdminReadOnlyTable({
         meta: id === statusColumn ? { label, options, variant: 'select' } : { label },
         cell: ({ row }) => id === 'member' && row.original.link
           ? <Link className="underline" href={row.original.link}>{row.original[id] ?? 'View member'}</Link>
-          : row.original[id] || '—',
+          : formatReadOnlyCell(row.original[id]),
       })),
     ];
     return definedColumns;

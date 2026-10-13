@@ -7,6 +7,7 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listAdminArticles } from '@/lib/news/articles';
 import { listAdminSeminars } from '@/lib/seminars/seminars';
+import { formatTableDate } from '@/lib/format';
 
 type ResourceType = 'news' | 'seminars';
 
@@ -47,7 +48,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       status: String(row.status), type: String(row.article_type ?? 'news'),
       thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : undefined,
       publication: formatAdminDate(new Date(String(row.publication_date)).toISOString().slice(0, 10)),
-      updated: new Date(String(row.updated_at)).toLocaleString(),
+      updated: formatTableDate(String(row.updated_at)),
     }));
   } else if (tableType === 'seminars') {
     const listing = await listAdminSeminars(listQuery);
