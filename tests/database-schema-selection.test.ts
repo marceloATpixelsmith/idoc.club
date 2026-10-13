@@ -84,3 +84,23 @@ test('only the staging branch is allowed to use idoc_staging in Preview', () =>
     }
   }
 });
+
+test('Production and the staging branch refuse to start without an explicit DB_SCHEMA', () => {
+  const previous = { schema: process.env.DB_SCHEMA, env: process.env.VERCEL_ENV, ref: process.env.VERCEL_GIT_COMMIT_REF };
+  try {
+    delete process.env.DB_SCHEMA;
+    process.env.VERCEL_ENV = 'production';
+    process.env.VERCEL_GIT_COMMIT_REF = 'main';
+    assert.throws(() => getDatabaseSchemaName(), /DB_SCHEMA must be set explicitly/);
+    process.env.VERCEL_ENV = 'preview';
+    process.env.VERCEL_GIT_COMMIT_REF = 'staging';
+    assert.throws(() => getDatabaseSchemaName(), /DB_SCHEMA must be set explicitly/);
+    process.env.VERCEL_GIT_COMMIT_REF = 'feature/some-other-preview';
+    assert.equal(getDatabaseSchemaName(), 'idoc');
+  } finally {
+    for (const [key, value] of [['DB_SCHEMA', previous.schema], ['VERCEL_ENV', previous.env], ['VERCEL_GIT_COMMIT_REF', previous.ref]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
