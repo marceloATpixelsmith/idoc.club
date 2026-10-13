@@ -25,10 +25,11 @@ test('News Blog admin table exposes slug, typed/status icon labels, filter and d
   assert.match(resourceTable, /row\.original\.type[\s\S]*?toUpperCase\(\)/);
   assert.match(resourceTable, /types: \[\{ label: 'NEWS', value: 'news' \}, \{ label: 'BLOG', value: 'blog' \}\]/);
   assert.match(resourceList, /publication: formatAdminDate/);
-  assert.match(resourceTable, /publication: \{ width: '180px' \}/);
-  assert.match(resourceTable, /updated: \{ width: '190px' \}/);
-  assert.match(resourceTable, /id === 'publication' \|\| id === 'updated'/);
-  assert.match(resourceTable, /justify-between whitespace-nowrap/);
+  assert.match(resourceTable, /publication: \{ width: '165px' \}/);
+  assert.match(resourceTable, /updated: \{ width: '160px' \}/);
+  assert.match(resourceTable, /tableType === 'news' && id !== 'title'/);
+  assert.match(resourceTable, /type: \{ width: '120px' \}/);
+  assert.match(resourceTable, /justify-between whitespace-normal/);
   assert.doesNotMatch(resourceTable, /ChevronDown|top-1\/2 size-3\.5 -translate-y-1\/2/);
 });
 

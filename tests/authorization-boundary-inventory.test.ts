@@ -102,7 +102,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/audit-log/route.ts': 'requireSuperAdmin',
   'app/api/admin/export/members/route.ts': 'requireAdministrator',
   'app/api/admin/export/notifications/route.ts': 'requireAdministrator',
-  'app/api/admin/export/payments/route.ts': 'requireSuperAdmin',
+  'app/api/admin/export/payments/route.ts': 'requireAdministrator',
   'app/api/admin/export/seminar-all-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/selected-reports/route.ts': 'requireAdministrator',

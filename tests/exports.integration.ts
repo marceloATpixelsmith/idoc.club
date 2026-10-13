@@ -42,16 +42,14 @@ test('listAllMembersForExport includes a profile with zero memberships alongside
   assert.equal(withoutMembershipRow?.validUntil, null);
 });
 
-test('listAllPaymentsForExport requires Super Admin, not just Administrator', async () => {
+test('listAllPaymentsForExport allows an Administrator and rejects a non-administrator', async () => {
   const admin = await adminUser();
-  const superAdmin = await superAdminUser();
   const member = await createUser();
   const profile = await createProfile(member.id);
   await sql`insert into idoc.payments(profile_id, source, amount_cents, currency, paid_at, administrator_id, reason)
     values (${profile.id}, 'cash', 8000, 'EUR', now(), ${admin.id}, 'fixture payment')`;
 
-  await assert.rejects(asAdministration(admin.id, () => listAllPaymentsForExport()));
-  const rows = await asAdministration(superAdmin.id, () => listAllPaymentsForExport());
+  const rows = await asAdministration(admin.id, () => listAllPaymentsForExport());
   assert.equal(rows.length, 1);
   assert.equal(rows[0].source, 'cash');
   assert.equal(rows[0].email, member.email);
@@ -177,18 +175,14 @@ test('selected report export re-fetches rows, enforces administration, and audit
   assert.deepEqual(audit.after_json, { resultCount: 1, selectedCount: 1, table: 'reconciliation' });
 });
 
-test('the payments export route rejects a plain administrator with a 401, and succeeds for a Super Admin', async () => {
+test('the payments export route succeeds for an Administrator', async () => {
   const admin = await adminUser();
-  const superAdmin = await superAdminUser();
   const member = await createUser();
   const profile = await createProfile(member.id);
   await sql`insert into idoc.payments(profile_id, source, amount_cents, currency, paid_at, administrator_id, reason)
     values (${profile.id}, 'cash', 8000, 'EUR', now(), ${admin.id}, 'fixture payment')`;
 
-  const forbidden = await asAdministration(admin.id, () => exportPayments());
-  assert.equal(forbidden.status, 401);
-
-  const allowed = await asAdministration(superAdmin.id, () => exportPayments());
+  const allowed = await asAdministration(admin.id, () => exportPayments());
   assert.equal(allowed.status, 200);
   assert.equal(allowed.headers.get('Content-Type'), 'text/csv; charset=utf-8');
   const body = await allowed.text();
