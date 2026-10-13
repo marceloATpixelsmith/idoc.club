@@ -203,6 +203,23 @@ The backup holds **both** schemas, so the restore command must always name the o
 1. Decide who approves and who runs it. Record the backup object path from Part 3, the reason, and the time.
 2. Take a fresh backup (run **IDOC R2 Schema Backups**, wait for it to pass), so the current damaged state is also recoverable.
 3. Stop writes to that schema. No application switch for this is documented, so decide how to do it for that window (for example, accept downtime on staging; for production, a maintenance announcement and a plan agreed with the second person).
+**Set up the live-database window before step 4 (and use it for steps 4 to 7).** The scratch window from Part 6 has `PGHOST`, `PGPORT` and `PGUSER` pointing at the scratch server on your Mac, and a newly opened terminal window inherits none of the variables or the folder from Parts 1 and 2. Open a **new** terminal window and run all of this in it, before anything that changes the live database (including the rename in step 4), so the rename and the restore both work and a recovery rename is possible:
+
+```
+cd ~/idoc-restore
+export PGBIN="$(brew --prefix postgresql@17)/bin"
+export PGHOST=<owner login host> PGPORT=<port> PGUSER=<owner login user> PGDATABASE=ayni_space
+read -rs "PGPASSWORD?Schema-owner password: "; export PGPASSWORD
+read -r TARGET_SCHEMA            # type exactly: idoc_staging   or   idoc_production
+case "$TARGET_SCHEMA" in idoc_staging|idoc_production) ;; *) echo "Not a valid target"; return 1 2>/dev/null || exit 1 ;; esac
+STAMP=$(date -u +%Y%m%d)
+printf "Type the schema name again to confirm: "; read -r CONFIRM; [ "$CONFIRM" = "$TARGET_SCHEMA" ] || { echo "Not confirmed"; return 1 2>/dev/null || exit 1; }
+"$PGBIN/psql" -c "select current_user, current_database()"   # must show the owner login and ayni_space, not restore_check
+ls idoc.dump                                                   # the decrypted archive from Part 5 must be here
+```
+
+(The `read -rs "VAR?prompt"` form is for zsh, the Mac default; in bash use `read -rsp "prompt: " PGPASSWORD`. Get the host, port and user from the schema-owner connection string in your password manager or Render, without pasting the string into any command.) If the `psql` check shows `restore_check`, or `ls` cannot find `idoc.dump`, stop and fix the window before going on.
+
 4. Using the schema-owner login (`IDOC_MIGRATION_DATABASE_URL`), keep the damaged schema rather than dropping it. A shell variable is not expanded inside `psql`, so pass the two confirmed names to `psql` as variables and refer to them with `:"name"` (which quotes them as identifiers). Connect with the owner login's `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` variables set in this terminal (never as a URL on the command line), then run:
 
    ```
@@ -213,7 +230,8 @@ The backup holds **both** schemas, so the restore command must always name the o
    ```
 
    The `\echo` line only records in your terminal which names were used (they were already confirmed above, before this command); check it afterwards, and never retype the names from memory.
-5. Restore the chosen schema from the archive into the live database: `pg_restore --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (`--no-privileges` is only needed if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
+5. Restore the chosen schema from the archive into the live database **as one transaction**, so that either all of it is applied or none of it is: `pg_restore --single-transaction --exit-on-error --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (add `--no-privileges` only if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Run this in the live-database window you set up before step 4. Without `--single-transaction --exit-on-error`, `pg_restore` carries on after an SQL error and can leave a half-built schema in place after the original has been renamed away. **If this command reports any error, nothing has been applied: put the original back with the same `psql` pattern as step 4 (`ALTER SCHEMA :"old" RENAME TO :"target";`, with `old` and `target` set the same way), confirm the application works, and stop.** Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
+
 6. Verify (row counts, newest rows, that the application works on the affected environment, and that `idoc_backup_reader` can still read the schema). Run **IDOC R2 Schema Backups** again; the role check in the script will fail if the grants are wrong.
 7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it with the second person's agreement.
 
@@ -226,7 +244,7 @@ The backup holds **both** schemas, so the restore command must always name the o
 
 ### Part 11: Clean up (always)
 
-In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the window. In your main window: `cd ~ && rm -rf ~/idoc-restore` (this removes the encrypted file, the decrypted dump and the scratch database), and `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY R2_ACCOUNT_ID`. If you created a temporary R2 read token for this, revoke it in Cloudflare. Record in `docs/observability-implementation-status.md` (or the operations log) which backup was used, who approved it, and the outcome.
+In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the window. In your main window: `cd ~ && rm -rf ~/idoc-restore` (this removes the encrypted file, the decrypted dump and the scratch database), and `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY R2_ACCOUNT_ID`. If you did Part 9, also clear the database credentials in **every** window you used for it, then close those windows: `unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE TARGET_SCHEMA STAMP CONFIRM`. If you created a temporary R2 read token for this, revoke it in Cloudflare. Record in `docs/observability-implementation-status.md` (or the operations log) which backup was used, who approved it, and the outcome.
 
 ## Known pre-existing blocker
 
