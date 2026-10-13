@@ -58,18 +58,30 @@ test('the backup script splits the database URL into PG* environment variables a
   assert.match(runbook, /only\*\* query option accepted is a single, non-empty `sslmode`/);
 });
 
-test('the nightly backup runs a restore check into a throwaway cluster and the pre-migration backup does not', () => {
+test('the nightly restore check runs in a separate step with no credentials and the pre-migration backup does not run it', () => {
   const nightly = readFileSync('.github/workflows/idoc-r2-backups.yml', 'utf8');
   const migration = readFileSync('.github/workflows/manual-promotion-0071.yml', 'utf8');
   assert.match(nightly, /IDOC_RESTORE_CHECK: 'true'/);
   assert.match(nightly, /apt-get install -y postgresql-17 postgresql-client-17/);
   assert.match(nightly, /create_main_cluster = false/);
   assert.doesNotMatch(migration, /IDOC_RESTORE_CHECK/); // the mandatory pre-migration backup stays fast
-  const script = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
-  assert.match(script, /listen_addresses=''/); // unix socket only, no network listener
-  assert.match(script, /pg_restore" --no-owner --no-privileges --dbname=restore_check_db/);
-  assert.match(script, /Restore check failed: \$schema has \$actual restored table/);
+  // pg_restore executes SQL taken from the archive, so its step must not see any credential.
+  const restoreStep = nightly.split('- name: Restore check (runs with no credentials)')[1]?.split('- name:')[0] ?? '';
+  assert.match(restoreStep, /restore-check-idoc\.sh/);
+  assert.doesNotMatch(restoreStep, /secrets\.|env:|vars\./);
+  assert.doesNotMatch(nightly, /^env:/m); // no workflow-level environment that every step would inherit
+  assert.match(nightly, /if: always\(\)\n\s+run: rm -rf/); // the handed-over archive is removed even when the check fails
+  const backup = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
+  assert.doesNotMatch(backup, /pg_restore" --no-owner/); // the backup process never restores
+  assert.match(backup, /RESTORE_CHECK_INPUT_DIR/);
+  const restore = readFileSync('scripts/restore-check-idoc.sh', 'utf8');
+  for (const name of ['DATABASE_BACKUP_URL', 'IDOC_BACKUP_ENCRYPTION_PASSPHRASE', 'AWS_SECRET_ACCESS_KEY', 'PGPASSWORD']) assert.match(restore, new RegExp(name));
+  assert.match(restore, /Restore check must run without credentials/);
+  assert.match(restore, /env -i PATH=/); // every PostgreSQL command runs with an empty environment
+  assert.match(restore, /listen_addresses=''/); // unix socket only, no network listener
+  assert.match(restore, /--no-owner --no-privileges --dbname=restore_check_db/);
+  assert.match(restore, /Restore check failed: \$schema has \$actual restored table/);
   // Failure output is limited to error summary lines because detail lines can contain row values.
-  assert.match(script, /grep '\^pg_restore: error:'/);
+  assert.match(restore, /grep '\^pg_restore: error:'/);
   assert.match(readFileSync('docs/16-idoc-r2-backup-recovery.md', 'utf8'), /Automated restore check/);
 });
