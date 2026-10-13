@@ -291,7 +291,7 @@ export function ResourceDataTable({
   const columns = useMemo<ColumnDef<ResourceRow>[]>(() => {
     const header = (id: ResourceColumn, label: string) => ({ column }: HeaderContext<ResourceRow, unknown>) => (
       <DataTableColumnHeader
-        className={tableType === 'news' && id !== 'title' ? 'w-full min-w-0 justify-between whitespace-normal px-1 text-left leading-tight' : undefined}
+        className={tableType === 'news' && id !== 'title' ? 'w-full min-w-0 justify-between whitespace-nowrap px-1' : undefined}
         column={column}
         label={label}
       />
@@ -461,13 +461,13 @@ export function ResourceDataTable({
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   const newsColumnStyles = tableType === 'news'
     ? {
-      select: { width: '42px' },
-      type: { width: '120px' },
+      select: { width: '40px' },
+      type: { width: '160px' },
       status: { width: '130px' },
-      access: { width: '130px' },
-      publication: { width: '165px' },
-      updated: { width: '160px' },
-      actions: { width: '92px' },
+      access: { width: '115px' },
+      publication: { width: '200px' },
+      updated: { width: '130px' },
+      actions: { width: '80px' },
     }
     : undefined;
   return <>
