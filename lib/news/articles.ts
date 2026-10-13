@@ -91,32 +91,47 @@ const LEGACY_BLOG_SLUGS = [
   'integrity-beyond-compliance',
 ] as const;
 
-async function newsSchemaSupportsTypeAndThumbnail(): Promise<boolean> {
+/** These probes check the schema the connection actually uses (`current_schema()`, from the pool's
+ * search_path), never the literal legacy name `idoc`: that schema does not exist in the shared database, so a
+ * hardcoded probe always answered "not ready" and sent every public news query down the legacy fallback
+ * (no audience filter, derived types and thumbnails) plus three catalog lookups per call. A positive answer is
+ * remembered for the life of the process (columns are only ever added); a negative one is re-checked each
+ * time so a migration applied later is noticed. */
+function cacheWhenReady(probe: () => Promise<boolean>): () => Promise<boolean> {
+  let ready = false;
+  return async () => {
+    if (ready) return true;
+    ready = await probe();
+    return ready;
+  };
+}
+
+const newsSchemaSupportsTypeAndThumbnail = cacheWhenReady(async () => {
   const [row] = await client<{ ready: boolean }[]>`
     select (
-      exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='article_type')
-      and exists(select 1 from information_schema.columns where table_schema='idoc' and table_name='news_articles' and column_name='thumbnail_url')
+      exists(select 1 from information_schema.columns where table_schema=current_schema() and table_name='news_articles' and column_name='article_type')
+      and exists(select 1 from information_schema.columns where table_schema=current_schema() and table_name='news_articles' and column_name='thumbnail_url')
     ) as ready`;
   return Boolean(row?.ready);
-}
+});
 
-async function newsSchemaSupportsAudience(): Promise<boolean> {
+const newsSchemaSupportsAudience = cacheWhenReady(async () => {
   const [row] = await client<{ ready: boolean }[]>`
     select exists(
       select 1 from information_schema.columns
-      where table_schema='idoc' and table_name='news_articles' and column_name='audience'
+      where table_schema=current_schema() and table_name='news_articles' and column_name='audience'
     ) as ready`;
   return Boolean(row?.ready);
-}
+});
 
-async function newsSchemaSupportsExternalUrl(): Promise<boolean> {
+const newsSchemaSupportsExternalUrl = cacheWhenReady(async () => {
   const [row] = await client<{ ready: boolean }[]>`
     select exists(
       select 1 from information_schema.columns
-      where table_schema='idoc' and table_name='news_articles' and column_name='external_url'
+      where table_schema=current_schema() and table_name='news_articles' and column_name='external_url'
     ) as ready`;
   return Boolean(row?.ready);
-}
+});
 
 export async function requireNewsArticleSchema() {
   if ((await newsSchemaSupportsTypeAndThumbnail()) && (await newsSchemaSupportsExternalUrl()) && (await newsSchemaSupportsAudience())) return;
