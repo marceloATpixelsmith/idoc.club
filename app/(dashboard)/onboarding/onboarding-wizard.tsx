@@ -202,7 +202,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
 
   if (step === 'type') {
     return (
-      <AuthShell description="Select the official capacity that best describes you. You can hold more than one." hideVisual title="What kind of official are you?" wide>
+      <AuthShell description="Select the membership type that best describes you." hideVisual title="What kind of official are you?" wide>
         <div aria-label="Official type" className="flex flex-col gap-3" role="radiogroup">
           {TYPE_OPTIONS.map((option) => (
             <label
@@ -217,7 +217,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
                 type="radio"
                 value={option.value}
               />
-              <span className="flex shrink-0 items-center gap-1.5">
+              <span className="flex w-12 shrink-0 items-center gap-1.5">
                 {option.icons.map((icon) => <TypeIcon key={icon} type={icon} />)}
               </span>
               <span className="font-medium text-foreground">{option.label}</span>
