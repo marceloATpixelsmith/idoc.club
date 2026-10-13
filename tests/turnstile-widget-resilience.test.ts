@@ -98,3 +98,8 @@ test('a widget that rendered but issued no token (e.g. after a server-action red
   assert.match(widget, /challengeVisibleRef\.current\) return/);
   assert.match(widget, /if \(window\.turnstile\) setScriptLoaded\(true\)/);
 });
+
+test('the token watchdog waits longer than Cloudflare\'s built-in 8 second widget retry', () => {
+  const match = widget.match(/const TOKEN_WATCHDOG_MS = ([0-9_]+);/);
+  assert.ok(match && Number(match[1].replace(/_/g, '')) > 8000);
+});

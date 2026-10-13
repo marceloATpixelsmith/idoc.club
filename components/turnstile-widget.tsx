@@ -19,7 +19,9 @@ const SCRIPT_LOAD_TIMEOUT_MS = 10_000;
 // A widget that rendered but never produced a token (seen after a server-action redirect, e.g. the
 // password-reset return to /sign-in, where only a manual refresh recovered it) is re-rendered in
 // place rather than leaving the gated submit button disabled. Never touches the <Script> element.
-const TOKEN_WATCHDOG_MS = 6_000;
+// Longer than Cloudflare's own built-in widget retry interval (8 s, `retry: 'auto'`) so this never
+// discards a widget that is about to retry itself.
+const TOKEN_WATCHDOG_MS = 12_000;
 const TOKEN_WATCHDOG_ATTEMPTS = 3;
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
