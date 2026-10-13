@@ -16,8 +16,8 @@
 -- devices, Google identity links, tokens, OTP codes, delivery/notification outboxes, memberships,
 -- subscriptions, payments, refunds, seminar registrations (including guest registrations made
 -- with the email), consents, support conversations/messages, activity logs, table preferences,
--- invitations, profile change history, and audit_log rows by/about the user or mentioning the
--- email.
+-- invitations, profile change history, and audit_log rows by/about the user or carrying the exact
+-- email as a top-level JSON value.
 --
 -- Safety:
 --  * Touches ONLY schema idoc_staging. It never reads or writes idoc_production.
@@ -119,7 +119,10 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('payment_refunds', v_n);
   DELETE FROM seminar_registrations WHERE id = ANY(v_regs);
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('seminar_registrations', v_n);
-  DELETE FROM notification_outbox WHERE profile_id = ANY(v_pids);
+  DELETE FROM notification_outbox
+   WHERE profile_id = ANY(v_pids)
+      OR lower(payload->>'to') = lower(v_email)  -- guest confirmations: profile_id is NULL, recipient only in payload
+      OR (profile_id IS NULL AND payload->>'registrationId' = ANY(SELECT x::text FROM unnest(v_regs) x));
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('notification_outbox', v_n);
   DELETE FROM reconciliation_findings WHERE profile_id = ANY(v_pids);
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('reconciliation_findings', v_n);
@@ -177,7 +180,7 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('google_oauth_transactions', v_n);
   DELETE FROM external_identities WHERE user_id = ANY(v_uids);
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('external_identities', v_n);
-  DELETE FROM auth_security_notification_outbox WHERE user_id = ANY(v_uids);
+  DELETE FROM auth_security_notification_outbox WHERE user_id = ANY(v_uids) OR lower(recipient_email) = lower(v_email);  -- e.g. old-address notices queued under another user's id
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('auth_security_notification_outbox', v_n);
   DELETE FROM account_delivery_outbox WHERE user_id = ANY(v_uids);
   GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('account_delivery_outbox', v_n);
@@ -211,9 +214,10 @@ BEGIN
      WHERE actor_id = ANY(v_uids)
         OR (entity_type = 'user' AND entity_id = ANY(SELECT x::text FROM unnest(v_uids) x))
         OR (entity_type = 'profile' AND entity_id = ANY(SELECT x::text FROM unnest(v_pids) x))
-        OR position(lower(v_email) IN lower(coalesce(before_json::text, ''))) > 0
-        OR position(lower(v_email) IN lower(coalesce(after_json::text, ''))) > 0
-        OR position(lower(v_email) IN lower(coalesce(reason, ''))) > 0;
+        OR (entity_type = 'seminar_registration' AND entity_id = ANY(SELECT x::text FROM unnest(v_regs) x))
+        -- exact (whole-value, case-insensitive) email match on top-level JSON fields only; never substring
+        OR (jsonb_typeof(before_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(before_json) j WHERE lower(j.value) = lower(v_email)))
+        OR (jsonb_typeof(after_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(after_json) j WHERE lower(j.value) = lower(v_email)));
     GET DIAGNOSTICS v_n = ROW_COUNT; v_counts := v_counts || jsonb_build_object('audit_log', v_n);
   END IF;
 
@@ -260,5 +264,8 @@ SELECT
   (SELECT count(*) FROM idoc_staging.email_otp_codes WHERE lower(email) = lower('someone@example.com')) AS otp_codes,
   (SELECT count(*) FROM idoc_staging.invitations WHERE lower(email) = lower('someone@example.com')) AS invitations,
   (SELECT count(*) FROM idoc_staging.seminar_registrations WHERE lower(guest_email) = lower('someone@example.com')) AS guest_registrations,
-  (SELECT count(*) FROM idoc_staging.audit_log WHERE position(lower('someone@example.com') IN lower(coalesce(before_json::text, '') || coalesce(after_json::text, '') || coalesce(reason, ''))) > 0) AS audit_log_mentions;
+  (SELECT count(*) FROM idoc_staging.audit_log a WHERE
+     (jsonb_typeof(a.before_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(a.before_json) j WHERE lower(j.value) = lower('someone@example.com')))
+  OR (jsonb_typeof(a.after_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(a.after_json) j WHERE lower(j.value) = lower('someone@example.com')))) AS audit_log_mentions,
+  (SELECT count(*) FROM idoc_staging.notification_outbox WHERE lower(payload->>'to') = lower('someone@example.com')) AS notifications;
 -- ^ also replace the email in this SELECT with the one you used above.
