@@ -193,6 +193,14 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
               <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="phone">Phone</Label>
               <InternationalPhoneInput id="phone" name="phone" onChange={setPhone} value={phone} />
             </div>
+            <div className="max-w-xl">
+              <input name="directoryEmailOptInField" type="hidden" value="1" />
+              <label className="flex items-start gap-2 text-sm font-semibold text-foreground">
+                <input className="mt-0.5" defaultChecked={Boolean(member?.profile.directoryEmailOptIn)} name="directoryEmailOptIn" type="checkbox" />
+                <span>Show my email in the member directory</span>
+              </label>
+              <p className="mt-1 pl-6 text-xs text-muted-foreground">Opting into showing your email in the directory is a great way for members to be able to get in touch with you for things like judging opportunities etc.</p>
+            </div>
           </fieldset>
 
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">

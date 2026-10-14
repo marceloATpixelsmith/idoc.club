@@ -10,20 +10,20 @@ import {
 beforeEach(resetIdoc);
 after(closeHarness);
 
-test('a paypal payment is recorded with the reference, extends the membership, and writes a full audit trail', async () => {
+test('a manually registered Stripe payment is recorded with the reference, extends the membership, and writes a full audit trail', async () => {
   const admin = await adminUser();
   const member = await createUser();
   const profile = await createProfile(member.id);
   await createMembership(profile.id, true); // valid_until 2099-12-31
 
   const result = await asAdmin(admin.id, () => recordManualPayment({
-    paidAt: '2026-01-01', profileId: profile.id, reason: 'Phone request, confirmed by email', reference: 'PP-12345', source: 'paypal',
+    paidAt: '2026-01-01', profileId: profile.id, reason: 'Phone request, confirmed by email', reference: 'pi_manual_12345', source: 'stripe_manual',
   }));
-  assert.equal(result.payment.source, 'paypal');
+  assert.equal(result.payment.source, 'stripe_manual');
   assert.equal(result.payment.amountCents, 8000);
   assert.equal(result.payment.currency, 'EUR');
   assert.equal(result.payment.administratorId, admin.id);
-  assert.equal(result.payment.reference, 'PP-12345');
+  assert.equal(result.payment.reference, 'pi_manual_12345');
   assert.equal(result.membership.status, 'active');
   assert.equal(result.membership.validUntil, '2100-12-31'); // early renewal: 2099-12-31 + 1 year
 
@@ -73,12 +73,12 @@ test('a complimentary grant records the nominal €80 value, requires no referen
   assert.equal(result.membership.status, 'complimentary');
 });
 
-test('paypal and bank_transfer without a reference are rejected before any row is written', async () => {
+test('stripe_manual and bank_transfer without a Stripe Payment ID / bank transfer reference are rejected before any row is written', async () => {
   const admin = await adminUser();
   const member = await createUser();
   const profile = await createProfile(member.id);
   await createMembership(profile.id, true);
-  for (const source of ['paypal', 'bank_transfer'] as const) {
+  for (const source of ['stripe_manual', 'bank_transfer'] as const) {
     await assert.rejects(asAdmin(admin.id, () => recordManualPayment({
       paidAt: '2026-01-01', profileId: profile.id, reason: 'Missing reference', source,
     })));
@@ -225,4 +225,33 @@ test('searchMembersForAdmin matches case-insensitively on name or email, require
 
   const nonAdmin = await createUser();
   await assert.rejects(withTestMembershipBoundary({ actor: { id: nonAdmin.id, roles: [] } }, () => searchMembersForAdmin(member.email)));
+});
+
+test('PayPal is no longer an accepted manual payment source', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await assert.rejects(asAdmin(admin.id, () => recordManualPayment({
+    paidAt: '2026-01-01', profileId: profile.id, reason: 'Retired source', reference: 'PP-1', source: 'paypal',
+  })));
+});
+
+test('recording an active member\'s manual payment queues the "fully paid and accessible" email, once, but a complimentary grant does not', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  const result = await asAdmin(admin.id, () => recordManualPayment({
+    paidAt: '2026-01-01', profileId: profile.id, reason: 'Paid by transfer', reference: 'BT-1', source: 'bank_transfer',
+  }));
+  const queued = await sql`select kind,payload,dedupe_key from idoc.notification_outbox where profile_id=${profile.id} and kind='membership.manual_payment_recorded'`;
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].dedupe_key, `membership.manual_payment_recorded:${result.payment.id}`);
+  assert.equal(queued[0].payload.to, member.email);
+  assert.equal(queued[0].payload.expirationDate, result.membership.validUntil);
+
+  const other = await createUser();
+  const otherProfile = await createProfile(other.id);
+  await asAdmin(admin.id, () => recordManualPayment({ paidAt: '2026-01-01', profileId: otherProfile.id, reason: 'Granted', source: 'complimentary' }));
+  assert.equal((await sql`select count(*)::int count from idoc.notification_outbox where profile_id=${otherProfile.id} and kind='membership.manual_payment_recorded'`)[0].count, 0);
 });

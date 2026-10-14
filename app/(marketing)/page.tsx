@@ -64,7 +64,7 @@ export default async function Home() {
             <div className="flex items-end justify-between gap-6">
               <div>
                 <p className="eyebrow">Calendar</p>
-                <h2 className="mt-3 text-4xl">Upcoming Seminars</h2>
+                <h2 className="mt-3 text-4xl">Upcoming Seminars/Courses</h2>
               </div>
               <Link
                 href="/seminars"
@@ -75,9 +75,9 @@ export default async function Home() {
             </div>
 
             <div className="mt-10">
-              <h3 className="section-label">Available seminars</h3>
+              <h3 className="section-label">Available seminars/courses</h3>
               {upcomingSeminars.length === 0 ? (
-                <p className="mt-6 text-muted-foreground">No seminars have been published yet. Check back soon.</p>
+                <p className="mt-6 text-muted-foreground">No seminars/courses have been published yet. Check back soon.</p>
               ) : (
                 <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">
                   {upcomingSeminars.map((seminar) => (
@@ -89,7 +89,7 @@ export default async function Home() {
               )}
               {pastSeminars.length ? (
                 <div className="mt-12">
-                  <h3 className="section-label">Past seminars</h3>
+                  <h3 className="section-label">Past seminars/courses</h3>
                   <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">
                     {pastSeminars.map((seminar) => (
                       <li key={seminar.id}>

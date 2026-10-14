@@ -468,7 +468,7 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
         String(source.language), String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)),
         sanitizeArticleContent(String(source.participant_profile)), sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)),
         sanitizeArticleContent(String(source.accommodation_information)), Number(source.capacity), Number(source.member_price_cents),
-        Number(source.non_member_price_cents), source.registration_deadline, String(source.status), Boolean(source.is_fei),
+        Number(source.non_member_price_cents ?? source.member_price_cents), source.registration_deadline, String(source.status), Boolean(source.is_fei),
         source.levels, actorId]);
     return result[0].id;
   }
@@ -483,7 +483,7 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
       source.start_time, source.end_time, source.timezone, String(source.location), String(source.language),
       String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)), sanitizeArticleContent(String(source.participant_profile)),
       sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)), sanitizeArticleContent(String(source.accommodation_information)),
-      Number(source.capacity), Number(source.member_price_cents), Number(source.non_member_price_cents),
+      Number(source.capacity), Number(source.member_price_cents), Number(source.non_member_price_cents ?? source.member_price_cents),
       source.registration_deadline, String(source.status), Boolean(source.is_fei), source.levels, actorId, Number(target.id)]);
   return Number(target.id);
 }

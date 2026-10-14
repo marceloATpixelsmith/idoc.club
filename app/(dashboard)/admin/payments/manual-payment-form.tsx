@@ -41,7 +41,7 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="reference">Reference / evidence (required for PayPal and bank transfer)</Label>
+        <Label htmlFor="reference">Stripe Payment ID / Bank Transfer Reference</Label>
         <Input id="reference" name="reference" type="text" />
       </div>
       <div className="space-y-1.5">

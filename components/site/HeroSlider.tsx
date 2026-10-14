@@ -32,11 +32,11 @@ const slides: Slide[] = [
     image: '/hero-seminar.jpg',
     alt: 'Dressage rider in extended trot in a dim arena',
     focal: '55% 50%',
-    eyebrow: 'Seminars & Courses 2026',
+    eyebrow: 'Seminars/Courses 2026',
     title: 'Education that keeps',
     titleAccent: 'officials aligned',
     body: 'Maintenance courses, young horse seminars and para dressage transfer-up courses — from Falsterbo to Verden and Hartpury. Members receive priority information and registration details.',
-    primary: { label: 'View Seminars', href: '/seminars' },
+    primary: { label: 'View Seminars/Courses', href: '/seminars' },
     secondary: { label: 'Membership Benefits', href: '/membership' },
   },
   {

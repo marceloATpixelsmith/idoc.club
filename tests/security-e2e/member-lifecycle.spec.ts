@@ -16,7 +16,7 @@ test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origin
 test.describe.configure({ mode: 'serial' });
 
 const email = uniqueEmail('lifecycle');
-const MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 4500, nonMemberCents: 7000, title: 'E2E Lifecycle Member Seminar' };
+const MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 4500, title: 'E2E Lifecycle Member Seminar' };
 let memberSeminarId = 0;
 
 async function profileRow() {
@@ -136,6 +136,6 @@ test.describe('after signup', () => {
     expect((await registrationFor(email, MEMBER_SEMINAR.title)).payment_status).toBe('paid');
 
     await page.goto('/seminars?view=my');
-    await expect(page.locator('li', { hasText: MEMBER_SEMINAR.title })).toContainText('(paid)');
+    await expect(page.locator('li', { hasText: MEMBER_SEMINAR.title })).toContainText('Payment Status: Paid');
   });
 });

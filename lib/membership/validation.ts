@@ -60,6 +60,9 @@ export const memberProfileSchema = z.object({
   address2: z.string().trim().max(200).optional().transform((value) => value || null),
   city: requiredText('City', 100),
   countryCode,
+  // Opt-in to showing the member's email in the paid member directory. Undefined means "leave as is"
+  // (an administrator correction never silently flips it); a brand-new profile defaults to not shown.
+  directoryEmailOptIn: z.boolean().optional(),
   firstName: requiredText('First name', 100),
   lastName: requiredText('Last name', 100),
   phone: optionalMemberPhoneSchema,
@@ -109,7 +112,7 @@ export function parseMemberProfileFormData(formData: FormData): unknown {
     ...(classification === 'judge' || classification === 'judge_steward' ? [{ ...official, isTechnicalDelegate: formData.get('isTechnicalDelegate') === 'yes', officialStatuses: formData.getAll('judgeStatus'), roleType: 'judge' }] : []),
     ...(classification === 'steward' || classification === 'judge_steward' ? [{ ...official, officialStatuses: formData.getAll('stewardStatus'), roleType: 'steward' }] : []),
   ];
-  return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: formData.get('phone'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
+  return { address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'), countryCode: formData.get('countryCode'), directoryEmailOptIn: formData.has('directoryEmailOptInField') ? formData.get('directoryEmailOptIn') === 'on' : undefined, firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: formData.get('phone'), postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince') };
 }
 
 // AUTH-IDENTITY-003: NFC normalization first makes the subsequent case-fold deterministic across
