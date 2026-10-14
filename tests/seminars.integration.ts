@@ -354,6 +354,25 @@ test('every seminar create, edit, status change, and registration mutation write
   }
 });
 
+test('an administrator marking a seminar registration paid queues exactly one "Seminar payment confirmed" notice for the registrant', async () => {
+  const admin = await adminUser();
+  const { profile, user } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id, { price: '80.00' });
+  await asMember(user.id, () => registerForSeminar(seminarId, 'bank_transfer'));
+  const [registrationRow] = await sql<{ id: number }[]>`select id from idoc.seminar_registrations where seminar_id=${seminarId}`;
+  const queuedNotices = () => sql<{ kind: string; payload: Record<string, unknown> }[]>`select kind,payload from idoc.notification_outbox where kind='seminar.payment_confirmed' and (payload->>'registrationId')::int=${registrationRow.id}`;
+  assert.equal((await queuedNotices()).length, 0, 'no payment notice exists before the payment is recorded');
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'bank_transfer', 'REF-NOTICE'));
+  // Recording the same payment again is a no-op, so the registrant is never emailed twice.
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'bank_transfer', 'REF-NOTICE'));
+  const notices = await queuedNotices();
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].payload.amountCents, 8000);
+  assert.equal(notices[0].payload.seminarId, seminarId);
+  assert.ok(typeof notices[0].payload.to === 'string' && notices[0].payload.to.length > 0);
+  assert.equal((await sql`select profile_id from idoc.notification_outbox where dedupe_key=${`seminar.payment_confirmed:${registrationRow.id}:manual`}`)[0].profile_id, profile.id);
+});
+
 test('a Stripe Checkout Session completion marks the exact registration paid, verified against this seminar\'s own member price, and is idempotent on webhook replay', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();

@@ -575,3 +575,16 @@ test('an administrator creates a registration by looking up an active member, wh
   // Seminar and payment method sit side by side at 50% each on desktop.
   assert.match(drawer, /grid gap-4 md:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
 });
+
+test('an administrator recording a seminar payment queues the Seminar payment confirmed notice in the same transaction', () => {
+  const source = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const start = source.indexOf('export async function recordManualSeminarPayment');
+  const body = source.slice(start, source.indexOf('export async function', start + 10));
+  assert.match(body, /payment_status='paid'/);
+  assert.match(body, /'seminar\.payment_confirmed'/);
+  assert.match(body, /seminar\.payment_confirmed:\$\{registrationId\.data\}:manual/);
+  assert.match(body, /on conflict\(dedupe_key\) do nothing/);
+  // The notice is queued inside the client.begin transaction that records the payment.
+  assert.ok(body.indexOf("'seminar.payment_confirmed'") > body.indexOf("payment_status='paid'"));
+  assert.ok(body.indexOf('client.begin') < body.indexOf("payment_status='paid'"));
+});
