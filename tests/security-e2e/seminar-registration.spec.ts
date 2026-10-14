@@ -31,8 +31,14 @@ const unpaidMember = uniqueEmail('seminar-unpaid');
 
 async function openPaymentChoices(page: Page, seminarId: number) {
   await page.goto(`/seminars/${seminarId}`);
-  await page.getByRole('button', { name: /^Register/ }).first().click();
-  return page.getByRole('dialog');
+  const dialog = page.getByRole('dialog');
+  // The dev server can be slow to hydrate: a click before hydration is silently ignored, so retry the
+  // click until the payment dialog is actually open (opening it again is idempotent).
+  await expect(async () => {
+    await page.getByRole('button', { name: /^Register/ }).first().click();
+    await expect(dialog).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
+  return dialog;
 }
 
 test.beforeAll(async () => {
