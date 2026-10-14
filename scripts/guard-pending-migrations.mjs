@@ -20,7 +20,12 @@ const newestCommitted = Math.max(...journal.entries.map((entry) => entry.when));
 const newestApplied = async (sql, targetSchema) => Number((await sql.unsafe(
   'SELECT max(created_at) AS newest FROM "' + targetSchema + '".__drizzle_migrations'))[0].newest);
 
-const sql = postgres(url, { max: 1, connect_timeout: 15, connection: { application_name: 'idoc-pending-migrations-guard' } });
+// Match lib/db/connection-url.ts: require TLS for every non-local database, as Render demands.
+const connectionUrl = new URL(url);
+if (!['localhost', '127.0.0.1', '::1'].includes(connectionUrl.hostname.replace(/^\[|\]$/g, '')) && !connectionUrl.searchParams.has('sslmode')) {
+  connectionUrl.searchParams.set('sslmode', 'require');
+}
+const sql = postgres(connectionUrl.toString(), { max: 1, connect_timeout: 15, connection: { application_name: 'idoc-pending-migrations-guard' } });
 try {
   const identity = await sql`SELECT current_database() AS database,
     EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = ${schema}) AS schema_exists`;
