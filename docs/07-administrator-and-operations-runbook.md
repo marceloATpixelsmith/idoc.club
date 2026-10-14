@@ -259,7 +259,7 @@ This runbook defines normal administrative actions, exception handling and escal
 
 4. Enter €80 in EUR. Do not enter partial, discounted, or waived payments.
 
-5. Enter actual paid date and the **Stripe Payment ID / Bank Transfer Reference** (required for Stripe and Bank Transfer).
+5. Enter actual paid date and the evidence field, which is required and labelled for the source chosen: **Stripe Payment ID** (Stripe), **Bank Transfer Reference** (Bank Transfer) or **Receipt ID** (Cash). A Complimentary grant has no evidence field.
 
 6. Review the proposed membership validity change.
 

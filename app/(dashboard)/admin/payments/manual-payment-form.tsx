@@ -15,8 +15,13 @@ type ManualPaymentActionState = { error?: string; success?: string };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
 const today = () => new Date().toISOString().slice(0, 10);
-// Mirrors REFERENCE_REQUIRED_SOURCES in lib/payments/manual-payments.ts (docs/02 §4): only these sources carry evidence.
-const REFERENCE_SOURCES: readonly ManualPaymentSource[] = ['stripe_manual', 'bank_transfer'];
+// Mirrors REFERENCE_REQUIRED_SOURCES in lib/payments/manual-payments.ts (docs/02 §4): each payment source records its own
+// kind of evidence, and the field is labelled for it. A complimentary grant is not a payment and has none.
+const REFERENCE_LABELS: Partial<Record<ManualPaymentSource, string>> = {
+  bank_transfer: 'Bank Transfer Reference',
+  cash: 'Receipt ID',
+  stripe_manual: 'Stripe Payment ID',
+};
 
 export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string | null; onSuccess?: () => void; profileId: number }) {
   const [state, formAction, isPending] = useActionState<ManualPaymentActionState, FormData>(recordManualPaymentForm, {});
@@ -27,7 +32,7 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
   const [source, setSource] = useState<ManualPaymentSource>(MANUAL_PAYMENT_SOURCES[0]);
   const [reference, setReference] = useState('');
   const [reason, setReason] = useState('');
-  const referenceApplies = REFERENCE_SOURCES.includes(source);
+  const referenceLabel = REFERENCE_LABELS[source];
   const proposedValidUntil = nextValidUntil({ currentValidUntil, paidAt });
 
   return (
@@ -51,9 +56,9 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
           value={paidAt} onChange={(event) => setPaidAt(event.target.value)}
         />
       </div>
-      {referenceApplies && (
+      {referenceLabel && (
         <div className="space-y-1.5">
-          <Label htmlFor="reference">Stripe Payment ID / Bank Transfer Reference</Label>
+          <Label htmlFor="reference">{referenceLabel}</Label>
           <Input
             id="reference" name="reference" required type="text"
             value={reference} onChange={(event) => setReference(event.target.value)}

@@ -11,19 +11,21 @@ test('manual membership payments offer Stripe instead of PayPal and label the si
   assert.deepEqual([...MANUAL_PAYMENT_SOURCES], ['stripe_manual', 'bank_transfer', 'cash', 'complimentary']);
   assert.equal(PAYMENT_SOURCE_LABELS.stripe_manual, 'Stripe');
   const form = read('app/(dashboard)/admin/payments/manual-payment-form.tsx');
-  assert.match(form, /Stripe Payment ID \/ Bank Transfer Reference/);
   assert.doesNotMatch(form, /Reference \/ evidence|PayPal/);
   // The evidence field only appears (and is only required) for the sources that need it, and every field is
   // controlled so a rejected submission does not clear what the administrator typed.
-  assert.match(form, /REFERENCE_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer'\]/);
-  assert.match(form, /\{referenceApplies && \(/);
+  assert.match(form, /bank_transfer: 'Bank Transfer Reference'/);
+  assert.match(form, /cash: 'Receipt ID'/);
+  assert.match(form, /stripe_manual: 'Stripe Payment ID'/);
+  assert.match(form, /\{referenceLabel && \(/);
+  assert.match(form, /<Label htmlFor="reference">\{referenceLabel\}<\/Label>/);
   assert.match(form, /id="reference" name="reference" required type="text"/);
   assert.match(form, /value=\{source\} onChange=/);
   assert.match(form, /value=\{reason\} onChange=/);
-  // The reference input is not rendered for cash/complimentary, so the action must treat the missing field as undefined.
+  // The reference input is not rendered for a complimentary grant, so the action must treat the missing field as undefined.
   assert.match(read('app/(dashboard)/admin/payments/actions.ts'), /reference: formData\.get\('reference'\) \?\? undefined,/);
   const server = read('lib/payments/manual-payments.ts');
-  assert.match(server, /REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer'\]/);
+  assert.match(server, /REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer', 'cash'\]/);
   assert.match(server, /membership\.manual_payment_recorded/);
   assert.match(server, /input\.source !== 'complimentary' && membershipRow\.status === 'active'/);
   assert.match(migration, /"source" in \('stripe_recurring', 'stripe_one_time', 'stripe_manual', 'paypal', 'bank_transfer', 'cash', 'complimentary'\)/);
