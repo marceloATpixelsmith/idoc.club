@@ -496,6 +496,22 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar_registration.payment_marked_paid','seminar_registration',${String(registrationId.data)},
       ${JSON.stringify({ paymentStatus: existing.payment_status })}::jsonb,${JSON.stringify({ method, reference })}::jsonb)`;
+    // Tell the registrant their payment was recorded (the same "Seminar payment confirmed" notice the website
+    // describes). Queued in this transaction so a payment can never be recorded without its notice; the dedupe key
+    // makes a retried request a no-op. Stripe payments email through the verified webhook instead.
+    const [recipient] = await sql<{ amount: number | null; email: string | null; first_name: string | null; profile_id: number | null; seminar_id: number }[]>`select r.expected_amount_cents amount,r.profile_id,r.seminar_id,
+      p.first_name,coalesce(u.email_display,u.email) email
+      from seminar_registrations r join profiles p on p.id=r.profile_id join users u on u.id=p.user_id where r.id=${registrationId.data}`;
+    if (recipient?.email) {
+      // staging.idoc.club queues under its own kind, which the production worker never claims and which the calling
+      // action drains straight away; every other environment uses the production kind.
+      const noticeKind = isStagingSeminarDirectDelivery() ? 'seminar.staging_payment_confirmed' : 'seminar.payment_confirmed';
+      await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${recipient.profile_id},${noticeKind},
+          jsonb_build_object('amountCents',${recipient.amount}::int,'firstName',${recipient.first_name ?? ''}::text,'registrationId',${registrationId.data}::int,'seminarId',${recipient.seminar_id}::int,'to',${recipient.email}::text),
+          ${`seminar.payment_confirmed:${registrationId.data}:manual`})
+        on conflict(dedupe_key) do nothing`;
+    }
   });
 }
 
