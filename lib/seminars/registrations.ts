@@ -8,7 +8,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { isEntitled } from '@/lib/membership/entitlement';
-import { escapeHtml } from '@/lib/notifications/email-template';
+import { escapeHtml, IDOC_EMAIL_ICONS, idocEmailFeiLogoUrl } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { formatDate, formatLevels } from '@/lib/seminars/format';
@@ -366,19 +366,6 @@ export type SeminarEmailDetails = {
   start_date: string; title: string;
 };
 
-const EMAIL_ICON_BASE = 'https://res.cloudinary.com/z6xv27qx/image/upload/e_colorize,co_rgb:d3af37,w_20,h_20,c_fit/idoc-email-icons';
-
-const SEMINAR_EMAIL_ICONS = {
-  banknote: `${EMAIL_ICON_BASE}/banknote.png`,
-  calendar: `${EMAIL_ICON_BASE}/calendar.png`,
-  deadline: `${EMAIL_ICON_BASE}/calendar-clock.png`,
-  flag: `${EMAIL_ICON_BASE}/flag.png`,
-  language: `${EMAIL_ICON_BASE}/languages.png`,
-  layers: `${EMAIL_ICON_BASE}/layers.png`,
-  location: `${EMAIL_ICON_BASE}/map-pin.png`,
-  users: `${EMAIL_ICON_BASE}/users.png`,
-};
-
 function seminarEmailInfoRow(iconUrl: string, value: string) {
   return `<tr>
     <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid #343d55;vertical-align:middle;">
@@ -427,14 +414,14 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, app
   }
 
   const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;overflow:hidden;">
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
-    ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
-    ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.location, escapeHtml(seminar.location))}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
+    ${levels ? seminarEmailInfoRow(IDOC_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
+    ${seminar.is_fei ? `<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><a href="https://www.fei.org/dressage" style="text-decoration:none;"><img alt="FEI" src="${idocEmailFeiLogoUrl()}" width="153" height="24" style="display:block;width:153px;height:24px;border:0;" /></a></td></tr>` : ''}
   </table>`;
 
   const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;padding:24px 22px;">
