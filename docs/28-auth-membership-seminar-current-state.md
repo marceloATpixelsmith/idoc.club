@@ -33,50 +33,46 @@ This document records the implemented cross-domain behavior that must stay consi
 - Self-service membership cancellation is distinct from changing renewal preference: cancellation immediately removes entitlement by suspending the membership, cancels open recurring billing, removes marketing enrollment, and revokes sessions/devices while retaining the account for future sign-in/reactivation.
 - Membership payments and seminar payments are separate ledgers and webhook classifications. A seminar payment can never extend membership entitlement.
 
-## 3. Seminar registration and payment lifecycle
+## 3. Seminar/course registration and payment lifecycle
 
-Seminars have separate member and non-member prices. Registration status and payment status are independent durable facts.
+User-facing text says **Seminars/Courses**. Every seminar/course has **one price** for everyone (the former separate non-member price and the guest/non-member pricing logic are retired). Three independent durable facts describe a registration: its lifecycle status (`registered` / `canceled`), its **Payment Status**, and its **Registration Status** (`approval_status`; see 3.3).
+
+**Registration is members-only.** A signed-out visitor, or a signed-in account without current membership entitlement, can still browse the seminar/course listing and detail pages but is shown no Register button, and every registration function re-authorizes server-side (`requireAccountAccess('member')`, current entitlement). The anonymous guest flow — guest contact form, Turnstile/rate-limited guest registration, anonymous Stripe Checkout and the guest-creating webhook — has been removed. Existing guest registrations created before the change are retained as read-only legacy rows (visible to administrators and refundable); a Stripe Checkout Session created by the old guest flow that completes after the change is refunded in full by the verified webhook rather than creating a registration.
 
 ### 3.1 Signed-in entitled member
 
-- The registration is tied to the member profile and uses the member price.
+- The registration is tied to the member profile and uses the seminar's single price.
 - The member chooses an enabled payment method: Online via Stripe, Bank Transfer, or Cash.
 - Bank Transfer/Cash creates the registration immediately with the corresponding pending payment status, queues the branded confirmation email, and routes the member to `/seminars?view=my`.
 - Online creates the profile-backed registration first, then redirects to Stripe Checkout. The registration is not marked paid and its confirmation email is not queued until the verified paid Checkout webhook succeeds.
 - After successful online payment, the member returns to `/seminars?view=my`.
+- **My Seminars/Courses** shows both the **Payment Status** and the **Registration Status**.
+- A member whose entitlement has lapsed can still view and cancel an existing registration but cannot register; the detail page points them to renew.
 
-### 3.2 Signed-in account holder without current membership entitlement
+### 3.2 Visitors who cannot register
 
-- If the account has its own member profile, the seminar registration remains tied to that real profile rather than becoming a guest registration.
-- The non-member seminar price applies.
-- Bank Transfer and Cash follow the same profile-backed registration, redirect, history, and cancellation behavior as for an entitled member.
-- **Current staging gap:** profile-backed Online via Stripe is not presently usable for a signed-in profile without current membership entitlement. Registration creation succeeds at the non-member price, but `createSeminarCheckoutSession()` still requires the stricter `member` account boundary before opening Stripe Checkout. This leaves the newly created registration unpaid and a retry is rejected as a duplicate. The intended product behavior is parity with the entitled-member Online path, but the current implementation must be fixed before documentation may claim that parity.
+- A signed-out visitor sees the listing and the full detail page, plus a prompt to sign in or join; no register control and no registration route is reachable.
+- A signed-in account without current entitlement sees a prompt to renew or manage the membership.
 
-### 3.3 Anonymous guest — Bank Transfer or Cash
+### 3.3 Registration Status (independent of payment)
 
-- The public Register flow uses the guest registration dialog and collects first name, last name, email, and international phone number.
-- Client-side validity controls submission; server-side schemas normalize and validate all four contact fields.
-- Anonymous submission is protected by CSRF, Turnstile, and email/origin rate limiting.
-- A successful Bank Transfer/Cash registration is created immediately at the non-member price with pending payment status, and the branded confirmation email is queued.
-- The success state returns to the seminar detail page using server-backed flash state; it does not depend on disposable URL query parameters.
+| Status | Meaning |
+| --- | --- |
+| Confirmed | Every registration for a non-FEI seminar/course, from the moment it is made — **payment status has nothing to do with it**. |
+| Pending FEI Approval | Every registration for an FEI seminar/course, from the moment it is made, until an administrator records the FEI decision. The email states that the registrant's National Federation must register them with the FEI to be approved to participate. |
+| Approved by FEI / Not Approved by FEI / Approved to Audit Only by FEI | Set manually by an administrator on the registration. Each change emails the registrant the same registration details as the confirmation with a message clearly stating the status. |
 
-### 3.4 Anonymous guest — Online via Stripe
+The column is `idoc.seminar_registrations.approval_status` (migration `0072`; default `confirmed`, existing FEI rows backfilled to `pending_fei_approval`). It is shown and filterable in the Admin Registrations table and exported in the CSVs.
 
-- The flow is Stripe-first. IDOC does not ask the guest to enter contact details before redirecting.
-- Stripe Checkout collects email and phone natively plus required First name and Last name custom fields.
-- No guest registration row is created before payment.
-- On the verified paid Checkout webhook, IDOC re-retrieves/validates provider evidence, rechecks seminar status, registration deadline, capacity, amount, currency, and duplicate email, then creates the paid guest registration and queues the same branded registration confirmation.
-- If the paid Checkout can no longer become a valid registration (for example the seminar filled, closed, or duplicate registration now exists), the webhook attempts an idempotent automatic refund and records reconciliation evidence if manual attention is required.
-- Guest online success returns to the seminar detail page through server-backed flash state.
+### 3.4 Shared seminar safeguards and administration
 
-### 3.5 Shared seminar safeguards and administration
-
-- Capacity is enforced under database locking; duplicate member/profile registrations and duplicate guest-email registrations are prevented.
+- Capacity is enforced under database locking; duplicate member/profile registrations are prevented.
 - Canceling a seminar preserves the seminar as canceled. Registrations are canceled; paid Stripe registrations are refunded, and open Stripe Checkout sessions are expired by the resumable cancellation worker.
 - Payment method remains visible independently of payment status. Administrators can mark Bank Transfer/Cash registrations paid without rewriting the selected payment method.
-- Administrator-created seminar registrations support Bank Transfer or Cash only. If the entered email belongs to an existing profile, the registration attaches to that profile and uses the member price only when the membership is currently entitled; otherwise it uses the non-member price. Unknown emails create guest registrations.
-- Seminar confirmation email content is shared across member and guest registrations; Online adds the completed-Stripe-payment wording, and Bank Transfer includes the configured bank-transfer instructions.
-- Registration confirmations are delivered through the durable notification outbox. Online confirmations are queued only after verified payment; offline confirmations are queued at successful registration creation.
+- **Administrator-created registrations** (Admin > Registrations > New Registration) support Bank Transfer or Cash only and are attached to an **active member** chosen with a searchable member lookup (name or email); first name, last name, email and phone are no longer entered. Only currently entitled members can be selected and the server re-checks entitlement. The member receives the same confirmation email as a self-registration (including the FEI status message for FEI seminars). The seminar and payment-method fields sit side by side at 50% width each on desktop. An administrator registers a member who was confirmed by the FEI without registering on IDOC the same way, so the registration shows in that member's My Seminars/Courses.
+- The seminar form no longer has an Organizing National Federation field (the seminar detail page, listings and emails no longer show it) and has a single **Price (EUR)** field. `organizing_national_federation` and `non_member_price_cents` remain in the shared database only as retained legacy columns (the price is mirrored into `non_member_price_cents` so a still-deployed older build stays coherent); nothing reads them. They will be dropped in a later contract migration once production is promoted.
+- Seminar confirmation email content: Online adds the completed-Stripe-payment wording, and Bank Transfer includes the configured bank-transfer instructions; every confirmation states the Registration Status.
+- Registration confirmations are delivered through the durable notification outbox. Online confirmations are queued only after verified payment; offline confirmations are queued at successful registration creation. A Registration Status change queues a status-update email on the same (staging-partitioned) confirmation kinds.
 
 ## 4. Documentation maintenance rule
 

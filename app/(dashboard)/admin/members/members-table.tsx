@@ -25,20 +25,21 @@ import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import type { AdminMemberRow } from '@/lib/membership/admin-memberships';
 import { COUNTRY_OPTIONS, countryNameForCode } from '@/lib/membership/countries';
-import { IDOC_REGIONS } from '@/lib/membership/validation';
+import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
+import { formatTableDate } from '@/lib/format';
 
 type Filters = {
   countries?: string[]; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federations?: string[];
-  membershipTypes?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
+  membershipTypes?: string[]; officialStatuses?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
 };
 
 // 'actions' is deliberately excluded here: it's non-hideable (see the column def below) and has
 // no accessorFn, so it never appears in the View popover to be restored -- a saved preference
 // predating this column (or missing it) must never be able to hide it with no way back.
-const OPTIONAL_COLUMNS = ['email', 'type', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
-const MULTI_SELECT_FILTERS = ['status', 'type', 'federation', 'country', 'region'] as const;
-const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
+const OPTIONAL_COLUMNS = ['email', 'type', 'officialStatus', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
+const MULTI_SELECT_FILTERS = ['status', 'type', 'officialStatus', 'federation', 'country', 'region'] as const;
+const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', officialStatus: 'Official Status', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
   { label: 'Archived Members', value: 'archived' }, { label: 'Board Members', value: 'board_member' },
@@ -48,6 +49,11 @@ const STATUS_OPTIONS = [
 const TYPE_OPTIONS = [
   { label: 'Judge', value: 'judge' }, { label: 'Steward', value: 'steward' },
   { label: 'Judge & Steward', value: 'combo' }, { label: 'Veterinarian', value: 'veterinarian' },
+];
+// Every Official Status for both Judges and Stewards; "Other" exists in each list, so tokens are role-prefixed.
+const OFFICIAL_STATUS_FILTER_OPTIONS = [
+  ...JUDGE_STATUSES.map((status) => ({ label: `Judge: ${status}`, value: `judge:${status}` })),
+  ...STEWARD_STATUSES.map((status) => ({ label: `Steward: ${status}`, value: `steward:${status}` })),
 ];
 const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
@@ -98,16 +104,17 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'name', accessorFn: (row) => `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(), header: header('name'), meta: { label: 'Member name' }, cell: ({ row }) => <span className="inline-flex items-center gap-2 font-medium uppercase">{row.original.profileId ? <>{row.original.lastName}{row.original.lastName && row.original.firstName ? ', ' : ''}{row.original.firstName}</> : <span className="text-muted-foreground">Profile not completed</span>}{row.original.isSuperAdmin && <Shield aria-label="Super Admin" className="size-4 shrink-0 text-gold" data-icon-tooltip="Super Admin" role="img" />}{row.original.isAdministrator && <UserCog aria-label="Administrator" className="size-4 shrink-0 text-gold" data-icon-tooltip="Administrator" role="img" />}{row.original.isBoardMember && <UsersRound aria-label="Board Member" className="size-4 shrink-0 text-gold" data-icon-tooltip="Board Member" role="img" />}</span> },
     { id: 'email', accessorKey: 'email', header: header('email'), meta: { label: 'Email' }, cell: ({ row }) => <a className="underline" href={`mailto:${encodeURIComponent(row.original.email)}`}>{row.original.email}</a> },
     { id: 'type', accessorKey: 'membershipType', enableColumnFilter: true, header: header('type'), meta: { label: 'Membership Type', options: TYPE_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const type = TYPE_DISPLAY[row.original.membershipType as keyof typeof TYPE_DISPLAY]; return type ? <span className="inline-flex items-center gap-2"><type.icon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip={type.label} />{row.original.membershipType === 'combo' && <HorseshoeIcon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip="STEWARD" />}{type.label}</span> : '—'; } },
+    { id: 'officialStatus', accessorFn: (row) => row.officialStatuses ?? [], enableColumnFilter: true, header: header('officialStatus'), meta: { label: 'Official Status', options: OFFICIAL_STATUS_FILTER_OPTIONS, variant: 'multiSelect' }, enableSorting: false, cell: ({ row }) => row.original.officialStatuses?.length ? <span className="flex flex-col gap-0.5">{row.original.officialStatuses.map((token) => <span key={token}>{token.replace(/^judge:/, 'Judge: ').replace(/^steward:/, 'Steward: ')}</span>)}</span> : '—' },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip={status.label} />{status.label}</span> : row.original.status.toUpperCase(); } },
     { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.federation)}<CountryFlag code={row.original.federation} /></span> : '—' },
     { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.country)}<CountryFlag code={row.original.country} /></span> : '—' },
     { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.region ?? '—' },
-    { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? new Date(`${row.original.validUntil}T00:00:00`).toLocaleDateString() : '—' },
-    { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? new Date(row.original.lastPaymentAt).toLocaleDateString() : '—' },
-    { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString() },
+    { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? formatTableDate(row.original.validUntil) : '—' },
+    { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? formatTableDate(row.original.lastPaymentAt) : '—' },
+    { id: 'updated', accessorKey: 'updatedAt', header: header('updated'), meta: { label: 'Updated' }, cell: ({ row }) => formatTableDate(row.original.updatedAt) },
     { id: 'actions', enableHiding: false, enableSorting: false, meta: { label: 'Actions' }, size: 150, header: () => <DataTableStaticHeader className="text-gold" label="Actions" />, cell: ({ row }) => <div className="flex items-center gap-1">{row.original.profileId && <><Button asChild aria-label="Edit" size="icon-sm" title="Edit" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}`)}><Pencil aria-hidden="true" /></Link></Button><Button asChild aria-label="Payment" size="icon-sm" title="Payment" variant="ghost"><Link href={`${pathname}?profileId=${row.original.profileId}&tab=payment`} onClick={(event) => openMember(event, `${pathname}?profileId=${row.original.profileId}&tab=payment`)}><CreditCard aria-hidden="true" /></Link></Button></>}<Button asChild={row.original.hasSupportHistory} aria-label="Support conversations" disabled={!row.original.hasSupportHistory} size="icon-sm" title={row.original.hasSupportHistory ? 'Support conversations' : 'No support conversations on file'} variant="ghost">{row.original.hasSupportHistory ? <Link href={`/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`} onClick={(event) => openMember(event, `/admin/support?memberEmail=${encodeURIComponent(row.original.email)}`)}><Headphones aria-hidden="true" /></Link> : <Headphones aria-hidden="true" />}</Button><Button asChild aria-label="Email" size="icon-sm" title="Email" variant="ghost"><a href={`mailto:${encodeURIComponent(row.original.email)}`}><Mail aria-hidden="true" /></a></Button></div> },
   ], [pathname]);
-  const defaultColumnOrder = ['select', 'name', 'status', 'type', 'expires', 'region', 'email', 'federation', 'country', 'lastPayment', 'updated', 'actions'];
+  const defaultColumnOrder = ['select', 'name', 'status', 'type', 'expires', 'region', 'officialStatus', 'email', 'federation', 'country', 'lastPayment', 'updated', 'actions'];
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
   // Facet filters (status/type/federation/country/region) are applied server-side from saved
   // preferences regardless of this initial state, so this must mirror what the server actually
@@ -115,6 +122,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   // and the next unrelated change persists `undefined` for these, silently clearing the saved view.
   const initialColumnFilters: ColumnFiltersState = [
     { id: 'type', value: filters.membershipTypes ?? [] },
+    { id: 'officialStatus', value: filters.officialStatuses ?? [] },
     { id: 'status', value: filters.statuses ?? [] },
     { id: 'federation', value: filters.federations ?? [] },
     { id: 'country', value: filters.countries ?? [] },
@@ -142,6 +150,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
       q: effectiveSearch || undefined,
       region: filterToken(state.columnFilters, 'region'),
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
+      officialStatus: filterToken(state.columnFilters, 'officialStatus'),
       status: filterToken(state.columnFilters, 'status'),
       type: filterToken(state.columnFilters, 'type'),
     }).finally(() => startTransition(() => router.refresh()));

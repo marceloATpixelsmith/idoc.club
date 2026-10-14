@@ -1,5 +1,6 @@
-import { Banknote, Calendar, CalendarClock, Languages, Layers, MapPin, Users, Flag } from 'lucide-react';
+import { Banknote, Calendar, CalendarClock, Languages, Layers, MapPin, Users } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FeiBadge } from '@/components/seminars/fei-badge';
 import { SeminarRegisterCta } from '@/components/seminars/seminar-register-cta';
@@ -10,7 +11,6 @@ import { FlashBanner } from '@/components/ui/flash-banner';
 import { getUser } from '@/lib/db/queries';
 import { getOwnPrivateMember } from '@/lib/membership/data-access';
 import { isEntitled } from '@/lib/membership/entitlement';
-import { countryNameForCode } from '@/lib/membership/countries';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { formatDate, formatLevels, formatSchedule, money } from '@/lib/seminars/format';
 import { getSeminarForRegistrant, listEnabledSeminarPaymentMethods } from '@/lib/seminars/registrations';
@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!seminar) return { title: 'Seminar — IDOC' };
   return {
     description: `${formatSchedule(seminar)} · ${seminar.location}`,
-    title: `${seminar.title} — IDOC Seminars`,
+    title: `${seminar.title} — IDOC Seminars/Courses`,
   };
 }
 
@@ -57,15 +57,9 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
 
   const paymentMethods = await listEnabledSeminarPaymentMethods();
   const alreadyRegistered = seminar.registration_status !== null;
-  const guestRegistrationJustCompleted = flash === 'seminar-registration-success';
-  // Only a currently entitled member gets the pre-filled, member-price form directly. A signed-in
-  // visitor who has their own profile but cannot use the member price (a lapsed membership) still
-  // goes straight to the same form -- pre-filled and locked from their real profile, tied to their
-  // real profileId -- just at the non-member price, so it correctly shows up in their own My
-  // Seminars afterward instead of becoming an orphaned guest registration. Only a signed-in visitor
-  // with no profile at all (e.g. a pure administrator) falls back to the guest form -- there's no
-  // profile to tie a registration to either way -- but even then, "Create an account" would make no
-  // sense to someone already logged in, so they skip straight to the form instead of that choice.
+  // Registration is members-only: only a signed-in, currently entitled member is offered the Register
+  // action. Everyone else (signed out, or signed in without current entitlement) still sees the full
+  // seminar/course details, but never a registration affordance -- the server re-checks all of this.
   const isEntitledMember = Boolean(member && isEntitled(member.entitlement, new Date().toISOString().slice(0, 10)));
   const isSignedIn = Boolean(user);
   const dateRange = seminar.start_date === seminar.end_date
@@ -76,12 +70,9 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <PageHeader eyebrow="Seminar" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
+      <PageHeader eyebrow="Seminar/Course" intro={`${formatSchedule(seminar)} · ${seminar.location}`} title={seminar.title} />
       <div className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
-        <BackLink href="/seminars">Back to Seminars</BackLink>
-        {flash === 'seminar-registration-success' ? (
-          <FlashBanner targetPath={`/seminars/${id}`}>Registration completed successfully. Your seminar registration confirmation will be sent by email.</FlashBanner>
-        ) : null}
+        <BackLink href="/seminars">Back to Seminars/Courses</BackLink>
         {flash === 'seminar-checkout-canceled' ? (
           <FlashBanner targetPath={`/seminars/${id}`}>Online payment was canceled. No payment was taken.</FlashBanner>
         ) : null}
@@ -97,9 +88,8 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
                   <InfoRow icon={Calendar}>{dateRange}</InfoRow>
                   <InfoRow icon={MapPin}>{seminar.location}</InfoRow>
                   <InfoRow icon={Languages}>Language: {languageNameForTag(seminar.language)}</InfoRow>
-                  <InfoRow icon={Flag}>Organizing National Federation: {countryNameForCode(seminar.organizing_national_federation)}</InfoRow>
                   <InfoRow icon={Users}>Number of participants: {seminar.capacity}</InfoRow>
-                  <InfoRow icon={Banknote}>Members: {money(seminar.member_price_cents)} · Non-members: {money(seminar.non_member_price_cents)}</InfoRow>
+                  <InfoRow icon={Banknote}>Price: {money(seminar.member_price_cents)}</InfoRow>
                   {levelsLabel ? <InfoRow icon={Layers}>{levelsLabel}</InfoRow> : null}
                   <InfoRow icon={CalendarClock}>Registration deadline: {deadlineDate}</InfoRow>
                 </div>
@@ -107,17 +97,14 @@ export default async function SeminarDetailPage({ params }: { params: Promise<{ 
               </CardContent>
             </Card>
 
-            {alreadyRegistered || guestRegistrationJustCompleted ? null : seminar.availability !== 'open' ? (
+            {alreadyRegistered ? null : seminar.availability !== 'open' ? (
               <p className="border border-border p-5 text-sm text-muted-foreground">{AVAILABILITY_LABELS[seminar.availability]} — registration is not currently open for this seminar.</p>
+            ) : isEntitledMember ? (
+              <SeminarRegisterCta paymentMethods={paymentMethods} seminarId={seminar.id} />
+            ) : isSignedIn ? (
+              <p className="border border-border p-5 text-sm text-muted-foreground">An active IDOC membership is required to register. <Link className="underline underline-offset-4" href="/dashboard/membership">Renew or manage your membership</Link>.</p>
             ) : (
-              <SeminarRegisterCta
-                isSignedIn={isSignedIn}
-                memberDetails={isEntitledMember && member ? { email: member.email, name: `${member.profile.firstName} ${member.profile.lastName}`.trim() } : undefined}
-                memberPriceLabel={money(seminar.member_price_cents)}
-                ownProfileDetails={!isEntitledMember && member ? { email: member.email, name: `${member.profile.firstName} ${member.profile.lastName}`.trim() } : undefined}
-                paymentMethods={paymentMethods}
-                seminarId={seminar.id}
-              />
+              <p className="border border-border p-5 text-sm text-muted-foreground">Only signed-in IDOC members can register. <Link className="underline underline-offset-4" href="/sign-in">Sign in</Link> or <Link className="underline underline-offset-4" href="/sign-up">join IDOC</Link> to register.</p>
             )}
           </div>
 

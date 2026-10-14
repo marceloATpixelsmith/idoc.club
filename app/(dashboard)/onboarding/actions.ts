@@ -26,7 +26,7 @@ export async function completeOnboarding(_state: { error?: string }, formData: F
   try {
     await createOwnMemberProfile({
       address1: formData.get('address1'), address2: formData.get('address2'), city: formData.get('city'),
-      countryCode: formData.get('countryCode'), firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: phone.data,
+      countryCode: formData.get('countryCode'), directoryEmailOptIn: formData.get('directoryEmailOptIn') === 'on', firstName: formData.get('firstName'), lastName: formData.get('lastName'), phone: phone.data,
       postalCode: formData.get('postalCode'), roles, stateProvince: formData.get('stateProvince'),
     }, {
       keepUpdated: formData.get('keepUpdated') === 'on',

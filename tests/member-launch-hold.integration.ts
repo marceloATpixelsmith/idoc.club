@@ -11,7 +11,7 @@ import { createMembershipCheckoutSession } from '../lib/payments/checkout.ts';
 import { beginAutomaticRenewalSetup, disableAutomaticRenewal, cancelPendingRenewalChange } from '../lib/payments/renewal-preferences.ts';
 import { refundMembershipPayment, refundSeminarRegistration, refundSeminarRegistrationCore } from '../lib/payments/refunds.ts';
 import { cancelMemberSubscriptionAtPeriodEnd, createMembershipPortalSession } from '../lib/payments/stripe.ts';
-import { createGuestSeminarCheckoutSession, createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
+import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
 import { updateStripeCustomerEmail } from '../lib/payments/customer-email.ts';
 import { processStripeEvent, type WebhookStripeClient } from '../lib/payments/webhook-handlers.ts';
 import { processCanceledSeminarPayments } from '../lib/seminars/cancellation-worker.ts';
@@ -100,7 +100,7 @@ test('all public live billing boundaries reject before provider or local billing
     () => refundSeminarRegistrationCore(1, 'synthetic reason', null),
     () => refundMembershipPayment(1, 'synthetic reason'), () => refundSeminarRegistration(1, 'synthetic reason'),
     () => cancelMemberSubscriptionAtPeriodEnd('sub_synthetic'), () => createMembershipPortalSession(),
-    () => createSeminarCheckoutSession(1), () => createGuestSeminarCheckoutSession(1),
+    () => createSeminarCheckoutSession(1),
     () => updateStripeCustomerEmail('cus_synthetic', 'synthetic@example.test'),
   ];
   for (const operation of operations) await assert.rejects(operation(), MemberLaunchHoldError);

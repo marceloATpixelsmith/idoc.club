@@ -34,7 +34,7 @@ export async function listAllMembersForExport() {
 
 export async function listAllPaymentsForExport() {
   const actor = await requireAccountAccess('administration');
-  requireSuperAdmin(actor);
+  requireAdministrator(actor);
   const rows = await db.select({
     amountCents: payments.amountCents, currency: payments.currency, email: users.email,
     firstName: profiles.firstName, lastName: profiles.lastName, paidAt: payments.paidAt, source: payments.source,

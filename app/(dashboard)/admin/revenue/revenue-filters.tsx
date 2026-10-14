@@ -20,33 +20,47 @@ function fromDateKey(value?: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-// Every control here -- the date-range trigger, the Origin select, and Apply -- is left at its
+const SOURCE_OPTIONS = [
+  { label: 'All', value: 'all' }, { label: 'Stripe', value: 'stripe' },
+  { label: 'Bank Transfer', value: 'bank_transfer' }, { label: 'Cash', value: 'cash' },
+];
+
+// Every control here -- the date-range trigger, the Payment source select, and Apply -- is left at its
 // component's default (h-9) size so the row lines up evenly, rather than each picking its own height.
-export function RevenueFilters({ from, origin, to }: { from?: string; origin?: string; to?: string }) {
+export function RevenueFilters({ from, source, to }: { from?: string; source?: string; to?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<DateRange>({ from: fromDateKey(from), to: fromDateKey(to) });
-  const [originValue, setOriginValue] = useState(origin ?? 'all');
+  const [sourceValue, setSourceValue] = useState(SOURCE_OPTIONS.some((option) => option.value === source) ? source! : 'all');
 
   // Re-sync when the committed props change without a remount -- e.g. browser Back/Forward
-  // changing the URL's query params -- otherwise the controls keep showing a stale range/origin
+  // changing the URL's query params -- otherwise the controls keep showing a stale range/source
   // and Apply would push those stale values right back, undoing the navigation.
   useEffect(() => {
     setRange({ from: fromDateKey(from), to: fromDateKey(to) });
-    setOriginValue(origin ?? 'all');
-  }, [from, to, origin]);
+    setSourceValue(SOURCE_OPTIONS.some((option) => option.value === source) ? source! : 'all');
+  }, [from, to, source]);
 
   function apply() {
     const params = new URLSearchParams();
     if (range.from) params.set('from', toDateKey(range.from));
     if (range.to) params.set('to', toDateKey(range.to));
-    if (originValue !== 'all') params.set('origin', originValue);
+    if (sourceValue !== 'all') params.set('source', sourceValue);
     router.push(`/admin/revenue${params.size ? `?${params}` : ''}`);
   }
 
-  const dateText = range.from && range.to && range.from.getTime() !== range.to.getTime()
-    ? `${formatDate(range.from)} - ${formatDate(range.to)}`
-    : formatDate(range.from ?? range.to);
+  // react-day-picker's range mode adjusts an already-complete range (so a new *first* date could
+  // never be picked once a range existed). A click on a complete range starts a fresh range instead.
+  function onSelect(next: DateRange | undefined, trigger: Date) {
+    if (range.from && range.to) setRange({ from: trigger, to: undefined });
+    else setRange(next ?? { from: undefined, to: undefined });
+  }
+
+  const hasRange = Boolean(range.from || range.to);
+  const dateText = !hasRange ? 'All time'
+    : range.from && range.to && range.from.getTime() !== range.to.getTime()
+      ? `${formatDate(range.from)} - ${formatDate(range.to)}`
+      : formatDate(range.from ?? range.to);
 
   return (
     <div className="mt-6 flex flex-wrap items-end gap-3">
@@ -60,18 +74,19 @@ export function RevenueFilters({ from, origin, to }: { from?: string; origin?: s
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-auto p-0">
-            <Calendar autoFocus captionLayout="dropdown" mode="range" onSelect={(next) => setRange(next ?? { from: undefined, to: undefined })} selected={range} />
+            <Calendar autoFocus captionLayout="dropdown" mode="range" onSelect={onSelect} selected={range} />
+            <div className="flex justify-end border-t p-2">
+              <Button disabled={!hasRange} onClick={() => setRange({ from: undefined, to: undefined })} size="sm" type="button" variant="ghost">Clear (all time)</Button>
+            </div>
           </PopoverContent>
         </Popover>
       </label>
       <label className="flex flex-col gap-1 text-sm">
-        Origin
-        <Select onValueChange={setOriginValue} value={originValue}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+        Payment source
+        <Select onValueChange={setSourceValue} value={sourceValue}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="stripe">Stripe</SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
+            {SOURCE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
           </SelectContent>
         </Select>
       </label>

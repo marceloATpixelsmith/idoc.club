@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { listAdminMembers } from '../lib/membership/admin-memberships.ts';
-import { asAdmin, adminUser, closeHarness, createMembership, createProfile, createUser, judgeRole, resetIdoc, sql } from './postgres-harness.ts';
+import { asAdmin, adminUser, closeHarness, createMembership, createProfile, createUser, judgeRole, resetIdoc, sql, stewardRole } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -115,4 +115,32 @@ test('descending member-name sorting reverses first names when last names match'
 
   const listing = await asAdmin(admin.id, () => listAdminMembers({ sort: JSON.stringify([{ id: 'name', desc: true }]) }));
   assert.deepEqual(listing.rows.map((row) => row.profileId), [zoeProfile.id, aliceProfile.id]);
+});
+
+test('the Official Status filter matches members holding any selected Judge or Steward status, and the same label under the other role does not collide', async () => {
+  const admin = await adminUser();
+  const judge = await createUser();
+  const judgeProfile = await createProfile(judge.id, [{ ...judgeRole, officialStatuses: ['FEI Dressage Judge 3/4*', 'Other'] as never }]);
+  await createMembership(judgeProfile.id);
+  const steward = await createUser();
+  const stewardProfile = await createProfile(steward.id, [{ ...stewardRole, officialStatuses: ['National Dressage Steward'] as never }]);
+  await createMembership(stewardProfile.id);
+  const other = await createUser();
+  const otherProfile = await createProfile(other.id, [{ ...stewardRole, officialStatuses: ['Other'] as never }]);
+  await createMembership(otherProfile.id);
+
+  const judgeOnly = await asAdmin(admin.id, () => listAdminMembers({ officialStatus: 'judge:FEI Dressage Judge 3/4*' }));
+  assert.deepEqual(judgeOnly.rows.map((row) => row.profileId), [judgeProfile.id]);
+  assert.deepEqual(judgeOnly.rows[0].officialStatuses, ['judge:FEI Dressage Judge 3/4*', 'judge:Other']);
+
+  const either = await asAdmin(admin.id, () => listAdminMembers({ officialStatus: 'judge:FEI Dressage Judge 3/4*,steward:National Dressage Steward' }));
+  assert.deepEqual(either.rows.map((row) => row.profileId).sort(), [judgeProfile.id, stewardProfile.id].sort());
+
+  // "Other" exists in both lists: the role prefix keeps the Judge's "Other" from matching a Steward's.
+  const stewardOther = await asAdmin(admin.id, () => listAdminMembers({ officialStatus: 'steward:Other' }));
+  assert.deepEqual(stewardOther.rows.map((row) => row.profileId), [otherProfile.id]);
+
+  // An unknown token is ignored rather than widening or breaking the query.
+  const unknown = await asAdmin(admin.id, () => listAdminMembers({ officialStatus: 'judge:Not A Status' }));
+  assert.deepEqual(unknown.filters.officialStatuses, []);
 });

@@ -226,6 +226,8 @@ export const profiles = idocSchema.table('profiles', {
   boardSubtitle: varchar('board_subtitle', { length: 160 }),
   boardFacebookUrl: varchar('board_facebook_url', { length: 500 }),
   boardPhotoUrl: text('board_photo_url'),
+  // Opt-in (default no): the member's email appears in the paid member directory only when true.
+  directoryEmailOptIn: boolean('directory_email_opt_in').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -367,7 +369,7 @@ export const supportConversations = idocSchema.table('support_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`),
+  check('support_conversations_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'suggestion', 'other')`),
   check('support_conversations_status_check', sql`${table.status} in ('open', 'admin_responded', 'member_replied', 'closed')`),
   check('support_conversations_subject_length_check', sql`char_length(${table.subject}) between 1 and 160`),
   index('support_conversations_member_activity_idx').on(table.memberUserId, table.updatedAt),
@@ -412,7 +414,7 @@ export const supportCategoryDefaults = idocSchema.table('support_category_defaul
   administratorUserId: integer('administrator_user_id').notNull().references(() => users.id),
   updatedBy: integer('updated_by').notNull().references(() => users.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'other')`)]);
+}, (table) => [primaryKey({ columns: [table.category, table.administratorUserId] }), check('support_category_defaults_category_check', sql`${table.category} in ('billing_membership', 'seminars', 'technical_support', 'suggestion', 'other')`)]);
 
 /** Administrator-authored News/Blog articles. `publicationDate` is the administrator-set target date
  * (also the displayed article date); `publishedAt` is the actual timestamp the article went live,
@@ -521,7 +523,9 @@ export const seminars = idocSchema.table('seminars', {
   accommodationInformation: text('accommodation_information').notNull().default(''),
   capacity: integer('capacity').notNull(),
   memberPriceCents: integer('member_price_cents').notNull(),
-  nonMemberPriceCents: integer('non_member_price_cents').notNull(),
+  // Retired: one price applies to everyone (migration 0072). Column kept nullable for expand-only
+  // compatibility with the shared live database; application code no longer reads or writes it.
+  nonMemberPriceCents: integer('non_member_price_cents'),
   registrationDeadline: timestamp('registration_deadline', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('draft'),
   isFei: boolean('is_fei').notNull().default(false),
@@ -576,6 +580,9 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   guestPhone: varchar('guest_phone', { length: 40 }),
   registrationStatus: varchar('registration_status', { length: 20 }).notNull().default('registered'),
   paymentStatus: varchar('payment_status', { length: 30 }).notNull(),
+  // Independent of payment status and of the lifecycle `registrationStatus` above (migration 0072):
+  // non-FEI registrations are 'confirmed' at registration; FEI ones start 'pending_fei_approval'.
+  approvalStatus: varchar('approval_status', { length: 30 }).notNull().default('confirmed'),
   paymentMethodCanonicalId: varchar('payment_method_canonical_id', { length: 40 }).notNull().references(() => seminarPaymentMethods.canonicalId),
   paymentReference: text('payment_reference'),
   stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique(),
@@ -594,6 +601,7 @@ export const seminarRegistrations = idocSchema.table('seminar_registrations', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check('seminar_registrations_registration_status_check', sql`${table.registrationStatus} in ('registered', 'canceled')`),
+  check('seminar_registrations_approval_status_check', sql`${table.approvalStatus} in ('confirmed', 'pending_fei_approval', 'approved_by_fei', 'not_approved_by_fei', 'approved_audit_only_by_fei')`),
   check('seminar_registrations_payment_status_check', sql`${table.paymentStatus} in ('unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback')`),
   check('seminar_registrations_expected_amount_check', sql`${table.expectedAmountCents} is null or ${table.expectedAmountCents} >= 0`),
   check('seminar_registrations_currency_check', sql`${table.currency} = 'EUR'`),
@@ -792,12 +800,12 @@ export const payments = idocSchema.table('payments', {
   reason: text('reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('payments_source_check', sql`${table.source} in ('stripe_recurring', 'stripe_one_time', 'paypal', 'bank_transfer', 'cash', 'complimentary')`),
+  check('payments_source_check', sql`${table.source} in ('stripe_recurring', 'stripe_one_time', 'stripe_manual', 'paypal', 'bank_transfer', 'cash', 'complimentary')`),
   check('payments_amount_check', sql`${table.amountCents} > 0`),
   check(
     'payments_evidence_check',
     sql`(${table.source} in ('stripe_recurring', 'stripe_one_time') and ${table.externalPaymentId} is not null)
-      or (${table.source} in ('paypal', 'bank_transfer', 'cash', 'complimentary') and ${table.administratorId} is not null)`,
+      or (${table.source} in ('stripe_manual', 'paypal', 'bank_transfer', 'cash', 'complimentary') and ${table.administratorId} is not null)`,
   ),
 ]);
 

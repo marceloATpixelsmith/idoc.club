@@ -1062,11 +1062,13 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 3. Pay with a Stripe test card and wait for the verified webhook; confirm entitlement becomes active exactly once.
 4. Register for a seminar by each enabled payment method; for online payment complete Stripe test checkout and confirm the registration becomes paid once.
 5. Confirm a full seminar and a seminar past its registration deadline reject registration with a clear message, and that cancellation updates My Seminars.
+6. Confirm My Seminars/Courses shows both Payment Status and Registration Status (Confirmed for a non-FEI seminar, Pending FEI Approval for an FEI one), and that in a signed-out browser the seminar detail page offers no Register button or guest path.
 
 ### PASS
 - Entitlement and seminar payment status change only after a verified provider event, never from browser redirects or client-supplied fields.
 - Redelivered events do not double-credit.
 - Capacity, deadline, disabled payment methods and unpaid-member restrictions are enforced server-side.
+- Seminar/course registration is members-only: a signed-out or non-entitled visitor can browse details but cannot register by any route, and no guest or non-member pricing path exists.
 
 ### FAIL
 - Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration.

@@ -23,11 +23,9 @@ export default async function AdminExportsPage() {
     <ul className="mt-6 max-w-md list-outside space-y-3 pl-5 text-sm">
       <ExportRow href="/api/admin/export/members" label="Member directory" />
       <ExportRow href="/api/admin/export/notifications" label="Notification history" />
-      {isSuperAdmin ? <>
-        <ExportRow href="/api/admin/export/payments" label="Payment ledger — Super Admin" />
-        <ExportRow href="/api/admin/export/audit-log" label="Audit log — Super Admin" />
-      </> : null}
+      <ExportRow href="/api/admin/export/payments" label="Payment ledger" />
+      {isSuperAdmin ? <ExportRow href="/api/admin/export/audit-log" label="Audit log — Super Admin" /> : null}
     </ul>
-    {!isSuperAdmin ? <p className="mt-4 text-sm text-muted-foreground">Payment ledger and audit log exports require Super Admin.</p> : null}
+    {!isSuperAdmin ? <p className="mt-4 text-sm text-muted-foreground">The audit log export requires Super Admin.</p> : null}
   </main>;
 }
