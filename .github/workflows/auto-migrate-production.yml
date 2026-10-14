@@ -32,14 +32,16 @@ jobs:
     timeout-minutes: 30
     environment: idoc-db-production-maintenance
     steps:
-      - name: Verify the Production environment has non-bypassable review protection
+      - name: Verify the Production environment requires a named reviewer and disables administrator bypass
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # A sole owner must be able to approve their own run, so self-review prevention is not required; a named
+          # reviewer's explicit approval and disabled administrator bypass still are.
           configuration="$(gh api "repos/${GITHUB_REPOSITORY}/environments/idoc-db-production-maintenance")"
-          if ! jq -e '.can_admins_bypass == false and (.protection_rules | any(.type == "required_reviewers" and (.reviewers | length > 0) and .prevent_self_review == true))' <<<"$configuration" >/dev/null; then
-            echo "::error::Production environment must require reviewers and disable administrator bypass."
+          if ! jq -e '.can_admins_bypass == false and (.protection_rules | any(.type == "required_reviewers" and (.reviewers | length > 0)))' <<<"$configuration" >/dev/null; then
+            echo "::error::Production environment must require at least one reviewer and disable administrator bypass."
             exit 1
           fi
       - name: Check out main
