@@ -681,3 +681,30 @@ test('an administrator creates a registration for an active member found by look
 function current_listing_has(rows: Array<{ id: number; registration_status: string | null }>, seminarId: number) {
   return rows.some((row) => row.id === seminarId && row.registration_status === 'registered');
 }
+
+test('a Checkout created at the retired non-member amount still credits payment, and a full Stripe refund of it is classified full', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
+  const { profile } = await paidMember();
+  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,stripe_checkout_session_id,checkout_status)
+    values (${seminarId},${profile.id},'pending','online_stripe',6500,'cs_legacy_price','open') returning id`;
+  const registrationId = row.id;
+  const [customer] = await sql<{ id: number }[]>`insert into idoc.billing_accounts(profile_id,external_customer_id) values (${profile.id},'cus_legacy_price') returning id`;
+  assert.ok(customer);
+  const paymentIntent = `pi_${randomUUID()}`;
+  const event = (type: string, object: unknown) => ({
+    api_version: '2025-08-27.basil', created: Math.floor(Date.now() / 1000), data: { object }, id: `evt_${randomUUID()}`, livemode: false,
+    object: 'event', pending_webhooks: 0, request: { id: null, idempotency_key: null }, type,
+  });
+  const session = {
+    amount_total: 6500, currency: 'eur', customer: 'cus_legacy_price', id: 'cs_legacy_price',
+    metadata: { amountCents: '6500', currency: 'EUR', kind: 'seminar_registration', profileId: String(profile.id), registrationId: String(registrationId), seminarId: String(seminarId) },
+    mode: 'payment', payment_intent: paymentIntent, payment_status: 'paid',
+  };
+  const stripe = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
+  assert.equal(await processStripeEvent(event('checkout.session.completed', session) as never, stripe as never), 'processed');
+  assert.equal((await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`)[0].payment_status, 'paid');
+  const refund = { amount: 6500, currency: 'eur', id: 're_legacy_price', payment_intent: paymentIntent, status: 'succeeded' };
+  await processStripeEvent(event('refund.updated', refund) as never, stripe as never);
+  assert.equal((await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`)[0].payment_status, 'refunded');
+});

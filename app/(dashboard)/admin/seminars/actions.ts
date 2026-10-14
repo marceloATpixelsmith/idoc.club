@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { createSeminar, updateSeminar } from '@/lib/seminars/seminars';
-import { createAdminSeminarRegistration, recordManualSeminarPayment, searchActiveMembersForRegistration, setAdminRegistrationApprovalStatus, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
+import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
+import { createAdminSeminarRegistration, isStagingSeminarDirectDelivery, recordManualSeminarPayment, searchActiveMembersForRegistration, setAdminRegistrationApprovalStatus, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -67,11 +68,14 @@ export async function updateSeminarAction(_state: AdminSeminarState, formData: F
 }
 
 export async function createAdminSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
-  return run(formData, () => createAdminSeminarRegistration({
-    paymentMethod: formData.get('paymentMethod'),
-    profileId: formData.get('profileId'),
-    seminarId: formData.get('seminarId'),
-  }).then(() => undefined), 'Registration created.', '/admin/seminars/registrations');
+  return run(formData, async () => {
+    await createAdminSeminarRegistration({
+      paymentMethod: formData.get('paymentMethod'),
+      profileId: formData.get('profileId'),
+      seminarId: formData.get('seminarId'),
+    });
+    if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
+  }, 'Registration created.', '/admin/seminars/registrations');
 }
 
 /** Typeahead for the New Registration member lookup. Administrator-only (re-checked server-side) and
@@ -86,8 +90,11 @@ export async function searchRegistrationMembersAction(query: string) {
 }
 
 export async function setAdminRegistrationApprovalStatusAction(_state: AdminSeminarState, formData: FormData) {
-  return run(formData, () => setAdminRegistrationApprovalStatus(formData.get('registrationId'), formData.get('approvalStatus')),
-    'Registration status updated.', '/admin/seminars/registrations');
+  return run(formData, async () => {
+    await setAdminRegistrationApprovalStatus(formData.get('registrationId'), formData.get('approvalStatus'));
+    // staging.idoc.club queues under its own kind that the production cron never claims, so drain it now.
+    if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
+  }, 'Registration status updated.', '/admin/seminars/registrations');
 }
 
 export async function recordManualSeminarPaymentAction(_state: AdminSeminarState, formData: FormData) {

@@ -243,7 +243,9 @@ async function handleSeminarCheckoutSessionCompleted(tx: Transaction, deliveredS
   // Grant credit only against this seminar's own current fee, matching the amount/currency
   // tamper check the membership one-time-fee path already performs (docs/04 §3). A guest has no
   // billing-account Customer to match, so that half of the check only applies to members.
-  const priceCents = registration.memberPriceCents;
+  // The amount recorded on the registration when it was created is authoritative: a registration or
+  // Checkout created before the single-price change may carry the retired non-member amount.
+  const priceCents = registration.expectedAmountCents ?? registration.memberPriceCents;
   const valid = registration.registrationStatus === 'registered' && registration.profileId === metadataProfileId &&
     registration.seminarId === metadataSeminarId && registration.checkoutSessionId === session.id &&
     registration.expectedAmountCents === priceCents && session.amount_total === priceCents &&
@@ -346,8 +348,8 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
   const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id;
   if (!paymentIntentId) return;
   const [registration] = await tx.select({ id: seminarRegistrations.id, guestEmail: seminarRegistrations.guestEmail,
-    guestName: seminarRegistrations.guestName, memberPriceCents: seminars.memberPriceCents,
-    profileId: seminarRegistrations.profileId })
+    expectedAmountCents: seminarRegistrations.expectedAmountCents, guestName: seminarRegistrations.guestName,
+    memberPriceCents: seminars.memberPriceCents, profileId: seminarRegistrations.profileId })
     .from(seminarRegistrations).innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
     .where(eq(seminarRegistrations.stripePaymentIntentId, paymentIntentId)).limit(1);
   if (!registration) {
@@ -355,7 +357,8 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
       details: { paymentIntentId, refundId: refund.id, status: refund.status } });
     return;
   }
-  const priceCents = registration.memberPriceCents;
+  // Classify against the amount actually charged for this registration (legacy rows may carry the retired non-member price).
+  const priceCents = registration.expectedAmountCents ?? registration.memberPriceCents;
   const amount = refund.amount;
   const [existing] = await tx.select({ id: paymentRefunds.id }).from(paymentRefunds).where(eq(paymentRefunds.externalRefundId, refund.id)).limit(1);
   if (existing) await tx.update(paymentRefunds).set({ providerEvidence: { id: refund.id, status: refund.status }, status, updatedAt: new Date(),
