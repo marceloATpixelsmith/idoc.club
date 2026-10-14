@@ -11,7 +11,7 @@ import { HeaderShell } from './HeaderShell';
 
 const nav = [
   { href: '/', label: 'Home' },
-  { href: '/seminars', label: 'Seminars' },
+  { href: '/seminars', label: 'Seminars/Courses' },
   { href: '/membership', label: 'Membership' },
 ] as const;
 

@@ -34,6 +34,11 @@
   );
 }
 
+.idoc-auth-shell--no-visual .idoc-auth-shell__content {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
 .idoc-auth-shell__content {
   display: flex;
   order: 1;

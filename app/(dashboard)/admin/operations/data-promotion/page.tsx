@@ -18,6 +18,7 @@ import {
   type PromotionDataset,
 } from '@/lib/admin/data-promotion';
 import { Button } from '@/components/ui/button';
+import { formatTableDate } from '@/lib/format';
 
 async function executePromotionAction(_state: PromotionActionState, formData: FormData): Promise<PromotionActionState> {
   'use server';
@@ -233,7 +234,7 @@ export default async function DataPromotionPage({
                   <tbody>
                     {history.map((item) => (
                       <tr className="border-b border-border/60" key={item.operationId}>
-                        <td className="py-2 pr-3">{new Date(item.createdAt).toLocaleString()}</td>
+                        <td className="py-2 pr-3">{formatTableDate(item.createdAt)}</td>
                         <td className="py-2 pr-3">{item.dataset}</td>
                         <td className="py-2 pr-3">{item.summary}</td>
                         <td className="py-2 font-mono text-xs">{item.operationId}</td>

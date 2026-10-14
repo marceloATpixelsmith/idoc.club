@@ -13,3 +13,5 @@ Self-service membership cancellation (docs/02 §5.1) makes the mirror-image best
 ## Runtime configuration
 
 The server-only integration uses `MAILCHIMP_MARKETING_API_KEY`, `MAILCHIMP_MARKETING_SERVER_PREFIX`, and `MAILCHIMP_MARKETING_AUDIENCE_ID`. If any value is absent, onboarding still completes and no provider call is attempted. These values must never be exposed to browser code or persisted as consent evidence.
+
+Onboarding presentation: both onboarding steps ("What kind of official are you?" and "Complete your profile") render without the auth-page horse image. The first step is a single-select radio list showing only each option's name beside its established member-type icon (Bell for Judge, Horseshoe for Steward, both for Judge + Steward, Stethoscope for Veterinarian). The Terms of Service (`/terms`) and Privacy Policy (`/privacy`) pages render inside the standard marketing layout, with the site header and footer, as ordinary content pages.

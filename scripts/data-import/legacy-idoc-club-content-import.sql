@@ -42,9 +42,8 @@
 --        gets, so date-based availability/deadline math behaves identically to any other seminar.
 --      - registration_deadline: defaulted to 14 days before the seminar where the source gave no
 --        explicit application deadline.
---      - non_member_price_cents: the legacy site never distinguished a member from a non-member
---        fee (this split is new -- see lib/db/migrations/0056_seminars_multiday_dual_price_guest.sql),
---        so it is imported equal to member_price_cents; an administrator should set a real
+--      - non_member_price_cents (dropped by migration 0073): seminars now have one price for
+--        everyone, stored in member_price_cents; an administrator should set a real
 --        non-member price before relying on public/guest registration for these rows.
 --      - Two of the four seminars were multi-day events on the legacy site (e.g. "June 27th-28th,
 --        2026"); this import still holds `end_date = start_date` for both (the first day only,
@@ -1736,7 +1735,7 @@ FROM ins;
 -- Seminars (legacy category: seminars) (4 rows) ----------------------------------
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/ (wp post id 3242)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, capacity, member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L2 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l2-judges/
@@ -1800,9 +1799,7 @@ https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/glou
     '2026-06-27'::date,
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     'en',
-    'GB',
     10,
-    15000,
     15000,
     '2026-05-15T23:59:00Z'::timestamptz,
     'draft',
@@ -1820,7 +1817,7 @@ FROM ins;
 
 -- source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/ (wp post id 3244)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, capacity, member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Para Dressage Transfer Up Course for L3 Judges',
     'Source: https://idoc.club/para-dressage-transfer-up-course-for-l3-judges/
@@ -1882,9 +1879,7 @@ https://www.premierinn. com/gb/en/hotels/england/gloucestershire/gloucester/glou
     '2026-06-27'::date,
     'Hartpury University and College, Hartpury, Gloucestershire, GL19 3BE, Great Britain',
     'en',
-    'GB',
     20,
-    15000,
     15000,
     '2026-05-15T23:59:00Z'::timestamptz,
     'draft',
@@ -1902,7 +1897,7 @@ FROM ins;
 
 -- source: https://idoc.club/dress-judge-maintenance-course-falstervbo/ (wp post id 3346)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, capacity, member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Dressage Judge Maintenance Course',
     'Source: https://idoc.club/dress-judge-maintenance-course-falstervbo/
@@ -1975,8 +1970,8 @@ Nearest airports: Malmö SWE (50km) or Copenhagen DEN (48 km)',
     '2026-07-10'::date,
     '2026-07-10'::date,
     'Falsterbo Horse Show Arena, Clemensagervagen, 23942 Falsterbo, Sweden',
+    'en',
     20,
-    30000,
     30000,
     '2026-06-02T23:59:00Z'::timestamptz,
     'published',
@@ -1994,7 +1989,7 @@ FROM ins;
 
 -- source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/ (wp post id 3299)
 WITH ins AS (
-  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, organizing_national_federation, capacity, member_price_cents, non_member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
+  INSERT INTO idoc.seminars (title, description, start_date, end_date, location, language, capacity, member_price_cents, registration_deadline, status, created_by_user_id, updated_by_user_id)
   SELECT
     'Young Horse Seminar, Verden 2026 – Save the Date!',
     'Source: https://idoc.club/young-horse-seminar-verden-2026-save-the-date/
@@ -2023,8 +2018,8 @@ EUR 350 (IDOC members)',
     '2026-08-06'::date,
     '2026-08-06'::date,
     'Verden, Germany',
+    'en',
     30,
-    35000,
     35000,
     '2026-07-23T23:59:00Z'::timestamptz,
     'published',

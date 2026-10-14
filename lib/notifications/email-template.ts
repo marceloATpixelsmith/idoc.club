@@ -19,6 +19,13 @@ export const IDOC_EMAIL_ICONS = {
   users: `${IDOC_EMAIL_ICON_BASE}/users.png`,
 } as const;
 
+// Served from this app's own /public (a PNG, since many mail clients block SVG). BASE_URL is the
+// per-environment origin; production is the fallback so previews/tests without it still render.
+export function idocEmailLogoUrl(environment: NodeJS.ProcessEnv = process.env): string {
+  const origin = environment.BASE_URL?.trim().replace(/\/+$/, '') || 'https://idoc.club';
+  return `${origin}/idoc-logo-email.png`;
+}
+
 export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -56,7 +63,7 @@ export function renderTransactionalEmail(options: { bodyHtml: string; footerNote
     <tr><td align="center" bgcolor="${IDOC_EMAIL_COLORS.background}" style="padding:28px 14px;background:${IDOC_EMAIL_COLORS.background} !important;">
       <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" bgcolor="${IDOC_EMAIL_COLORS.card}" class="idoc-email-card" style="width:100%;max-width:640px;background:${IDOC_EMAIL_COLORS.card} !important;border:1px solid ${IDOC_EMAIL_COLORS.border};border-radius:8px;">
         <tr><td class="idoc-email-text" style="padding:36px;color:${IDOC_EMAIL_COLORS.text} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;">
-          <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC — International Dressage Officials Club" src="https://res.cloudinary.com/z6xv27qx/image/upload/v1790786199/idoc-logo-email.png" width="180" style="display:inline-block;width:180px;max-width:100%;height:auto;border:0;" /></div>
+          <div style="margin:0 0 28px;text-align:center;"><img alt="IDOC — International Dressage Officials Club" src="${escapeHtml(idocEmailLogoUrl())}" width="180" style="display:inline-block;width:180px;max-width:100%;height:auto;border:0;" /></div>
           ${options.heading ? `<h2 class="idoc-email-gold" style="margin:0 0 24px;color:${IDOC_EMAIL_COLORS.gold} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:26px;font-weight:700;line-height:1.25;">${escapeHtml(options.heading)}</h2>` : ''}
           <div class="idoc-email-text" style="color:${IDOC_EMAIL_COLORS.text} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;">${options.bodyHtml}</div>
           ${options.footerNote ? `<p style="margin:28px 0 0;color:${IDOC_EMAIL_COLORS.muted};font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;">${options.footerNote}</p>` : ''}
@@ -98,15 +105,4 @@ export function emailNoticeCard(title: string, bodyHtml: string): string {
     <div class="idoc-email-gold" style="margin:0 0 8px;color:${IDOC_EMAIL_COLORS.gold} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${escapeHtml(title)}</div>
     <div class="idoc-email-text" style="color:${IDOC_EMAIL_COLORS.text} !important;font-family:'Barlow',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;">${bodyHtml}</div>
   </div>`;
-}
-
-
-export function renderGuestSeminarRefundEmail(firstName: string) {
-  return {
-    html: renderTransactionalEmail({
-      bodyHtml: `<p>Hello ${escapeHtml(firstName)},</p><p>Your seminar refund has been processed.</p>`,
-      heading: 'Seminar refund confirmed',
-    }),
-    subject: 'Your IDOC seminar refund',
-  };
 }

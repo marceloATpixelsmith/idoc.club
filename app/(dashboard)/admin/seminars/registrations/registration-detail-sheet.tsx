@@ -8,8 +8,8 @@ import { SeminarForm } from '@/components/seminars/seminar-form';
 import { SeminarRefundForm } from '@/components/seminars/refund-form';
 import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
 import type { AdminSeminarRegistrationRow } from '@/lib/seminars/registrations';
-import { PAYMENT_STATUS_LABELS, REGISTRATION_STATUSES } from '@/lib/seminars/status';
-import { recordManualSeminarPaymentAction, setAdminRegistrationStatusAction, updateSeminarRegistrationDetailsAction } from '../actions';
+import { APPROVAL_STATUS_LABELS, FEI_APPROVAL_STATUSES, PAYMENT_STATUS_LABELS, REGISTRATION_STATUSES } from '@/lib/seminars/status';
+import { recordManualSeminarPaymentAction, setAdminRegistrationApprovalStatusAction, setAdminRegistrationStatusAction, updateSeminarRegistrationDetailsAction } from '../actions';
 
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 const REGISTRATION_STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', registered: 'Registered' };
@@ -24,27 +24,17 @@ function money(amountCents: number | null, currency: string) {
 export function RegistrationDetailSheet({ closeHref, paymentMethods, registration }: {
   closeHref: string; paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>; registration: AdminSeminarRegistrationRow;
 }) {
-  const isGuest = registration.profile_id === null;
   return (
     <AdminFormDrawer closeHref={closeHref} title="Registration">
       <div className="space-y-4 px-5 py-6 lg:px-8">
-        <p className="text-sm text-muted-foreground">{registration.seminar_title} · {isGuest ? 'Guest' : 'Member'}</p>
+        <p className="text-sm text-muted-foreground">{registration.seminar_title}</p>
           <AdminFormSection title="Registrant details">
             <SeminarForm action={updateSeminarRegistrationDetailsAction} submitLabel="Save details">
               <input name="registrationId" type="hidden" value={registration.id} />
-              {isGuest ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5"><Label htmlFor="guestFirstName">First name</Label><Input defaultValue={registration.guest_first_name ?? ''} id="guestFirstName" maxLength={100} name="guestFirstName" /></div>
-                  <div className="space-y-1.5"><Label htmlFor="guestLastName">Last name</Label><Input defaultValue={registration.guest_last_name ?? ''} id="guestLastName" maxLength={100} name="guestLastName" /></div>
-                  <div className="space-y-1.5"><Label htmlFor="guestEmail">Email</Label><Input defaultValue={registration.guest_email ?? ''} id="guestEmail" maxLength={255} name="guestEmail" required type="email" /></div>
-                  <div className="space-y-1.5"><Label htmlFor="guestPhone">Phone</Label><Input defaultValue={registration.guest_phone ?? ''} id="guestPhone" maxLength={40} name="guestPhone" type="tel" /></div>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5"><Label>Name</Label><p className="text-sm">{registration.member_name}</p></div>
-                  <div className="space-y-1.5"><Label>Email</Label><p className="text-sm">{registration.member_email}</p></div>
-                </div>
-              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5"><Label>Name</Label><p className="text-sm">{registration.member_name}</p></div>
+                <div className="space-y-1.5"><Label>Email</Label><p className="text-sm">{registration.member_email}</p></div>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="paymentMethod">Payment method</Label>
                 <PaymentMethodSelect
@@ -58,7 +48,17 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
             </SeminarForm>
           </AdminFormSection>
 
-          <AdminFormSection title="Registration status">
+          <AdminFormSection title="Registration Status">
+            <SeminarForm action={setAdminRegistrationApprovalStatusAction} submitLabel="Update registration status">
+              <input name="registrationId" type="hidden" value={registration.id} />
+              <p className="text-sm text-muted-foreground">Current: <strong>{APPROVAL_STATUS_LABELS[registration.approval_status]}</strong>. {registration.is_fei ? 'Choosing an FEI status emails the registrant the registration details with a message stating the status.' : 'This is not an FEI seminar/course, so registrations are Confirmed.'}</p>
+              <select className={SELECT_CLASSNAME} defaultValue={registration.approval_status} disabled={!registration.is_fei || registration.registration_status !== 'registered'} name="approvalStatus">
+                {(registration.is_fei ? FEI_APPROVAL_STATUSES : (['confirmed'] as const)).map((value) => <option key={value} value={value}>{APPROVAL_STATUS_LABELS[value]}</option>)}
+              </select>
+            </SeminarForm>
+          </AdminFormSection>
+
+          <AdminFormSection title="Active or canceled">
             <SeminarForm action={setAdminRegistrationStatusAction} submitLabel="Update status">
               <input name="registrationId" type="hidden" value={registration.id} />
               <fieldset className="flex flex-wrap gap-4">

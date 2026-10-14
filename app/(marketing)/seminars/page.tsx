@@ -8,11 +8,11 @@ import { getPublicUser } from '@/lib/db/queries';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Seminars & Courses — IDOC',
+  title: 'Seminars/Courses — IDOC',
   description:
     'Upcoming IDOC and FEI seminars, maintenance courses and transfer-up courses for dressage judges and stewards.',
   openGraph: {
-    title: 'Seminars & Courses — IDOC',
+    title: 'Seminars/Courses — IDOC',
     description: 'Maintenance courses, young horse seminars and para dressage transfer-up courses for officials.',
   },
 };
@@ -39,23 +39,23 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
           </a>
         )}
         eyebrow="Calendar"
-        title="Seminars & Courses"
+        title="Seminars/Courses"
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
         {user ? (
-          <nav aria-label="Seminars view" className="mt-10 flex gap-4 border-b border-border">
+          <nav aria-label="Seminars/Courses view" className="mt-10 flex gap-4 border-b border-border">
             <Link
               href="/seminars"
               className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'text-muted-foreground' : 'border-b-2 border-gold'}`}
             >
-              Available Seminars
+              Available Seminars/Courses
             </Link>
             <Link
               href="/seminars?view=my"
               className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'border-b-2 border-gold' : 'text-muted-foreground'}`}
             >
-              My Seminars
+              My Seminars/Courses
             </Link>
           </nav>
         ) : null}

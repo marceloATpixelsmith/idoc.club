@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 66, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0071, still apply once');
+    assert.equal(count, 68, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0073, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -156,8 +156,8 @@ test('migration 0061 preserves existing seminar content while retaining nullable
 test('the seminars_levels_valid_check constraint rejects all_levels alongside any other level, even bypassing application-layer parseLevels', async () => {
   const [user] = await sql`insert into idoc.users (email,password_hash) values ('levels-check-admin@idoc.club','hash') returning id`;
   await assert.rejects(sql`insert into idoc.seminars
-    (title,description,start_date,end_date,location,language,organizing_national_federation,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
-    values ('Bad Levels','desc','2026-01-01','2026-01-01','Somewhere','en','IE',10,1000,2000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
+    (title,description,start_date,end_date,location,language,capacity,member_price_cents,registration_deadline,status,levels,created_by_user_id,updated_by_user_id)
+    values ('Bad Levels','desc','2026-01-01','2026-01-01','Somewhere','en',10,1000,now(),'published',${sql.array(['all_levels', 'level_1'])},${user.id},${user.id})`,
     /seminars_levels_valid_check/, 'the database must reject all_levels combined with any other level, not just the application layer');
 });
 
@@ -288,7 +288,7 @@ test('generated migration metadata agrees with the migrated schema', async () =>
   // no longer exist post-migration -- a deliberate, documented removal, not a drift bug.
   const tablesRemovedAfterSnapshot = new Set(['idoc.webauthn_credentials', 'idoc.webauthn_ceremony_challenges']);
   // Migrations 0055/0056 renamed/removed these columns off of idoc.seminars: seminar_date -> start_date
-  // (plus a new end_date), price_cents -> member_price_cents (plus a new non_member_price_cents), and
+  // (plus a new end_date), price_cents -> member_price_cents (plus a since-removed non-member price), and
   // payment_method_canonical_id moved from the seminar to each registration -- see 0056_snapshot.json.
   const columnsRemovedAfterSnapshot: Record<string, Set<string>> = {
     'idoc.seminars': new Set(['seminar_date', 'price_cents', 'payment_method_canonical_id']),
@@ -349,14 +349,14 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
     '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
 
-  // Migrations 0055/0056/0057/0058/0061/0063/0064/0069/0070/0071 reshaped these tables after this frozen snapshot was taken
+  // Migrations 0055/0056/0057/0058/0061/0063/0064/0069/0070/0071/0072 reshaped these tables after this frozen snapshot was taken
   // (payment method moved from the seminar to each registration; multi-day dates; dual
   // member/non-member prices; guest registration; the FEI-affiliation flag; the levels field).
   // Rather than hand-patching every column/constraint/index delta here, this substitutes the
-  // affected tables' definitions straight from the current 0071 snapshot -- generated from
+  // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0071_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0073_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
@@ -366,6 +366,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.audit_log'] = currentSnapshot.tables['idoc.audit_log'];
   expectedSchema['idoc.support_category_defaults'] = currentSnapshot.tables['idoc.support_category_defaults'];
   expectedSchema['idoc.support_conversations'] = currentSnapshot.tables['idoc.support_conversations'];
+  // Migration 0072 added the stripe_manual payment source to the payments constraints.
+  expectedSchema['idoc.payments'] = currentSnapshot.tables['idoc.payments'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables

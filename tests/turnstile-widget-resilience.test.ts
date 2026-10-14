@@ -89,3 +89,17 @@ test('visible challenges and Turnstile errors preserve layout space', () => {
   assert.match(widget, /getBoundingClientRect\(\)/);
   assert.match(widget, /setChallengeVisible\(hasVisibleContent\)/);
 });
+
+test('a widget that rendered but issued no token (e.g. after a server-action redirect) is re-rendered in place a bounded number of times, and a missed onReady is recovered by polling window.turnstile', () => {
+  assert.match(widget, /TOKEN_WATCHDOG_MS/);
+  assert.match(widget, /TOKEN_WATCHDOG_ATTEMPTS/);
+  assert.match(widget, /tokenIssuedRef\.current/);
+  assert.match(widget, /window\.clearInterval\(watchdog\)/);
+  assert.match(widget, /challengeVisibleRef\.current\) return/);
+  assert.match(widget, /if \(window\.turnstile\) setScriptLoaded\(true\)/);
+});
+
+test('the token watchdog waits longer than Cloudflare\'s built-in 8 second widget retry', () => {
+  const match = widget.match(/const TOKEN_WATCHDOG_MS = ([0-9_]+);/);
+  assert.ok(match && Number(match[1].replace(/_/g, '')) > 8000);
+});

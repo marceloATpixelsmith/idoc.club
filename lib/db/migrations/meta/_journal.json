@@ -505,6 +505,20 @@
       "when": 1791566400000,
       "tag": "0071_permanent_data_promotion",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1791570000000,
+      "tag": "0072_seminar_approval_directory_optin_support_suggestion",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791580000000,
+      "tag": "0073_remove_guest_and_non_member_legacy",
+      "breakpoints": true
     }
   ]
 }

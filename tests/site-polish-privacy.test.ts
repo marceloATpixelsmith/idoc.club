@@ -7,7 +7,7 @@ const membership = readFileSync('app/(dashboard)/dashboard/membership/page.tsx',
 const globals = readFileSync('app/globals.css', 'utf8');
 const layout = readFileSync('app/layout.tsx', 'utf8');
 const notice = readFileSync('components/site/privacy-notice.tsx', 'utf8');
-const privacy = readFileSync('app/privacy/page.tsx', 'utf8');
+const privacy = readFileSync('app/(marketing)/privacy/page.tsx', 'utf8');
 
 test('footer omits Facebook and exposes privacy and terms links', () => {
   assert.doesNotMatch(footer, /facebook\.com/i);

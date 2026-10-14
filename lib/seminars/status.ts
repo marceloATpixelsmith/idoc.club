@@ -6,6 +6,23 @@ export type SeminarStatus = (typeof SEMINAR_STATUSES)[number];
 export const REGISTRATION_STATUSES = ['registered', 'canceled'] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
 
+/** The registration's approval ("Registration Status" in the UI) -- independent of both the lifecycle
+ * `registrationStatus` above and the payment status. A non-FEI registration is 'confirmed' the moment
+ * it is made; an FEI registration starts at 'pending_fei_approval' until an administrator records
+ * the FEI decision. */
+export const APPROVAL_STATUSES = ['confirmed', 'pending_fei_approval', 'approved_by_fei', 'not_approved_by_fei', 'approved_audit_only_by_fei'] as const;
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
+export const FEI_APPROVAL_STATUSES = APPROVAL_STATUSES.filter((status) => status !== 'confirmed');
+
+export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
+  approved_audit_only_by_fei: 'Approved to Audit Only by FEI', approved_by_fei: 'Approved by FEI', confirmed: 'Confirmed',
+  not_approved_by_fei: 'Not Approved by FEI', pending_fei_approval: 'Pending FEI Approval',
+};
+
+export function initialApprovalStatus(isFei: boolean): ApprovalStatus {
+  return isFei ? 'pending_fei_approval' : 'confirmed';
+}
+
 export const PAYMENT_STATUSES = ['unpaid', 'pending', 'bank_transfer_pending', 'cash_pending', 'paid', 'refunded', 'partially_refunded', 'refund_failed', 'disputed', 'chargeback'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 

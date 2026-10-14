@@ -54,6 +54,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     // Reset must be able to actually clear Status to "no restriction", not just re-apply this.
     status: typeof savedPreferences?.status === 'string' ? savedPreferences.status : savedPreferences === null ? 'active' : undefined,
     type: typeof savedPreferences?.type === 'string' ? savedPreferences.type : undefined,
+    officialStatus: typeof savedPreferences?.officialStatus === 'string' ? savedPreferences.officialStatus : undefined,
   };
   let filterError: string | null = null;
   let listing: Awaited<ReturnType<typeof listAdminMembers>>;

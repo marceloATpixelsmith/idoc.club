@@ -8,7 +8,6 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { sanitizeArticleContent, hasVisibleContent } from '@/lib/news/sanitize';
-import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
 import { canonicalLanguageTag } from '@/lib/seminars/language';
 import { seminarEndsAtUtc, SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
 
@@ -58,7 +57,7 @@ async function requireSeminarAdministrator() {
 type SeminarInput = {
   accommodationInformation: unknown; application: unknown; capacity: unknown; courseDirectors: unknown;
   courseVenueInformation: unknown; endDate: unknown; isFei: unknown; language: unknown; levels: unknown; location: unknown;
-  memberPrice: unknown; nonMemberPrice: unknown; organizingNationalFederation: unknown; participantProfile: unknown;
+  price: unknown; participantProfile: unknown;
   registrationDeadline: unknown; startDate: unknown; status: unknown; title: unknown;
 };
 
@@ -83,23 +82,20 @@ function validateFields(input: SeminarInput) {
   const endDate = parse(dateSchema, input.endDate, 'Enter a valid end date.');
   if (endDate < startDate) throw new SeminarValidationError('The end date must be on or after the start date.');
   const capacity = parse(capacitySchema, input.capacity, 'Capacity must be a whole number of at least 1.');
-  const memberPriceCents = Math.round(parse(priceSchema, input.memberPrice, 'Member price must be zero or a positive amount.') * 100);
-  const nonMemberPriceCents = Math.round(parse(priceSchema, input.nonMemberPrice, 'Non-member price must be zero or a positive amount.') * 100);
+  const priceCents = Math.round(parse(priceSchema, input.price, 'Price must be zero or a positive amount.') * 100);
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
   const deadlineDate = parse(dateSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
   const registrationDeadline = new Date(`${deadlineDate}T00:00:00Z`);
   if (registrationDeadline.getTime() >= new Date(`${startDate}T00:00:00Z`).getTime()) throw new SeminarValidationError('The registration deadline must be before the seminar start date.');
   const language = typeof input.language === 'string' ? canonicalLanguageTag(input.language) : null;
   if (!language) throw new SeminarValidationError('Choose a valid BCP 47 language.');
-  const organizingNationalFederation = typeof input.organizingNationalFederation === 'string' ? input.organizingNationalFederation.toUpperCase() : '';
-  if (!(ISO_COUNTRY_CODES as readonly string[]).includes(organizingNationalFederation)) throw new SeminarValidationError('Choose a valid National Federation.');
   return {
     accommodationInformation: richText(input.accommodationInformation, 'Accommodation Information'),
     application: richText(input.application, 'Application'), capacity,
     courseDirectors: richText(input.courseDirectors, 'Course Directors'),
     courseVenueInformation: richText(input.courseVenueInformation, 'Course Venue Information'), endDate,
     isFei: input.isFei === 'on' || input.isFei === true, language, levels: parseLevels(input.levels), location,
-    memberPriceCents, nonMemberPriceCents, organizingNationalFederation,
+    priceCents,
     participantProfile: richText(input.participantProfile, 'Participant Profile'), registrationDeadline, startDate, status, title,
   };
 }
@@ -123,7 +119,7 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
   const limit = listPageSize(input);
   const offset = (page - 1) * limit;
   const rows = await client`select s.id,s.title,s.status,s.start_date,s.end_date,s.registration_deadline,s.capacity,
-    s.member_price_cents,s.non_member_price_cents,count(*) over()::int total_count,
+    s.member_price_cents,count(*) over()::int total_count,
     (select count(*)::int from seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') registered_count
     from seminars s
     where (${statusWhere}) and (${search}='' or s.title ilike ${`%${search}%`} or s.location ilike ${`%${search}%`})
@@ -135,7 +131,7 @@ export async function listAdminSeminars(input: Record<string, string | string[] 
 export type AdminSeminarRow = {
   accommodation_information: string; application: string; capacity: number; course_directors: string; course_venue_information: string;
   created_at: Date; created_by_user_id: number; end_date: string; id: number; is_fei: boolean; language: string; levels: string[];
-  location: string; member_price_cents: number; non_member_price_cents: number; organizing_national_federation: string;
+  location: string; member_price_cents: number;
   participant_profile: string; registration_deadline: Date | string; start_date: string; status: SeminarStatus; title: string;
   updated_at: Date; updated_by_user_id: number;
 };
@@ -157,11 +153,11 @@ export async function createSeminar(input: SeminarInput) {
   const fields = validateFields(input);
   return client.begin(async (sql) => {
     const [row] = await sql<{ id: number }[]>`insert into seminars
-      (title,description,start_date,end_date,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
-      values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.organizingNationalFederation},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.memberPriceCents},${fields.nonMemberPriceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
+      (title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
+      values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.priceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
-      (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
+      (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, priceCents: fields.priceCents, status: fields.status, title: fields.title })}::jsonb)`;
     return row.id;
   });
 }
@@ -173,21 +169,21 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
   let needsCancellationResolution = false;
   await client.begin(async (sql) => {
     const [existing] = await sql<{
-      capacity: number; member_price_cents: number; non_member_price_cents: number; status: SeminarStatus; title: string;
-    }[]>`select capacity,member_price_cents,non_member_price_cents,status,title from seminars where id=${id} for update`;
+      capacity: number; member_price_cents: number; status: SeminarStatus; title: string;
+    }[]>`select capacity,member_price_cents,status,title from seminars where id=${id} for update`;
     if (!existing) throw new SeminarValidationError('Seminar not found.');
     const [{ count: activeCount }] = await sql<{ count: number }[]>`select count(*)::int count from seminar_registrations where seminar_id=${id} and registration_status='registered'`;
     const [{ count: totalCount }] = await sql<{ count: number }[]>`select count(*)::int count from seminar_registrations where seminar_id=${id}`;
-    if (totalCount > 0 && (fields.memberPriceCents !== existing.member_price_cents || fields.nonMemberPriceCents !== existing.non_member_price_cents)) {
+    if (totalCount > 0 && fields.priceCents !== existing.member_price_cents) {
       throw new SeminarValidationError('Prices cannot change once a seminar has registrations.');
     }
     if (fields.capacity < activeCount) {
       throw new SeminarValidationError(`Capacity cannot be reduced below the ${activeCount} current active registration(s).`);
     }
     await sql`update seminars set title=${fields.title},description='',start_date=${fields.startDate},end_date=${fields.endDate},location=${fields.location},
-      language=${fields.language},organizing_national_federation=${fields.organizingNationalFederation},course_directors=${fields.courseDirectors},
+      language=${fields.language},course_directors=${fields.courseDirectors},
       participant_profile=${fields.participantProfile},course_venue_information=${fields.courseVenueInformation},application=${fields.application},accommodation_information=${fields.accommodationInformation},
-      capacity=${fields.capacity},member_price_cents=${fields.memberPriceCents},non_member_price_cents=${fields.nonMemberPriceCents},
+      capacity=${fields.capacity},member_price_cents=${fields.priceCents},
       registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},is_fei=${fields.isFei},levels=${sql.array(fields.levels)},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     // Canceling a seminar atomically cancels active registrations. Stripe resolution is intentionally
@@ -206,13 +202,12 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     }
     const changedFields = [
       existing.title !== fields.title && 'title', existing.status !== fields.status && 'status',
-      existing.capacity !== fields.capacity && 'capacity', existing.member_price_cents !== fields.memberPriceCents && 'memberPriceCents',
-      existing.non_member_price_cents !== fields.nonMemberPriceCents && 'nonMemberPriceCents',
+      existing.capacity !== fields.capacity && 'capacity', existing.member_price_cents !== fields.priceCents && 'priceCents',
     ].filter(Boolean);
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar.edited','seminar',${String(id)},
-      ${JSON.stringify({ capacity: existing.capacity, memberPriceCents: existing.member_price_cents, nonMemberPriceCents: existing.non_member_price_cents, status: existing.status, title: existing.title })}::jsonb,
-      ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, memberPriceCents: fields.memberPriceCents, nonMemberPriceCents: fields.nonMemberPriceCents, status: fields.status, title: fields.title })}::jsonb)`;
+      ${JSON.stringify({ capacity: existing.capacity, priceCents: existing.member_price_cents, status: existing.status, title: existing.title })}::jsonb,
+      ${JSON.stringify({ canceledRegistrations, capacity: fields.capacity, changedFields, priceCents: fields.priceCents, status: fields.status, title: fields.title })}::jsonb)`;
   });
   // Start refunds and payment-session expiry immediately after the cancellation commits.
   // The durable canceled registration state remains eligible for scheduled recovery.

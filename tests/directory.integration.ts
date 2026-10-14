@@ -39,10 +39,11 @@ async function createProfileIn(userId: number, countryCode: string, roles: RoleF
   return profile;
 }
 
-async function entitledMemberIn(countryCode: string, roles: RoleFixture[] = [judgeRole], name?: { firstName: string; lastName: string }) {
+async function entitledMemberIn(countryCode: string, roles: RoleFixture[] = [judgeRole], name?: { firstName: string; lastName: string }, options: { directoryEmailOptIn?: boolean } = {}) {
   const user = await createUser();
   const profile = await createProfileIn(user.id, countryCode, roles, name);
   await createMembership(profile.id, true);
+  if (options.directoryEmailOptIn) await sql`update idoc.profiles set directory_email_opt_in=true where id=${profile.id}`;
   return { profile, user };
 }
 
@@ -125,7 +126,7 @@ test('paid directory: a currently-entitled member can search, and a privileged a
 });
 
 test('paid directory: returns member email for contact while excluding addresses and database identifiers', async () => {
-  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' }, { directoryEmailOptIn: true });
   const listing = await asMember(user.id, () => listMemberDirectory({ q: 'Lovelace' }));
   assert.equal(listing.rows.length, 1);
   assert.equal(listing.rows[0].email, user.email);
@@ -147,17 +148,31 @@ test('paid directory: only active, non-admin member accounts appear in directory
 
   const listing = await asMember(searcher.id, () => listMemberDirectory());
   assert.equal(listing.total, 1);
-  assert.deepEqual(listing.rows.map((row) => row.email), [searcher.email]);
+  assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`), ['Grace Hopper']);
 });
 
 test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {
-  const { user: listedUser } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  const { user: listedUser } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' }, { directoryEmailOptIn: true });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
   const listing = await asMember(searcher.id, () => listMemberDirectory({ q: listedUser.email }));
   assert.equal(listing.rows.length, 1);
   assert.equal(listing.rows[0].firstName, 'Ada');
   assert.equal(listing.rows[0].email, listedUser.email);
   assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
+});
+
+test('paid directory: a member who has not opted in never exposes their email -- not in the row, not through email search, not through email sorting', async () => {
+  const { user: hidden } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  const { user: shown } = await entitledMemberIn('ES', [judgeRole], { firstName: 'Bea', lastName: 'Babbage' }, { directoryEmailOptIn: true });
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
+  const byName = await asMember(searcher.id, () => listMemberDirectory({ q: 'Lovelace' }));
+  assert.equal(byName.rows.length, 1);
+  assert.equal(byName.rows[0].email, null);
+  const byHiddenEmail = await asMember(searcher.id, () => listMemberDirectory({ q: hidden.email }));
+  assert.equal(byHiddenEmail.rows.length, 0, 'an email that was not opted in must not be discoverable by searching for it');
+  const byShownEmail = await asMember(searcher.id, () => listMemberDirectory({ q: shown.email }));
+  assert.equal(byShownEmail.rows.length, 1);
+  assert.equal(byShownEmail.rows[0].email, shown.email);
 });
 
 test('paid directory: filters by federation, region, and membership type without a country filter', async () => {

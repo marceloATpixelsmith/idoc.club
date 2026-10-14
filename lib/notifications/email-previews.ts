@@ -4,7 +4,7 @@ import { EMAIL_OTP_SUBJECTS, renderEmailOtpHtml, type EmailOtpPurpose } from '@/
 import { AUTH_SECURITY_CONTENT } from '@/lib/notifications/auth-security-delivery';
 import { AUTH_SECURITY_KINDS } from '@/lib/notifications/auth-security-events';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
-import { emailButton, escapeHtml, renderGuestSeminarRefundEmail, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { emailButton, escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
 import { renderNotice } from '@/lib/notifications/renewal-notices';
 import { seminarRegistrationConfirmationBodyHtml, type SeminarEmailDetails } from '@/lib/seminars/registrations';
 import { formatDateTime } from '@/lib/format';
@@ -30,14 +30,14 @@ const MEMBERSHIP_PREVIEWS = [
   ['membership.payment_failed', 'Renewal payment failed'],
   ['membership.grace_reminder', 'Grace-period reminder'],
   ['membership.grace_expired', 'Membership expired after grace'],
+  ['membership.manual_payment_recorded', 'Membership payment recorded by an administrator'],
 ] as const;
 
 const SEMINAR_PREVIEWS = [
   ['seminar.registration_created', 'Seminar registration confirmation'],
   ['seminar.registration_canceled', 'Seminar registration canceled'],
   ['seminar.payment_confirmed', 'Seminar payment confirmed'],
-  ['seminar.refund_confirmed', 'Member seminar refund confirmed'],
-  ['seminar.guest_refund_confirmed', 'Guest seminar refund confirmed'],
+  ['seminar.refund_confirmed', 'Seminar refund confirmed'],
 ] as const;
 
 export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
@@ -106,8 +106,6 @@ const SAMPLE_SEMINAR: SeminarEmailDetails = {
   levels: ['level_1', 'level_2'],
   location: 'Madrid, Spain',
   member_price_cents: 12000,
-  non_member_price_cents: 18000,
-  organizing_national_federation: 'ES',
   participant_profile: '<p>Judges, Stewards and Veterinarians.</p>',
   registration_deadline: '2026-11-01',
   start_date: '2026-11-15',
@@ -118,7 +116,8 @@ async function seminarRegistrationPreview() {
   return {
     html: renderTransactionalEmail({
       bodyHtml: await seminarRegistrationConfirmationBodyHtml({
-        amountCents: 18000,
+        amountCents: 12000,
+        approvalStatus: 'pending_fei_approval',
         firstName: 'Ameyalli',
         paymentConfirmed: true,
         paymentMethod: 'online_stripe',
@@ -145,7 +144,6 @@ async function renderPreview(id: string): Promise<{ html: string; subject: strin
     return securityPreview(kind);
   }
   if (id === 'seminar.registration_created') return seminarRegistrationPreview();
-  if (id === 'seminar.guest_refund_confirmed') return renderGuestSeminarRefundEmail('Ameyalli');
   if (MEMBERSHIP_PREVIEWS.some(([kind]) => kind === id) || SEMINAR_PREVIEWS.some(([kind]) => kind === id)) {
     return renderNotice(id, {
       amountCents: 18000,

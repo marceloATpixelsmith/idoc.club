@@ -34,7 +34,8 @@ export type MemberDirectoryFilters = {
 
 export type DirectoryRoleDetail = { officialStatuses: string[] | null; roleType: string };
 export type DirectoryMemberRow = {
-  email: string; federation: string | null; firstName: string;
+  /** Null unless the member opted in to showing their email in the directory (default: not shown). */
+  email: string | null; federation: string | null; firstName: string;
   lastName: string; membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
 type RawDirectoryRow = DirectoryMemberRow;
@@ -91,7 +92,7 @@ function queryParts(raw: MemberDirectoryFilters) {
   ];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or coalesce(u.email_display, u.email) ilike ${pattern} escape '\\')`);
+    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or (p.directory_email_opt_in and coalesce(u.email_display, u.email) ilike ${pattern} escape '\\'))`);
   }
   if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
@@ -120,7 +121,7 @@ function directoryOrder(sorting: DirectorySort[]) {
     const direction = desc ? sql`desc` : sql`asc`;
     const column = id === 'name' || id === 'lastName' ? sql`p.last_name`
       : id === 'firstName' ? sql`p.first_name`
-      : id === 'email' ? sql`coalesce(u.email_display, u.email)`
+      : id === 'email' ? sql`case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end`
       : id === 'type' ? sql`roles.membership_type`
       : id === 'federation' ? sql`roles.federation`
       : sql`roles.region`;
@@ -143,7 +144,7 @@ export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
   const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", coalesce(u.email_display, u.email) email, roles.federation, roles.region,
+    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end email, roles.federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
       roles.role_details "roles" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),

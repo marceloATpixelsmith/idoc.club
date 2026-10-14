@@ -5,19 +5,21 @@ import './canonical-reference.css';
 export function AuthShell({
   children,
   description,
+  hideVisual,
   title,
   wide,
 }: {
   children: ReactNode;
   description?: ReactNode;
+  hideVisual?: boolean;
   title?: string;
   wide?: boolean;
 }) {
   const hasHeading = Boolean(title || description);
 
   return (
-    <main className="idoc-auth-shell">
-      <section aria-hidden="true" className="idoc-auth-shell__visual" />
+    <main className={`idoc-auth-shell${hideVisual ? ' idoc-auth-shell--no-visual' : ''}`}>
+      {hideVisual ? null : <section aria-hidden="true" className="idoc-auth-shell__visual" />}
 
       <section className="idoc-auth-shell__content">
         <div className={`idoc-auth-shell__inner${wide ? ' idoc-auth-shell__inner--wide' : ''}`}>

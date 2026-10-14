@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
-import { cancelOwnRegistration, registerForSeminar, registerForSeminarAtNonMemberPrice } from '@/lib/seminars/registrations';
+import { cancelOwnRegistration, registerForSeminar } from '@/lib/seminars/registrations';
 import { createSeminarCheckoutSession } from '@/lib/seminars/checkout';
 import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
 import { isStagingSeminarDirectDelivery } from '@/lib/seminars/registrations';
@@ -44,13 +44,6 @@ async function runOwnProfileRegistration(formData: FormData, register: (seminarI
 
 export async function registerForSeminarAction(_state: MemberSeminarState, formData: FormData): Promise<MemberSeminarState> {
   return runOwnProfileRegistration(formData, registerForSeminar);
-}
-
-/** For a signed-in visitor with their own profile who cannot use the member price (see
- * registerForSeminarAtNonMemberPrice) -- same flow as registerForSeminarAction, just the
- * non-member-priced registration function underneath. */
-export async function registerAtNonMemberPriceAction(_state: MemberSeminarState, formData: FormData): Promise<MemberSeminarState> {
-  return runOwnProfileRegistration(formData, registerForSeminarAtNonMemberPrice);
 }
 
 export async function cancelSeminarRegistrationAction(_state: MemberSeminarState, formData: FormData): Promise<MemberSeminarState> {

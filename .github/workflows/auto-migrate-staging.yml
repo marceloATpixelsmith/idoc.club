@@ -1,0 +1,53 @@
+name: Auto-migrate Staging Schema
+
+# Applies committed Drizzle migrations to the idoc_staging schema whenever migration files change on the
+# staging branch, so the staging database never falls behind the deployed code. This replaces the migration
+# step that vercel.json ran in the build until 9 October 2026 (commit 16616d3), without putting the
+# schema-owner credential in Vercel. Production is never migrated here: it stays the manual,
+# reviewer-approved "Manual Apply Pending Migrations" workflow.
+on:
+  push:
+    branches:
+      - staging
+    paths:
+      - lib/db/migrations/**
+      - scripts/migrate-selected-schema.ts
+      - scripts/schema-migration-sql.mjs
+      - .github/workflows/auto-migrate-staging.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-migrate-staging
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/staging'
+    name: Apply pending migrations to idoc_staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: idoc-db-staging-maintenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - run: pnpm install --frozen-lockfile
+      - name: Apply every pending committed migration to idoc_staging
+        env:
+          POSTGRES_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          DB_SCHEMA: idoc_staging
+        run: pnpm db:migrate
+      - name: Verify the ledger reached the newest committed migration
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          TARGET_SCHEMA: idoc_staging
+        run: node scripts/guard-pending-migrations.mjs after

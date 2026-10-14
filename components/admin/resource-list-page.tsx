@@ -7,6 +7,7 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { listAdminArticles } from '@/lib/news/articles';
 import { listAdminSeminars } from '@/lib/seminars/seminars';
+import { formatTableDate } from '@/lib/format';
 
 type ResourceType = 'news' | 'seminars';
 
@@ -47,7 +48,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       status: String(row.status), type: String(row.article_type ?? 'news'),
       thumbnailUrl: row.thumbnail_url ? String(row.thumbnail_url) : undefined,
       publication: formatAdminDate(new Date(String(row.publication_date)).toISOString().slice(0, 10)),
-      updated: new Date(String(row.updated_at)).toLocaleString(),
+      updated: formatTableDate(String(row.updated_at)),
     }));
   } else if (tableType === 'seminars') {
     const listing = await listAdminSeminars(listQuery);
@@ -56,7 +57,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       id: Number(row.id), title: String(row.title),
       start: formatAdminDate(String(row.start_date)), end: formatAdminDate(String(row.end_date)),
       deadline: formatAdminDate(new Date(String(row.registration_deadline)).toISOString().slice(0, 10)), status: String(row.status),
-      prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)} / €${(Number(row.non_member_price_cents) / 100).toFixed(2)}`,
+      prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)}`,
       registrations: `${String(row.registered_count)} / ${String(row.capacity)}`,
     }));
   }

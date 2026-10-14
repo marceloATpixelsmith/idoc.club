@@ -3,16 +3,17 @@ import 'server-only';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, memberships, payments, profiles } from '@/lib/db/schema';
+import { auditLog, memberships, notificationOutbox, payments, profiles, users } from '@/lib/db/schema';
+import { communicationHoldFields } from '@/lib/runtime/member-launch-hold';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { lockLatestMembership } from '@/lib/membership/locking';
 import { MANUAL_PAYMENT_SOURCES, MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, type ManualPaymentSource } from './pricing';
 import { nextValidUntil } from './renewal';
 
-// PayPal/bank transfer need a transaction reference as evidence (docs/02 §4); cash and
-// complimentary grants may not have one.
-const REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource[] = ['paypal', 'bank_transfer'];
+// Stripe/bank transfer need a Stripe Payment ID / bank transfer reference as evidence (docs/02 §4);
+// cash and complimentary grants may not have one.
+const REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource[] = ['stripe_manual', 'bank_transfer'];
 
 // docs/02 §5/§8: a manual payment always uses "the actual payment date" — a date that hasn't
 // happened yet can never be an actual payment date, so future dates are rejected outright rather
@@ -38,7 +39,7 @@ const manualPaymentSchema = z.object({
 });
 
 /**
- * Records an EUR manual payment (paypal/bank_transfer/cash) or a complimentary grant, and extends
+ * Records an EUR manual payment (stripe_manual/bank_transfer/cash) or a complimentary grant, and extends
  * membership using the same rolling-calendar rule Stripe payments use (docs/02 §5, §8). Payment,
  * entitlement change, and audit entry commit in one transaction. The fee is always the fixed
  * MEMBERSHIP_FEE_CENTS — there is no amount input on this function's signature, by design, so no
@@ -90,6 +91,23 @@ export async function recordManualPayment(untrustedInput: unknown) {
       beforeJson: membership ? { membership } : null,
       entityId: String(input.profileId), entityType: 'profile', reason: input.reason,
     });
+
+    // Tell the member their account is fully paid and accessible -- but only when this payment actually
+    // leaves them active. A complimentary grant is not a payment, and a suspended or canceled
+    // membership stays that way (a payment alone never lifts it), so neither claims "accessible".
+    if (input.source !== 'complimentary' && membershipRow.status === 'active') {
+      const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName }).from(profiles)
+        .innerJoin(users, eq(users.id, profiles.userId)).where(eq(profiles.id, input.profileId)).limit(1);
+      if (contact?.email) {
+        await tx.insert(notificationOutbox).values({
+          ...communicationHoldFields(),
+          dedupeKey: `membership.manual_payment_recorded:${payment.id}`,
+          kind: 'membership.manual_payment_recorded',
+          payload: { amountCents: MEMBERSHIP_FEE_CENTS, expirationDate: validUntil, firstName: contact.firstName, to: contact.email },
+          profileId: input.profileId,
+        }).onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+      }
+    }
 
     return { membership: membershipRow, payment };
   });
