@@ -572,7 +572,7 @@ test('an administrator creates a registration by looking up an active member, wh
   assert.match(drawer, /<MemberLookup \/>/);
   assert.doesNotMatch(drawer, /name="firstName"|name="lastName"|name="email"|name="phone"/);
   // Seminar and payment method sit side by side at 50% each on desktop.
-  assert.match(drawer, /grid gap-4 md:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
+  assert.match(drawer, /grid gap-4 sm:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
 });
 
 test('an administrator recording a seminar payment queues the Seminar payment confirmed notice in the same transaction', () => {

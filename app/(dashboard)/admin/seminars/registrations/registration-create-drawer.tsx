@@ -27,7 +27,7 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
         >
           <SeminarForm action={createAdminSeminarRegistrationAction} submitLabel="Create Registration">
             <MemberLookup />
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="seminarId">Seminar/Course</Label>
                 <select className={SELECT_CLASSNAME} id="seminarId" name="seminarId" onChange={(event) => setSeminarId(event.target.value)} required value={seminarId}>
@@ -46,7 +46,7 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
                 />
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="approvalStatus">Registration Status</Label>
                 <select className={SELECT_CLASSNAME} id="approvalStatus" key={isFei ? 'fei' : 'standard'} name="approvalStatus" required>

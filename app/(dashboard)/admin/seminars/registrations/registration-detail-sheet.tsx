@@ -31,11 +31,11 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
           <AdminFormSection title="Registrant details">
             <SeminarForm action={updateSeminarRegistrationDetailsAction} submitLabel="Save details">
               <input name="registrationId" type="hidden" value={registration.id} />
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>Name</Label><p className="text-sm">{registration.member_name}</p></div>
                 <div className="space-y-1.5"><Label>Email</Label><p className="text-sm">{registration.member_email}</p></div>
               </div>
-              <div className="space-y-1.5">
+              <div className="max-w-sm space-y-1.5">
                 <Label htmlFor="paymentMethod">Payment method</Label>
                 <PaymentMethodSelect
                   className={SELECT_CLASSNAME}
@@ -52,7 +52,7 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
             <SeminarForm action={setAdminRegistrationApprovalStatusAction} submitLabel="Update registration status">
               <input name="registrationId" type="hidden" value={registration.id} />
               <p className="text-sm text-muted-foreground">Current: <strong>{APPROVAL_STATUS_LABELS[registration.approval_status]}</strong>. {registration.is_fei ? 'Choosing an FEI status emails the registrant the registration details with a message stating the status.' : 'This is not an FEI seminar/course, so registrations are Confirmed.'}</p>
-              <select className={SELECT_CLASSNAME} defaultValue={registration.approval_status} disabled={!registration.is_fei || registration.registration_status !== 'registered'} name="approvalStatus">
+              <select className={`${SELECT_CLASSNAME} max-w-sm`} defaultValue={registration.approval_status} disabled={!registration.is_fei || registration.registration_status !== 'registered'} name="approvalStatus">
                 {(registration.is_fei ? FEI_APPROVAL_STATUSES : (['confirmed'] as const)).map((value) => <option key={value} value={value}>{APPROVAL_STATUS_LABELS[value]}</option>)}
               </select>
             </SeminarForm>
@@ -73,14 +73,16 @@ export function RegistrationDetailSheet({ closeHref, paymentMethods, registratio
           </AdminFormSection>
 
           <AdminFormSection title="Payment">
-            <p className="text-sm">Status: <strong>{PAYMENT_STATUS_LABELS[registration.payment_status]}</strong></p>
-            <p className="text-sm">Amount due: <strong>{money(registration.expected_amount_cents, registration.currency)}</strong></p>
-            {registration.paid_at ? <p className="text-sm">Paid at: {new Date(registration.paid_at).toLocaleString()}</p> : null}
-            {registration.payment_reference ? <p className="text-sm">Reference: {registration.payment_reference}</p> : null}
+            <div className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <p>Status: <strong>{PAYMENT_STATUS_LABELS[registration.payment_status]}</strong></p>
+              <p>Amount due: <strong>{money(registration.expected_amount_cents, registration.currency)}</strong></p>
+              {registration.paid_at ? <p>Paid at: {new Date(registration.paid_at).toLocaleString()}</p> : null}
+              {registration.payment_reference ? <p>Reference: {registration.payment_reference}</p> : null}
+            </div>
             {MARKABLE_PAID_STATUSES.includes(registration.payment_status) ? (
               <SeminarForm action={recordManualSeminarPaymentAction} submitLabel="Mark paid">
                 <input name="registrationId" type="hidden" value={registration.id} />
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="method">Payment received via</Label>
                     <PaymentMethodSelect
