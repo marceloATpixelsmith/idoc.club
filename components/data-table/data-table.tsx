@@ -55,8 +55,10 @@ export function DataTable<TData>({
   const [drawerRefreshPending, setDrawerRefreshPending] = useState(false);
   React.useEffect(() => {
     const begin = () => setDrawerRefreshPending(true);
+    const end = () => setDrawerRefreshPending(false);
     window.addEventListener('idoc:table-refresh-start', begin);
-    return () => window.removeEventListener('idoc:table-refresh-start', begin);
+    window.addEventListener('idoc:table-refresh-end', end);
+    return () => { window.removeEventListener('idoc:table-refresh-start', begin); window.removeEventListener('idoc:table-refresh-end', end); };
   }, []);
   React.useEffect(() => {
     //THE SERVER SUPPLIED NEW TABLE DATA; CLEAR THE DRAWER-INITIATED SKELETON.

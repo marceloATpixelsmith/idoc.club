@@ -105,6 +105,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <MembersTable initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
     {selected && (
       <MemberDetailSheet
+        key={selected.profile.id}
         accountState={accountState}
         activeRoles={activeRoles}
         auditHistory={auditHistory}
