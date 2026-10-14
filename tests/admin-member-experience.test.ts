@@ -20,6 +20,8 @@ test('manual membership payments offer Stripe instead of PayPal and label the si
   assert.match(form, /id="reference" name="reference" required type="text"/);
   assert.match(form, /value=\{source\} onChange=/);
   assert.match(form, /value=\{reason\} onChange=/);
+  // The reference input is not rendered for cash/complimentary, so the action must treat the missing field as undefined.
+  assert.match(read('app/(dashboard)/admin/payments/actions.ts'), /reference: formData\.get\('reference'\) \?\? undefined,/);
   const server = read('lib/payments/manual-payments.ts');
   assert.match(server, /REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer'\]/);
   assert.match(server, /membership\.manual_payment_recorded/);
