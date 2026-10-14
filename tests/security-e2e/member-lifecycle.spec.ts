@@ -136,6 +136,6 @@ test.describe('after signup', () => {
     expect((await registrationFor(email, MEMBER_SEMINAR.title)).payment_status).toBe('paid');
 
     await page.goto('/seminars?view=my');
-    await expect(page.locator('li', { hasText: MEMBER_SEMINAR.title })).toContainText('Payment Status: Paid');
+    await expect(page.locator('li', { hasText: MEMBER_SEMINAR.title })).toContainText(/Status: \w[\w ]* \/ Paid/);
   });
 });

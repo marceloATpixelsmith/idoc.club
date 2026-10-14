@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { searchRegistrationMembersAction } from '../actions';
@@ -33,7 +34,7 @@ export function MemberLookup() {
       {selected ? (
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
           <span><strong>{selected.firstName} {selected.lastName}</strong> · {selected.email}</span>
-          <button className="text-xs underline" onClick={() => { setSelected(null); setQuery(''); }} type="button">Change</button>
+          <Button onClick={() => { setSelected(null); setQuery(''); }} size="sm" type="button" variant="outline">Change</Button>
         </div>
       ) : (
         <div className="relative">

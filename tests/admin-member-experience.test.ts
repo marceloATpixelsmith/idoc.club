@@ -11,19 +11,21 @@ test('manual membership payments offer Stripe instead of PayPal and label the si
   assert.deepEqual([...MANUAL_PAYMENT_SOURCES], ['stripe_manual', 'bank_transfer', 'cash', 'complimentary']);
   assert.equal(PAYMENT_SOURCE_LABELS.stripe_manual, 'Stripe');
   const form = read('app/(dashboard)/admin/payments/manual-payment-form.tsx');
-  assert.match(form, /Stripe Payment ID \/ Bank Transfer Reference/);
   assert.doesNotMatch(form, /Reference \/ evidence|PayPal/);
   // The evidence field only appears (and is only required) for the sources that need it, and every field is
   // controlled so a rejected submission does not clear what the administrator typed.
-  assert.match(form, /REFERENCE_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer'\]/);
-  assert.match(form, /\{referenceApplies && \(/);
+  assert.match(form, /bank_transfer: 'Bank Transfer Reference'/);
+  assert.match(form, /cash: 'Receipt ID'/);
+  assert.match(form, /stripe_manual: 'Stripe Payment ID'/);
+  assert.match(form, /\{referenceLabel && \(/);
+  assert.match(form, /<Label htmlFor="reference">\{referenceLabel\}<\/Label>/);
   assert.match(form, /id="reference" name="reference" required type="text"/);
   assert.match(form, /value=\{source\} onChange=/);
   assert.match(form, /value=\{reason\} onChange=/);
-  // The reference input is not rendered for cash/complimentary, so the action must treat the missing field as undefined.
+  // The reference input is not rendered for a complimentary grant, so the action must treat the missing field as undefined.
   assert.match(read('app/(dashboard)/admin/payments/actions.ts'), /reference: formData\.get\('reference'\) \?\? undefined,/);
   const server = read('lib/payments/manual-payments.ts');
-  assert.match(server, /REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer'\]/);
+  assert.match(server, /REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource\[\] = \['stripe_manual', 'bank_transfer', 'cash'\]/);
   assert.match(server, /membership\.manual_payment_recorded/);
   assert.match(server, /input\.source !== 'complimentary' && membershipRow\.status === 'active'/);
   assert.match(migration, /"source" in \('stripe_recurring', 'stripe_one_time', 'stripe_manual', 'paypal', 'bank_transfer', 'cash', 'complimentary'\)/);
@@ -37,8 +39,12 @@ test('Membership Revenue defaults to all time, can always pick a new first date,
   assert.match(filters, /'All time'/);
   for (const label of ['All', 'Stripe', 'Bank Transfer', 'Cash']) assert.match(filters, new RegExp(`label: '${label}'`));
   assert.match(filters, /Payment source/);
-  // A click on an already-complete range restarts the range at the clicked day (the first date was unpickable before).
-  assert.match(filters, /if \(range\.from && range\.to\) setRange\(\{ from: trigger, to: undefined \}\)/);
+  // The picker reports a one-day range on the first click, so the phase is tracked explicitly: first click anchors, second
+  // click completes the range in either order, a third starts over.
+  assert.match(filters, /const \[awaitingEnd, setAwaitingEnd\] = useState\(false\)/);
+  assert.match(filters, /setRange\(\{ from: trigger, to: undefined \}\);\s+setAwaitingEnd\(true\)/);
+  assert.match(filters, /trigger\.getTime\(\) < range\.from\.getTime\(\) \? \[trigger, range\.from\] : \[range\.from, trigger\]/);
+  assert.doesNotMatch(filters, /if \(range\.from && range\.to\) setRange/);
   assert.doesNotMatch(filters, /Origin|manual'/);
   const report = read('lib/payments/revenue-report.ts');
   assert.match(report, /if \(!rawFrom && !rawTo\) return \{ from: null, to: null \}/);
@@ -73,9 +79,13 @@ test('showing a member email in the directory is an opt-in, default no, with the
   for (const path of ['app/(dashboard)/onboarding/onboarding-wizard.tsx', 'app/(dashboard)/dashboard/profile/profile-form.tsx']) {
     const source = read(path);
     assert.ok(source.includes(text), `${path} must carry the helper text`);
-    assert.match(source, /name="directoryEmailOptIn" type="checkbox"/);
+    assert.match(source, /name="directoryEmailOptIn"( type="checkbox")?/);
     assert.doesNotMatch(source, /name="directoryEmailOptIn"[^>]*defaultChecked(?!=\{Boolean)/);
   }
+  // On sign-up the directory opt-in sits inside the CONSENT section, after the other consent checkboxes.
+  const onboarding = read('app/(dashboard)/onboarding/onboarding-wizard.tsx');
+  assert.ok(onboarding.indexOf('name="keepUpdated"') < onboarding.indexOf('name="directoryEmailOptIn"'));
+  assert.ok(onboarding.indexOf('name="directoryEmailOptIn"') < onboarding.indexOf('state.error'));
   assert.match(read('app/(dashboard)/onboarding/actions.ts'), /directoryEmailOptIn: formData\.get\('directoryEmailOptIn'\) === 'on'/);
   assert.match(migration, /"directory_email_opt_in" boolean DEFAULT false NOT NULL/);
   assert.match(read('lib/db/schema.ts'), /directoryEmailOptIn: boolean\('directory_email_opt_in'\)\.notNull\(\)\.default\(false\)/);
@@ -108,4 +118,22 @@ test('transactional emails serve their icons and the FEI logo from the app origi
   const order = ['IDOC_EMAIL_ICONS.calendar', 'IDOC_EMAIL_ICONS.location', 'IDOC_EMAIL_ICONS.language', 'IDOC_EMAIL_ICONS.users', 'IDOC_EMAIL_ICONS.banknote', 'IDOC_EMAIL_ICONS.layers', 'IDOC_EMAIL_ICONS.deadline'];
   const positions = order.map((name) => registrations.indexOf(`seminarEmailInfoRow(${name}`));
   assert.ok(positions.every((position, index) => position > 0 && (index === 0 || position > positions[index - 1])), 'email detail rows must follow the website order');
+});
+
+test('punchlist: US slash dates, Seminars/Courses admin label, create-registration statuses, and homepage partner sections', () => {
+  assert.match(read('lib/seminars/format.ts'), /return `\$\{month\}\/\$\{day\}\/\$\{year\}`/);
+  const fieldset = read('components/seminars/seminar-fieldset.tsx');
+  for (const name of ['startDate', 'endDate', 'registrationDeadline']) assert.match(fieldset, new RegExp(`<UsDateInput[^>]*name="${name}"`));
+  assert.match(read('components/admin-navigation.tsx'), /label: 'Seminars\/Courses'/);
+  const create = read('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx');
+  assert.match(create, /name="approvalStatus"/);
+  assert.match(create, /name="paymentStatus"/);
+  assert.match(read('app/(dashboard)/admin/seminars/registrations/page.tsx'), /listSeminarsOpenForAdminRegistration/);
+  const home = read('app/(marketing)/page.tsx');
+  for (const text of ['Dressage Results', 'FEI Officials &amp; Partners Clubs', 'Global Dressage Forum', 'IDRC', 'IDTC', 'IEOC', 'online.equipe.com']) assert.ok(home.includes(text), text);
+});
+
+test('an administrator-created Paid registration also queues the payment-confirmed notice', () => {
+  const source = read('lib/seminars/registrations.ts');
+  assert.match(source, /if \(markPaid\) \{[\s\S]*seminar\.staging_payment_confirmed[\s\S]*seminar\.payment_confirmed:admin:/);
 });

@@ -134,7 +134,7 @@ test('recording a manual payment refreshes a stale, locally-open Stripe checkout
 test('My Seminars never renders bank-transfer instructions in the registration listing', () => {
   assert.doesNotMatch(memberPage, /sanitizeBankInstructions/);
   assert.doesNotMatch(memberPage, /dangerouslySetInnerHTML/);
-  assert.match(memberPage, /Payment Method:/);
+  assert.doesNotMatch(memberPage, /Payment Method:/);
 });
 
 
@@ -211,8 +211,7 @@ test('a locked price input still submits its value through a hidden mirror', () 
 test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /APPROVAL_STATUS_LABELS/);
   assert.match(memberPage, /PAYMENT_STATUS_LABELS/);
-  assert.match(memberPage, /Registration Status:/);
-  assert.match(memberPage, /Payment Status:/);
+  assert.match(memberPage, /Status: <strong>\{registrationStatus === 'canceled'[^}]*APPROVAL_STATUS_LABELS\[approvalStatus\]\} \/ \$\{PAYMENT_STATUS_LABELS\[paymentStatus\]\}/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
   for (const label of ['Canceled', 'Registration closed', 'Full', 'Open', 'Past', 'Bank transfer pending', 'Cash pending', 'Paid', 'Unpaid']) {
     assert.ok(statusSource.includes(label), `label "${label}" is not defined in lib/seminars/status.ts`);

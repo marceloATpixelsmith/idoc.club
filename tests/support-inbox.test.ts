@@ -20,7 +20,7 @@ test('support categories, states, body lengths, and opaque identifiers are const
 });
 
 test('member-facing support labels match the approved categories and workflow statuses', () => {
-  for (const label of ['Billing/Membership', 'Seminars', 'Technical Support', 'Other', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
+  for (const label of ['Billing/Membership', 'Seminars/Courses', 'Technical Support', 'Other', 'Open', 'Responded to by admin', 'Member Replied', 'Closed/Resolved']) {
     assert.match(source, new RegExp(label.replace('/', '\\/')));
   }
 });

@@ -8,6 +8,13 @@ import { PublicNewsCard } from '@/components/news/public-news-card';
 import { listPublicArticles } from '@/lib/news/articles';
 import { listCurrentSeminarsForMember, listPastPublishedSeminars } from '@/lib/seminars/registrations';
 
+const PARTNER_CLUBS = [
+  { href: 'https://www.globaldressageforum.com/', image: '/partners/weblogo_gdf.png', name: 'Global Dressage Forum' },
+  { href: 'https://www.idrc.me/', image: '/partners/IDRC-logo.png', name: 'IDRC' },
+  { href: 'http://www.idtc-online.com/', image: '/partners/idtc.png', name: 'IDTC' },
+  { href: 'http://ieoc.info/', image: '/partners/ieoc.png', name: 'IEOC' },
+] as const;
+
 export const metadata: Metadata = {
   title: 'IDOC — International Dressage Officials Club',
   description:
@@ -133,6 +140,40 @@ export default async function Home() {
                   <PublicNewsCard basePath="/blog" item={post as never} key={String(post.slug)} />
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Dressage results + partner clubs (legacy homepage links) */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+          <div className="grid gap-12 lg:grid-cols-2">
+            <div>
+              <p className="eyebrow">Results</p>
+              <h2 className="mt-3 text-4xl">Dressage Results</h2>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <a className="idoc-secondary-button px-6 py-3 text-sm" href="https://equestrian-hub.com/" rel="noopener noreferrer" target="_blank">
+                  eDressage™ Results <ArrowUpRight className="size-4" />
+                </a>
+                <a className="idoc-secondary-button px-6 py-3 text-sm" href="https://online.equipe.com/" rel="noopener noreferrer" target="_blank">
+                  Results on Equipe <ArrowUpRight className="size-4" />
+                </a>
+              </div>
+            </div>
+            <div>
+              <p className="eyebrow">Partners</p>
+              <h2 className="mt-3 text-4xl">FEI Officials &amp; Partners Clubs</h2>
+              <ul className="mt-8 flex flex-wrap items-center gap-6">
+                {PARTNER_CLUBS.map((club) => (
+                  <li key={club.name}>
+                    <a aria-label={club.name} href={club.href} rel="noopener noreferrer" target="_blank" title={club.name}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img alt={club.name} className="h-20 w-20 rounded-sm object-contain" height={80} src={club.image} width={80} />
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

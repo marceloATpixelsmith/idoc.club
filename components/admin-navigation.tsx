@@ -30,7 +30,7 @@ const SHARED_ITEMS = [
   { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
   { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
   { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
-  { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars' },
+  { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars/Courses' },
   { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
 ] as const;
 
