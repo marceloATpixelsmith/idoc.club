@@ -58,9 +58,9 @@ const EXPECTED_ROLE = 'idoc_data_promoter';
 const NEWS_FIELDS = ['slug', 'title', 'subtitle', 'content_html', 'article_type', 'audience', 'thumbnail_url',
   'external_url', 'status', 'publication_date', 'published_at', 'archived_at'] as const;
 const SEMINAR_FIELDS = ['title', 'description', 'start_date', 'end_date', 'start_time', 'end_time', 'timezone',
-  'location', 'language', 'organizing_national_federation', 'course_directors', 'participant_profile',
+  'location', 'language', 'course_directors', 'participant_profile',
   'course_venue_information', 'application', 'accommodation_information', 'capacity', 'member_price_cents',
-  'non_member_price_cents', 'registration_deadline', 'status', 'is_fei', 'levels'] as const;
+  'registration_deadline', 'status', 'is_fei', 'levels'] as const;
 const ORGANIZATION_FIELDS = ['address_1', 'address_2', 'city', 'state_province', 'postal_code', 'country'] as const;
 
 let promotionConnection: PromotionSql | undefined;
@@ -238,7 +238,7 @@ async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId:
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
+      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
       [Number(sourceId)]);
     return result[0] ?? null;
   }
@@ -257,7 +257,7 @@ async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: R
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1' +
+      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1' +
         (lock ? ' for update' : ''),
       [String(source.promotion_key)]);
     return result[0] ?? null;
@@ -462,13 +462,13 @@ async function applyNews(tx: PromotionSql, source: Row, target: Row | null, acto
 async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, actorId: number) {
   if (!target) {
     const result = await rows<{ id: number }>(tx,
-      'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,organizing_national_federation,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24) returning id',
+      'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$22) returning id',
       [String(source.promotion_key), String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date),
         canonicalValue(source.end_date), source.start_time, source.end_time, source.timezone, String(source.location),
-        String(source.language), String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)),
+        String(source.language), sanitizeArticleContent(String(source.course_directors)),
         sanitizeArticleContent(String(source.participant_profile)), sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)),
         sanitizeArticleContent(String(source.accommodation_information)), Number(source.capacity), Number(source.member_price_cents),
-        Number(source.non_member_price_cents ?? source.member_price_cents), source.registration_deadline, String(source.status), Boolean(source.is_fei),
+        source.registration_deadline, String(source.status), Boolean(source.is_fei),
         source.levels, actorId]);
     return result[0].id;
   }
@@ -478,12 +478,12 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
     throw new DataPromotionError('The Production seminar gained registration activity after preview. Promotion was rejected.');
   }
   await rows(tx,
-    'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,start_time=$5,end_time=$6,timezone=$7,location=$8,language=$9,organizing_national_federation=$10,course_directors=$11,participant_profile=$12,course_venue_information=$13,application=$14,accommodation_information=$15,capacity=$16,member_price_cents=$17,non_member_price_cents=$18,registration_deadline=$19,status=$20,is_fei=$21,levels=$22,updated_by_user_id=$23,updated_at=now() where id=$24 returning id',
+    'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,start_time=$5,end_time=$6,timezone=$7,location=$8,language=$9,course_directors=$10,participant_profile=$11,course_venue_information=$12,application=$13,accommodation_information=$14,capacity=$15,member_price_cents=$16,registration_deadline=$17,status=$18,is_fei=$19,levels=$20,updated_by_user_id=$21,updated_at=now() where id=$22 returning id',
     [String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date), canonicalValue(source.end_date),
       source.start_time, source.end_time, source.timezone, String(source.location), String(source.language),
-      String(source.organizing_national_federation), sanitizeArticleContent(String(source.course_directors)), sanitizeArticleContent(String(source.participant_profile)),
+      sanitizeArticleContent(String(source.course_directors)), sanitizeArticleContent(String(source.participant_profile)),
       sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)), sanitizeArticleContent(String(source.accommodation_information)),
-      Number(source.capacity), Number(source.member_price_cents), Number(source.non_member_price_cents ?? source.member_price_cents),
+      Number(source.capacity), Number(source.member_price_cents),
       source.registration_deadline, String(source.status), Boolean(source.is_fei), source.levels, actorId, Number(target.id)]);
   return Number(target.id);
 }

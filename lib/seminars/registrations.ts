@@ -592,7 +592,7 @@ export async function setAdminRegistrationApprovalStatus(registrationIdValue: un
     const [existing] = await sql<{ amount: number | null; approval_status: string; email: string | null; first_name: string | null; is_fei: boolean; payment_method: string; profile_id: number | null; registration_status: string; seminar_id: number }[]>`select r.approval_status,r.registration_status,r.profile_id,r.seminar_id,r.payment_method_canonical_id payment_method,r.expected_amount_cents amount,
       s.is_fei,p.first_name,coalesce(u.email_display,u.email) email
       from seminar_registrations r join seminars s on s.id=r.seminar_id
-      left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
+      join profiles p on p.id=r.profile_id join users u on u.id=p.user_id
       where r.id=${registrationId.data} for update of r`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');
     if (existing.registration_status !== 'registered') throw new SeminarRegistrationError('Only an active registration has a registration status.');
@@ -646,7 +646,7 @@ function registrationsWhere(input: Record<string, string | string[] | undefined>
 }
 
 /** The cross-seminar registrations roster (Admin Dashboard > Registrations): every registration,
- * (legacy guest rows included), searchable by registrant name/email and filterable by seminar, payment status,
+ * searchable by registrant name/email and filterable by seminar, payment status,
  * and registration date range -- the seminar-scoped table this superseded only ever showed one
  * seminar's rows at a time. */
 export async function listAdminAllSeminarRegistrations(input: Record<string, string | string[] | undefined>) {
@@ -664,13 +664,13 @@ export async function listAdminAllSeminarRegistrations(input: Record<string, str
   const approvalStatusWhere = approvalStatuses.length ? client`r.approval_status in ${client(approvalStatuses)}` : client`true`;
   const rows = await client`select r.id,r.registration_status,r.approval_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at,s.id seminar_id,s.title seminar_title,
-    coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,coalesce(u.email_display,u.email,r.guest_email) registrant_email,
+    p.first_name||' '||p.last_name registrant_name,coalesce(u.email_display,u.email) registrant_email,
     count(*) over()::int total_count
     from seminar_registrations r join seminars s on s.id=r.seminar_id
-    left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
+    join profiles p on p.id=r.profile_id join users u on u.id=p.user_id
     where (${seminarWhere}) and (${paymentStatusWhere}) and (${approvalStatusWhere})
     and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
-    and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
+    and (${search}='' or (p.first_name||' '||p.last_name) ilike ${`%${search}%`} or u.email ilike ${`%${search}%`})
     and (${advancedWhere})
     order by ${order} limit ${limit + 1} offset ${offset}`;
   return { hasNext: rows.length > limit, page, pageSize: limit, rows: rows.slice(0, limit), total: Number(rows[0]?.total_count ?? 0) };
@@ -683,17 +683,17 @@ export async function exportAllSeminarRegistrationsCsvRows(input: Record<string,
   const paymentStatusWhere = paymentStatuses.length ? client`r.payment_status in ${client(paymentStatuses)}` : client`true`;
   const advancedWhere = advancedListWhere(input, { status: 'r.payment_status' }, PAYMENT_STATUSES);
   const approvalStatusWhere = approvalStatuses.length ? client`r.approval_status in ${client(approvalStatuses)}` : client`true`;
-  const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,
-    coalesce(u.email_display,u.email,r.guest_email) registrant_email,
+  const rows = await client`select s.title seminar_title,p.first_name||' '||p.last_name registrant_name,
+    coalesce(u.email_display,u.email) registrant_email,
     r.registration_status,r.approval_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at,
     (select string_agg(pr.external_refund_id, ';' order by pr.requested_at) from payment_refunds pr where pr.seminar_registration_id=r.id) refund_ids,
     (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
     from seminar_registrations r join seminars s on s.id=r.seminar_id
-    left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
+    join profiles p on p.id=r.profile_id join users u on u.id=p.user_id
     where (${seminarWhere}) and (${paymentStatusWhere}) and (${approvalStatusWhere})
     and (${from}::date is null or r.registered_at>=${from}::date) and (${to}::date is null or r.registered_at<${to}::date + 1)
-    and (${search}='' or coalesce(p.first_name||' '||p.last_name,r.guest_name,'') ilike ${`%${search}%`} or coalesce(u.email,r.guest_email,'') ilike ${`%${search}%`})
+    and (${search}='' or (p.first_name||' '||p.last_name) ilike ${`%${search}%`} or u.email ilike ${`%${search}%`})
     and (${advancedWhere})
     order by r.registered_at limit ${REGISTRATION_EXPORT_LIMIT + 1}`;
   if (rows.length > REGISTRATION_EXPORT_LIMIT) throw new SeminarRegistrationError(`Export exceeds the safe limit of ${REGISTRATION_EXPORT_LIMIT} registrations. Narrow the filters and retry.`);
@@ -703,10 +703,9 @@ export async function exportAllSeminarRegistrationsCsvRows(input: Record<string,
 }
 
 export type AdminSeminarRegistrationRow = {
-  canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; guest_email: string | null; guest_name: string | null;
-  guest_first_name: string | null; guest_last_name: string | null; guest_phone: string | null;
+  canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null;
   id: number; member_email: string | null; member_name: string | null; paid_at: Date | string | null; payment_method_canonical_id: string;
-  payment_reference: string | null; payment_status: PaymentStatus; profile_id: number | null; registered_at: Date | string;
+  payment_reference: string | null; payment_status: PaymentStatus; profile_id: number; registered_at: Date | string;
   approval_status: ApprovalStatus; is_fei: boolean; registration_status: 'canceled' | 'registered'; seminar_id: number; seminar_title: string;
 };
 export async function getAdminSeminarRegistration(registrationIdValue: unknown): Promise<AdminSeminarRegistrationRow | null> {
@@ -714,11 +713,10 @@ export async function getAdminSeminarRegistration(registrationIdValue: unknown):
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) return null;
   const [row] = await client<AdminSeminarRegistrationRow[]>`select r.id,r.seminar_id,s.title seminar_title,s.is_fei,r.profile_id,
-    coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,r.guest_name,r.guest_first_name,r.guest_last_name,r.guest_email,r.guest_phone,
-    r.registration_status,r.approval_status,r.payment_status,r.payment_method_canonical_id,r.payment_reference,r.expected_amount_cents,r.currency,
+    coalesce(p.first_name||' '||p.last_name,'') member_name,coalesce(u.email_display,u.email) member_email,    r.registration_status,r.approval_status,r.payment_status,r.payment_method_canonical_id,r.payment_reference,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at
     from seminar_registrations r join seminars s on s.id=r.seminar_id
-    left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
+    join profiles p on p.id=r.profile_id join users u on u.id=p.user_id
     where r.id=${registrationId.data} limit 1`;
   return row ?? null;
 }
@@ -727,14 +725,14 @@ export async function exportSeminarRegistrationsCsvRows(seminarIdValue: unknown)
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(seminarIdValue);
   if (!seminarId.success) throw new SeminarRegistrationError('Seminar not found.');
-  const rows = await client`select s.title seminar_title,coalesce(p.first_name||' '||p.last_name,r.guest_name) registrant_name,
-    coalesce(u.email_display,u.email,r.guest_email) registrant_email,
+  const rows = await client`select s.title seminar_title,p.first_name||' '||p.last_name registrant_name,
+    coalesce(u.email_display,u.email) registrant_email,
     r.registration_status,r.approval_status,r.payment_status,r.payment_method_canonical_id,r.expected_amount_cents,r.currency,
     r.registered_at,r.canceled_at,r.paid_at,
     (select string_agg(pr.external_refund_id, ';' order by pr.requested_at) from payment_refunds pr where pr.seminar_registration_id=r.id) refund_ids,
     (select coalesce(sum(pr.amount_cents) filter(where pr.status='succeeded'),0)::int from payment_refunds pr where pr.seminar_registration_id=r.id) refunded_amount_cents
     from seminar_registrations r join seminars s on s.id=r.seminar_id
-    left join profiles p on p.id=r.profile_id left join users u on u.id=p.user_id
+    join profiles p on p.id=r.profile_id join users u on u.id=p.user_id
     where r.seminar_id=${seminarId.data} order by r.registered_at limit ${REGISTRATION_EXPORT_LIMIT + 1}`;
   if (rows.length > REGISTRATION_EXPORT_LIMIT) throw new SeminarRegistrationError(`Export exceeds the safe limit of ${REGISTRATION_EXPORT_LIMIT} registrations. Narrow the filters and retry.`);
   await client`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
