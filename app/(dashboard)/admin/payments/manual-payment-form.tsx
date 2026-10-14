@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { nextValidUntil } from '@/lib/payments/renewal';
-import { MANUAL_PAYMENT_SOURCES, PAYMENT_SOURCE_LABELS } from '@/lib/payments/pricing';
+import { MANUAL_PAYMENT_SOURCES, PAYMENT_SOURCE_LABELS, type ManualPaymentSource } from '@/lib/payments/pricing';
 import { CsrfField } from '@/components/security/csrf-field';
 import { recordManualPaymentForm } from './actions';
 
@@ -15,11 +15,19 @@ type ManualPaymentActionState = { error?: string; success?: string };
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Mirrors REFERENCE_REQUIRED_SOURCES in lib/payments/manual-payments.ts (docs/02 §4): only these sources carry evidence.
+const REFERENCE_SOURCES: readonly ManualPaymentSource[] = ['stripe_manual', 'bank_transfer'];
 
 export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string | null; onSuccess?: () => void; profileId: number }) {
   const [state, formAction, isPending] = useActionState<ManualPaymentActionState, FormData>(recordManualPaymentForm, {});
   useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
+  // Every field is controlled: React resets uncontrolled fields after a form action finishes, which wiped the
+  // administrator's input whenever the server rejected the submission.
   const [paidAt, setPaidAt] = useState(today());
+  const [source, setSource] = useState<ManualPaymentSource>(MANUAL_PAYMENT_SOURCES[0]);
+  const [reference, setReference] = useState('');
+  const [reason, setReason] = useState('');
+  const referenceApplies = REFERENCE_SOURCES.includes(source);
   const proposedValidUntil = nextValidUntil({ currentValidUntil, paidAt });
 
   return (
@@ -29,7 +37,10 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
       <p className="text-sm text-foreground">Amount: <strong>€80.00</strong> — no partial, discounted, or waived payments.</p>
       <div className="space-y-1.5">
         <Label htmlFor="source">Payment source</Label>
-        <select className={SELECT_CLASSNAME} id="source" name="source" required>
+        <select
+          className={SELECT_CLASSNAME} id="source" name="source" required
+          value={source} onChange={(event) => setSource(event.target.value as ManualPaymentSource)}
+        >
           {MANUAL_PAYMENT_SOURCES.map((source) => <option key={source} value={source}>{PAYMENT_SOURCE_LABELS[source]}</option>)}
         </select>
       </div>
@@ -40,13 +51,18 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
           value={paidAt} onChange={(event) => setPaidAt(event.target.value)}
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="reference">Stripe Payment ID / Bank Transfer Reference</Label>
-        <Input id="reference" name="reference" type="text" />
-      </div>
+      {referenceApplies && (
+        <div className="space-y-1.5">
+          <Label htmlFor="reference">Stripe Payment ID / Bank Transfer Reference</Label>
+          <Input
+            id="reference" name="reference" required type="text"
+            value={reference} onChange={(event) => setReference(event.target.value)}
+          />
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="reason">Reason</Label>
-        <Textarea id="reason" name="reason" required rows={3} />
+        <Textarea id="reason" name="reason" required rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
       </div>
       <p className="text-sm text-foreground">New paid-through date: <strong>{proposedValidUntil}</strong></p>
       <Button type="submit" disabled={isPending}>
