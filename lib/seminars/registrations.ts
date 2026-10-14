@@ -101,7 +101,7 @@ export async function createAdminSeminarRegistration(fields: {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     const [member] = await sql<{ email: string; first_name: string; grace_ends_on: string | null; id: number; status: string | null; valid_until: string | null }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email,
       m.status,m.valid_until,m.grace_ends_on
-      from profiles p join users u on u.id=p.user_id
+      from profiles p join users u on u.id=p.user_id and u.deleted_at is null and u.account_state='active'
       left join lateral (
         select status,valid_until,grace_ends_on from memberships
         where profile_id=p.id order by updated_at desc,id desc limit 1
