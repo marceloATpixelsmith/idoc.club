@@ -150,6 +150,14 @@ export async function createAdminSeminarRegistration(fields: {
       (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${member.id},${confirmationKind},
         jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
         ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
+    // Created as Paid: the member also gets the same payment-confirmed notice an administrator's "Mark paid" sends.
+    if (markPaid) {
+      const paymentKind = directDelivery ? 'seminar.staging_payment_confirmed' : 'seminar.payment_confirmed';
+      await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${member.id},${paymentKind},
+          jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
+          ${`seminar.payment_confirmed:admin:${registrationId}:${Date.now()}`})`;
+    }
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar_registration.created','seminar_registration',${String(registrationId)},
        ${JSON.stringify({ approvalStatus, paymentMethod: paymentMethod.data, profileId: member.id, seminarId: seminarId.data })}::jsonb)`;

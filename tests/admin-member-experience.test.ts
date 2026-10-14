@@ -132,3 +132,8 @@ test('punchlist: US slash dates, Seminars/Courses admin label, create-registrati
   const home = read('app/(marketing)/page.tsx');
   for (const text of ['Dressage Results', 'FEI Officials &amp; Partners Clubs', 'Global Dressage Forum', 'IDRC', 'IDTC', 'IEOC', 'online.equipe.com']) assert.ok(home.includes(text), text);
 });
+
+test('an administrator-created Paid registration also queues the payment-confirmed notice', () => {
+  const source = read('lib/seminars/registrations.ts');
+  assert.match(source, /if \(markPaid\) \{[\s\S]*seminar\.staging_payment_confirmed[\s\S]*seminar\.payment_confirmed:admin:/);
+});
