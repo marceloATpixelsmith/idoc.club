@@ -110,7 +110,7 @@ BEGIN
 
   -- ---- Collect ids ----------------------------------------------------------------------
   SELECT coalesce(array_agg(id), '{}') INTO v_regs FROM seminar_registrations
-   WHERE profile_id = ANY(v_pids) OR lower(guest_email) = lower(v_email);
+   WHERE profile_id = ANY(v_pids);
   SELECT coalesce(array_agg(id), '{}') INTO v_pays FROM payments WHERE profile_id = ANY(v_pids);
   SELECT coalesce(array_agg(id), '{}') INTO v_convs FROM support_conversations WHERE member_user_id = ANY(v_uids);
 
@@ -263,7 +263,6 @@ SELECT
   (SELECT count(*) FROM idoc_staging.users WHERE lower(email) = lower('someone@example.com')) AS users,
   (SELECT count(*) FROM idoc_staging.email_otp_codes WHERE lower(email) = lower('someone@example.com')) AS otp_codes,
   (SELECT count(*) FROM idoc_staging.invitations WHERE lower(email) = lower('someone@example.com')) AS invitations,
-  (SELECT count(*) FROM idoc_staging.seminar_registrations WHERE lower(guest_email) = lower('someone@example.com')) AS guest_registrations,
   (SELECT count(*) FROM idoc_staging.audit_log a WHERE
      (jsonb_typeof(a.before_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(a.before_json) j WHERE lower(j.value) = lower('someone@example.com')))
   OR (jsonb_typeof(a.after_json) = 'object' AND EXISTS (SELECT 1 FROM jsonb_each_text(a.after_json) j WHERE lower(j.value) = lower('someone@example.com')))) AS audit_log_mentions,

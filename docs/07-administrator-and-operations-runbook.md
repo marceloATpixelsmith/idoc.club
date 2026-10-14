@@ -916,7 +916,7 @@ and named operator approval. Missing evidence is a release blocker, not permissi
 
 Migration `0072_seminar_approval_directory_optin_support_suggestion.sql` is **expand-only** because staging and production share one database and an older build may still be running: it adds `seminar_registrations.approval_status` (default `confirmed`, existing FEI rows backfilled to `pending_fei_approval`), `profiles.directory_email_opt_in` (default false, so existing members' emails leave the directory until they opt in), the `stripe_manual` payment source, the `suggestion` support category, and makes `seminars.non_member_price_cents` nullable. Migration `0073_remove_guest_and_non_member_legacy.sql` is the pre-launch contract step (the app is in development with Stripe sandbox data only, so removing data is accepted): it deletes any guest registrations and PayPal payments (and their refunds), drops `seminar_registrations.guest_*`, the guest identity check and guest-email unique index, sets `profile_id` NOT NULL, drops `seminars.non_member_price_cents` and `seminars.organizing_national_federation`, and recreates the payment source/evidence checks without `paypal`. Apply `0071`, `0072` and `0073` in order to both schemas (`DB_SCHEMA=idoc_staging|idoc_production pnpm db:migrate` with the owner connection) before or together with deploying this revision; after `0073` an older build that still reads the dropped columns will fail, so deploy staging and production code from this revision before running `0073` against `idoc_production`.
 
-The `0071` grant listing below predates `0073`: the `organizing_national_federation` and `non_member_price_cents` column privileges disappear with those columns.
+The `0071` migration file still names the two columns `0073` later drops; this is safe because `0071` runs first and the privileges vanish with the columns. The provisioning SQL below already uses the post-`0073` column list.
 
 Migration `0059_seminar_guest_contact_fields.sql` is an expand-only migration adding structured guest first name, last name, and phone while retaining `guest_name` for production compatibility. Apply it before deploying this revision. Migration `0061` converts seminars to date-only events and adds language, canonical organizing National Federation, and structured rich-text information. Rehearse its content backfill and contract changes before applying it to the shared staging/production database.
 
@@ -1333,12 +1333,12 @@ GRANT INSERT (promotion_key, slug, title, subtitle, content_html, article_type, 
 ON idoc_production.news_articles TO idoc_data_promoter;
 
 GRANT INSERT (promotion_key, title, description, start_date, end_date, start_time, end_time, timezone, location,
-  language, organizing_national_federation, course_directors, participant_profile, course_venue_information,
-  application, accommodation_information, capacity, member_price_cents, non_member_price_cents,
+  language, course_directors, participant_profile, course_venue_information,
+  application, accommodation_information, capacity, member_price_cents,
   registration_deadline, status, is_fei, levels, created_by_user_id, updated_by_user_id),
   UPDATE (title, description, start_date, end_date, start_time, end_time, timezone, location, language,
-  organizing_national_federation, course_directors, participant_profile, course_venue_information, application,
-  accommodation_information, capacity, member_price_cents, non_member_price_cents, registration_deadline,
+  course_directors, participant_profile, course_venue_information, application,
+  accommodation_information, capacity, member_price_cents, registration_deadline,
   status, is_fei, levels, updated_by_user_id, updated_at)
 ON idoc_production.seminars TO idoc_data_promoter;
 
