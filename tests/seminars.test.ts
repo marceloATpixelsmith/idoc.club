@@ -582,6 +582,10 @@ test('an administrator recording a seminar payment queues the Seminar payment co
   const body = source.slice(start, source.indexOf('export async function', start + 10));
   assert.match(body, /payment_status='paid'/);
   assert.match(body, /'seminar\.payment_confirmed'/);
+  // staging owns its notice (production never claims it) and the action drains it, like every registration confirmation.
+  assert.match(body, /isStagingSeminarDirectDelivery\(\) \? 'seminar\.staging_payment_confirmed' : 'seminar\.payment_confirmed'/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8'), /queues the payment notice under its own kind[^\n]*\n\s+if \(isStagingSeminarDirectDelivery\(\)\) await processStagingSeminarConfirmationBatch\(\)/);
+  assert.match(readFileSync('lib/notifications/renewal-notices.ts', 'utf8'), /kind in \(\$\{STAGING_SEMINAR_CONFIRMATION_KIND\}, \$\{STAGING_SEMINAR_PAYMENT_KIND\}\)/);
   assert.match(body, /seminar\.payment_confirmed:\$\{registrationId\.data\}:manual/);
   assert.match(body, /on conflict\(dedupe_key\) do nothing/);
   // The notice is queued inside the client.begin transaction that records the payment.

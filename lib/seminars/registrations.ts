@@ -503,8 +503,11 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
       p.first_name,coalesce(u.email_display,u.email) email
       from seminar_registrations r join profiles p on p.id=r.profile_id join users u on u.id=p.user_id where r.id=${registrationId.data}`;
     if (recipient?.email) {
+      // staging.idoc.club queues under its own kind, which the production worker never claims and which the calling
+      // action drains straight away; every other environment uses the production kind.
+      const noticeKind = isStagingSeminarDirectDelivery() ? 'seminar.staging_payment_confirmed' : 'seminar.payment_confirmed';
       await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
-        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${recipient.profile_id},'seminar.payment_confirmed',
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${recipient.profile_id},${noticeKind},
           jsonb_build_object('amountCents',${recipient.amount}::int,'firstName',${recipient.first_name ?? ''}::text,'registrationId',${registrationId.data}::int,'seminarId',${recipient.seminar_id}::int,'to',${recipient.email}::text),
           ${`seminar.payment_confirmed:${registrationId.data}:manual`})
         on conflict(dedupe_key) do nothing`;
