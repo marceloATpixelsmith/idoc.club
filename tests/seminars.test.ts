@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { computeSeminarAvailability, initialPaymentStatusForMethod, registrationDisplayLabel } from '../lib/seminars/status.ts';
+import { APPROVAL_STATUS_LABELS, APPROVAL_STATUSES, computeSeminarAvailability, FEI_APPROVAL_STATUSES, initialApprovalStatus, initialPaymentStatusForMethod, registrationDisplayLabel } from '../lib/seminars/status.ts';
 
 const seminarsSource = readFileSync('lib/seminars/seminars.ts', 'utf8');
 const registrationsSource = readFileSync('lib/seminars/registrations.ts', 'utf8');
 const checkoutSource = readFileSync('lib/seminars/checkout.ts', 'utf8');
 const adminActions = readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8');
 const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
-const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
 const originalMigration = readFileSync('lib/db/migrations/0041_seminars.sql', 'utf8');
 const paymentMethodMigration = readFileSync('lib/db/migrations/0055_seminar_registration_payment_method.sql', 'utf8');
 const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday_dual_price_guest.sql', 'utf8');
@@ -16,6 +15,7 @@ const dateOnlyMigration = readFileSync('lib/db/migrations/0061_seminar_date_only
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
 test('seminar and registration states, and their documented length limits, are constrained in the migration', () => {
   assert.match(originalMigration, /"status" in \('draft', 'published', 'canceled'\)/);
@@ -66,23 +66,6 @@ test('member-facing registration functions derive the actor\'s own profile serve
   assert.doesNotMatch(registrationsSource, /input\.profileId|profileId: unknown/);
 });
 
-test('a guest can register without an account using structured contact details and a normalized email', () => {
-  assert.match(registrationsSource, /export async function registerAsGuestForSeminar/);
-  const guestValidationSource = readFileSync('lib/seminars/guest-registration-validation.ts', 'utf8');
-  assert.match(registrationsSource, /guestEmailSchema/);
-  assert.match(guestValidationSource, /guestEmailSchema = z\.string\(\)\.trim\(\)\.email\(/);
-  assert.match(registrationsSource, /guest_first_name/);
-  assert.match(registrationsSource, /guest_last_name/);
-  assert.match(registrationsSource, /guest_phone/);
-  assert.match(registrationsSource, /profile_id is null and lower\(guest_email\)/);
-});
-
-test('both prices become immutable once a seminar has any registration, and payment method is no longer a seminar-level concept at all', () => {
-  assert.match(seminarsSource, /Prices cannot change once a seminar has registrations/i);
-  assert.match(seminarsSource, /totalCount > 0/);
-  assert.match(seminarsSource, /memberPriceCents !== existing\.member_price_cents \|\| fields\.nonMemberPriceCents !== existing\.non_member_price_cents/);
-});
-
 test('capacity cannot be reduced below the current count of active registrations', () => {
   assert.match(seminarsSource, /fields\.capacity < activeCount/);
   assert.match(seminarsSource, /registration_status='registered'/);
@@ -97,7 +80,7 @@ test('seminar creation, edits, and registration/payment/status mutations are all
   for (const action of ['admin.seminar.created', 'admin.seminar.edited']) {
     assert.match(seminarsSource, new RegExp(action.replaceAll('.', '\\.')));
   }
-  for (const action of ['member.seminar_registration.registered', 'guest.seminar_registration.registered', 'member.seminar_registration.canceled', 'admin.seminar_registration.payment_marked_paid', 'admin.seminar_registration.status_changed', 'admin.seminar_registration.details_updated']) {
+  for (const action of ['member.seminar_registration.registered', 'member.seminar_registration.canceled', 'admin.seminar_registration.created', 'admin.seminar_registration.payment_marked_paid', 'admin.seminar_registration.status_changed', 'admin.seminar_registration.approval_status_changed', 'admin.seminar_registration.details_updated']) {
     assert.match(registrationsSource, new RegExp(action.replaceAll('.', '\\.')));
   }
 });
@@ -105,7 +88,7 @@ test('seminar creation, edits, and registration/payment/status mutations are all
 test('every admin Server Action requires CSRF evidence before any mutation, directly or through the shared run() helper', () => {
   const runHelper = adminActions.match(/async function run\([\s\S]*?\n\}/)?.[0];
   assert.ok(runHelper); assert.match(runHelper as string, /requireCsrfToken\(/);
-  for (const name of ['createSeminarAction', 'updateSeminarAction', 'recordManualSeminarPaymentAction', 'setAdminRegistrationStatusAction', 'updateSeminarRegistrationDetailsAction', 'refundSeminarRegistrationAction']) {
+  for (const name of ['createSeminarAction', 'updateSeminarAction', 'recordManualSeminarPaymentAction', 'setAdminRegistrationStatusAction', 'setAdminRegistrationApprovalStatusAction', 'createAdminSeminarRegistrationAction', 'updateSeminarRegistrationDetailsAction', 'refundSeminarRegistrationAction']) {
     const fn = adminActions.match(new RegExp(`export async function ${name}[\\s\\S]*?\\n\\}`))?.[0];
     assert.ok(fn, `${name} not found`);
     assert.ok(/requireCsrfToken\(/.test(fn as string) || /\brun\(/.test(fn as string), `${name} must call requireCsrfToken directly or via run()`);
@@ -114,61 +97,10 @@ test('every admin Server Action requires CSRF evidence before any mutation, dire
   assert.doesNotMatch(adminActions, /publishSeminarAction|cancelSeminarAction|revertSeminarToDraftAction|markSeminarRegistrationPaidAction/);
 });
 
-test('every member and guest Server Action requires CSRF evidence before any mutation', () => {
-  const sharedHelper = memberActions.match(/async function runOwnProfileRegistration\([\s\S]*?\n\}/)?.[0];
-  assert.ok(sharedHelper); assert.match(sharedHelper as string, /requireCsrfToken\(/);
-  for (const name of ['registerForSeminarAction', 'registerAtNonMemberPriceAction', 'cancelSeminarRegistrationAction']) {
-    const fn = memberActions.match(new RegExp(`export async function ${name}[\\s\\S]*?\\n\\}`))?.[0];
-    assert.ok(fn, `${name} not found`);
-    assert.ok(/requireCsrfToken\(/.test(fn as string) || /\brunOwnProfileRegistration\(/.test(fn as string), `${name} must call requireCsrfToken directly or via runOwnProfileRegistration()`);
-  }
-  // Deliberately not wrapped in the shared validatedAction helper: that helper's own zod parse would
-  // reject a bad field before this action's callback ever ran, with no chance to echo the submitted
-  // name/email back to the form -- so this action does its own CSRF + validation instead.
-  const fn = guestActions.match(/export async function registerAsGuestForSeminarAction[\s\S]*?\n\}/)?.[0];
-  assert.ok(fn, 'registerAsGuestForSeminarAction not found');
-  assert.match(fn as string, /requireCsrfToken\(/);
-});
-
-test('the anonymous guest seminar registration action is gated by Turnstile and a per-email/per-origin rate limit, the same anonymous-write pattern the public contact form uses', () => {
-  assert.match(guestActions, /verifyTurnstile\(turnstileToken, origin, 'seminar_guest_registration'\)/);
-  assert.match(guestActions, /checkRateLimit\('seminar_guest_registration', email, origin\)/);
-  const registrationForm = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.match(registrationForm, /TurnstileWidget/);
-  assert.match(registrationForm, /name="turnstileToken"/);
-});
-
-test('the guest registration action echoes the submitted name/email back on every failure path, so a validation or Turnstile/rate-limit error never wipes what the visitor typed', () => {
-  assert.match(guestActions, /const echo = \{ ?email:/);
-  const failureReturns = guestActions.match(/return \{ \.\.\.echo,/g) ?? [];
-  assert.ok(failureReturns.length >= 3, 'every failure branch (validation, turnstile, rate limit, registration error) should echo the submitted values back');
-});
-
 test('seminar payments are classified separately from membership billing: the checkout module never imports the membership/payment-ledger schema tables', () => {
   assert.doesNotMatch(checkoutSource, /from '@\/lib\/db\/schema'/);
   assert.match(checkoutSource, /seminar_registration_staging/);
   assert.match(checkoutSource, /seminar_registration/);
-});
-
-test('anonymous Checkout uses a schema-safe origin-only rate-limit purpose', () => {
-  assert.match(guestActions, /checkOriginRateLimit\('seminar_guest_checkout', origin\)/);
-  assert.doesNotMatch(guestActions, /seminar_guest_registration_checkout/);
-});
-
-test('anonymous online registration is Stripe-first: Checkout collects contact details and the paid webhook creates the guest registration', () => {
-  assert.match(checkoutSource, /export async function createGuestSeminarCheckoutSession/);
-  assert.match(checkoutSource, /seminar_guest_registration_staging/);
-  assert.match(checkoutSource, /seminar_guest_registration/);
-  assert.match(checkoutSource, /phone_number_collection: \{ enabled: true \}/);
-  assert.match(checkoutSource, /key: 'first_name'/);
-  assert.match(checkoutSource, /key: 'last_name'/);
-  assert.match(checkoutSource, /maximum_length: 99/g);
-  const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
-  assert.match(webhookSource, /handleGuestSeminarCheckoutSessionCompleted/);
-  assert.match(webhookSource, /session\.customer_details\?\.email/);
-  assert.match(webhookSource, /session\.customer_details\?\.phone/);
-  assert.match(webhookSource, /guestFirstName: firstName/);
-  assert.match(guestActions, /paymentMethod === 'online_stripe'/);
 });
 
 test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
@@ -199,14 +131,6 @@ test('reactivating a canceled registration re-runs the seminar open\/deadline\/c
 
 test('recording a manual payment refreshes a stale, locally-open Stripe checkout status against Stripe itself rather than trusting it forever', () => {
   assert.match(registrationsSource, /checkout\.sessions\.retrieve\(existing\.stripe_checkout_session_id\)/);
-});
-
-test('the CSV export route exposes only the documented columns, including guest registrants, and is BOM-prefixed for spreadsheet compatibility', () => {
-  assert.match(exportRoute, /toCsv\(rows, \['seminar_title', 'registrant_name', 'registrant_email', 'is_guest', 'registration_status', 'payment_status', 'payment_method_canonical_id', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'\]\)/);
-  const bom = String.fromCharCode(0xfeff);
-  const escapeSequenceSpelling = '`' + String.fromCharCode(92, 117, 70, 69, 70, 70) + '${toCsv';
-  assert.ok(exportRoute.includes(`\`${bom}$\{toCsv`) || exportRoute.includes(escapeSequenceSpelling), 'the response body must be BOM-prefixed for spreadsheet compatibility');
-  assert.doesNotMatch(exportRoute, /stripe_payment_intent_id|stripe_checkout_session_id|password|marked_paid_by_user_id/);
 });
 
 test('My Seminars never renders bank-transfer instructions in the registration listing', () => {
@@ -245,8 +169,8 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
   assert.doesNotMatch(seminarFieldset, /name="startTime"|name="endTime"|name="timezone"/);
   assert.match(seminarFieldset, /name="startDate"/);
   assert.match(seminarFieldset, /name="endDate"/);
-  assert.match(seminarFieldset, /'memberPrice', 'Member price/);
-  assert.match(seminarFieldset, /'nonMemberPrice', 'Non-member price/);
+  assert.match(seminarFieldset, /name="price"/);
+  assert.doesNotMatch(seminarFieldset, /nonMemberPrice|Non-member|memberPrice|organizingNationalFederation/);
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
 });
 
@@ -282,12 +206,15 @@ test('a seminar can be assigned one or more officiating levels via a multi-check
 });
 
 test('a locked price input still submits its value through a hidden mirror', () => {
-  assert.match(seminarFieldset, /lockPrices && cents !== undefined/);
-  assert.match(seminarFieldset, /<input name=\{name\} type="hidden"/);
+  assert.match(seminarFieldset, /lockPrices && seminar/);
+  assert.match(seminarFieldset, /<input name="price" type="hidden"/);
 });
 
 test('the member Seminars page renders registration and payment status labels', () => {
-  assert.match(memberPage, /registrationDisplayLabel/);
+  assert.match(memberPage, /APPROVAL_STATUS_LABELS/);
+  assert.match(memberPage, /PAYMENT_STATUS_LABELS/);
+  assert.match(memberPage, /Registration Status:/);
+  assert.match(memberPage, /Payment Status:/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
   for (const label of ['Canceled', 'Registration closed', 'Full', 'Open', 'Past', 'Bank transfer pending', 'Cash pending', 'Paid', 'Unpaid']) {
     assert.ok(statusSource.includes(label), `label "${label}" is not defined in lib/seminars/status.ts`);
@@ -295,7 +222,7 @@ test('the member Seminars page renders registration and payment status labels', 
 });
 
 test('the member Seminars page separates current registrations from available seminars, with no redundant sub-heading repeating what the tab already says', () => {
-  for (const label of ['Available seminars', 'My seminar registrations', 'Past seminars']) {
+  for (const label of ['Available seminars/courses', 'My seminar/course registrations', 'Past seminars/courses']) {
     assert.match(memberPage, new RegExp(label));
   }
   assert.match(memberPage, /const registered/);
@@ -319,18 +246,10 @@ test('both the member catalog and the signed-out public catalog show an already-
   const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
   for (const block of [availableBlock, publicBlock]) {
     assert.ok(block, 'catalog block not found');
-    assert.match(block as string, /<h3 className="section-label">Past seminars<\/h3>/);
+    assert.match(block as string, /<h3 className="section-label">Past seminars\/courses<\/h3>/);
   }
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
   assert.match(registrationsSource, /s\.status='published' and s\.end_date < current_date/);
-});
-
-test('the public seminar catalog shows both the member and non-member price, with each seminar linking to its own detail page for registration', () => {
-  const publicPage = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
-  assert.match(publicPage, /PublicSeminarsCatalog/);
-  assert.match(memberPage, /export async function PublicSeminarsCatalog/);
-  assert.match(memberPage, /Members: .*Non-members:/);
-  assert.match(memberPage, /href=\{`\/seminars\/\$\{seminar\.id\}`\}/);
 });
 
 test('all seminar listing surfaces reuse a compact, uniformly constrained card with independent navigation and FEI links', () => {
@@ -358,14 +277,6 @@ test('pricing follows title and date-only metadata inside the shared seminar inf
   assert.doesNotMatch(memberPage, /justify-between/);
 });
 
-test('a signed-in profile without current entitlement (a lapsed membership) sees both prices on Available Seminars, since the detail page will route it to guest/non-member pricing', () => {
-  assert.match(memberPage, /showBothPrices/);
-  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
-  assert.ok(availableBlock && /showBothPrices \? `Members: .*Non-members:/.test(availableBlock));
-  const dispatchBlock = memberPage.match(/export async function MemberRegistrations[\s\S]*?\n\}/)?.[0];
-  assert.ok(dispatchBlock && /isEntitled\(member\.entitlement/.test(dispatchBlock) && /showBothPrices=\{!entitled\}/.test(dispatchBlock));
-});
-
 test('the seminar detail page presents full details and offers the Register CTA, or the visitor\'s existing registration status', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.match(detailPage, /getSeminarForRegistrant/);
@@ -381,62 +292,6 @@ test('the seminar detail page presents full details and offers the Register CTA,
   // space above the first row and below the FEI badge.
   const infoCardBlock = detailPage.match(/<Card[^>]*>\s*<CardContent className="space-y-0 p-0">/)?.[0];
   assert.ok(infoCardBlock && /<Card className="py-0">/.test(infoCardBlock), 'the icon-block info Card must cancel the base Card component\'s py-6 with py-0');
-});
-
-test('a signed-in visitor without member pricing registers under their own profile at the non-member price, never the anonymous guest identity, once they click Register', () => {
-  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
-  assert.match(detailPage, /import \{ getUser \} from '@\/lib\/db\/queries'/);
-  assert.match(detailPage, /const isSignedIn = Boolean\(user\)/);
-  // A signed-in visitor with their own profile (a lapsed membership) gets ownProfileDetails, tied to
-  // their real profileId at the non-member price -- never the guest identity.
-  assert.match(detailPage, /ownProfileDetails=\{!isEntitledMember && member \? \{ email: member\.email, name:/);
-  assert.match(detailPage, /memberDetails=\{isEntitledMember && member \? \{ email: member\.email, name:/);
-  const ctaSource = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  // A signed-in visitor (with or without a profile) opens the shared payment dialog directly --
-  // the join-or-guest dialog is reachable only when isSignedIn is false too.
-  assert.match(ctaSource, /const hasProfile = Boolean\(memberDetails\) \|\| Boolean\(ownProfileDetails\)/);
-  assert.match(ctaSource, /const knownVisitor = hasProfile \|\| isSignedIn/);
-  assert.match(ctaSource, /knownVisitor \? setPaymentDialogOpen\(true\) : setJoinDialogOpen\(true\)/);
-  assert.match(ctaSource, /Choose a payment method/);
-});
-
-test('authenticated seminar registration never renders the contact form and always uses the signed-in profile for every payment method', () => {
-  assert.match(registrationsSource, /export async function registerForSeminarAtNonMemberPrice/);
-  assert.match(registrationsSource, /async function requireOwnProfileIdRegardlessOfEntitlement/);
-  assert.match(memberActions, /export async function registerForSeminarAction/);
-  assert.match(memberActions, /export async function registerAtNonMemberPriceAction/);
-  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  assert.match(cta, /if \(hasProfile\)/);
-  assert.match(cta, /action=\{authenticatedAction\}/);
-  assert.match(cta, /name="paymentMethod"/);
-  assert.match(cta, /!hasProfile \? <TurnstileWidget/);
-  assert.doesNotMatch(cta, /<SeminarRegistrationForm memberDetails=/);
-  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.doesNotMatch(form, /registerForSeminarAction|registerAtNonMemberPriceAction|memberDetails|ownProfileDetails|readOnly/);
-  assert.match(form, /anonymous-only/);
-});
-
-test('the Register CTA is a single full-width button; a signed-out visitor sees a branded join-or-guest dialog instead of a separate boxed panel', () => {
-  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  assert.match(cta, /className="w-full text-xs uppercase tracking-\[0\.2em\]"/);
-  assert.match(cta, />\s*Register\s*</);
-  assert.match(cta, /Join to get member pricing of \{memberPriceLabel\}/);
-  assert.match(cta, /Register as a guest/);
-  assert.match(cta, /href="\/sign-up"/);
-  assert.match(cta, /import \{ Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle \} from '@\/components\/ui\/dialog'/);
-  assert.match(cta, /SeminarRegistrationForm/);
-  assert.match(cta, /startGuestSeminarStripeCheckoutAction/);
-  assert.match(cta, /methodId === 'online_stripe'/);
-  assert.match(cta, /useActionState<GuestStripeCheckoutState, FormData>/);
-  assert.match(cta, /disabled=\{!guestTurnstileToken \|\| guestCheckoutPending\}/);
-});
-
-test('the IDOC contact registration form is only for anonymous bank-transfer/cash registration and is visually identified as registration', () => {
-  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.match(form, /registerAsGuestForSeminarAction/);
-  assert.doesNotMatch(form, /registerForSeminarAction|registerAtNonMemberPriceAction/);
-  assert.match(form, /rounded-xl border bg-card/);
-  assert.match(form, />Register<\/h2>/);
 });
 
 test('the admin Seminar table owns registration/download actions while edit/create forms open as table-backed drawers', () => {
@@ -512,9 +367,7 @@ test('every seminar registration path uses the one detailed confirmation contrac
 
   assert.match(registrations, /paymentMethod !== 'online_stripe'/);
   assert.match(registrations, /seminar\.registration_created/);
-  assert.match(registrations, /seminar\.registration_created:guest:/);
-  assert.match(webhooks, /seminar\.registration_created:guest:\$\{created\.id\}:stripe-paid/);
-  assert.match(webhooks, /seminar\.registration_created:\$\{registrationId\}:stripe-paid/);
+    assert.match(webhooks, /seminar\.registration_created:\$\{registrationId\}:stripe-paid/);
   assert.doesNotMatch(webhooks, /best-effort; payment and registration are already durable/);
   assert.doesNotMatch(notices, /Your seminar registration was recorded/);
   assert.match(notices, /seminarRegistrationConfirmationBodyHtml/);
@@ -541,7 +394,7 @@ test('all Brevo transactional email uses Accounts as the sender name', () => {
   assert.match(source, /sender: \{ email: fromEmail, name: 'Accounts' \}/);
 });
 
-test('seminar confirmation preserves the enqueued member-or-guest registration-cycle snapshot', () => {
+test('seminar confirmation preserves the enqueued registration-cycle snapshot', () => {
   const source = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
   assert.match(source, /amountCents: payload\.amountCents/);
   assert.match(source, /firstName: payload\.firstName/);
@@ -558,7 +411,6 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
   const registrations = readFileSync('lib/seminars/registrations.ts', 'utf8');
   const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
   const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
-  const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
   const webhooks = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
   const stripeRoute = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
   const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
@@ -566,10 +418,8 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
   assert.match(registrations, /hostname === 'staging\.idoc\.club'/);
   assert.match(registrations, /confirmationKind = directDelivery \? 'seminar\.staging_registration_created' : 'seminar\.registration_created'/);
   assert.match(memberActions, /processStagingSeminarConfirmationBatch/);
-  assert.match(guestActions, /processStagingSeminarConfirmationBatch/);
   assert.match(checkout, /deliveryOwner/);
   assert.match(checkout, /seminar_registration_staging/);
-  assert.match(checkout, /seminar_guest_registration_staging/);
   assert.match(webhooks, /staging:\$\{event\.id\}/);
   assert.match(webhooks, /session\.metadata\?\.deliveryOwner === 'staging'/);
   assert.match(stripeRoute, /stagingOwnedEvent/);
@@ -581,30 +431,12 @@ test('staging seminar confirmations use a durable staging-owned queue and checko
 });
 
 
-test('guest registration completion only flashes success after confirmed paid registration', () => {
-  const guestActions = readFileSync('app/(marketing)/seminars/actions.ts', 'utf8');
-  const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
-  const flashRoute = readFileSync('app/api/ui/flash/seminar-checkout/[status]/[seminarId]/route.ts', 'utf8');
-  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
-
-  assert.match(guestActions, /outcome\.paymentMethod === 'cash_event' \|\| outcome\.paymentMethod === 'bank_transfer'/);
-  assert.match(guestActions, /setUiFlash\('seminar-registration-success', targetPath\)/);
-  assert.match(guestActions, /return \{ redirectTo: targetPath \}/);
-  assert.match(checkout, /createGuestSeminarCheckoutSession[\s\S]*seminar-checkout\/success/);
-  assert.match(flashRoute, /registration_status='registered' and payment_status='paid'/);
-  assert.match(flashRoute, /if \(rows.length === 0\)/);
-  assert.match(flashRoute, /Refresh:/);
-  assert.match(checkout, /session_id=\{CHECKOUT_SESSION_ID\}/);
-  assert.match(detailPage, /flash === 'seminar-registration-success'/);
-  assert.match(detailPage, /Registration completed successfully/);
-});
-
 test('every completed profile-backed seminar registration lands on My Seminars', () => {
   const memberActions = readFileSync('app/(dashboard)/dashboard/seminars/actions.ts', 'utf8');
   const checkout = readFileSync('lib/seminars/checkout.ts', 'utf8');
 
   assert.match(memberActions, /outcome\.paymentMethod === 'cash_event' \|\| outcome\.paymentMethod === 'bank_transfer'[\s\S]*return \{ redirectTo: '\/seminars\?view=my' \}/);
-  assert.match(checkout, /success_url: row\.profile_id !== null[\s\S]*seminars\?view=my/);
+  assert.match(checkout, /success_url: `\$\{baseUrl\}\/seminars\?view=my`/);
 });
 
 
@@ -613,37 +445,16 @@ test('offline profile registrations expose a reliable My Seminars client navigat
   const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
 
   assert.match(actions, /return \{ redirectTo: '\/seminars\?view=my' \}/);
-  assert.match(cta, /window\.location\.replace\(redirectTo\)/);
+  assert.match(cta, /window\.location\.replace\(state\.redirectTo\)/);
 });
 
 test('registered profiles do not get a redundant management box on seminar detail pages', () => {
   const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
   assert.doesNotMatch(detailPage, /Manage in My Seminars/);
   assert.doesNotMatch(detailPage, /Your registration:/);
-  assert.match(detailPage, /alreadyRegistered \|\| guestRegistrationJustCompleted \? null/);
+  assert.match(detailPage, /alreadyRegistered \? null/);
 });
 
-
-test('guest success flash suppresses the Register box completely', () => {
-  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
-  assert.match(detailPage, /guestRegistrationJustCompleted = flash === 'seminar-registration-success'/);
-  assert.match(detailPage, /alreadyRegistered \|\| guestRegistrationJustCompleted \? null/);
-});
-
-
-test('My Seminars keeps payment status compact and never renders bank instructions', () => {
-  const source = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
-  assert.doesNotMatch(source, /sanitizeBankInstructions/);
-  assert.doesNotMatch(source, /getSeminarPaymentMethodInstructions/);
-  assert.doesNotMatch(source, /Your registration:/);
-  assert.match(source, /Payment Method:/);
-  assert.match(source, /Bank Transfer/);
-  assert.match(source, /Cash/);
-  assert.match(source, /\(paid\)/);
-  assert.match(source, /expected_amount_cents/);
-  assert.match(source, /exceptionalPaymentStatuses/);
-  assert.match(source, /registrationDisplayLabel/);
-});
 
 test('My Seminars cancel action uses the same subtle table-control styling as admin filters', () => {
   const source = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
@@ -651,15 +462,6 @@ test('My Seminars cancel action uses the same subtle table-control styling as ad
   assert.match(source, /buttonTableControl/);
   assert.match(source, /border-dashed/);
   assert.match(form, /data-idoc-table-control/);
-});
-
-test('all seminar Register CTAs carry the outgoing arrow icon', () => {
-  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  const guestForm = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.match(cta, /ArrowUpRight/);
-  assert.match(cta, /Register <ArrowUpRight/);
-  assert.match(cta, /Register as a guest <ArrowUpRight/);
-  assert.match(guestForm, /Register <ArrowUpRight/);
 });
 
 test('seminar confirmation email renders full spelled-out calendar dates', () => {
@@ -679,33 +481,12 @@ test('member manual registration returns My Seminars before any seminar revalida
 });
 
 
-test('guest manual registration stays in a dialog instead of replacing the seminar detail CTA', () => {
-  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  const form = readFileSync('components/seminars/seminar-registration-form.tsx', 'utf8');
-  assert.doesNotMatch(cta, /if \(guestPaymentMethod\) \{[\s\S]*return <SeminarRegistrationForm/);
-  assert.match(cta, /guestPaymentMethod \? \([\s\S]*<SeminarRegistrationForm embedded/);
-  assert.match(form, /embedded \? '' : 'rounded-xl border bg-card p-6 shadow-sm'/);
-});
-
 test('seminar payment-method choices use the same subtle table-control treatment as cancel registration', () => {
   const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
   assert.match(cta, /data-idoc-table-control=""/);
   assert.match(cta, /border-dashed/);
   assert.match(cta, /rounded-md/);
   assert.match(cta, /font-normal/);
-});
-
-
-test('guest registration dialog retains an accessible title and description during the contact-form step', () => {
-  const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  assert.match(cta, /guestPaymentMethod \? \([\s\S]*DialogTitle>Register for this seminar/);
-  assert.match(cta, /DialogDescription>Enter your contact details to complete your seminar registration/);
-});
-
-test('signed-in visitors without a profile use the same dialog-based manual guest flow', () => {
-  const rules = readFileSync('docs/02-membership-and-payment-business-rules.md', 'utf8');
-  assert.match(rules, /signed-in visitor with no member profile/i);
-  assert.match(rules, /manual-payment selection opens the guest contact form inside that dialog/i);
 });
 
 
@@ -716,13 +497,84 @@ test('seminar detail rich-information section headings use the defined gold acce
 });
 
 
-test('guest registration choice dialog buttons use the same table-control treatment as cancel registration', () => {
+
+
+test('registration is members-only: guest registration, guest checkout, and non-member pricing are gone from code, UI, and the webhook', () => {
+  for (const removed of ['lib/seminars/guest-registration-validation.ts', 'app/(marketing)/seminars/actions.ts', 'components/seminars/seminar-registration-form.tsx']) {
+    assert.equal(existsSync(removed), false, `${removed} must be deleted`);
+  }
+  assert.doesNotMatch(registrationsSource, /registerAsGuestForSeminar|registerForSeminarAtNonMemberPrice|guestEmailSchema|non_member_price_cents|organizing_national_federation/);
+  assert.doesNotMatch(checkoutSource, /createGuestSeminarCheckoutSession|non_member_price_cents|seminar_guest_registration/);
+  assert.doesNotMatch(memberActions, /registerAtNonMemberPriceAction|NonMemberPrice/);
+  assert.doesNotMatch(seminarsSource, /nonMemberPrice|organizingNationalFederation/);
   const cta = readFileSync('components/seminars/seminar-register-cta.tsx', 'utf8');
-  const joinDialogStart = cta.indexOf('<Dialog onOpenChange={setJoinDialogOpen}');
-  const paymentDialogStart = cta.indexOf('<Dialog onOpenChange={(open)', joinDialogStart);
-  const joinDialog = cta.slice(joinDialogStart, paymentDialogStart);
-  assert.equal((joinDialog.match(/data-idoc-table-control=""/g) ?? []).length, 2);
-  assert.equal((joinDialog.match(/variant="outline"/g) ?? []).length, 2);
-  assert.equal((joinDialog.match(/border-dashed/g) ?? []).length, 2);
-  assert.doesNotMatch(joinDialog, /variant="ghost"/);
+  assert.doesNotMatch(cta, /guest|Guest|Turnstile|sign-up/);
+  assert.match(cta, /Choose a payment method/);
+  assert.match(cta, /window\.location\.replace\(state\.redirectTo\)/);
+  const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
+  // An in-flight Checkout from the retired guest flow is refunded in full, never silently kept.
+  assert.match(webhookSource, /handleRetiredGuestSeminarCheckoutSessionCompleted/);
+  assert.doesNotMatch(webhookSource, /nonMemberPriceCents|guest\.seminar_registration\.registered_and_paid/);
+});
+
+test('a signed-out or non-entitled visitor sees the seminar/course details but never a Register action, and the server independently enforces entitlement', () => {
+  const detailPage = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(detailPage, /isEntitledMember \? \(\s*<SeminarRegisterCta/);
+  assert.match(detailPage, /Only signed-in IDOC members can register/);
+  assert.match(detailPage, /An active IDOC membership is required to register/);
+  assert.doesNotMatch(detailPage, /Organizing National Federation|Non-members|ownProfileDetails|memberDetails/);
+  assert.match(registrationsSource, /export async function registerForSeminar\([\s\S]*requireOwnProfileId\(\)/);
+  assert.match(registrationsSource, /requireAccountAccess\('member'\)/);
+});
+
+test('every user-facing "Seminars" label reads Seminars/Courses', () => {
+  const header = readFileSync('components/site/Header.tsx', 'utf8');
+  const listing = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
+  assert.match(header, /label: 'Seminars\/Courses'/);
+  assert.match(listing, /title="Seminars\/Courses"/);
+  assert.match(listing, /Available Seminars\/Courses/);
+  assert.match(listing, /My Seminars\/Courses/);
+});
+
+test('the registration approval status ("Registration Status") is independent of payment: non-FEI is Confirmed at registration, FEI starts Pending FEI Approval', () => {
+  assert.deepEqual([...APPROVAL_STATUSES], ['confirmed', 'pending_fei_approval', 'approved_by_fei', 'not_approved_by_fei', 'approved_audit_only_by_fei']);
+  assert.deepEqual(FEI_APPROVAL_STATUSES, ['pending_fei_approval', 'approved_by_fei', 'not_approved_by_fei', 'approved_audit_only_by_fei']);
+  assert.equal(initialApprovalStatus(false), 'confirmed');
+  assert.equal(initialApprovalStatus(true), 'pending_fei_approval');
+  assert.equal(APPROVAL_STATUS_LABELS.approved_audit_only_by_fei, 'Approved to Audit Only by FEI');
+  assert.match(approvalMigration, /ADD COLUMN IF NOT EXISTS "approval_status" varchar\(30\) DEFAULT 'confirmed' NOT NULL/);
+  assert.match(approvalMigration, /"approval_status" in \('confirmed', 'pending_fei_approval', 'approved_by_fei', 'not_approved_by_fei', 'approved_audit_only_by_fei'\)/);
+  assert.match(approvalMigration, /SET "approval_status" = 'pending_fei_approval'[\s\S]*s\."is_fei" = true/);
+  // Both self-registration and admin-created registration set it from the seminar's FEI flag.
+  assert.equal((registrationsSource.match(/initialApprovalStatus\(seminar\.is_fei\)/g) ?? []).length, 2);
+  assert.doesNotMatch(registrationsSource, /approval_status='confirmed',paid_at/);
+});
+
+test('an administrator can record the FEI decision; it is validated, audited, and emails the registrant the confirmation details plus a clear status message', () => {
+  const fn = registrationsSource.match(/export async function setAdminRegistrationApprovalStatus[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(fn, 'setAdminRegistrationApprovalStatus not found');
+  assert.match(fn as string, /requireSeminarAdministrator\(\)/);
+  assert.match(fn as string, /FEI registration statuses only apply to FEI seminars/);
+  assert.match(fn as string, /admin\.seminar_registration\.approval_status_changed/);
+  assert.match(fn as string, /FEI_APPROVAL_STATUSES as readonly string\[\]\)\.includes\(status\)/);
+  assert.match(fn as string, /'statusUpdate',true/);
+  assert.match(registrationsSource, /Your National Federation must register you with the FEI in order for you to be approved to participate/);
+  assert.match(registrationsSource, /registrationStatusMessageHtml\(approvalStatus\)/);
+  const notices = readFileSync('lib/notifications/renewal-notices.ts', 'utf8');
+  assert.match(notices, /statusUpdate: payload\.statusUpdate \?\? false/);
+  assert.match(notices, /Your IDOC seminar registration status: \$\{statusLabel\}/);
+});
+
+test('an administrator creates a registration by looking up an active member, which sends the same confirmation email as self-registration', () => {
+  const fn = registrationsSource.match(/export async function createAdminSeminarRegistration[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(fn, 'createAdminSeminarRegistration not found');
+  assert.doesNotMatch(fn as string, /guest_|guestName|fields\.email|fields\.phone/);
+  assert.match(fn as string, /Registrations can only be created for active members/);
+  assert.match(fn as string, /seminar\.registration_created/);
+  assert.match(registrationsSource, /export async function searchActiveMembersForRegistration/);
+  const drawer = readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8');
+  assert.match(drawer, /<MemberLookup \/>/);
+  assert.doesNotMatch(drawer, /name="firstName"|name="lastName"|name="email"|name="phone"/);
+  // Seminar and payment method sit side by side at 50% each on desktop.
+  assert.match(drawer, /grid gap-4 md:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
 });

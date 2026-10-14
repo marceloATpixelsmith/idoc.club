@@ -6,10 +6,11 @@ import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { processStripeEvent } from '../lib/payments/webhook-handlers.ts';
 import { refundSeminarRegistration } from '../lib/payments/refunds.ts';
 import { createSeminarCheckoutSession } from '../lib/seminars/checkout.ts';
+import { renderNotice } from '../lib/notifications/renewal-notices.ts';
 import {
   cancelOwnRegistration, exportSeminarRegistrationsCsvRows, getSeminarPaymentMethodInstructions,
   listAdminAllSeminarRegistrations, listCurrentSeminarsForMember, listPastSeminarsForMember,
-  recordManualSeminarPayment, registerAsGuestForSeminar, registerForSeminar, registerForSeminarAtNonMemberPrice,
+  createAdminSeminarRegistration, recordManualSeminarPayment, registerForSeminar, searchActiveMembersForRegistration, setAdminRegistrationApprovalStatus,
   setAdminRegistrationStatus, SeminarRegistrationError, updateSeminarRegistrationDetails,
 } from '../lib/seminars/registrations.ts';
 import { createSeminar, getAdminSeminar, listAdminSeminars, SeminarValidationError, updateSeminar } from '../lib/seminars/seminars.ts';
@@ -43,11 +44,24 @@ async function paidMember() {
   return { profile, user };
 }
 
+async function legacyRegistration(seminarId: number, profileId: number) {
+  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents)
+    values (${seminarId},${profileId},'unpaid','online_stripe',4500) returning id`;
+  return { registrationId: row.id };
+}
+
+/** A guest registration as created before guest sign-up was retired -- such rows are retained. */
+async function legacyGuestRegistration(seminarId: number) {
+  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,guest_name,guest_first_name,guest_last_name,guest_email,guest_phone,payment_status,payment_method_canonical_id,expected_amount_cents)
+    values (${seminarId},'Jamie Guest','Jamie','Guest','jamie.guest@example.test','+35315550100','unpaid','online_stripe',6500) returning id`;
+  return { registrationId: row.id };
+}
+
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
-    accommodationInformation: '<p>Hotel details</p>', application: '<p>Apply online</p>', capacity: 2, courseDirectors: '<p>Director</p>', courseVenueInformation: '<p>Arena details</p>', endDate: startDate, isFei: false, language: 'en', levels: [], location: 'Arena 3, IDOC Headquarters', organizingNationalFederation: 'IE', participantProfile: '<p>Officials</p>',
-    memberPrice: '45.00', nonMemberPrice: '65.00', registrationDeadline: future(48).slice(0, 10),
+    accommodationInformation: '<p>Hotel details</p>', application: '<p>Apply online</p>', capacity: 2, courseDirectors: '<p>Director</p>', courseVenueInformation: '<p>Arena details</p>', endDate: startDate, isFei: false, language: 'en', levels: [], location: 'Arena 3, IDOC Headquarters', participantProfile: '<p>Officials</p>',
+    price: '45.00', registrationDeadline: future(48).slice(0, 10),
     startDate, status: 'published', title: 'Judging Clinic', ...overrides,
   };
 }
@@ -64,8 +78,7 @@ test('an authenticated non-administrator cannot create a seminar', async () => {
 test('capacity, prices, and date-only start/end values are constrained server-side', async () => {
   const admin = await adminUser();
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ capacity: 0 }))), SeminarValidationError);
-  await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ memberPrice: -5 }))), SeminarValidationError);
-  await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ nonMemberPrice: -5 }))), SeminarValidationError);
+  await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ price: -5 }))), SeminarValidationError);
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const earlierEndDate = new Date(Date.now() + 6 * 86_400_000).toISOString().slice(0, 10);
   await assert.rejects(asAdmin(admin.id, () => createSeminar(seminarInput({ endDate: earlierEndDate, startDate }))), SeminarValidationError, 'end date cannot precede start date');
@@ -99,7 +112,7 @@ test('a member can register for an open seminar at the member price, and a secon
   const [row] = await sql`select registration_status,payment_status,expected_amount_cents from idoc.seminar_registrations where seminar_id=${seminarId} and profile_id=${profile.id}`;
   assert.equal(row.registration_status, 'registered');
   assert.equal(row.payment_status, 'unpaid');
-  assert.equal(row.expected_amount_cents, 4500, 'a logged-in member must be charged the member price, not the non-member price');
+  assert.equal(row.expected_amount_cents, 4500, 'a member is charged the seminar single price');
 });
 
 test('bank transfer and cash registrations start in their own pending payment state, never "paid"', async () => {
@@ -190,51 +203,42 @@ test('a member cannot view or act on another member\'s registration', async () =
   assert.equal(seen?.registration_status ?? null, null, "another member's registration must never surface on a different member's own view");
 });
 
-test('a guest can register anonymously at the non-member price, without an account, and a duplicate guest email for the same seminar is rejected', async () => {
+test('an account that never paid for membership cannot register: registration requires an entitled member and no guest/non-member pricing path exists', async () => {
   const admin = await adminUser();
   const seminarId = await publishedSeminar(admin.id);
-  const { paymentMethod, registrationId } = await registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'jamie.guest@example.test', '+35315550100', 'online_stripe');
-  assert.equal(paymentMethod, 'online_stripe');
-  const [row] = await sql`select expected_amount_cents,guest_email,guest_name,payment_status,profile_id from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.profile_id, null);
-  assert.equal(row.guest_name, 'Jamie Guest');
-  assert.equal(row.guest_email, 'jamie.guest@example.test');
-  assert.equal(row.expected_amount_cents, 6500, 'a guest must be charged the non-member price');
-  assert.equal(row.payment_status, 'unpaid');
-  await assert.rejects(registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'JAMIE.GUEST@example.test', '+35315550100', 'online_stripe'), /already registered/);
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await assert.rejects(asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe')), AuthorizationError);
+  assert.equal((await sql`select count(*)::int count from idoc.seminar_registrations where seminar_id=${seminarId} and profile_id=${profile.id}`)[0].count, 0);
 });
 
-test('a signed-in visitor with their own profile but a lapsed membership registers at the non-member price under their real profileId (not a guest identity), shows up in their own current seminars, and can cancel it themselves without needing current entitlement', async () => {
+test('a signed-in member with a lapsed membership cannot register, but can still cancel an existing registration without current entitlement', async () => {
   const user = await createUser();
   const profile = await createProfile(user.id);
   await createMembership(profile.id, false);
   const admin = await adminUser();
   const seminarId = await publishedSeminar(admin.id);
-  const { registrationId } = await asMember(user.id, () => registerForSeminarAtNonMemberPrice(seminarId, 'online_stripe'));
-  const [row] = await sql`select expected_amount_cents,profile_id,guest_email,guest_name from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.profile_id, profile.id, "the registration must be tied to the visitor's own real profile, never a guest identity");
-  assert.equal(row.guest_name, null); assert.equal(row.guest_email, null);
-  assert.equal(row.expected_amount_cents, 6500, 'a lapsed member must be charged the non-member price, never the member price');
+  await assert.rejects(asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe')), AuthorizationError);
+  const { registrationId } = await legacyRegistration(seminarId, profile.id);
   const current = await listCurrentSeminarsForMember(profile.id);
-  assert.ok(current.some((s) => s.id === seminarId && s.registration_status === 'registered'), 'the registration must show up in their own Available/current seminars list');
+  assert.ok(current.some((s) => s.id === seminarId && s.registration_status === 'registered'), 'an existing registration still shows in their own list');
   await asMember(user.id, () => cancelOwnRegistration(seminarId));
   const [canceled] = await sql`select registration_status from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(canceled.registration_status, 'canceled', 'a lapsed member must be able to cancel their own registration without current entitlement');
 });
 
-test('an administrator can edit a registration\'s guest details without being forced off a payment method Organization Settings has since disabled, but cannot switch to a different disabled method', async () => {
+test('an administrator can save a registration without being forced off a payment method Organization Settings has since disabled, but cannot switch to a different disabled method', async () => {
   const admin = await adminUser();
+  const { user } = await paidMember();
   const seminarId = await publishedSeminar(admin.id);
-  const { registrationId } = await registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'jamie.guest@example.test', '+35315550100', 'bank_transfer');
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'bank_transfer'));
   await sql`update idoc.seminar_payment_methods set enabled=false where canonical_id in ('bank_transfer','cash_event')`;
-  // Saving an unrelated field change (the guest's name) must not be blocked by, or silently change,
-  // a payment method that was valid at registration time but has since been disabled.
-  await asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestFirstName: 'Jamie R.', guestLastName: 'Guest', guestPhone: '+35315550100', paymentMethod: 'bank_transfer' }));
-  const [row] = await sql`select guest_name,payment_method_canonical_id from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.guest_name, 'Jamie R. Guest');
+  // Saving with the unchanged, since-disabled payment method must neither be blocked nor silently change it.
+  await asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { paymentMethod: 'bank_transfer' }));
+  const [row] = await sql`select payment_method_canonical_id from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(row.payment_method_canonical_id, 'bank_transfer', 'the unchanged, since-disabled payment method must be preserved, not silently replaced');
   // Switching to a *different* method that is also disabled must still be rejected.
-  await assert.rejects(asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { guestEmail: 'jamie.guest@example.test', guestFirstName: 'Jamie R.', guestLastName: 'Guest', guestPhone: '+35315550100', paymentMethod: 'cash_event' })), SeminarRegistrationError);
+  await assert.rejects(asAdmin(admin.id, () => updateSeminarRegistrationDetails(registrationId, { paymentMethod: 'cash_event' })), SeminarRegistrationError);
 });
 
 test('recording a manual payment is rejected while a registration has an open Stripe checkout session, so the registrant cannot still complete it and be charged a second time', async () => {
@@ -276,21 +280,13 @@ test('reactivating a canceled registration re-enforces the seminar\'s open/deadl
   await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationStatus(registrationId, 'registered')), /not open for registration/);
 });
 
-test('a guest\'s name is stored exactly as submitted -- HTML escaping happens only at email-render time (see tests/seminars.test.ts)', async () => {
+test('an administrator can change the price while a seminar has no registrations, and the new value actually persists', async () => {
   const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '10.00', nonMemberPrice: '10.00' });
-  const { registrationId } = await registerAsGuestForSeminar(seminarId, '<script>evil</script>', 'Guest', 'jamie.guest@example.test', '+35315550100', 'bank_transfer');
-  const [row] = await sql`select guest_name from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.guest_name, '<script>evil</script> Guest');
-});
-
-test('an administrator can change either price while a seminar has no registrations, and the new values actually persist', async () => {
-  const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '45.00', nonMemberPrice: '65.00' });
-  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ memberPrice: '99.00', nonMemberPrice: '150.00' })));
+  const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
+  await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ price: '99.00' })));
   const [row] = await sql`select member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId}`;
-  assert.equal(row.member_price_cents, 9900, 'member price must actually be written to the row, not silently dropped from the update');
-  assert.equal(row.non_member_price_cents, 15000, 'non-member price must actually be written to the row, not silently dropped from the update');
+  assert.equal(row.member_price_cents, 9900, 'the price must actually be written to the row, not silently dropped from the update');
+  assert.equal(row.non_member_price_cents, 9900, 'the retained legacy column mirrors the single price so an older build stays coherent');
 });
 
 test('the FEI-affiliation flag persists through create and update, on both the true and false paths', async () => {
@@ -313,13 +309,12 @@ test('the seminar levels field persists a selected subset, and checking all_leve
   assert.deepEqual(updated.levels, ['all_levels'], 'checking All Levels must discard any individually-checked level, never combine them');
 });
 
-test('an administrator cannot change either price once a seminar has any registration', async () => {
+test('an administrator cannot change the price once a seminar has any registration', async () => {
   const admin = await adminUser();
   const { user } = await paidMember();
   const seminarId = await publishedSeminar(admin.id);
   await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
-  await assert.rejects(asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ memberPrice: '99.00' }))), /prices cannot change/i);
-  await assert.rejects(asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ nonMemberPrice: '99.00' }))), /prices cannot change/i);
+  await assert.rejects(asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ price: '99.00' }))), /prices cannot change/i);
   // An edit that leaves both prices untouched must still succeed.
   await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ title: 'Judging Clinic (Updated)' })));
   const updated = await asAdmin(admin.id, () => getAdminSeminar(seminarId));
@@ -370,7 +365,7 @@ test('every seminar create, edit, status change, and registration mutation write
 test('a Stripe Checkout Session completion marks the exact registration paid, verified against this seminar\'s own member price, and is idempotent on webhook replay', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '80.00' });
+  const seminarId = await publishedSeminar(admin.id, { price: '80.00' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
 
   const fakeListLineItems = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
@@ -406,17 +401,17 @@ test('a Stripe Checkout Session completion marks the exact registration paid, ve
   assert.equal(afterAuditCount, beforeAuditCount);
 });
 
-test('a guest Stripe Checkout Session completion marks the exact registration paid, verified against this seminar\'s own non-member price', async () => {
+test('a Checkout Session from the retired guest flow is refunded in full and never creates a registration', async () => {
   const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { nonMemberPrice: '65.00' });
-  const { registrationId } = await registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'jamie.guest@example.test', '+35315550100', 'online_stripe');
-
-  const fakeListLineItems = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
-  const checkoutSessionId = `cs_${randomUUID()}`;
-  await sql`update idoc.seminar_registrations set stripe_checkout_session_id=${checkoutSessionId},checkout_status='open',expected_amount_cents=6500,payment_status='pending' where id=${registrationId}`;
+  const seminarId = await publishedSeminar(admin.id);
+  const refunds: unknown[] = [];
+  const stripe = {
+    checkout: { sessions: { listLineItems: async () => ({ data: [] }) } },
+    refunds: { create: async (params: unknown) => { refunds.push(params); return { id: 're_retired_guest', status: 'succeeded' } as never; } },
+  };
   const sessionCompleted = {
-    amount_total: 6500, currency: 'eur', customer_email: 'jamie.guest@example.test', id: checkoutSessionId,
-    metadata: { amountCents: '6500', currency: 'EUR', kind: 'seminar_registration', profileId: '', registrationId: String(registrationId), seminarId: String(seminarId) },
+    amount_total: 6500, currency: 'eur', id: `cs_${randomUUID()}`,
+    metadata: { amountCents: '6500', currency: 'EUR', kind: 'seminar_guest_registration', seminarId: String(seminarId) },
     mode: 'payment', payment_intent: `pi_${randomUUID()}`, payment_status: 'paid',
   };
   const event = {
@@ -424,18 +419,15 @@ test('a guest Stripe Checkout Session completion marks the exact registration pa
     data: { object: sessionCompleted }, id: `evt_${randomUUID()}`, livemode: false,
     object: 'event', pending_webhooks: 0, request: { id: null, idempotency_key: null }, type: 'checkout.session.completed',
   };
-  const result = await processStripeEvent(event as never, fakeListLineItems as never);
-  assert.equal(result, 'processed');
-  const [row] = await sql`select payment_status,paid_at,stripe_payment_intent_id from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(row.payment_status, 'paid');
-  assert.ok(row.paid_at);
-  assert.equal(row.stripe_payment_intent_id, sessionCompleted.payment_intent);
+  assert.equal(await processStripeEvent(event as never, stripe as never), 'processed');
+  assert.equal(refunds.length, 1, 'the retired guest payment must be refunded automatically');
+  assert.equal((await sql`select count(*)::int count from idoc.seminar_registrations where seminar_id=${seminarId}`)[0].count, 0);
 });
 
 test('a Checkout Session priced against a different amount than this seminar\'s own fee never grants payment credit', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '80.00' });
+  const seminarId = await publishedSeminar(admin.id, { price: '80.00' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   const fakeListLineItems = { checkout: { sessions: { listLineItems: async () => ({ data: [] }) } } };
   const checkoutSessionId = `cs_${randomUUID()}`;
@@ -460,7 +452,7 @@ test('a Checkout Session priced against a different amount than this seminar\'s 
 test('createSeminarCheckoutSession prices the session against the member\'s own current member fee and records the session id', async () => {
   const admin = await adminUser();
   const { user } = await paidMember();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '55.50' });
+  const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   const calls: unknown[] = [];
   const fakeClient = { checkout: { sessions: { create: async (params: unknown) => { calls.push(params); return { id: 'cs_fixture', url: 'https://checkout.stripe.com/session/fixture' }; } } }, customers: { create: async () => ({ id: 'cus_seminar_fixture' }) } };
@@ -474,23 +466,10 @@ test('createSeminarCheckoutSession prices the session against the member\'s own 
   assert.equal(row.stripe_checkout_session_id, 'cs_fixture');
 });
 
-test('createSeminarCheckoutSession prices a guest\'s session against the non-member fee and uses their email, with no Stripe Customer', async () => {
-  const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { nonMemberPrice: '65.00' });
-  const { registrationId } = await registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'jamie.guest@example.test', '+35315550100', 'online_stripe');
-  const calls: unknown[] = [];
-  const fakeClient = { checkout: { sessions: { create: async (params: unknown) => { calls.push(params); return { id: 'cs_guest_fixture', url: 'https://checkout.stripe.com/session/guest-fixture' }; } } }, customers: { create: async () => { throw new Error('a guest checkout must never create a billing-account Customer'); } } };
-  const url = await createSeminarCheckoutSession(registrationId, fakeClient);
-  assert.equal(url, 'https://checkout.stripe.com/session/guest-fixture');
-  const params = calls[0] as { customer_email?: string; line_items: Array<{ price_data: { unit_amount: number } }> };
-  assert.equal(params.line_items[0].price_data.unit_amount, 6500);
-  assert.equal(params.customer_email, 'jamie.guest@example.test');
-});
-
 test('the production seminar refund flow uses authoritative payment state, persists full provider evidence, and rejects a succeeded retry', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '55.50' });
+  const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_authoritative',paid_at=now(),expected_amount_cents=5550
     where id=${registrationId}`;
@@ -522,10 +501,10 @@ test('the production seminar refund flow uses authoritative payment state, persi
   assert.equal((await sql`select count(*)::int count from idoc.payment_refunds where seminar_registration_id=${registrationId}`)[0].count, 1);
 });
 
-test('a guest\'s paid registration can be refunded by an administrator via a direct best-effort email, with no profile row required', async () => {
+test('a legacy guest\'s paid registration (created before guest sign-up was retired) can still be refunded by an administrator via a direct best-effort email, with no profile row required', async () => {
   const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { nonMemberPrice: '65.00' });
-  const { registrationId } = await registerAsGuestForSeminar(seminarId, 'Jamie', 'Guest', 'jamie.guest@example.test', '+35315550100', 'online_stripe');
+  const seminarId = await publishedSeminar(admin.id, { price: '65.00' });
+  const { registrationId } = await legacyGuestRegistration(seminarId);
   await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_guest_refund',paid_at=now(),expected_amount_cents=6500 where id=${registrationId}`;
   const provider = { refunds: { create: async () => ({ id: 're_guest_fixture', status: 'succeeded' }) as never } };
   await asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Approved full refund for a guest', provider));
@@ -537,7 +516,7 @@ test('a guest\'s paid registration can be refunded by an administrator via a dir
 test('preserves paid evidence when Stripe refund fails and permits a safe retry', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();
-  const seminarId = await publishedSeminar(admin.id, { memberPrice: '55.50' });
+  const seminarId = await publishedSeminar(admin.id, { price: '55.50' });
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_preserved',paid_at=now(),expected_amount_cents=5550 where id=${registrationId}`;
   const failure = { refunds: { create: async () => { throw new Error('injected provider outage'); } } };
@@ -569,7 +548,7 @@ test('admin registration search/filter finds a member by name or email across se
 
   const exported = await asAdmin(admin.id, () => exportSeminarRegistrationsCsvRows(seminarId));
   assert.equal(exported.length, 1);
-  assert.ok(Object.keys(exported[0]).every((key) => ['seminar_title', 'registrant_name', 'registrant_email', 'is_guest', 'registration_status', 'payment_status', 'payment_method_canonical_id', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'].includes(key)),
+  assert.ok(Object.keys(exported[0]).every((key) => ['seminar_title', 'registrant_name', 'registrant_email', 'registration_status', 'approval_status', 'payment_status', 'payment_method_canonical_id', 'expected_amount_cents', 'currency', 'refund_ids', 'refunded_amount_cents', 'registered_at', 'canceled_at', 'paid_at'].includes(key)),
     'export rows must expose only the documented columns');
   const [auditRow] = await sql<{ after_json: { resultCount: number } }[]>`select after_json from idoc.audit_log where action='admin.seminar_registrations.exported' and entity_id=${String(seminarId)}`;
   assert.equal(auditRow.after_json.resultCount, 1);
@@ -581,8 +560,7 @@ test('the admin seminar list supports search and status filtering', async () => 
   await asAdmin(admin.id, () => createSeminar(seminarInput({ status: 'draft', title: 'Beta Workshop' })));
   const { rows: published } = await asAdmin(admin.id, () => listAdminSeminars({ status: 'published' }));
   assert.ok(published.every((row) => row.status === 'published'));
-  assert.equal(published[0].member_price_cents, 4500, 'the admin seminar list row must include both prices, not just id/date/status');
-  assert.equal(published[0].non_member_price_cents, 6500);
+  assert.equal(published[0].member_price_cents, 4500, 'the admin seminar list row must include the price, not just id/date/status');
   const { rows: searched } = await asAdmin(admin.id, () => listAdminSeminars({ q: 'Beta' }));
   assert.equal(searched.length, 1);
   assert.equal(searched[0].title, 'Beta Workshop');
@@ -618,3 +596,88 @@ test('Bank Transfer instructions shown to a member are the same sanitized organi
   const html = await getSeminarPaymentMethodInstructions('bank_transfer');
   assert.match(String(html), /Wire to IBAN/);
 });
+
+test('Registration Status is independent of payment: non-FEI is Confirmed at registration and stays so when paid, FEI starts Pending FEI Approval', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { capacity: 5, isFei: false });
+  const feiId = await publishedSeminar(admin.id, { capacity: 5, isFei: true, title: 'FEI Course' });
+  const { user } = await paidMember();
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'bank_transfer'));
+  const [before] = await sql`select approval_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.deepEqual({ ...before }, { approval_status: 'confirmed', payment_status: 'bank_transfer_pending' });
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', 'REF-1'));
+  const [after] = await sql`select approval_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.deepEqual({ ...after }, { approval_status: 'confirmed', payment_status: 'paid' });
+
+  const { user: other } = await paidMember();
+  const { registrationId: feiRegistration } = await asMember(other.id, () => registerForSeminar(feiId, 'cash_event'));
+  const [fei] = await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`;
+  assert.equal(fei.approval_status, 'pending_fei_approval');
+  await asAdmin(admin.id, () => recordManualSeminarPayment(feiRegistration, 'cash_event', null));
+  assert.equal((await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`)[0].approval_status, 'pending_fei_approval', 'paying never approves an FEI registration');
+  // The queued confirmation states the pending status and that the National Federation must register the member.
+  const [queued] = await sql`select kind,payload from idoc.notification_outbox where kind like 'seminar.%registration_created' and (payload->>'registrationId')::int=${feiRegistration}`;
+  const rendered = await renderNotice(queued.kind, queued.payload);
+  assert.match(rendered.html, /Pending FEI Approval/);
+  assert.match(rendered.html, /National Federation must register you with the FEI/);
+});
+
+test('an administrator records the FEI decision, which is audited and emails the registrant the details with a clear status message', async () => {
+  const admin = await adminUser();
+  const feiId = await publishedSeminar(admin.id, { isFei: true, title: 'FEI Course' });
+  const plainId = await publishedSeminar(admin.id, { isFei: false });
+  const { user, profile } = await paidMember();
+  const { registrationId } = await asMember(user.id, () => registerForSeminar(feiId, 'cash_event'));
+  const { registrationId: plainRegistration } = await asMember(user.id, () => registerForSeminar(plainId, 'cash_event'));
+
+  await assert.rejects(asMember(user.id, () => setAdminRegistrationApprovalStatus(registrationId, 'approved_by_fei')), AuthorizationError);
+  await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationApprovalStatus(registrationId, 'bogus')), /valid registration status/);
+  await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationApprovalStatus(plainRegistration, 'approved_by_fei')), /only apply to FEI seminars/);
+  await assert.rejects(asAdmin(admin.id, () => setAdminRegistrationApprovalStatus(registrationId, 'confirmed')), /Pending FEI Approval/);
+
+  for (const [status, text] of [['approved_by_fei', /has <strong>approved<\/strong>/], ['not_approved_by_fei', /has <strong>not approved<\/strong>/], ['approved_audit_only_by_fei', /audit only/]] as const) {
+    await asAdmin(admin.id, () => setAdminRegistrationApprovalStatus(registrationId, status));
+    assert.equal((await sql`select approval_status from idoc.seminar_registrations where id=${registrationId}`)[0].approval_status, status);
+    const rows = await sql`select kind,payload from idoc.notification_outbox where profile_id=${profile.id} and dedupe_key like ${`seminar.registration_status:${registrationId}:${status}:%`}`;
+    assert.equal(rows.length, 1);
+    const rendered = await renderNotice(rows[0].kind, rows[0].payload);
+    assert.match(rendered.html, text);
+    assert.match(rendered.html, /Judging Clinic|FEI Course/, 'the same registration details as the confirmation');
+    assert.match(rendered.subject, /registration status/i);
+  }
+  assert.equal((await sql`select count(*)::int count from idoc.audit_log where action='admin.seminar_registration.approval_status_changed' and entity_id=${String(registrationId)}`)[0].count, 3);
+  // Setting the same status again is a no-op: no second email.
+  await asAdmin(admin.id, () => setAdminRegistrationApprovalStatus(registrationId, 'approved_audit_only_by_fei'));
+  assert.equal((await sql`select count(*)::int count from idoc.notification_outbox where dedupe_key like ${`seminar.registration_status:${registrationId}:%`}`)[0].count, 3);
+});
+
+test('an administrator creates a registration for an active member found by lookup, with the same confirmation email, and cannot register a lapsed member', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { isFei: true });
+  const { profile, user } = await paidMember();
+  const lapsedUser = await createUser();
+  const lapsedProfile = await createProfile(lapsedUser.id);
+  await createMembership(lapsedProfile.id, false);
+
+  await assert.rejects(asMember(user.id, () => searchActiveMembersForRegistration('mem')), AuthorizationError);
+  const found = await asAdmin(admin.id, () => searchActiveMembersForRegistration(user.email.slice(0, 12)));
+  assert.ok(found.some((match) => match.profileId === profile.id), 'an active member is found by email');
+  assert.ok(!found.some((match) => match.profileId === lapsedProfile.id), 'a lapsed member is never offered');
+  assert.deepEqual(await asAdmin(admin.id, () => searchActiveMembersForRegistration('x')), [], 'under two characters returns nothing');
+
+  const { registrationId } = await asAdmin(admin.id, () => createAdminSeminarRegistration({ paymentMethod: 'bank_transfer', profileId: profile.id, seminarId }));
+  const [row] = await sql`select profile_id,expected_amount_cents,approval_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
+  assert.deepEqual({ ...row }, { approval_status: 'pending_fei_approval', expected_amount_cents: 4500, payment_status: 'bank_transfer_pending', profile_id: profile.id });
+  const queued = await sql`select kind from idoc.notification_outbox where profile_id=${profile.id} and kind like 'seminar.%registration_created'`;
+  assert.equal(queued.length, 1, 'the member gets the same confirmation a self-registration sends');
+  assert.equal(current_listing_has(await listCurrentSeminarsForMember(profile.id), seminarId), true, 'it shows in their My Seminars/Courses');
+
+  await assert.rejects(asAdmin(admin.id, () => createAdminSeminarRegistration({ paymentMethod: 'cash_event', profileId: lapsedProfile.id, seminarId })), /active members/);
+  await assert.rejects(asAdmin(admin.id, () => createAdminSeminarRegistration({ paymentMethod: 'cash_event', profileId: 999999, seminarId })), SeminarRegistrationError);
+  await assert.rejects(asAdmin(admin.id, () => createAdminSeminarRegistration({ paymentMethod: 'online_stripe', profileId: profile.id, seminarId })), /Bank Transfer or Cash/);
+  await assert.rejects(asAdmin(admin.id, () => createAdminSeminarRegistration({ paymentMethod: 'cash_event', profileId: profile.id, seminarId })), /already registered/);
+});
+
+function current_listing_has(rows: Array<{ id: number; registration_status: string | null }>, seminarId: number) {
+  return rows.some((row) => row.id === seminarId && row.registration_status === 'registered');
+}

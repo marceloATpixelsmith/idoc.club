@@ -71,7 +71,9 @@ test('the paid member directory rate-limits searches per account and per origin 
 
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.first_name'), memberDirectorySource.indexOf('${from} where ${where} order'));
-  assert.match(select, /coalesce\(u\.email_display, u\.email\) email/);
+  // The email is returned only for members who opted in (default: not shown); search and sort honor the same rule.
+  assert.match(select, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
+  assert.match(memberDirectorySource, /\(p\.directory_email_opt_in and coalesce\(u\.email_display, u\.email\) ilike/);
   assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state = 'active'/);
   assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
   assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);

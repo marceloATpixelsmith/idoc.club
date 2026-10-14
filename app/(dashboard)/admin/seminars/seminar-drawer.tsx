@@ -64,8 +64,6 @@ export async function AdminSeminarDrawer({ isNew = false, seminarId }: { isNew?:
                 levels: seminar.levels ?? [],
                 location: String(seminar.location),
                 member_price_cents: Number(seminar.member_price_cents),
-                non_member_price_cents: Number(seminar.non_member_price_cents),
-                organizing_national_federation: seminar.organizing_national_federation,
                 participant_profile: seminar.participant_profile,
                 registration_deadline: seminar.registration_deadline as string,
                 start_date: seminar.start_date,

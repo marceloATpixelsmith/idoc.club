@@ -27,29 +27,39 @@ export class RevenueRangeError extends Error {
   }
 }
 
-function dates(input: RevenueFilters) {
-  const today = new Date();
-  const to = firstValue(input.to) ?? today.toISOString().slice(0, 10);
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 11, 1));
-  const from = firstValue(input.from) ?? start.toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new RevenueRangeError();
+// The default view is all time: with neither bound supplied there is no date restriction at all. A
+// lone start date runs through today; a lone end date has no lower bound.
+function dates(input: RevenueFilters): { from: string | null; to: string | null } {
+  const rawFrom = firstValue(input.from) || undefined;
+  const rawTo = firstValue(input.to) || undefined;
+  if (!rawFrom && !rawTo) return { from: null, to: null };
+  const to = rawTo ?? new Date().toISOString().slice(0, 10);
+  const from = rawFrom ?? null;
+  if ((from !== null && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || (from !== null && from > to)) throw new RevenueRangeError();
   return { from, to };
 }
+
+// Payment-source filter values offered by the UI. "stripe" covers every Stripe-recorded payment,
+// whether the webhook recorded it or an administrator registered it manually.
+export const REVENUE_SOURCE_FILTERS = ['stripe', 'bank_transfer', 'cash'] as const;
 
 export async function getRevenueReport(input: RevenueFilters = {}) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const range = dates(input);
   const source = firstValue(input.source);
   const origin = firstValue(input.origin);
-  const conditions = [sql`paid_at >= (${range.from}::date::timestamp at time zone 'UTC')`, sql`paid_at < ((${range.to}::date::timestamp at time zone 'UTC') + interval '1 day')`, sql`source <> 'complimentary'`];
-  if (source) conditions.push(sql`source = ${source}`);
-  if (origin === 'stripe') conditions.push(sql`source in ('stripe_recurring','stripe_one_time')`);
-  if (origin === 'manual') conditions.push(sql`source not in ('stripe_recurring','stripe_one_time','complimentary')`);
+  const conditions = [sql`source <> 'complimentary'`];
+  if (range.from) conditions.push(sql`paid_at >= (${range.from}::date::timestamp at time zone 'UTC')`);
+  if (range.to) conditions.push(sql`paid_at < ((${range.to}::date::timestamp at time zone 'UTC') + interval '1 day')`);
+  if (source === 'stripe') conditions.push(sql`source in ('stripe_recurring','stripe_one_time','stripe_manual')`);
+  else if (source === 'bank_transfer' || source === 'cash') conditions.push(sql`source = ${source}`);
+  if (origin === 'stripe') conditions.push(sql`source in ('stripe_recurring','stripe_one_time','stripe_manual')`);
+  if (origin === 'manual') conditions.push(sql`source not in ('stripe_recurring','stripe_one_time','stripe_manual','complimentary')`);
   const where = sql.join(conditions, sql` and `);
   const [summary, bySource, overTime] = await Promise.all([
     db.execute<{ averageCents: number; currency: string; manualCents: number; paymentCount: number; stripeCents: number; totalCents: number }>(sql`select currency,sum(amount_cents)::int "totalCents",count(*)::int "paymentCount",round(avg(amount_cents))::int "averageCents",
-      coalesce(sum(amount_cents) filter (where source in ('stripe_recurring','stripe_one_time')),0)::int "stripeCents",
-      coalesce(sum(amount_cents) filter (where source not in ('stripe_recurring','stripe_one_time','complimentary')),0)::int "manualCents"
+      coalesce(sum(amount_cents) filter (where source in ('stripe_recurring','stripe_one_time','stripe_manual')),0)::int "stripeCents",
+      coalesce(sum(amount_cents) filter (where source not in ('stripe_recurring','stripe_one_time','stripe_manual','complimentary')),0)::int "manualCents"
       from payments where ${where} group by currency order by currency`),
     db.execute<{ currency: string; source: string; totalCents: number }>(sql`select currency,source,sum(amount_cents)::int "totalCents" from payments where ${where} group by currency,source order by currency,source`),
     db.execute<{ currency: string; month: string; totalCents: number }>(sql`select currency,to_char(date_trunc('month',paid_at at time zone 'UTC'),'YYYY-MM') as "month",sum(amount_cents)::int "totalCents" from payments where ${where} group by currency,date_trunc('month',paid_at at time zone 'UTC') order by date_trunc('month',paid_at at time zone 'UTC'),currency`),

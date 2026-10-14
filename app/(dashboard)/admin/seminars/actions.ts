@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { createSeminar, updateSeminar } from '@/lib/seminars/seminars';
-import { createAdminSeminarRegistration, recordManualSeminarPayment, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
+import { createAdminSeminarRegistration, recordManualSeminarPayment, searchActiveMembersForRegistration, setAdminRegistrationApprovalStatus, setAdminRegistrationStatus, updateSeminarRegistrationDetails } from '@/lib/seminars/registrations';
 import { refundSeminarRegistration } from '@/lib/payments/refunds';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -17,7 +17,7 @@ function seminarFields(formData: FormData) {
     accommodationInformation: formData.get('accommodationInformation'), application: formData.get('application'), capacity: formData.get('capacity'),
     courseDirectors: formData.get('courseDirectors'), courseVenueInformation: formData.get('courseVenueInformation'), endDate: formData.get('endDate'),
     isFei: formData.get('isFei'), language: formData.get('language'), levels: formData.getAll('levels'), location: formData.get('location'),
-    memberPrice: formData.get('memberPrice'), nonMemberPrice: formData.get('nonMemberPrice'), organizingNationalFederation: formData.get('organizingNationalFederation'),
+    price: formData.get('price'),
     participantProfile: formData.get('participantProfile'), registrationDeadline: formData.get('registrationDeadline'), startDate: formData.get('startDate'),
     status: formData.get('status'), title: formData.get('title'),
   };
@@ -68,13 +68,26 @@ export async function updateSeminarAction(_state: AdminSeminarState, formData: F
 
 export async function createAdminSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
   return run(formData, () => createAdminSeminarRegistration({
-    email: formData.get('email'),
-    firstName: formData.get('firstName'),
-    lastName: formData.get('lastName'),
     paymentMethod: formData.get('paymentMethod'),
-    phone: formData.get('phone'),
+    profileId: formData.get('profileId'),
     seminarId: formData.get('seminarId'),
   }).then(() => undefined), 'Registration created.', '/admin/seminars/registrations');
+}
+
+/** Typeahead for the New Registration member lookup. Administrator-only (re-checked server-side) and
+ * bounded; returns only the fields needed to identify one active member. */
+export async function searchRegistrationMembersAction(query: string) {
+  try {
+    return await searchActiveMembersForRegistration(query);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AuthorizationError') return [];
+    throw error;
+  }
+}
+
+export async function setAdminRegistrationApprovalStatusAction(_state: AdminSeminarState, formData: FormData) {
+  return run(formData, () => setAdminRegistrationApprovalStatus(formData.get('registrationId'), formData.get('approvalStatus')),
+    'Registration status updated.', '/admin/seminars/registrations');
 }
 
 export async function recordManualSeminarPaymentAction(_state: AdminSeminarState, formData: FormData) {
@@ -90,8 +103,7 @@ export async function setAdminRegistrationStatusAction(_state: AdminSeminarState
 export async function updateSeminarRegistrationDetailsAction(_state: AdminSeminarState, formData: FormData) {
   const registrationId = formData.get('registrationId');
   return run(formData, () => updateSeminarRegistrationDetails(registrationId, {
-    guestEmail: formData.get('guestEmail'), guestFirstName: formData.get('guestFirstName'), guestLastName: formData.get('guestLastName'),
-    guestPhone: formData.get('guestPhone'), paymentMethod: formData.get('paymentMethod'),
+    paymentMethod: formData.get('paymentMethod'),
   }), 'Registration updated.', '/admin/seminars/registrations');
 }
 

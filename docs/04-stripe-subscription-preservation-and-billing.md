@@ -115,7 +115,7 @@ After a member verifies an email/username change, update the matching Stripe Cus
 
 # 8. Manual/non-Stripe members
 
-Members paid by bank transfer, PayPal, cash/in person or complimentary grant must not be forced to create Stripe Customers or Subscriptions. Their membership validity is maintained by payment/adjustment records and administrator workflows.
+Members paid by bank transfer, administrator-registered Stripe payment, cash/in person or complimentary grant must not be forced to create Stripe Customers or Subscriptions. Their membership validity is maintained by payment/adjustment records and administrator workflows.
 
 # 9. Stripe reconciliation controls
 

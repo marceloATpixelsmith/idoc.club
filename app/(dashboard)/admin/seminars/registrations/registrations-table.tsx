@@ -21,20 +21,20 @@ import { Input } from '@/components/ui/input';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
-import { PAYMENT_STATUS_LABELS, PAYMENT_STATUSES, type PaymentStatus, registrationDisplayLabel } from '@/lib/seminars/status';
+import { APPROVAL_STATUS_LABELS, APPROVAL_STATUSES, PAYMENT_STATUS_LABELS, PAYMENT_STATUSES, type PaymentStatus, registrationDisplayLabel } from '@/lib/seminars/status';
 import { PaymentMethodIcon, PaymentStatusIcon, paymentMethodLabel } from '@/components/seminars/payment-method-icon';
 import { formatTableDate } from '@/lib/format';
 
 type AdminRegistrationRow = {
-  canceled_at: Date | string | null; currency: string; expected_amount_cents: number | null; id: number; is_guest: boolean;
+  canceled_at: Date | string | null; approval_status: string; currency: string; expected_amount_cents: number | null; id: number;
   paid_at: Date | string | null; payment_method_canonical_id: string; payment_status: string; registered_at: Date | string;
   registrant_email: string; registrant_name: string; registration_status: 'canceled' | 'registered'; seminar_id: number; seminar_title: string;
 };
 
-const OPTIONAL_COLUMNS = ['registrant', 'seminar', 'status', 'registered'] as const;
-const LABELS: Record<string, string> = { registered: 'Registered', registrant: 'Registrant', seminar: 'Seminar', status: 'Payment Status' };
+const OPTIONAL_COLUMNS = ['registrant', 'seminar', 'approval', 'status', 'registered'] as const;
+const LABELS: Record<string, string> = { approval: 'Registration Status', registered: 'Registered', registrant: 'Registrant', seminar: 'Seminar/Course', status: 'Payment Status' };
 const PAYMENT_STATUS_OPTIONS = PAYMENT_STATUSES.map((value) => ({ label: PAYMENT_STATUS_LABELS[value], value }));
-const REGISTRANT_TYPE_OPTIONS = [{ label: 'Members', value: 'member' }, { label: 'Guests', value: 'guest' }];
+const APPROVAL_STATUS_OPTIONS = APPROVAL_STATUSES.map((value) => ({ label: APPROVAL_STATUS_LABELS[value], value }));
 function header(id: string) { return ({ column }: HeaderContext<AdminRegistrationRow, unknown>) => <DataTableColumnHeader column={column} label={LABELS[id]} />; }
 function filterToken(columnFilters: ColumnFiltersState, id: string): string | undefined {
   const value = columnFilters.find((filter) => filter.id === id)?.value;
@@ -45,7 +45,7 @@ function filterToken(columnFilters: ColumnFiltersState, id: string): string | un
 export function RegistrationsTable({
   filters, initialColumnOrder, initialVisibleColumns, rows, seminarOptions, total,
 }: {
-  filters: { from?: string; page: number; pageSize: number; paymentStatus?: string; q?: string; registrantType?: string; seminarId?: string; sort?: string; to?: string };
+  filters: { from?: string; page: number; pageSize: number; paymentStatus?: string; q?: string; approvalStatus?: string; seminarId?: string; sort?: string; to?: string };
   initialColumnOrder?: string; initialVisibleColumns?: string[]; rows: AdminRegistrationRow[];
   seminarOptions: { label: string; value: string }[]; total: number;
 }) {
@@ -61,16 +61,16 @@ export function RegistrationsTable({
     startTransition(() => router.push(href));
   }, [router]);
   const initialVisibility = useMemo(() => {
-    const visibility: Record<string, boolean> = { registrantType: false };
+    const visibility: Record<string, boolean> = {};
     if (!initialVisibleColumns) return visibility;
     return { ...visibility, ...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, initialVisibleColumns.includes(column)])) };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
   }, []);
   const columns = useMemo<ColumnDef<AdminRegistrationRow>[]>(() => [
     { id: 'select', enableHiding: false, enableSorting: false, size: 40, header: ({ table }) => <Checkbox aria-label="Select all registrations on this page" checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')} onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))} />, cell: ({ row }) => <Checkbox aria-label={`Select ${row.original.registrant_name}`} checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(Boolean(value))} /> },
-    { id: 'registrant', accessorFn: (row) => `${row.registrant_name} ${row.registrant_email}`, header: header('registrant'), meta: { label: 'Registrant' }, cell: ({ row }) => <div>{row.original.registrant_name}{row.original.is_guest ? <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Guest</span> : null}<span className="block text-sm text-muted-foreground">{row.original.registrant_email}</span></div> },
-    { id: 'registrantType', accessorFn: (row) => row.is_guest ? 'guest' : 'member', enableColumnFilter: true, enableHiding: false, header: () => null, meta: { label: 'Registrant Type', options: REGISTRANT_TYPE_OPTIONS, variant: 'multiSelect' }, cell: () => null },
-    { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
+    { id: 'registrant', accessorFn: (row) => `${row.registrant_name} ${row.registrant_email}`, header: header('registrant'), meta: { label: 'Registrant' }, cell: ({ row }) => <div>{row.original.registrant_name}<span className="block text-sm text-muted-foreground">{row.original.registrant_email}</span></div> },
+    { id: 'seminar', accessorKey: 'seminar_title', enableColumnFilter: true, header: header('seminar'), meta: { label: 'Seminar/Course', options: seminarOptions, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{row.original.seminar_title}</span> },
+    { id: 'approval', accessorKey: 'approval_status', enableColumnFilter: true, header: header('approval'), meta: { label: 'Registration Status', options: APPROVAL_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <span className="font-medium">{APPROVAL_STATUS_LABELS[row.original.approval_status as keyof typeof APPROVAL_STATUS_LABELS] ?? row.original.approval_status}</span> },
     { id: 'status', accessorKey: 'payment_status', enableColumnFilter: true, header: header('status'), meta: { label: 'Payment Status', options: PAYMENT_STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => <div><span className="inline-flex items-center gap-2 font-medium"><PaymentStatusIcon status={row.original.payment_status} />{registrationDisplayLabel(row.original.registration_status, row.original.payment_status as PaymentStatus).toUpperCase()}</span><span className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><PaymentMethodIcon method={row.original.payment_method_canonical_id} />{paymentMethodLabel(row.original.payment_method_canonical_id)}</span></div> },
     { id: 'registered', accessorKey: 'registered_at', header: header('registered'), meta: { label: 'Registered' }, cell: ({ row }) => formatTableDate(row.original.registered_at) },
     {
@@ -83,7 +83,7 @@ export function RegistrationsTable({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seminarOptions is derived server-side per render, stable for this table's lifetime.
   ], [openTableAction, pathname, seminarOptions]);
-  const defaultColumnOrder = ['select', 'registered', 'registrant', 'seminar', 'status', 'actions'];
+  const defaultColumnOrder = ['select', 'registered', 'registrant', 'seminar', 'approval', 'status', 'actions'];
   const initialSorting = useMemo(() => {
     try { const parsed = JSON.parse(filters.sort ?? '[]'); if (Array.isArray(parsed) && parsed.length) return parsed; } catch { /* fall through to the default below */ }
     return [{ desc: true, id: 'registered' as keyof AdminRegistrationRow }];
@@ -96,7 +96,7 @@ export function RegistrationsTable({
   const initialColumnFilters = useMemo(() => [
     { id: 'seminar', value: filters.seminarId ? filters.seminarId.split(',') : [] },
     { id: 'status', value: filters.paymentStatus ? filters.paymentStatus.split(',') : [] },
-    { id: 'registrantType', value: filters.registrantType ? filters.registrantType.split(',') : [] },
+    { id: 'approval', value: filters.approvalStatus ? filters.approvalStatus.split(',') : [] },
   ].filter((filter) => filter.value.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, at mount.
     []);
@@ -108,12 +108,12 @@ export function RegistrationsTable({
     void persistTablePreferences('seminar_registrations', {
       columnOrder: table.getState().columnOrder.join(','),
       columns: OPTIONAL_COLUMNS.filter((column) => table.getState().columnVisibility[column] !== false),
+      approvalStatus: filterToken(state.columnFilters, 'approval'),
       from: effectiveFrom,
       page: state.pagination.pageIndex + 1,
       pageSize: state.pagination.pageSize,
       paymentStatus: filterToken(state.columnFilters, 'status'),
       q: effectiveSearch || undefined,
-      registrantType: filterToken(state.columnFilters, 'registrantType'),
       seminarId: filterToken(state.columnFilters, 'seminar'),
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
       to: effectiveTo,
@@ -168,8 +168,8 @@ export function RegistrationsTable({
     if (seminarId) params.set('seminarId', seminarId);
     const paymentStatus = filterToken(table.getState().columnFilters, 'status');
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
-    const registrantType = filterToken(table.getState().columnFilters, 'registrantType');
-    if (registrantType) params.set('registrantType', registrantType);
+    const approvalStatus = filterToken(table.getState().columnFilters, 'approval');
+    if (approvalStatus) params.set('approvalStatus', approvalStatus);
     return params;
   }
   const exportParams = currentExportParams();
@@ -182,7 +182,7 @@ export function RegistrationsTable({
   const filtered = manuallyFiltered || Boolean(search) || table.getState().columnFilters.length > 0;
   return <><TablePreferenceSync table="seminar_registrations" /><DataTable
     actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selectedRows.length} selected</ActionBarSelection><ActionBarGroup><BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selectedRows.map((row) => String(row.original.id))} table="registrations" /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}
-    emptyState={<div><strong>{filtered ? 'No registrations match this view' : 'No seminar registrations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the result set.' : 'Registrations appear here once members or guests sign up.'}</span></div>}
+    emptyState={<div><strong>{filtered ? 'No registrations match this view' : 'No seminar registrations exist'}</strong><span className="mt-1 block text-muted-foreground">{filtered ? 'Edit or clear filters to broaden the result set.' : 'Registrations appear here once members register for a seminar/course.'}</span></div>}
     loading={isPending} pageSizeOptions={[10, 25, 50, 100]} table={table}
   >
     <DataTableToolbar

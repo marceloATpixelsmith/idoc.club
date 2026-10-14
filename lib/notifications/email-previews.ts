@@ -30,6 +30,7 @@ const MEMBERSHIP_PREVIEWS = [
   ['membership.payment_failed', 'Renewal payment failed'],
   ['membership.grace_reminder', 'Grace-period reminder'],
   ['membership.grace_expired', 'Membership expired after grace'],
+  ['membership.manual_payment_recorded', 'Membership payment recorded by an administrator'],
 ] as const;
 
 const SEMINAR_PREVIEWS = [
@@ -106,8 +107,6 @@ const SAMPLE_SEMINAR: SeminarEmailDetails = {
   levels: ['level_1', 'level_2'],
   location: 'Madrid, Spain',
   member_price_cents: 12000,
-  non_member_price_cents: 18000,
-  organizing_national_federation: 'ES',
   participant_profile: '<p>Judges, Stewards and Veterinarians.</p>',
   registration_deadline: '2026-11-01',
   start_date: '2026-11-15',
@@ -118,7 +117,8 @@ async function seminarRegistrationPreview() {
   return {
     html: renderTransactionalEmail({
       bodyHtml: await seminarRegistrationConfirmationBodyHtml({
-        amountCents: 18000,
+        amountCents: 12000,
+        approvalStatus: 'pending_fei_approval',
         firstName: 'Ameyalli',
         paymentConfirmed: true,
         paymentMethod: 'online_stripe',

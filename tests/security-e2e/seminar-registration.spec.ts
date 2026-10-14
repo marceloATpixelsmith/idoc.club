@@ -1,13 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  createActiveMember, fillPhone, grantMembershipInDatabase, insertSeminar, installStripeHostedPageStub,
+  createActiveMember, grantMembershipInDatabase, insertSeminar, installStripeHostedPageStub,
   installTurnstileStub, mockStripeSessions, payMockStripeSession, registrationFor, resetProviderControl, resetRateLimits,
   signedStripeEvent, uniqueEmail, withDatabase,
 } from './support/helpers';
 
 // Seminar registration rules beyond the paid golden path in member-lifecycle.spec.ts: payment-method
-// availability, every payment method, member and non-member pricing, cancellation, capacity, closed
-// registration, webhook redelivery and anonymous guest registration. Stripe is the only stand-in
+// availability, every payment method, the single seminar price, registration/payment status, cancellation, capacity,
+// closed registration, webhook redelivery and that a signed-out visitor can browse but never register. Stripe is the only stand-in
 // (tests/security-e2e/stripe-mock.ts).
 // Next's dev server answers middleware redirects on `localhost`, so these journeys run there too and
 // keep their host-only session cookies across the membership gate's redirects.
@@ -15,20 +15,19 @@ test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origin
 test.describe.configure({ mode: 'serial' });
 
 const SEMINARS = {
-  bank: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5000, title: 'E2E Bank Transfer Seminar' },
-  cash: { capacity: 20, deadlineDays: 30, memberCents: 3200, nonMemberCents: 5200, title: 'E2E Cash Seminar' },
-  closed: { capacity: 20, deadlineDays: -1, memberCents: 3000, nonMemberCents: 5000, title: 'E2E Closed Registration Seminar' },
-  full: { capacity: 1, deadlineDays: 30, memberCents: 2000, nonMemberCents: 4000, title: 'E2E Full Seminar' },
-  guestBank: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5100, title: 'E2E Guest Bank Seminar' },
-  guestStripe: { capacity: 20, deadlineDays: 30, memberCents: 3000, nonMemberCents: 5300, title: 'E2E Guest Stripe Seminar' },
-  online: { capacity: 20, deadlineDays: 30, memberCents: 6000, nonMemberCents: 9000, title: 'E2E Online Seminar' },
+  bank: { capacity: 20, deadlineDays: 30, memberCents: 3000, title: 'E2E Bank Transfer Seminar' },
+  cash: { capacity: 20, deadlineDays: 30, memberCents: 3200, title: 'E2E Cash Seminar' },
+  closed: { capacity: 20, deadlineDays: -1, memberCents: 3000, title: 'E2E Closed Registration Seminar' },
+  full: { capacity: 1, deadlineDays: 30, memberCents: 2000, title: 'E2E Full Seminar' },
+  fei: { capacity: 20, deadlineDays: 30, isFei: true, memberCents: 3400, title: 'E2E FEI Seminar' },
+  publicOnly: { capacity: 20, deadlineDays: 30, memberCents: 3000, title: 'E2E Public Catalog Seminar' },
+  online: { capacity: 20, deadlineDays: 30, memberCents: 6000, title: 'E2E Online Seminar' },
 } as const;
 const ids: Record<keyof typeof SEMINARS, number> = {} as Record<keyof typeof SEMINARS, number>;
 
 const memberOne = uniqueEmail('seminar-one');
 const memberTwo = uniqueEmail('seminar-two');
 const unpaidMember = uniqueEmail('seminar-unpaid');
-const guestEmail = uniqueEmail('seminar-guest');
 
 async function openPaymentChoices(page: Page, seminarId: number) {
   await page.goto(`/seminars/${seminarId}`);
@@ -146,6 +145,24 @@ test.describe('member one', () => {
     await page.goto(`/seminars/${ids.online}`);
     await expect(page.getByRole('button', { name: /^Register/ })).toHaveCount(0);
   });
+
+  test('an FEI seminar registration starts Pending FEI Approval, and My Seminars shows both the Registration Status and the Payment Status', async ({ page }) => {
+    const dialog = await openPaymentChoices(page, ids.fei);
+    await dialog.getByRole('button', { name: /Cash/ }).click();
+    await expect(page).toHaveURL(/\/seminars\?view=my/);
+    expect(await registrationFor(memberOne, SEMINARS.fei.title)).toMatchObject({ approval_status: 'pending_fei_approval', payment_status: 'cash_pending' });
+    const row = page.locator('li', { hasText: SEMINARS.fei.title });
+    await expect(row).toContainText('Registration Status: Pending FEI Approval');
+    await expect(row).toContainText('Payment Status: Cash pending');
+  });
+
+  test('a non-FEI registration is Confirmed as soon as it is made, independent of payment', async ({ page }) => {
+    await page.goto('/seminars?view=my');
+    const row = page.locator('li', { hasText: SEMINARS.bank.title });
+    await expect(row).toContainText('Registration Status: Confirmed');
+    await expect(row).toContainText('Payment Status: Bank transfer pending');
+    expect((await registrationFor(memberOne, SEMINARS.bank.title)).approval_status).toBe('confirmed');
+  });
 });
 
 test.describe('member two', () => {
@@ -174,66 +191,21 @@ test.describe('signed-in member who has not paid for membership', () => {
 });
 
 test.describe('signed-out visitor', () => {
-  test('the public catalog shows both prices and no member-only controls', async ({ page }) => {
+  test('the public catalog shows the single price and no member-only controls', async ({ page }) => {
     await page.goto('/seminars');
-    const row = page.locator('li', { hasText: SEMINARS.guestBank.title });
-    await expect(row).toContainText('Members: €30.00');
-    await expect(row).toContainText('Non-members: €51.00');
-    await expect(page.getByRole('navigation', { name: 'Seminars view' })).toHaveCount(0);
+    const row = page.locator('li', { hasText: SEMINARS.publicOnly.title });
+    await expect(row).toContainText('€30.00');
+    await expect(row).not.toContainText('Non-members');
+    await expect(page.getByRole('navigation', { name: 'Seminars/Courses view' })).toHaveCount(0);
   });
 
-  test('Register offers joining for the member price or continuing as a guest', async ({ page }) => {
-    await page.goto(`/seminars/${ids.guestBank}`);
-    await page.getByRole('button', { name: /^Register/ }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('link', { name: /Join to get member pricing of €30\.00/ })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /Register as a guest/ })).toBeVisible();
-  });
-
-  test('a guest pays online through Stripe first and the verified webhook creates the paid registration', async ({ page }) => {
-    await page.goto(`/seminars/${ids.guestStripe}`);
-    await page.getByRole('button', { name: /^Register/ }).click();
-    await page.getByRole('button', { name: /Register as a guest/ }).click();
-    await page.getByRole('dialog').getByRole('button', { name: /Online/ }).click();
-    await page.waitForURL(/checkout\.stripe\.com\/c\/pay\/cs_test_e2e/);
-    const session = (await mockStripeSessions()).find((candidate) => candidate.metadata.seminarId === String(ids.guestStripe));
-    expect(session?.amount_total).toBe(SEMINARS.guestStripe.nonMemberCents);
-    expect(await registrationFor(guestEmail, SEMINARS.guestStripe.title)).toBeUndefined();
-
-    // Stripe collects the guest's details on its own page; the verified webhook then creates the registration.
-    const paid = await payMockStripeSession(session?.id as string, {
-      custom_fields: [{ key: 'first_name', text: { value: 'Gina' } }, { key: 'last_name', text: { value: 'Guest' } }],
-      customer_details: { email: guestEmail, phone: '+49301234567' },
-    });
-    const event = signedStripeEvent('checkout.session.completed', paid);
-    expect((await page.request.post('/api/stripe/webhook', { data: event.payload, headers: event.headers })).status()).toBe(200);
-    expect(await registrationFor(guestEmail, SEMINARS.guestStripe.title)).toMatchObject({ payment_status: 'paid', registration_status: 'registered' });
-  });
-
-  test('a guest registers by bank transfer with contact details, and the same email cannot register twice', async ({ page }) => {
-    const submit = async () => {
-      await page.goto(`/seminars/${ids.guestBank}`);
-      await page.getByRole('button', { name: /^Register/ }).click();
-      await page.getByRole('button', { name: /Register as a guest/ }).click();
-      await page.getByRole('dialog').getByRole('button', { name: /Bank Transfer/ }).click();
-      const dialog = page.getByRole('dialog');
-      await dialog.getByLabel('First name').fill('Bea');
-      await dialog.getByLabel('Last name').fill('Banker');
-      await dialog.getByLabel('Email').fill(guestEmail);
-      await fillPhone(page, 'input#guestPhone', dialog);
-      await dialog.getByRole('button', { name: /^Register/ }).click();
-    };
-    await submit();
-    await expect(page.getByText(/Registration completed successfully/)).toBeVisible();
-    expect(await registrationFor(guestEmail, SEMINARS.guestBank.title)).toMatchObject({
-      expected_amount_cents: SEMINARS.guestBank.nonMemberCents, payment_status: 'bank_transfer_pending', registration_status: 'registered',
-    });
-
-    await resetRateLimits();
-    await page.goto(`/seminars/${ids.guestBank}`);
-    // Once registered the detail page no longer offers registration to this guest's session-less browser,
-    // so the duplicate is attempted through the same form and must be refused by the server.
-    await submit();
-    await expect(page.getByText('This email is already registered for this seminar.')).toBeVisible();
+  test('the detail page shows the full details but offers no way to register -- no Register button and no guest flow', async ({ page }) => {
+    await page.goto(`/seminars/${ids.publicOnly}`);
+    await expect(page.getByRole('heading', { name: SEMINARS.publicOnly.title })).toBeVisible();
+    await expect(page.getByText('Organizing National Federation')).toHaveCount(0);
+    await expect(page.getByText(/Only signed-in IDOC members can register/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Register/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /guest/i })).toHaveCount(0);
+    expect(await withDatabase((sql) => sql`select 1 from idoc.seminar_registrations where seminar_id = ${ids.publicOnly}`)).toHaveLength(0);
   });
 });

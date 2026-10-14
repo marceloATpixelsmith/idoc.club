@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { sql, type SQL } from 'drizzle-orm';
-import { ISO_COUNTRY_CODES, IDOC_REGIONS } from '@/lib/membership/validation';
+import { ISO_COUNTRY_CODES, IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
 import { requireAdministrator } from './authorization';
@@ -10,6 +10,13 @@ import { requireAccountAccess } from './data-access';
 export const DEFAULT_ADMIN_MEMBER_PAGE_SIZE = 25;
 export const MEMBER_EXPORT_LIMIT = 25_000;
 export const MEMBERSHIP_STATUSES = ['active', 'expired', 'archived', 'without_active', 'board_member', 'administrator', 'super_admin', 'onboarding', 'test'] as const;
+// Official Status filter tokens cover every judge and steward status; "Other" exists in both lists, so
+// each token carries its role (`judge:<status>` / `steward:<status>`) to stay unambiguous.
+export const OFFICIAL_STATUS_OPTIONS = [
+  ...JUDGE_STATUSES.map((status) => ({ label: `Judge: ${status}`, value: `judge:${status}` })),
+  ...STEWARD_STATUSES.map((status) => ({ label: `Steward: ${status}`, value: `steward:${status}` })),
+] as const;
+export const OFFICIAL_STATUS_VALUES: readonly string[] = OFFICIAL_STATUS_OPTIONS.map((option) => option.value);
 export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 // Next.js searchParams values are string | string[] | undefined at runtime (a repeated query key
 // becomes an array) regardless of a narrower page-level annotation, so every filter accepts that
@@ -19,7 +26,7 @@ export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 type RawFilterValue = string | string[] | undefined;
 export type MemberFilters = {
   column?: RawFilterValue; country?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
-  membershipType?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
+  membershipType?: RawFilterValue; officialStatus?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
   direction?: RawFilterValue; filters?: RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
   status?: RawFilterValue; joinOperator?: RawFilterValue;
   // The membership-type column keeps id `type` (its sort id, matching SORT_FIELDS); the simple-mode
@@ -30,7 +37,7 @@ export type MemberFilters = {
 export type AdminMemberRow = {
   country: string | null; email: string; federation: string | null; firstName: string | null;
   hasSupportHistory: boolean; isAdministrator: boolean; isBoardMember: boolean; isSuperAdmin: boolean; lastName: string | null; lastPaymentAt: Date | null; membershipType: string | null; profileId: number | null; region: string | null;
-  status: string; updatedAt: Date; userId: number; validUntil: string | null;
+  officialStatuses: string[] | null; status: string; updatedAt: Date; userId: number; validUntil: string | null;
 };
 
 const SORT_FIELDS = ['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
@@ -66,7 +73,7 @@ function allValues(value: RawFilterValue): string[] {
 }
 
 type NormalizedMemberFilters = {
-  countries: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
+  countries: string[]; officialStatuses: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
   direction: 'asc' | 'desc'; membershipTypes: MembershipTypeOption[]; page: number; pageSize: 10 | 25 | 50 | 100; q?: string; regions: string[];
   sort: SortField; sorts: { id: SortField; desc: boolean }[]; advancedFilters: AdvancedMemberFilter[];
   joinOperator: 'and' | 'or'; statuses: MembershipStatusFilter[];
@@ -95,6 +102,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     countries: allValues(input.country).map((value) => value.trim().toUpperCase()).filter(Boolean),
     expiresFrom: firstValue(input.expiresFrom) || undefined,
     expiresTo: firstValue(input.expiresTo) || undefined,
+    officialStatuses: allValues(input.officialStatus).filter((value) => OFFICIAL_STATUS_VALUES.includes(value)),
     federations: allValues(input.federation).map((value) => value.trim().toUpperCase()).filter(Boolean),
     membershipTypes,
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
@@ -193,6 +201,14 @@ function queryParts(raw: MemberFilters) {
   if (filters.countries.length) conditions.push(sql`p.country_code in (${sql.join(filters.countries.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.federations.length) conditions.push(sql`roles.federation in (${sql.join(filters.federations.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.regions.length) conditions.push(sql`roles.region in (${sql.join(filters.regions.map((value) => sql`${value}`), sql`,`)})`);
+  if (filters.officialStatuses.length) {
+    // Matches a member holding ANY selected status on a current role of the matching type.
+    const matches = filters.officialStatuses.map((token) => {
+      const [roleType, ...rest] = token.split(':');
+      return sql`exists (select 1 from professional_roles opr where opr.profile_id=p.id and opr.effective_to is null and opr.role_type=${roleType} and ${rest.join(':')} = any(opr.official_statuses))`;
+    });
+    conditions.push(sql`(${sql.join(matches, sql` or `)})`);
+  }
   if (filters.membershipTypes.length) {
     const matches = filters.membershipTypes.map((value) => value === 'combo'
       ? sql`(roles.has_judge and roles.has_steward)`
@@ -216,7 +232,7 @@ function queryParts(raw: MemberFilters) {
 
 const from = sql`from users u left join profiles p on p.user_id = u.id
   left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
-  left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true
+  left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,(select array_agg(distinct oc.concat_status order by oc.concat_status) from (select role_type||':'||st concat_status from professional_roles r2, unnest(r2.official_statuses) st where r2.profile_id=p.id and r2.effective_to is null) oc) official_statuses,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true
   left join lateral (select max(paid_at) last_payment_at from payments where profile_id=p.id) payment on true
   left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from application_roles where user_id=u.id and revoked_at is null) app_roles on true
   left join lateral (select true has_support_history from support_conversations where member_user_id=u.id limit 1) support on true`;
@@ -228,7 +244,7 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
+    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
@@ -238,7 +254,7 @@ export async function exportAdminMembers(input: MemberFilters = {}, selectedUser
   const actor = await authorize();
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const selectedWhere = selectedUserIds?.length ? sql` and u.id in (${sql.join(selectedUserIds.map((id) => sql`${id}`), sql`,`)})` : sql``;
-  const rows = await db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types)=1 then roles.role_types[1] else null end "membershipType",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where}${selectedWhere} order by ${order} limit ${MEMBER_EXPORT_LIMIT + 1}`);
+  const rows = await db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types)=1 then roles.role_types[1] else null end "membershipType",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where}${selectedWhere} order by ${order} limit ${MEMBER_EXPORT_LIMIT + 1}`);
   if (rows.length > MEMBER_EXPORT_LIMIT) throw new Error(`Export exceeds the safe limit of ${MEMBER_EXPORT_LIMIT} members. Narrow the filters and retry.`);
   await db.insert(auditLog).values({ action: 'admin.memberships.exported', actorId: actor.id, afterJson: { filters, resultCount: rows.length, selectedCount: selectedUserIds?.length ?? null }, entityId: 'membership-filtered-results', entityType: 'export' });
   return [...rows];

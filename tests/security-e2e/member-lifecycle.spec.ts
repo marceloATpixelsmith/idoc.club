@@ -16,7 +16,7 @@ test.use({ baseURL: 'http://localhost:3100', storageState: { cookies: [], origin
 test.describe.configure({ mode: 'serial' });
 
 const email = uniqueEmail('lifecycle');
-const MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 4500, nonMemberCents: 7000, title: 'E2E Lifecycle Member Seminar' };
+const MEMBER_SEMINAR = { capacity: 20, deadlineDays: 30, memberCents: 4500, title: 'E2E Lifecycle Member Seminar' };
 let memberSeminarId = 0;
 
 async function profileRow() {

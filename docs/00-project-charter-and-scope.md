@@ -23,7 +23,7 @@ This charter defines the objective, scope, constraints, major decisions, success
 
 - Preserve existing Stripe subscriptions in place wherever possible, rather than canceling and recreating them.
 
-- Support Stripe payments and auditable manual records for PayPal, bank transfer and cash/in-person payments.
+- Support Stripe payments and auditable manual records for Stripe, bank transfer and cash/in-person payments.
 
 - Represent dressage judges, stewards, combined judge/stewards, and veterinarians, including their respective levels where applicable.
 

@@ -109,14 +109,14 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       },
       {
         id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
-        cell: ({ row }) => <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a>,
+        cell: ({ row }) => row.original.email ? <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a> : '—',
       },
       {
         id: 'actions', enableHiding: false, enableSorting: false, size: 80,
         header: () => <span>CONTACT</span>,
-        cell: ({ row }) => <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
+        cell: ({ row }) => row.original.email ? <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
           <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
-        </Button>,
+        </Button> : null,
       },
     ], []),
     data: rows,
@@ -126,7 +126,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       pagination: { pageIndex: filters.page - 1, pageSize },
       sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],
     },
-    getRowId: (row) => row.email,
+    getRowId: (_row, index) => String(index),
     onLiveStateChange: (state) => navigate(state),
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
     startTransition,
