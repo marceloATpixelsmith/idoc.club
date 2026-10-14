@@ -97,7 +97,7 @@ export async function startStripeMock(): Promise<{ close: () => Promise<void> }>
     if (req.method === 'POST' && payMatch) {
       const session = sessions.get(payMatch[1]);
       if (!session) return send(res, 404, { error: 'unknown session' });
-      // Stripe collects a guest's contact details on its own page; the shopper's entries arrive here.
+      // Extra fields the shopper entered on Stripe's own page arrive here.
       if (body) Object.assign(session, JSON.parse(body) as Json);
       session.status = 'complete';
       session.payment_status = 'paid';

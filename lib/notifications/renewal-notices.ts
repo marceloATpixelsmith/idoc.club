@@ -6,6 +6,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificationOutbox, profiles, seminarRegistrations, users } from '@/lib/db/schema';
 import { getSeminarEmailDetails, seminarRegistrationConfirmationBodyHtml } from '@/lib/seminars/registrations';
+import { APPROVAL_STATUS_LABELS, type ApprovalStatus } from '@/lib/seminars/status';
 import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { sendTransactionalEmail } from './brevo-transactional';
@@ -24,6 +25,7 @@ const RENEWAL_NOTICE_KINDS = [
   'membership.payment_failed',
   'membership.grace_reminder',
   'membership.grace_expired',
+  'membership.manual_payment_recorded',
   'seminar.registration_created',
   'seminar.registration_canceled',
   'seminar.payment_confirmed',
@@ -38,6 +40,8 @@ export type NoticePayload = {
   amountCents?: number;
   paymentMethod?: string;
   paymentConfirmed?: boolean;
+  approvalStatus?: string;
+  statusUpdate?: boolean;
   seminarId?: number;
   registrationId?: number;
   to?: string | null;
@@ -195,18 +199,29 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
     if (!payload.paymentMethod) throw new Error('seminar_registration_confirmation_missing_payment_method');
     const seminar = await getSeminarEmailDetails(seminarId);
     if (!seminar) throw new Error('seminar_registration_confirmation_missing_seminar');
+    // The queued payload carries the status at enqueue time for a status update; otherwise read the
+    // registration's current status so the confirmation always states it.
+    let approvalStatus = payload.approvalStatus;
+    if (!approvalStatus && payload.registrationId) {
+      const [registration] = await db.select({ approvalStatus: seminarRegistrations.approvalStatus })
+        .from(seminarRegistrations).where(eq(seminarRegistrations.id, payload.registrationId)).limit(1);
+      approvalStatus = registration?.approvalStatus;
+    }
+    const statusLabel = APPROVAL_STATUS_LABELS[approvalStatus as ApprovalStatus];
     return {
       html: renderTransactionalEmail({
         bodyHtml: await seminarRegistrationConfirmationBodyHtml({
           amountCents: payload.amountCents,
+          approvalStatus: approvalStatus as ApprovalStatus | undefined,
           firstName: payload.firstName ?? '',
           paymentConfirmed: payload.paymentConfirmed ?? false,
           paymentMethod: payload.paymentMethod,
           seminar,
+          statusUpdate: payload.statusUpdate ?? false,
         }),
-        heading: `Thank you for registering for ${escapeHtml(seminar.title)}`,
+        heading: payload.statusUpdate ? `Your registration status for ${escapeHtml(seminar.title)}` : `Thank you for registering for ${escapeHtml(seminar.title)}`,
       }),
-      subject: 'Your IDOC seminar registration',
+      subject: payload.statusUpdate && statusLabel ? `Your IDOC seminar registration status: ${statusLabel}` : 'Your IDOC seminar registration',
     };
   }
 
@@ -255,6 +270,23 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
           footerNote: 'This is a transactional notice about your IDOC membership.',
           heading: 'Your membership is expiring soon',
           subject: 'Your IDOC membership is expiring soon',
+        };
+      }
+
+      case 'membership.manual_payment_recorded': {
+        const paidThrough = formatDate(payload.expirationDate);
+        return {
+          bodyHtml:
+            membershipIntro('Thank you. An IDOC administrator has recorded your annual membership payment, so your membership is fully paid and your account is accessible.') +
+            emailInfoCard(
+              emailInfoRow(IDOC_EMAIL_ICONS.banknote, 'Payment received', amount) +
+              emailInfoRow(IDOC_EMAIL_ICONS.deadline, 'Membership paid through', paidThrough),
+            ) +
+            emailNoticeCard('Your account is ready', '<p style="margin:0;">You can sign in at any time to use member features and resources.</p>') +
+            emailButton(membershipUrl, 'View membership'),
+          footerNote: 'This is a transactional notice about your IDOC membership.',
+          heading: 'Your membership is fully paid',
+          subject: 'Your IDOC membership payment was received',
         };
       }
 

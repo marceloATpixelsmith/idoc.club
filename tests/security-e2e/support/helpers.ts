@@ -206,7 +206,7 @@ export function hasSessionCookie(cookies: { name: string }[]) {
   return cookies.some((cookie) => cookie.name === 'idoc-session');
 }
 
-export type SeminarFixture = { capacity: number; deadlineDays: number; memberCents: number; nonMemberCents: number; title: string };
+export type SeminarFixture = { capacity: number; deadlineDays: number; isFei?: boolean; memberCents: number; title: string };
 
 /** Publishes a seminar directly in the database (administrator authoring is covered elsewhere). */
 export async function insertSeminar(seminar: SeminarFixture): Promise<number> {
@@ -217,9 +217,9 @@ export async function insertSeminar(seminar: SeminarFixture): Promise<number> {
     await sql`delete from idoc.seminars where title = ${seminar.title}`;
     const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
       (title, description, start_date, end_date, location, language, capacity, member_price_cents, non_member_price_cents,
-       registration_deadline, status, created_by_user_id, updated_by_user_id)
+       is_fei, registration_deadline, status, created_by_user_id, updated_by_user_id)
       values (${seminar.title}, 'Playwright seminar', current_date + 90, current_date + 90, 'Vienna', 'en', ${seminar.capacity},
-        ${seminar.memberCents}, ${seminar.nonMemberCents}, now() + (${seminar.deadlineDays} * interval '1 day'), 'published', ${admin.id}, ${admin.id})
+        ${seminar.memberCents}, ${seminar.memberCents}, ${seminar.isFei ?? false}, now() + (${seminar.deadlineDays} * interval '1 day'), 'published', ${admin.id}, ${admin.id})
       returning id`;
     return row.id;
   });
@@ -242,11 +242,11 @@ export async function chooseSeminarPaymentMethod(page: Page, seminarId: number, 
 }
 
 export async function registrationFor(email: string, title: string) {
-  return withDatabase(async (sql) => (await sql<{ expected_amount_cents: number | null; payment_status: string; registration_status: string }[]>`
-    select r.expected_amount_cents, r.payment_status, r.registration_status from idoc.seminar_registrations r
+  return withDatabase(async (sql) => (await sql<{ approval_status: string; expected_amount_cents: number | null; payment_status: string; registration_status: string }[]>`
+    select r.approval_status, r.expected_amount_cents, r.payment_status, r.registration_status from idoc.seminar_registrations r
     join idoc.seminars s on s.id = r.seminar_id
     left join idoc.profiles p on p.id = r.profile_id left join idoc.users u on u.id = p.user_id
-    where s.title = ${title} and (lower(u.email) = lower(${email}) or lower(r.guest_email) = lower(${email}))`)[0]);
+    where s.title = ${title} and lower(u.email) = lower(${email})`)[0]);
 }
 
 /** The international phone control: pick a calling code from the country list, then type the number. */

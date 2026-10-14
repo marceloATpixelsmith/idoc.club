@@ -57,7 +57,7 @@ export async function ResourceListPage({ tableType }: { tableType: ResourceType 
       id: Number(row.id), title: String(row.title),
       start: formatAdminDate(String(row.start_date)), end: formatAdminDate(String(row.end_date)),
       deadline: formatAdminDate(new Date(String(row.registration_deadline)).toISOString().slice(0, 10)), status: String(row.status),
-      prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)} / €${(Number(row.non_member_price_cents) / 100).toFixed(2)}`,
+      prices: `€${(Number(row.member_price_cents) / 100).toFixed(2)}`,
       registrations: `${String(row.registered_count)} / ${String(row.capacity)}`,
     }));
   }

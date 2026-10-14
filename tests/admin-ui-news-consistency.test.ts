@@ -64,7 +64,8 @@ test('admins can create seminar registrations with manual payment methods only',
   assert.match(registrations, /z\.enum\(MANUAL_PAYMENT_METHODS\)/);
   assert.match(registrations, /enabledMethods\.some/);
   assert.match(registrations, /isEntitled/);
-  assert.match(registrations, /memberEntitled \? seminar\.member_price_cents : seminar\.non_member_price_cents/);
+  assert.match(registrations, /const priceCents = seminar\.member_price_cents/);
+  assert.match(registrations, /Registrations can only be created for active members/);
   assert.match(registrations, /Admin-created registrations must use Bank Transfer or Cash/);
 });
 

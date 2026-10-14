@@ -119,7 +119,7 @@ test('My Profile merges the account email form with the professional profile for
   const page = await context.newPage();
   await page.goto('/dashboard/profile');
   await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible();
-  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
   // First/last name are the canonical name fields (docs/16) -- the redundant account-level "Name"
   // field was removed along with users.name, so account settings never maintain a second,
   // conflicting name value.

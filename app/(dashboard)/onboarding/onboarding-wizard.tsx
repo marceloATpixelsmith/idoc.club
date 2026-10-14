@@ -259,6 +259,14 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
           <InternationalPhoneInput id="phone" name="phone" onChange={setPhone} required value={phone} />
         </div>
 
+        <div>
+          <label className="flex items-start gap-2 text-sm font-bold text-foreground">
+            <input className="mt-0.5" name="directoryEmailOptIn" type="checkbox" />
+            <span>Show my email in the member directory</span>
+          </label>
+          <p className="mt-1 pl-6 text-xs text-muted-foreground">Opting into showing your email in the directory is a great way for members to be able to get in touch with you for things like judging opportunities etc.</p>
+        </div>
+
         <fieldset className="space-y-4 border-0 p-0">
           <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">ADDRESS</legend>
           <div>

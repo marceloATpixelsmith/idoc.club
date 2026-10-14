@@ -71,17 +71,14 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
   'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access', updateAdminTableInlineField: 'delegates-to-data-access' },
   'app/(dashboard)/admin/seminars/actions.ts': {
     createAdminSeminarRegistrationAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
-    refundSeminarRegistrationAction: 'delegates-to-data-access', setAdminRegistrationStatusAction: 'delegates-to-data-access',
+    refundSeminarRegistrationAction: 'delegates-to-data-access', searchRegistrationMembersAction: 'delegates-to-data-access',
+    setAdminRegistrationApprovalStatusAction: 'delegates-to-data-access', setAdminRegistrationStatusAction: 'delegates-to-data-access',
     updateSeminarAction: 'delegates-to-data-access', updateSeminarRegistrationDetailsAction: 'delegates-to-data-access',
   },
   'app/(dashboard)/dashboard/seminars/actions.ts': {
-    cancelSeminarRegistrationAction: 'delegates-to-data-access', registerAtNonMemberPriceAction: 'delegates-to-data-access',
+    cancelSeminarRegistrationAction: 'delegates-to-data-access',
     registerForSeminarAction: 'delegates-to-data-access',
   },
-  // Anonymous guest seminar registration: no session on either side, the same shape as the
-  // pre-authentication login/signup actions and the public contact form -- it just happens to live
-  // in (marketing) rather than (login).
-  'app/(marketing)/seminars/actions.ts': { registerAsGuestForSeminarAction: 'pre-authentication', startGuestSeminarStripeCheckoutAction: 'pre-authentication' },
   'app/(dashboard)/admin/members/actions.ts': {
     saveMemberProfileByAdminForm: 'delegates-to-data-access', suspendMembershipForm: 'delegates-to-data-access',
     reinstateMembershipForm: 'delegates-to-data-access', correctEntitlementForm: 'delegates-to-data-access',
