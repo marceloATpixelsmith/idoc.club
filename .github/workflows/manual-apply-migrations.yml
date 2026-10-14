@@ -51,7 +51,8 @@ jobs:
         if: inputs.target_schema == 'idoc_production'
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main
+          # fetch-depth: 0 on the checkout already provides origin/main; no credentials are persisted.
+          git rev-parse --verify --quiet origin/main >/dev/null || { echo "::error::origin/main is not available in the checkout."; exit 1; }
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "::error::The dispatched revision is not contained in main. Promote it to main first (migrations then run from Auto-migrate Production Schema), so Production never gets a schema ahead of its code."
             exit 1
