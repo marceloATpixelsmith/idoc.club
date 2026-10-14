@@ -82,7 +82,7 @@ export async function searchActiveMembersForRegistration(queryValue: unknown) {
 }
 
 export async function createAdminSeminarRegistration(fields: {
-  paymentMethod?: unknown; profileId?: unknown; seminarId?: unknown;
+  approvalStatus?: unknown; paymentMethod?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
 }): Promise<{ registrationId: number }> {
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(fields.seminarId);
@@ -95,10 +95,16 @@ export async function createAdminSeminarRegistration(fields: {
   if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
     throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
   }
+  // Payment Status on create: left at the method's pending state, or recorded as already paid.
+  const markPaid = fields.paymentStatus === 'paid';
+  if (fields.paymentStatus !== undefined && fields.paymentStatus !== '' && fields.paymentStatus !== 'pending' && !markPaid) throw new SeminarRegistrationError('Choose a valid payment status.');
   const directDelivery = isStagingSeminarDirectDelivery();
 
   return client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
+    // Registration Status on create: non-FEI seminars are always Confirmed; FEI seminars take any FEI status.
+    const requestedApproval = typeof fields.approvalStatus === 'string' && fields.approvalStatus !== '' ? fields.approvalStatus : initialApprovalStatus(seminar.is_fei);
+    if (!(seminar.is_fei ? (FEI_APPROVAL_STATUSES as readonly string[]) : ['confirmed']).includes(requestedApproval)) throw new SeminarRegistrationError('Choose a valid registration status for this seminar/course.');
     const [member] = await sql<{ email: string; first_name: string; grace_ends_on: string | null; id: number; status: string | null; valid_until: string | null }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email,
       m.status,m.valid_until,m.grace_ends_on
       from profiles p join users u on u.id=p.user_id and u.deleted_at is null and u.account_state='active'
@@ -115,8 +121,8 @@ export async function createAdminSeminarRegistration(fields: {
     }, new Date().toISOString().slice(0, 10)));
     if (!memberEntitled) throw new SeminarRegistrationError('Registrations can only be created for active members.');
 
-    const paymentStatus = initialPaymentStatusForMethod(paymentMethod.data);
-    const approvalStatus = initialApprovalStatus(seminar.is_fei);
+    const paymentStatus = markPaid ? 'paid' : initialPaymentStatusForMethod(paymentMethod.data);
+    const approvalStatus = requestedApproval as ApprovalStatus;
     const priceCents = seminar.member_price_cents;
     let registrationId: number;
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status
@@ -129,13 +135,13 @@ export async function createAdminSeminarRegistration(fields: {
       await sql`update seminar_registrations set registration_status='registered',payment_status=${paymentStatus},approval_status=${approvalStatus},
         payment_method_canonical_id=${paymentMethod.data},expected_amount_cents=${priceCents},currency='EUR',
         stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,stripe_payment_intent_id=null,
-        paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
+        paid_at=${markPaid ? sql`now()` : null},marked_paid_by_user_id=${markPaid ? actor.id : null},payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
         where id=${existing.id}`;
       registrationId = existing.id;
     } else {
       const [row] = await sql<{ id: number }[]>`insert into seminar_registrations
-        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency)
-        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR') returning id`;
+        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency,paid_at,marked_paid_by_user_id)
+        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR',${markPaid ? sql`now()` : null},${markPaid ? actor.id : null}) returning id`;
       registrationId = row.id;
     }
     // The same confirmation a self-registration receives (including the FEI status message for FEI seminars).
@@ -609,6 +615,17 @@ export async function getSeminarRegistrationCounts(seminarIdValue: unknown): Pro
   const [row] = await client<{ active: number; total: number }[]>`select count(*) filter(where registration_status='registered')::int active,count(*)::int total
     from seminar_registrations where seminar_id=${seminarId.data}`;
   return row ?? { active: 0, total: 0 };
+}
+
+/** Seminars an administrator can actually create a registration for: the same conditions
+ * requireSeminarOpenForRegistration enforces (published, before the registration deadline, not yet ended, not full),
+ * so the New Registration dropdown never offers a seminar the server would then reject as closed or full. */
+export async function listSeminarsOpenForAdminRegistration() {
+  await requireSeminarAdministrator();
+  return client<{ id: number; is_fei: boolean; title: string }[]>`select s.id,s.title,s.is_fei from seminars s
+    where s.status='published' and now() <= s.registration_deadline and now() < ((s.end_date + 1)::timestamp at time zone 'UTC')
+    and (select count(*) from seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') < s.capacity
+    order by s.start_date,s.id`;
 }
 
 /** Seminars an administrator can filter the registrations roster by -- published only, per the

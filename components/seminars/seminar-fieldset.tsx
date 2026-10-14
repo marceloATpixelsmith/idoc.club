@@ -2,6 +2,7 @@ import { SimpleEditorField } from '@/components/tiptap/simple-editor-field';
 import { sanitizeArticleContent } from '@/lib/news/sanitize';
 import { FormGrid, FormSection } from '@/components/forms/form-section';
 import { Input } from '@/components/ui/input';
+import { UsDateInput } from '@/components/forms/us-date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FormToggle } from '@/components/ui/form-toggle';
@@ -32,9 +33,9 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
     <div className="grid content-start gap-6">
 <FormSection title="Status"><fieldset className="flex flex-wrap gap-4">{statuses.map((value) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar ? seminar.status === value : value === 'draft'} name="status" type="radio" value={value} />{STATUS_LABELS[value]}</Label>)}</fieldset></FormSection>
 <FormSection title="Schedule"><FormGrid className="sm:grid-cols-3">
-      <div className="space-y-1.5"><Label htmlFor="startDate">Start date</Label><Input defaultValue={seminar?.start_date} id="startDate" name="startDate" required type="date" /></div>
-      <div className="space-y-1.5"><Label htmlFor="endDate">End date</Label><Input defaultValue={seminar?.end_date} id="endDate" name="endDate" required type="date" /></div>
-      <div className="space-y-1.5"><Label htmlFor="registrationDeadline">Deadline</Label><Input defaultValue={seminar ? new Date(String(seminar.registration_deadline)).toISOString().slice(0, 10) : undefined} id="registrationDeadline" name="registrationDeadline" required type="date" /></div>
+      <div className="space-y-1.5"><Label htmlFor="startDate">Start date</Label><UsDateInput defaultIso={seminar?.start_date} id="startDate" name="startDate" /></div>
+      <div className="space-y-1.5"><Label htmlFor="endDate">End date</Label><UsDateInput defaultIso={seminar?.end_date} id="endDate" name="endDate" /></div>
+      <div className="space-y-1.5"><Label htmlFor="registrationDeadline">Deadline</Label><UsDateInput defaultIso={seminar ? new Date(String(seminar.registration_deadline)).toISOString().slice(0, 10) : undefined} id="registrationDeadline" name="registrationDeadline" /></div>
     </FormGrid></FormSection>
 
     <FormSection title="Pricing"><FormGrid><div className="max-w-48 space-y-1.5"><Label htmlFor="price">Price (EUR)</Label><Input defaultValue={seminar ? (seminar.member_price_cents / 100).toFixed(2) : undefined} disabled={lockPrices} id="price" min={0} name="price" required step="0.01" type="number" />{lockPrices && seminar ? <input name="price" type="hidden" value={(seminar.member_price_cents / 100).toFixed(2)} /> : null}</div>{lockPrices ? <p className="text-xs text-muted-foreground sm:col-span-2">The price cannot change once this seminar has registrations.</p> : null}</FormGrid></FormSection>

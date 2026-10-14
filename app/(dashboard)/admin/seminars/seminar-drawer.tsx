@@ -18,10 +18,10 @@ export async function AdminSeminarDrawer({ isNew = false, seminarId }: { isNew?:
 
   if (isNew) {
     return (
-      <AdminFormDrawer closeHref="/admin/seminars" title="Seminar">
+      <AdminFormDrawer closeHref="/admin/seminars" title="Seminar/Course">
         <div className="space-y-4 px-5 py-6 lg:px-8">
           <SeminarForm action={createSeminarAction} submitLabel="Create seminar">
-            <AdminFormSection title="Seminar details">
+            <AdminFormSection title="Seminar/Course details">
               <SeminarFieldset />
             </AdminFormSection>
           </SeminarForm>
@@ -43,11 +43,11 @@ export async function AdminSeminarDrawer({ isNew = false, seminarId }: { isNew?:
   const status = String(seminar.status);
 
   return (
-    <AdminFormDrawer closeHref="/admin/seminars" title="Seminar">
+    <AdminFormDrawer closeHref="/admin/seminars" title="Seminar/Course">
       <div className="space-y-4 px-5 py-6 lg:px-8">
         <SeminarForm action={updateSeminarAction} submitLabel="Save changes">
           <input name="id" type="hidden" value={seminarId} />
-          <AdminFormSection title="Seminar details">
+          <AdminFormSection title="Seminar/Course details">
             <p className="text-sm text-muted-foreground">Status: <strong>{STATUS_LABELS[status]}</strong> · Availability: <strong>{AVAILABILITY_LABELS[availability]}</strong> · {registeredCount} registered ({registeredTotal} total)</p>
             <SeminarFieldset
               allowCanceled

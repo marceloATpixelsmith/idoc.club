@@ -79,8 +79,6 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
   const past = tab === 'past';
   const seminars = past ? await listPastSeminarsForMember(profileId) : await listCurrentSeminarsForMember(profileId);
   const registered = seminars.filter((seminar) => seminar.registration_status !== null);
-  const paymentMethodLabel = (method: string | null) =>
-    method === 'bank_transfer' ? 'Bank Transfer' : method === 'cash_event' ? 'Cash' : method === 'online_stripe' ? 'Online Payment' : null;
   const row = (seminar: (typeof seminars)[number]) => {
     const registrationStatus = seminar.registration_status as RegistrationStatus;
     const paymentStatus = (seminar.payment_status ?? 'unpaid') as PaymentStatus;
@@ -89,11 +87,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     <li key={seminar.id}>
       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
         <p className="font-medium">{money(seminar.expected_amount_cents ?? seminar.member_price_cents)}</p>
-        {registrationStatus === 'canceled' ? <p>Status: <strong>Canceled</strong></p> : <>
-          <p>Registration Status: <strong>{APPROVAL_STATUS_LABELS[approvalStatus]}</strong></p>
-          <p>Payment Status: <strong>{PAYMENT_STATUS_LABELS[paymentStatus]}</strong></p>
-          {seminar.payment_status !== 'paid' && paymentMethodLabel(seminar.payment_method_canonical_id) ? <p>Payment Method: <strong>{paymentMethodLabel(seminar.payment_method_canonical_id)}</strong></p> : null}
-        </>}
+        <p>Status: <strong>{registrationStatus === 'canceled' ? 'Canceled' : `${APPROVAL_STATUS_LABELS[approvalStatus]} / ${PAYMENT_STATUS_LABELS[paymentStatus]}`}</strong></p>
       </SeminarListingCard>
       {!past && seminar.registration_status === 'registered' ? <div className="pb-6"><SeminarForm action={cancelSeminarRegistrationAction} buttonClassName="h-8 rounded-md border-dashed px-3 font-normal" buttonTableControl pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
     </li>
