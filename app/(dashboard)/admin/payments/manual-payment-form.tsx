@@ -44,7 +44,7 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
         <Label htmlFor="source">Payment source</Label>
         <select
           className={SELECT_CLASSNAME} id="source" name="source" required
-          value={source} onChange={(event) => setSource(event.target.value as ManualPaymentSource)}
+          value={source} onChange={(event) => { setSource(event.target.value as ManualPaymentSource); setReference(''); }}
         >
           {MANUAL_PAYMENT_SOURCES.map((source) => <option key={source} value={source}>{PAYMENT_SOURCE_LABELS[source]}</option>)}
         </select>
