@@ -24,20 +24,16 @@ function money(amountCents: number | null, currency: string) {
 export function RegistrationDetailSheet({ closeHref, paymentMethods, registration }: {
   closeHref: string; paymentMethods: Array<{ canonical_id: unknown; display_label: unknown }>; registration: AdminSeminarRegistrationRow;
 }) {
-  // Legacy guest registrations (created before guest sign-up was retired) keep their stored contact
-  // details for reference; new registrations are always attached to a member.
-  const isLegacyGuest = registration.profile_id === null;
   return (
     <AdminFormDrawer closeHref={closeHref} title="Registration">
       <div className="space-y-4 px-5 py-6 lg:px-8">
-        <p className="text-sm text-muted-foreground">{registration.seminar_title}{isLegacyGuest ? ' · Legacy guest registration' : ''}</p>
+        <p className="text-sm text-muted-foreground">{registration.seminar_title}</p>
           <AdminFormSection title="Registrant details">
             <SeminarForm action={updateSeminarRegistrationDetailsAction} submitLabel="Save details">
               <input name="registrationId" type="hidden" value={registration.id} />
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5"><Label>Name</Label><p className="text-sm">{isLegacyGuest ? registration.guest_name : registration.member_name}</p></div>
-                <div className="space-y-1.5"><Label>Email</Label><p className="text-sm">{isLegacyGuest ? registration.guest_email : registration.member_email}</p></div>
-                {isLegacyGuest && registration.guest_phone ? <div className="space-y-1.5"><Label>Phone</Label><p className="text-sm">{registration.guest_phone}</p></div> : null}
+                <div className="space-y-1.5"><Label>Name</Label><p className="text-sm">{registration.member_name}</p></div>
+                <div className="space-y-1.5"><Label>Email</Label><p className="text-sm">{registration.member_email}</p></div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="paymentMethod">Payment method</Label>

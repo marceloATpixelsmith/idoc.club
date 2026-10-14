@@ -165,7 +165,7 @@ Stripe should use one canonical IDOC membership Product for new enrollments. Rec
 | Stripe recurring       | Webhook-driven                   | Customer ID, Subscription ID, invoice/payment identifiers, status, period end |
 | Stripe one-time        | Required webhook-driven flow     | Customer/payment identifier, amount, paid date, Checkout Session and one-time Price ID |
 | Stripe (manually registered) | Manual                     | Stripe Payment ID / bank transfer reference (required), paid date, amount, administrator |
-| PayPal (legacy)        | Not accepted for new records     | Historical records only; PayPal can no longer be chosen for a manual payment  |
+| PayPal (removed)       | Not accepted                     | Migration `0073` removed `paypal` from the payment source constraints (pre-launch; no real records existed) |
 | Bank transfer          | Manual                           | Reference, paid date, amount, administrator                                   |
 | Cash / in person       | Manual                           | Receipt/reference if available, paid date, amount, administrator              |
 | Complimentary          | Manual administrator action      | Reason, approver, effective dates                                             |

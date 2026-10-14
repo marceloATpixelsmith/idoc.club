@@ -36,9 +36,14 @@ test('a seminar\'s start/end date and both its member and non-member prices are 
   assert.match(multiDayMigration, /"non_member_price_cents" >= 0/);
 });
 
-test('a registration belongs to exactly one identity -- a real member profile, or a guest name+email, never both or neither -- enforced by a database check constraint and a partial unique index', () => {
-  assert.match(multiDayMigration, /CHECK \(\("profile_id" IS NOT NULL AND "guest_name" IS NULL AND "guest_email" IS NULL\) OR \("profile_id" IS NULL AND "guest_name" IS NOT NULL AND "guest_email" IS NOT NULL\)\)/);
-  assert.match(multiDayMigration, /CREATE UNIQUE INDEX "seminar_registrations_seminar_guest_email_unique" ON "idoc"\."seminar_registrations" USING btree \("seminar_id", lower\("guest_email"\)\) WHERE "profile_id" IS NULL/);
+test('every registration belongs to a real member profile: the guest identity columns, constraint and index are dropped and profile_id is NOT NULL', () => {
+  const cleanup = readFileSync('lib/db/migrations/0073_remove_guest_and_non_member_legacy.sql', 'utf8');
+  assert.match(cleanup, /DROP INDEX IF EXISTS "idoc"\."seminar_registrations_seminar_guest_email_unique"/);
+  assert.match(cleanup, /DROP CONSTRAINT IF EXISTS "seminar_registrations_registrant_identity_check"/);
+  assert.match(cleanup, /DROP COLUMN IF EXISTS "guest_email"/);
+  assert.match(cleanup, /ALTER COLUMN "profile_id" SET NOT NULL/);
+  assert.match(cleanup, /DROP COLUMN IF EXISTS "non_member_price_cents"/);
+  assert.match(cleanup, /DROP COLUMN IF EXISTS "organizing_national_federation"/);
 });
 
 test('capacity and duplicate-registration races are enforced by a unique constraint and a row lock, not application memory alone', () => {
@@ -103,16 +108,9 @@ test('seminar payments are classified separately from membership billing: the ch
   assert.match(checkoutSource, /seminar_registration/);
 });
 
-test('a guest\'s attacker-controlled name is HTML-escaped before interpolation into every transactional email that renders it', () => {
+test('a member\'s name and the seminar title are HTML-escaped before interpolation into the registration email', () => {
   assert.match(registrationsSource, /escapeHtml\(firstName\)/);
   assert.match(registrationsSource, /escapeHtml\(seminar\.title\)/);
-  const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
-  const refundsSource = readFileSync('lib/payments/refunds.ts', 'utf8');
-  const templateSource = readFileSync('lib/notifications/email-template.ts', 'utf8');
-  assert.match(templateSource, /renderGuestSeminarRefundEmail/);
-  assert.match(templateSource, /escapeHtml\(firstName\)/);
-  assert.match(webhookSource, /renderGuestSeminarRefundEmail\(registration\.guestName \?\? ''\)/);
-  assert.match(refundsSource, /renderGuestSeminarRefundEmail\(row\.first_name \?\? ''\)/);
 });
 
 test('recording a manual payment is refused while a registration has an open Stripe checkout session, to prevent a double charge', () => {
@@ -512,9 +510,7 @@ test('registration is members-only: guest registration, guest checkout, and non-
   assert.match(cta, /Choose a payment method/);
   assert.match(cta, /window\.location\.replace\(state\.redirectTo\)/);
   const webhookSource = readFileSync('lib/payments/webhook-handlers.ts', 'utf8');
-  // An in-flight Checkout from the retired guest flow is refunded in full, never silently kept.
-  assert.match(webhookSource, /handleRetiredGuestSeminarCheckoutSessionCompleted/);
-  assert.doesNotMatch(webhookSource, /nonMemberPriceCents|guest\.seminar_registration\.registered_and_paid/);
+  assert.doesNotMatch(webhookSource, /nonMemberPriceCents|guest\.seminar_registration\.registered_and_paid|handleRetiredGuestSeminarCheckoutSessionCompleted|refundGuestCheckoutWithoutRegistration/);
 });
 
 test('a signed-out or non-entitled visitor sees the seminar/course details but never a Register action, and the server independently enforces entitlement', () => {

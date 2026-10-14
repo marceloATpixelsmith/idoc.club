@@ -50,7 +50,7 @@ test('the returned rows never expose administrator identity, external payment id
   const profile = await createProfile(user.id);
   const administrator = await createUser();
   await sql`insert into idoc.payments(profile_id, source, amount_cents, currency, paid_at, administrator_id, reason, reference)
-    values (${profile.id}, 'paypal', 8000, 'EUR', now(), ${administrator.id}, 'sensitive administrator note', 'txn-sensitive-reference')`;
+    values (${profile.id}, 'bank_transfer', 8000, 'EUR', now(), ${administrator.id}, 'sensitive administrator note', 'txn-sensitive-reference')`;
 
   const [row] = await asMember(user.id, () => listOwnPaymentHistory());
   const keys = Object.keys(row).sort();

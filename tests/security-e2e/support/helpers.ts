@@ -216,10 +216,10 @@ export async function insertSeminar(seminar: SeminarFixture): Promise<number> {
     await sql`delete from idoc.seminar_registrations where seminar_id in (select id from idoc.seminars where title = ${seminar.title})`;
     await sql`delete from idoc.seminars where title = ${seminar.title}`;
     const [row] = await sql<{ id: number }[]>`insert into idoc.seminars
-      (title, description, start_date, end_date, location, language, capacity, member_price_cents, non_member_price_cents,
+      (title, description, start_date, end_date, location, language, capacity, member_price_cents,
        is_fei, registration_deadline, status, created_by_user_id, updated_by_user_id)
       values (${seminar.title}, 'Playwright seminar', current_date + 90, current_date + 90, 'Vienna', 'en', ${seminar.capacity},
-        ${seminar.memberCents}, ${seminar.memberCents}, ${seminar.isFei ?? false}, now() + (${seminar.deadlineDays} * interval '1 day'), 'published', ${admin.id}, ${admin.id})
+        ${seminar.memberCents}, ${seminar.isFei ?? false}, now() + (${seminar.deadlineDays} * interval '1 day'), 'published', ${admin.id}, ${admin.id})
       returning id`;
     return row.id;
   });

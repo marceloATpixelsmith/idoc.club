@@ -31,7 +31,7 @@ type StripePayment = { amount_cents: number; currency: string; id: number; paid_
 
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   bank_transfer: 'Bank transfer', cash: 'Cash', complimentary: 'Complimentary grant',
-  paypal: 'PayPal (legacy)', stripe_manual: 'Stripe (manual)', stripe_one_time: 'Stripe one-time', stripe_recurring: 'Stripe recurring',
+  stripe_manual: 'Stripe (manual)', stripe_one_time: 'Stripe one-time', stripe_recurring: 'Stripe recurring',
 };
 
 function money(amountCents: number, currency: string) {

@@ -50,13 +50,6 @@ async function legacyRegistration(seminarId: number, profileId: number) {
   return { registrationId: row.id };
 }
 
-/** A guest registration as created before guest sign-up was retired -- such rows are retained. */
-async function legacyGuestRegistration(seminarId: number) {
-  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,guest_name,guest_first_name,guest_last_name,guest_email,guest_phone,payment_status,payment_method_canonical_id,expected_amount_cents)
-    values (${seminarId},'Jamie Guest','Jamie','Guest','jamie.guest@example.test','+35315550100','unpaid','online_stripe',6500) returning id`;
-  return { registrationId: row.id };
-}
-
 function seminarInput(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   return {
@@ -284,9 +277,8 @@ test('an administrator can change the price while a seminar has no registrations
   const admin = await adminUser();
   const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
   await asAdmin(admin.id, () => updateSeminar(seminarId, seminarInput({ price: '99.00' })));
-  const [row] = await sql`select member_price_cents,non_member_price_cents from idoc.seminars where id=${seminarId}`;
+  const [row] = await sql`select member_price_cents from idoc.seminars where id=${seminarId}`;
   assert.equal(row.member_price_cents, 9900, 'the price must actually be written to the row, not silently dropped from the update');
-  assert.equal(row.non_member_price_cents, 9900, 'the retained legacy column mirrors the single price so an older build stays coherent');
 });
 
 test('the FEI-affiliation flag persists through create and update, on both the true and false paths', async () => {
@@ -401,29 +393,6 @@ test('a Stripe Checkout Session completion marks the exact registration paid, ve
   assert.equal(afterAuditCount, beforeAuditCount);
 });
 
-test('a Checkout Session from the retired guest flow is refunded in full and never creates a registration', async () => {
-  const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id);
-  const refunds: unknown[] = [];
-  const stripe = {
-    checkout: { sessions: { listLineItems: async () => ({ data: [] }) } },
-    refunds: { create: async (params: unknown) => { refunds.push(params); return { id: 're_retired_guest', status: 'succeeded' } as never; } },
-  };
-  const sessionCompleted = {
-    amount_total: 6500, currency: 'eur', id: `cs_${randomUUID()}`,
-    metadata: { amountCents: '6500', currency: 'EUR', kind: 'seminar_guest_registration', seminarId: String(seminarId) },
-    mode: 'payment', payment_intent: `pi_${randomUUID()}`, payment_status: 'paid',
-  };
-  const event = {
-    api_version: '2025-08-27.basil', created: Math.floor(Date.now() / 1000),
-    data: { object: sessionCompleted }, id: `evt_${randomUUID()}`, livemode: false,
-    object: 'event', pending_webhooks: 0, request: { id: null, idempotency_key: null }, type: 'checkout.session.completed',
-  };
-  assert.equal(await processStripeEvent(event as never, stripe as never), 'processed');
-  assert.equal(refunds.length, 1, 'the retired guest payment must be refunded automatically');
-  assert.equal((await sql`select count(*)::int count from idoc.seminar_registrations where seminar_id=${seminarId}`)[0].count, 0);
-});
-
 test('a Checkout Session priced against a different amount than this seminar\'s own fee never grants payment credit', async () => {
   const admin = await adminUser();
   const { profile, user } = await paidMember();
@@ -499,18 +468,6 @@ test('the production seminar refund flow uses authoritative payment state, persi
   await assert.rejects(asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Repeat refund attempt', provider)), /already been refunded/);
   assert.equal(providerCalls.length, 1, 'a succeeded refund must never call Stripe again');
   assert.equal((await sql`select count(*)::int count from idoc.payment_refunds where seminar_registration_id=${registrationId}`)[0].count, 1);
-});
-
-test('a legacy guest\'s paid registration (created before guest sign-up was retired) can still be refunded by an administrator via a direct best-effort email, with no profile row required', async () => {
-  const admin = await adminUser();
-  const seminarId = await publishedSeminar(admin.id, { price: '65.00' });
-  const { registrationId } = await legacyGuestRegistration(seminarId);
-  await sql`update idoc.seminar_registrations set payment_status='paid',stripe_payment_intent_id='pi_guest_refund',paid_at=now(),expected_amount_cents=6500 where id=${registrationId}`;
-  const provider = { refunds: { create: async () => ({ id: 're_guest_fixture', status: 'succeeded' }) as never } };
-  await asAdmin(admin.id, () => refundSeminarRegistration(registrationId, 'Approved full refund for a guest', provider));
-  const [registration] = await sql`select payment_status,registration_status from idoc.seminar_registrations where id=${registrationId}`;
-  assert.equal(registration.payment_status, 'refunded');
-  assert.equal(registration.registration_status, 'canceled');
 });
 
 test('preserves paid evidence when Stripe refund fails and permits a safe retry', async () => {
@@ -682,7 +639,7 @@ function current_listing_has(rows: Array<{ id: number; registration_status: stri
   return rows.some((row) => row.id === seminarId && row.registration_status === 'registered');
 }
 
-test('a Checkout created at the retired non-member amount still credits payment, and a full Stripe refund of it is classified full', async () => {
+test('a Checkout created at a registration\'s own stored expected amount still credits payment, and a full Stripe refund of it is classified full', async () => {
   const admin = await adminUser();
   const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
   const { profile } = await paidMember();

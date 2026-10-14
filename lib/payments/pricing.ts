@@ -17,5 +17,5 @@ export const OPEN_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'in
 
 export const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   bank_transfer: 'Bank transfer', cash: 'Cash / in person', complimentary: 'Complimentary',
-  paypal: 'PayPal (legacy)', stripe_manual: 'Stripe', stripe_one_time: 'Stripe (one-time)', stripe_recurring: 'Stripe (auto-renewal)',
+  stripe_manual: 'Stripe', stripe_one_time: 'Stripe (one-time)', stripe_recurring: 'Stripe (auto-renewal)',
 };

@@ -153,8 +153,8 @@ export async function createSeminar(input: SeminarInput) {
   const fields = validateFields(input);
   return client.begin(async (sql) => {
     const [row] = await sql<{ id: number }[]>`insert into seminars
-      (title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,non_member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
-      values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.priceCents},${fields.priceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
+      (title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id)
+      values (${fields.title},'',${fields.startDate},${fields.endDate},${fields.location},${fields.language},${fields.courseDirectors},${fields.participantProfile},${fields.courseVenueInformation},${fields.application},${fields.accommodationInformation},${fields.capacity},${fields.priceCents},${iso(fields.registrationDeadline)},${fields.status},${fields.isFei},${sql.array(fields.levels)},${actor.id},${actor.id})
       returning id`;
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar.created','seminar',${String(row.id)},${JSON.stringify({ capacity: fields.capacity, priceCents: fields.priceCents, status: fields.status, title: fields.title })}::jsonb)`;
@@ -183,7 +183,7 @@ export async function updateSeminar(idValue: unknown, input: SeminarInput) {
     await sql`update seminars set title=${fields.title},description='',start_date=${fields.startDate},end_date=${fields.endDate},location=${fields.location},
       language=${fields.language},course_directors=${fields.courseDirectors},
       participant_profile=${fields.participantProfile},course_venue_information=${fields.courseVenueInformation},application=${fields.application},accommodation_information=${fields.accommodationInformation},
-      capacity=${fields.capacity},member_price_cents=${fields.priceCents},non_member_price_cents=${fields.priceCents},
+      capacity=${fields.capacity},member_price_cents=${fields.priceCents},
       registration_deadline=${iso(fields.registrationDeadline)},status=${fields.status},is_fei=${fields.isFei},levels=${sql.array(fields.levels)},
       updated_by_user_id=${actor.id},updated_at=now() where id=${id}`;
     // Canceling a seminar atomically cancels active registrations. Stripe resolution is intentionally
