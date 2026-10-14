@@ -100,8 +100,11 @@ export async function setAdminRegistrationApprovalStatusAction(_state: AdminSemi
 }
 
 export async function recordManualSeminarPaymentAction(_state: AdminSeminarState, formData: FormData) {
-  return run(formData, () => recordManualSeminarPayment(formData.get('registrationId'), formData.get('method'), formData.get('reference')),
-    'Payment recorded.', '/admin/seminars/registrations');
+  return run(formData, async () => {
+    await recordManualSeminarPayment(formData.get('registrationId'), formData.get('method'), formData.get('reference'));
+    // staging.idoc.club queues the payment notice under its own kind that the production cron never claims, so drain it now.
+    if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
+  }, 'Payment recorded.', '/admin/seminars/registrations');
 }
 
 export async function setAdminRegistrationStatusAction(_state: AdminSeminarState, formData: FormData) {
