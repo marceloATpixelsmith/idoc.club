@@ -39,3 +39,8 @@ Redeploy staging, verify the Super Admin interface and perform the controlled dr
 | `DATA_PROMOTION_PLAN_SECRET` | Vercel **staging branch only** (later step) | New independent random secret of at least 32 bytes |
 
 The manually dispatched workflow **does** create a new verified encrypted R2 backup before attempting migration. It does not provision R2 buckets, database roles or secrets automatically. The migration still requires manual dispatch, approval and clean historical ledger checks. The separate one-time legacy-member transfer remains unimplemented and is not part of migration 0071.
+
+## Applying all pending migrations (0071 and later)
+
+From GitHub **Actions → Manual Apply Pending Migrations → Run workflow**, choose the `staging` branch, select `idoc_staging` first and type `APPLY-MIGRATIONS-idoc_staging`; then repeat for `idoc_production` with `APPLY-MIGRATIONS-idoc_production` (the Production run needs the protected-environment reviewer approval). Each run takes the same mandatory offsite pre-migration backup as the 0071 workflow, then runs `pnpm db:migrate` with `IDOC_MIGRATION_DATABASE_URL` scoped to the chosen `DB_SCHEMA`, which applies every committed migration not yet in that schema's ledger (for example `0071`, `0072` and `0073`), and finally fails unless the newest ledger timestamp equals the newest committed journal entry. Deploy the matching application code to an environment before migrating Production, because `0073` drops columns an older build still reads.
+

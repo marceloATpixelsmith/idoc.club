@@ -1,0 +1,93 @@
+name: Manual Apply Pending Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_schema:
+        description: Schema to migrate (run staging first; Production requires a separate approval)
+        required: true
+        type: choice
+        options:
+          - idoc_staging
+          - idoc_production
+      confirmation:
+        description: Type APPLY-MIGRATIONS-idoc_staging or APPLY-MIGRATIONS-idoc_production exactly
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pending-migrations-maintenance
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/staging' && ((inputs.target_schema == 'idoc_staging' && inputs.confirmation == 'APPLY-MIGRATIONS-idoc_staging') || (inputs.target_schema == 'idoc_production' && inputs.confirmation == 'APPLY-MIGRATIONS-idoc_production'))
+    name: Apply pending migrations to ${{ inputs.target_schema }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.target_schema == 'idoc_production' && 'idoc-db-production-maintenance' || 'idoc-db-staging-maintenance' }}
+    steps:
+      - name: Verify Production environment has non-bypassable review protection
+        if: inputs.target_schema == 'idoc_production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          configuration="$(gh api "repos/${GITHUB_REPOSITORY}/environments/idoc-db-production-maintenance")"
+          if ! jq -e '.can_admins_bypass == false and (.protection_rules | any(.type == "required_reviewers" and (.reviewers | length > 0) and .prevent_self_review == true))' <<<"$configuration" >/dev/null; then
+            echo "::error::Production environment must require reviewers and disable administrator bypass."
+            exit 1
+          fi
+      - name: Check out protected staging code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL 17 backup utilities
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17 gnupg
+          aws --version
+      - name: Mandatory IDOC offsite pre-migration backup
+        id: backup
+        env:
+          DATABASE_BACKUP_URL: ${{ secrets.IDOC_BACKUP_DATABASE_URL }}
+          IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.IDOC_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.IDOC_R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
+          BACKUP_KIND: pre-migration
+          PROMOTION_TARGET_SCHEMA: ${{ inputs.target_schema }}
+        run: bash scripts/backup-idoc-r2.sh
+      - name: Apply every pending committed migration to the selected schema
+        env:
+          POSTGRES_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          DB_SCHEMA: ${{ inputs.target_schema }}
+        run: pnpm db:migrate
+      - name: Verify the migration ledger reached the newest committed migration
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          TARGET_SCHEMA: ${{ inputs.target_schema }}
+        run: |
+          set -euo pipefail
+          expected="$(node -e "console.log(Math.max(...JSON.parse(require('fs').readFileSync('lib/db/migrations/meta/_journal.json','utf8')).entries.map((entry) => entry.when)))")"
+          actual="$(psql "$IDOC_MIGRATION_DATABASE_URL" -Atc "select max(created_at) from \"${TARGET_SCHEMA}\".__drizzle_migrations")"
+          echo "newest committed migration: ${expected}; newest applied: ${actual}"
+          test "${expected}" = "${actual}"
