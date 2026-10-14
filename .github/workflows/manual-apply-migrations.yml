@@ -76,18 +76,19 @@ jobs:
           BACKUP_KIND: pre-migration
           PROMOTION_TARGET_SCHEMA: ${{ inputs.target_schema }}
         run: bash scripts/backup-idoc-r2.sh
+      - name: Guard - bind to the backed-up server, require the ledger at 0070 or later, and require staging first for Production
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          TARGET_SCHEMA: ${{ inputs.target_schema }}
+          IDOC_BACKUP_SERVER_FINGERPRINT: ${{ steps.backup.outputs.server_fingerprint }}
+        run: node scripts/guard-pending-migrations.mjs before
       - name: Apply every pending committed migration to the selected schema
         env:
           POSTGRES_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           DB_SCHEMA: ${{ inputs.target_schema }}
         run: pnpm db:migrate
-      - name: Verify the migration ledger reached the newest committed migration
+      - name: Verify the ledger reached the newest committed migration
         env:
           IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           TARGET_SCHEMA: ${{ inputs.target_schema }}
-        run: |
-          set -euo pipefail
-          expected="$(node -e "console.log(Math.max(...JSON.parse(require('fs').readFileSync('lib/db/migrations/meta/_journal.json','utf8')).entries.map((entry) => entry.when)))")"
-          actual="$(psql "$IDOC_MIGRATION_DATABASE_URL" -Atc "select max(created_at) from \"${TARGET_SCHEMA}\".__drizzle_migrations")"
-          echo "newest committed migration: ${expected}; newest applied: ${actual}"
-          test "${expected}" = "${actual}"
+        run: node scripts/guard-pending-migrations.mjs after
