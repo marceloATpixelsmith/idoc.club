@@ -566,6 +566,7 @@ test('an administrator creates a registration by looking up an active member, wh
   assert.ok(fn, 'createAdminSeminarRegistration not found');
   assert.doesNotMatch(fn as string, /guest_|guestName|fields\.email|fields\.phone/);
   assert.match(fn as string, /Registrations can only be created for active members/);
+  assert.match(fn as string, /join users u on u\.id=p\.user_id and u\.deleted_at is null and u\.account_state='active'/);
   assert.match(fn as string, /seminar\.registration_created/);
   assert.match(registrationsSource, /export async function searchActiveMembersForRegistration/);
   const drawer = readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8');
