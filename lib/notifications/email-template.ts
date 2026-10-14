@@ -10,20 +10,36 @@ export const IDOC_EMAIL_COLORS = {
   text: '#eff2f7',
 } as const;
 
-export const IDOC_EMAIL_ICON_BASE = 'https://res.cloudinary.com/z6xv27qx/image/upload/e_colorize,co_rgb:d3af37,w_20,h_20,c_fit/idoc-email-icons';
-
-export const IDOC_EMAIL_ICONS = {
-  banknote: `${IDOC_EMAIL_ICON_BASE}/banknote.png`,
-  calendar: `${IDOC_EMAIL_ICON_BASE}/calendar.png`,
-  deadline: `${IDOC_EMAIL_ICON_BASE}/calendar-clock.png`,
-  users: `${IDOC_EMAIL_ICON_BASE}/users.png`,
-} as const;
-
-// Served from this app's own /public (a PNG, since many mail clients block SVG). BASE_URL is the
-// per-environment origin; production is the fallback so previews/tests without it still render.
-export function idocEmailLogoUrl(environment: NodeJS.ProcessEnv = process.env): string {
+// Email images are served from this app's own /public as PNGs (many mail clients block SVG, and the third-party
+// image host that used to serve the icons stopped resolving). BASE_URL is the per-environment origin; production
+// is the fallback so previews/tests without it still render.
+export function idocEmailAssetUrl(path: string, environment: NodeJS.ProcessEnv = process.env): string {
   const origin = environment.BASE_URL?.trim().replace(/\/+$/, '') || 'https://idoc.club';
-  return `${origin}/idoc-logo-email.png`;
+  return `${origin}${path}`;
+}
+
+const emailIcon = (file: string) => idocEmailAssetUrl(`/email-icons/${file}.png`);
+
+// Getters so the origin is read when an email is built, not when this module first loads. Gold (#d3af37) 40px PNGs,
+// shown at 20px. The keys mirror the lucide icons used on the website's seminar/membership detail cards.
+export const IDOC_EMAIL_ICONS = {
+  get banknote() { return emailIcon('banknote'); },
+  get calendar() { return emailIcon('calendar'); },
+  get deadline() { return emailIcon('calendar-clock'); },
+  get flag() { return emailIcon('flag'); },
+  get language() { return emailIcon('languages'); },
+  get layers() { return emailIcon('layers'); },
+  get location() { return emailIcon('map-pin'); },
+  get users() { return emailIcon('users'); },
+};
+
+// The white FEI wordmark as a PNG (306x48, shown at 24px high), matching the FEI badge on the seminar details page.
+export function idocEmailFeiLogoUrl(environment: NodeJS.ProcessEnv = process.env): string {
+  return idocEmailAssetUrl('/fei-logo-email.png', environment);
+}
+
+export function idocEmailLogoUrl(environment: NodeJS.ProcessEnv = process.env): string {
+  return idocEmailAssetUrl('/idoc-logo-email.png', environment);
 }
 
 export function escapeHtml(value: string): string {

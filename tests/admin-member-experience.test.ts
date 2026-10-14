@@ -82,3 +82,30 @@ test('showing a member email in the directory is an opt-in, default no, with the
   // Admin corrections never silently flip the member's own choice: the field is only written when the form carries it.
   assert.match(read('lib/membership/validation.ts'), /formData\.has\('directoryEmailOptInField'\)/);
 });
+
+test('transactional emails serve their icons and the FEI logo from the app origin, and the FEI badge matches the seminar details page', async () => {
+  const { existsSync, statSync } = await import('node:fs');
+  const { IDOC_EMAIL_ICONS, idocEmailFeiLogoUrl } = await import('../lib/notifications/email-template.ts');
+  const environment = { BASE_URL: 'https://staging.idoc.club/' } as unknown as NodeJS.ProcessEnv;
+  // The third-party image host that used to serve the icons stopped resolving; no email source may point at it again.
+  for (const file of ['lib/notifications/email-template.ts', 'lib/notifications/renewal-notices.ts', 'lib/seminars/registrations.ts']) {
+    assert.doesNotMatch(read(file), /cloudinary/, `${file} must not reference the external icon host`);
+  }
+  // Every icon is a real PNG in /public (mail clients block SVG) and is reachable at the app origin.
+  for (const key of ['banknote', 'calendar', 'deadline', 'flag', 'language', 'layers', 'location', 'users'] as const) {
+    const url = IDOC_EMAIL_ICONS[key];
+    assert.match(url, /^https:\/\/idoc\.club\/email-icons\/[a-z-]+\.png$/);
+    const file = `public${new URL(url).pathname}`;
+    assert.ok(existsSync(file) && statSync(file).size > 100, `${file} must exist`);
+  }
+  assert.equal(idocEmailFeiLogoUrl(environment), 'https://staging.idoc.club/fei-logo-email.png');
+  assert.ok(existsSync('public/fei-logo-email.png'));
+  // The confirmation email shows the FEI logo image (linked like the website badge), not the words "FEI SEMINAR".
+  const registrations = read('lib/seminars/registrations.ts');
+  assert.match(registrations, /seminar\.is_fei \? `<tr>.*href="https:\/\/www\.fei\.org\/dressage".*idocEmailFeiLogoUrl\(\)/);
+  assert.doesNotMatch(registrations, /FEI SEMINAR/);
+  // Rows mirror the website details card in the same order: dates, location, language, participants, price, levels, deadline, FEI.
+  const order = ['IDOC_EMAIL_ICONS.calendar', 'IDOC_EMAIL_ICONS.location', 'IDOC_EMAIL_ICONS.language', 'IDOC_EMAIL_ICONS.users', 'IDOC_EMAIL_ICONS.banknote', 'IDOC_EMAIL_ICONS.layers', 'IDOC_EMAIL_ICONS.deadline'];
+  const positions = order.map((name) => registrations.indexOf(`seminarEmailInfoRow(${name}`));
+  assert.ok(positions.every((position, index) => position > 0 && (index === 0 || position > positions[index - 1])), 'email detail rows must follow the website order');
+});
