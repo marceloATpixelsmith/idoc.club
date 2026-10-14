@@ -91,7 +91,7 @@ test.describe('member one', () => {
     await expect(row).toContainText('Bank Transfer');
     await expect(row).toContainText('30.00');
     expect(await registrationFor(memberOne, SEMINARS.bank.title)).toEqual({
-      expected_amount_cents: SEMINARS.bank.memberCents, payment_status: 'bank_transfer_pending', registration_status: 'registered',
+      approval_status: 'confirmed', expected_amount_cents: SEMINARS.bank.memberCents, payment_status: 'bank_transfer_pending', registration_status: 'registered',
     });
     expect((await mockStripeSessions()).length).toBe(before);
   });
@@ -141,7 +141,7 @@ test.describe('member one', () => {
     expect(credited[0].n).toBe(1);
 
     await page.goto('/seminars?view=my');
-    await expect(page.locator('li', { hasText: SEMINARS.online.title })).toContainText('(paid)');
+    await expect(page.locator('li', { hasText: SEMINARS.online.title })).toContainText('Payment Status: Paid');
     await page.goto(`/seminars/${ids.online}`);
     await expect(page.getByRole('button', { name: /^Register/ })).toHaveCount(0);
   });
