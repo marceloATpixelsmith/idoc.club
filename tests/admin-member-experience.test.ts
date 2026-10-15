@@ -123,7 +123,8 @@ test('transactional emails serve their icons and the FEI logo from the app origi
 test('punchlist: day-first admin dates, Seminars/Courses admin label, create-registration statuses, and homepage partner sections', () => {
   assert.match(read('lib/seminars/format.ts'), /return `\$\{day\}\/\$\{month\}\/\$\{year\}`/);
   const fieldset = read('components/seminars/seminar-fieldset.tsx');
-  for (const name of ['startDate', 'endDate', 'registrationDeadline']) assert.match(fieldset, new RegExp(`<UsDateInput[^>]*name="${name}"`));
+  assert.match(fieldset, /<DateRangePicker[^>]*fromName="startDate"[^>]*toName="endDate"/);
+  assert.match(fieldset, /<SingleDatePicker[^>]*name="registrationDeadline"/);
   assert.match(read('components/admin-navigation.tsx'), /label: 'Seminars\/Courses'/);
   const create = read('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx');
   assert.match(create, /name="approvalStatus"/);
