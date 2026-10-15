@@ -94,10 +94,24 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     );
   };
 
-  return <section className="mt-10" aria-labelledby="my-registrations-heading">
-    <h2 className="text-2xl" id="my-registrations-heading">My seminar/course registrations</h2>
-    <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars?view=my">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?view=my&tab=past">Past</Link></nav>
-    <div className="mt-6">
+  return <section aria-labelledby="my-registrations-heading">
+    {/*//SUBNAV SITS IN A SOFT NAVY WASH, WITH THINNER GOLD INDICATOR THAN THE PARENT LEVEL.*/}
+    <div className="bg-surface/45 px-4 pb-3 pt-4 sm:px-6">
+      <h2 className="sr-only" id="my-registrations-heading">My seminar/course registrations</h2>
+      <nav aria-label="Registration history" className="flex flex-wrap items-center gap-x-7 gap-y-2 border-l-2 border-gold/60 pl-4 sm:pl-5">
+        <Link
+          aria-current={!past ? 'page' : undefined}
+          className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${past ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold font-medium text-foreground'}`}
+          href="/seminars?view=my"
+        >Upcoming &amp; current</Link>
+        <Link
+          aria-current={past ? 'page' : undefined}
+          className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${past ? 'border-gold font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          href="/seminars?view=my&tab=past"
+        >Past</Link>
+      </nav>
+    </div>
+    <div className="mt-8">
       {registered.length ? <ul className="w-fit max-w-full divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar/course registrations.' : 'You have no upcoming seminar/course registrations.'}</p>}
     </div>
   </section>;
