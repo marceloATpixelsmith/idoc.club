@@ -1,12 +1,13 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, LoaderCircle, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Copy, Download, LoaderCircle, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { updateAdminTableInlineField } from '@/app/(dashboard)/admin/bulk-actions';
+import { duplicateAdminRecord } from '@/app/(dashboard)/admin/duplicate-record';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
 import { BulkNewsStatusSelected } from '@/components/admin/bulk-update-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
@@ -237,6 +238,46 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   );
 }
 
+//KEEP THE TABLE BUSY UNTIL REFRESHED SERVER ROWS ARRIVE, NOT JUST UNTIL THE MUTATION RETURNS.
+function DuplicateRecordButton({ id, tableType }: { id: number; tableType: ResourceType }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+
+  async function duplicate() {
+    if (pending) return;
+    setPending(true);
+    window.dispatchEvent(new Event('idoc:table-refresh-start'));
+    try {
+      const result = await duplicateAdminRecord(tableType, id, readCsrfTokenFromDocumentCookie());
+      if (result.error) {
+        window.dispatchEvent(new Event('idoc:table-refresh-end'));
+        window.alert(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      window.dispatchEvent(new Event('idoc:table-refresh-end'));
+      window.alert('Unable to duplicate this record. Please try again.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Button
+      aria-label={`Copy ${tableType === 'news' ? 'article' : 'seminar'}`}
+      disabled={pending}
+      onClick={() => { void duplicate(); }}
+      size="icon-sm"
+      title="Copy as draft"
+      type="button"
+      variant="ghost"
+    >
+      {pending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Copy aria-hidden />}
+    </Button>
+  );
+}
+
 function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'], type: ResourceType) {
   downloadCsv(
     `${type}-selected.csv`,
@@ -345,6 +386,7 @@ export function ResourceDataTable({
               }}
             ><Pencil aria-hidden="true" /></Link>
           </Button>
+          <DuplicateRecordButton id={row.original.id} tableType={tableType} />
           {tableType === 'seminars' && <>
             <Button asChild aria-label="Registrations" size="icon-sm" title="View registrations" variant="ghost">
               <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`} onClick={(event) => openTableAction(event, `/admin/seminars/registrations?seminarId=${row.original.id}`)}><ClipboardList aria-hidden="true" /></Link>
