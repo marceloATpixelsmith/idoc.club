@@ -47,10 +47,10 @@ async function sendPreviewForm(formData: FormData) {
 
   try {
     await sendEmailPreview(previewId);
-    redirect(`/admin/email-previews?sent=${encodeURIComponent(previewId)}`);
   } catch {
     redirect(`/admin/email-previews?failed=${encodeURIComponent(previewId)}`);
   }
+  redirect(`/admin/email-previews?sent=${encodeURIComponent(previewId)}`);
 }
 
 export default async function AdminEmailPreviewsPage({
