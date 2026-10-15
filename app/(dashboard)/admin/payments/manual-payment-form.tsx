@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SingleDatePicker } from '@/components/forms/us-date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { nextValidUntil } from '@/lib/payments/renewal';
@@ -51,10 +52,7 @@ export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="paidAt">Paid date</Label>
-        <Input
-          id="paidAt" max={today()} name="paidAt" required type="date"
-          value={paidAt} onChange={(event) => setPaidAt(event.target.value)}
-        />
+        <SingleDatePicker id="paidAt" max={today()} name="paidAt" onChange={setPaidAt} required value={paidAt} />
       </div>
       {referenceLabel && (
         <div className="space-y-1.5">
