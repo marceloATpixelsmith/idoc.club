@@ -94,10 +94,8 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     );
   };
 
-  return <section className="mt-10" aria-labelledby="my-registrations-heading">
-    <h2 className="text-2xl" id="my-registrations-heading">My seminar/course registrations</h2>
-    <nav aria-label="Registration history" className="mt-4 flex gap-4 border-b border-border"><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'text-muted-foreground' : 'border-b-2 border-gold'}`} href="/seminars?view=my">Upcoming &amp; current</Link><Link className={`pb-2 text-xs uppercase tracking-[0.14em] ${past ? 'border-b-2 border-gold' : 'text-muted-foreground'}`} href="/seminars?view=my&tab=past">Past</Link></nav>
-    <div className="mt-6">
+  return <section aria-labelledby="my-registrations-heading">
+    <div className="mt-8">
       {registered.length ? <ul className="w-fit max-w-full divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar/course registrations.' : 'You have no upcoming seminar/course registrations.'}</p>}
     </div>
   </section>;

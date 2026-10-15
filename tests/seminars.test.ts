@@ -665,3 +665,20 @@ test('member seminar catalog includes registered courses while detail pages supp
   assert.match(detail, /alreadyRegistered = seminar\.registration_status !== null/);
   assert.match(detail, /alreadyRegistered \? null : seminar\.availability !== 'open'/);
 });
+
+test('member seminar navigation uses a clear unboxed parent and contextual secondary level', () => {
+  const catalog = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
+  const member = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  assert.match(catalog, /aria-label="Seminars\/Courses view"/);
+  assert.match(catalog, /border-b-\[3px\]/);
+  assert.match(catalog, /aria-current=\{showMySeminars \? 'page' : undefined\}/);
+  assert.match(catalog, /aria-label="Registration history"/);
+  assert.match(catalog, /sm:grid-cols-subgrid/);
+  assert.match(catalog, /sm:col-start-2/);
+  assert.match(catalog, /bg-surface\/45/);
+  assert.doesNotMatch(catalog, /border-l-2 border-gold\/60/);
+  assert.match(catalog, /aria-current=\{tab === 'past' \? 'page' : undefined\}/);
+  assert.match(catalog, /href="\/seminars\?view=my&tab=past"/);
+  assert.doesNotMatch(member, /aria-label="Registration history"/);
+  assert.doesNotMatch(member, /const upcoming = seminars\.filter/);
+});
