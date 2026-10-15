@@ -31,10 +31,10 @@ function parseIds(formData: FormData): { table: BulkTable; ids: string[] } {
 async function deleteSeminars(ids: string[], actorId: number) {
   const numeric = ids.map(Number);
   return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; status: string; title: string; registrations: number }[]>`select s.id,s.status,s.title,(select count(*)::int from seminar_registrations r where r.seminar_id=s.id) registrations from seminars s where s.id in ${sql(numeric)} for update`;
+    const rows = await sql<{ id: number; status: string; title: string; registrations: number; oldEnough: boolean }[]>`select s.id,s.status,s.title,(s.end_date <= (current_date - interval '1 day')::date) as "oldEnough",(select count(*)::int from seminar_registrations r where r.seminar_id=s.id) registrations from seminars s where s.id in ${sql(numeric)} for update`;
     if (rows.length !== numeric.length) throw new Error('One or more selected seminars no longer exist.');
-    const blocked = rows.find((row) => row.registrations > 0 || !['draft','canceled'].includes(row.status));
-    if (blocked) throw new Error('“' + blocked.title + '” cannot be deleted. A seminar must be Draft or Canceled and have no registration history.');
+    const blocked = rows.find((row) => row.registrations > 0 || (!['draft','canceled'].includes(row.status) && !row.oldEnough));
+    if (blocked) throw new Error('“' + blocked.title + '” cannot be deleted. A seminar must be Draft, Canceled, or at least one day past its end date, and must have no registration history.');
     for (const row of rows) {
       await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,reason) values (${actorId},'admin.seminar.deleted','seminar',${String(row.id)},${JSON.stringify({ status: row.status, title: row.title })}::jsonb,'Bulk delete from Seminars admin table')`;
       await sql`delete from seminars where id=${row.id}`;
@@ -76,6 +76,48 @@ async function deleteSupport(ids: string[], actorId: number) {
     }
     return rows.length;
   });
+}
+
+//USE THE SAME TRANSACTIONAL REGISTRATION-CANCELLATION SEMANTICS AS INLINE STATUS CHANGES.
+export async function bulkSetSeminarStatus(_state: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const { table, ids } = parseIds(formData);
+    if (table !== 'seminars') throw new InlineAdminValidationError('Select seminar records.');
+    const status = String(formData.get('status') ?? '');
+    if (status !== 'canceled' && status !== 'draft') throw new InlineAdminValidationError('Unsupported seminar bulk status.');
+
+    let cancellationNeeded = false;
+    let changed = 0;
+    await client.begin(async (sql) => {
+      const numeric = ids.map(Number);
+      const rows = await sql<{ id: number; status: string }[]> `select id,status from seminars where id in ${sql(numeric)} for update`;
+      if (rows.length !== numeric.length) throw new InlineAdminValidationError('One or more seminars no longer exist.');
+      for (const row of rows) {
+        if (row.status === status) continue;
+        await sql`update seminars set status=${status},updated_by_user_id=${actor.id},updated_at=now() where id=${row.id}`;
+        let canceledRegistrations = 0;
+        if (status === 'canceled') {
+          cancellationNeeded = true;
+          const canceled = await sql<{ id: number }[]>`update seminar_registrations set registration_status='canceled',canceled_at=now(),updated_at=now() where seminar_id=${row.id} and registration_status='registered' returning id`;
+          canceledRegistrations = canceled.length;
+          if (canceledRegistrations) {
+            await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values(${actor.id},'admin.seminar.registrations_canceled_by_cascade','seminar',${String(row.id)},${JSON.stringify({ registrationIds: canceled.map((entry) => entry.id) })}::jsonb)`;
+          }
+        }
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values(${actor.id},'admin.seminar.bulk_status_changed','seminar',${String(row.id)},${JSON.stringify({ status: row.status })}::jsonb,${JSON.stringify({ status, canceledRegistrations })}::jsonb)`;
+        changed++;
+      }
+    });
+    if (cancellationNeeded) dispatchQueuedEmailAfterResponse(() => processCanceledSeminarPayments(), 'seminar-cancellation-resolution');
+    revalidatePath('/admin/seminars');
+    revalidatePath('/seminars');
+    return { success: `${changed} selected seminar${changed === 1 ? '' : 's'} updated.` };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The selected seminars could not be updated.' };
+  }
 }
 
 export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: FormData): Promise<BulkDeleteState> {
