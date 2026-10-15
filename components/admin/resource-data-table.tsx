@@ -70,7 +70,7 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     types: [{ label: 'NEWS', value: 'news' }, { label: 'BLOG', value: 'blog' }],
   },
   seminars: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Price' }, { id: 'registrations', label: 'Registered / Capacity' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Price' }, { id: 'registrations', label: 'REG/CAPS' }],
     dateFilter: true,
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
