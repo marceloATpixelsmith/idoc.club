@@ -91,9 +91,10 @@ export function DateRangeFilter({
     onChange(undefined, undefined);
   }
 
+  const selectedDate = range.from ?? range.to;
   const dateText = range.from && range.to && range.from.getTime() !== range.to.getTime()
     ? `${formatTableDate(toDateKey(range.from))} - ${formatTableDate(toDateKey(range.to))}`
-    : range.from || range.to ? formatTableDate(toDateKey((range.from ?? range.to)!)) : '';
+    : selectedDate ? formatTableDate(toDateKey(selectedDate)) : '';
 
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
