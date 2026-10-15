@@ -18,6 +18,8 @@ export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
 const GRACE_EXPIRY_BATCH_LIMIT = 500;
 const MAX_ATTEMPTS = 6;
 export const STAGING_SEMINAR_CONFIRMATION_KIND = 'seminar.staging_registration_created';
+// The staging-owned twin of 'seminar.payment_confirmed': the production renewal worker never claims it, and staging drains it itself.
+export const STAGING_SEMINAR_PAYMENT_KIND = 'seminar.staging_payment_confirmed';
 
 const RENEWAL_NOTICE_KINDS = [
   'membership.renewal_reminder',
@@ -353,6 +355,7 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
         };
 
       case 'seminar.payment_confirmed':
+      case STAGING_SEMINAR_PAYMENT_KIND:
         return {
           bodyHtml:
             `<p style="margin:0 0 18px;">${greeting}</p><p style="margin:0 0 18px;">We have recorded your seminar payment successfully.</p>` +
@@ -437,7 +440,7 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
   const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
     with candidate as (
       select id from notification_outbox
-      where kind = ${STAGING_SEMINAR_CONFIRMATION_KIND}
+      where kind in (${STAGING_SEMINAR_CONFIRMATION_KIND}, ${STAGING_SEMINAR_PAYMENT_KIND})
         and sent_at is null and dead_lettered_at is null and available_at <= now()
         and (lease_expires_at is null or lease_expires_at < now())
       order by available_at, id for update skip locked limit 1

@@ -31,6 +31,7 @@ export function RevenueFilters({ from, source, to }: { from?: string; source?: s
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<DateRange>({ from: fromDateKey(from), to: fromDateKey(to) });
+  const [awaitingEnd, setAwaitingEnd] = useState(false);
   const [sourceValue, setSourceValue] = useState(SOURCE_OPTIONS.some((option) => option.value === source) ? source! : 'all');
 
   // Re-sync when the committed props change without a remount -- e.g. browser Back/Forward
@@ -38,6 +39,7 @@ export function RevenueFilters({ from, source, to }: { from?: string; source?: s
   // and Apply would push those stale values right back, undoing the navigation.
   useEffect(() => {
     setRange({ from: fromDateKey(from), to: fromDateKey(to) });
+    setAwaitingEnd(false);
     setSourceValue(SOURCE_OPTIONS.some((option) => option.value === source) ? source! : 'all');
   }, [from, to, source]);
 
@@ -49,11 +51,19 @@ export function RevenueFilters({ from, source, to }: { from?: string; source?: s
     router.push(`/admin/revenue${params.size ? `?${params}` : ''}`);
   }
 
-  // react-day-picker's range mode adjusts an already-complete range (so a new *first* date could
-  // never be picked once a range existed). A click on a complete range starts a fresh range instead.
-  function onSelect(next: DateRange | undefined, trigger: Date) {
-    if (range.from && range.to) setRange({ from: trigger, to: undefined });
-    else setRange(next ?? { from: undefined, to: undefined });
+  // react-day-picker v9 reports a complete one-day range ({ from: d, to: d }) on the very first click, so the
+  // picker's own `next` value cannot tell "starting" from "finishing". Track the phase explicitly instead: the
+  // first click anchors a new range, the second click completes it (in either order), and a click after that
+  // starts over -- so any first and last date can always be picked, including a single day by clicking it twice.
+  function onSelect(_next: DateRange | undefined, trigger: Date) {
+    if (!awaitingEnd || !range.from) {
+      setRange({ from: trigger, to: undefined });
+      setAwaitingEnd(true);
+      return;
+    }
+    const [first, last] = trigger.getTime() < range.from.getTime() ? [trigger, range.from] : [range.from, trigger];
+    setRange({ from: first, to: last });
+    setAwaitingEnd(false);
   }
 
   const hasRange = Boolean(range.from || range.to);
@@ -76,7 +86,7 @@ export function RevenueFilters({ from, source, to }: { from?: string; source?: s
           <PopoverContent align="start" className="w-auto p-0">
             <Calendar autoFocus captionLayout="dropdown" mode="range" onSelect={onSelect} selected={range} />
             <div className="flex justify-end border-t p-2">
-              <Button disabled={!hasRange} onClick={() => setRange({ from: undefined, to: undefined })} size="sm" type="button" variant="ghost">Clear (all time)</Button>
+              <Button disabled={!hasRange} onClick={() => { setRange({ from: undefined, to: undefined }); setAwaitingEnd(false); }} size="sm" type="button" variant="ghost">Clear (all time)</Button>
             </div>
           </PopoverContent>
         </Popover>

@@ -12,7 +12,7 @@ import { formatDateTime } from '@/lib/format';
 export const EMAIL_PREVIEW_RECIPIENT = 'zangfuqi@gmail.com';
 
 export type EmailPreviewDefinition = {
-  category: 'Account & authentication' | 'Security' | 'Membership & billing' | 'Seminars';
+  category: 'Account & authentication' | 'Security' | 'Membership & billing' | 'Seminars/Courses';
   id: string;
   label: string;
 };
@@ -47,7 +47,7 @@ export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
   { category: 'Account & authentication', id: 'account:verify_email', label: 'Verify changed email address' },
   ...AUTH_SECURITY_KINDS.map((kind) => ({ category: 'Security' as const, id: `security:${kind}`, label: AUTH_SECURITY_CONTENT[kind].heading })),
   ...MEMBERSHIP_PREVIEWS.map(([id, label]) => ({ category: 'Membership & billing' as const, id, label })),
-  ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars' as const, id, label })),
+  ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars/Courses' as const, id, label })),
 ];
 
 function previewSubject(subject: string) {

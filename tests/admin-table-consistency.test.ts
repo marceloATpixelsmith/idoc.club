@@ -40,7 +40,7 @@ test('registration search wording is concise', () => {
 test('registration table and form use branded payment method icons', () => {
   assert.match(registrations, /<PaymentMethodIcon method=\{row\.original\.payment_method_canonical_id\}/);
   assert.match(registrationForm, /<PaymentMethodSelect[\s\S]*?id="paymentMethod"/);
-  assert.match(registrationForm, /<PaymentMethodSelect[\s\S]*?id="method"/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/registrations/record-payment-form.tsx', 'utf8'), /<PaymentMethodSelect[\s\S]*?id="method"/);
 });
 
 test('Judge icon remains the sitewide bell in the admin members table', () => {

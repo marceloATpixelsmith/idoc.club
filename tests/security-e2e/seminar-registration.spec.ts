@@ -147,7 +147,7 @@ test.describe('member one', () => {
     expect(credited[0].n).toBe(1);
 
     await page.goto('/seminars?view=my');
-    await expect(page.locator('li', { hasText: SEMINARS.online.title })).toContainText('Payment Status: Paid');
+    await expect(page.locator('li', { hasText: SEMINARS.online.title })).toContainText(/Status: \w[\w ]* \/ Paid/);
     await page.goto(`/seminars/${ids.online}`);
     await expect(page.getByRole('button', { name: /^Register/ })).toHaveCount(0);
   });
@@ -158,15 +158,13 @@ test.describe('member one', () => {
     await expect(page).toHaveURL(/\/seminars\?view=my/);
     expect(await registrationFor(memberOne, SEMINARS.fei.title)).toMatchObject({ approval_status: 'pending_fei_approval', payment_status: 'cash_pending' });
     const row = page.locator('li', { hasText: SEMINARS.fei.title });
-    await expect(row).toContainText('Registration Status: Pending FEI Approval');
-    await expect(row).toContainText('Payment Status: Cash pending');
+    await expect(row).toContainText('Status: Pending FEI Approval / Cash pending');
   });
 
   test('a non-FEI registration is Confirmed as soon as it is made, independent of payment', async ({ page }) => {
     await page.goto('/seminars?view=my');
     const row = page.locator('li', { hasText: SEMINARS.bank.title });
-    await expect(row).toContainText('Registration Status: Confirmed');
-    await expect(row).toContainText('Payment Status: Bank transfer pending');
+    await expect(row).toContainText('Status: Confirmed / Bank transfer pending');
     expect((await registrationFor(memberOne, SEMINARS.bank.title)).approval_status).toBe('confirmed');
   });
 });

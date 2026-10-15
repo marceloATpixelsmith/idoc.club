@@ -177,7 +177,7 @@ test('registration status and payment status are independent facts: canceling ne
   const seminarId = await publishedSeminar(admin.id);
   await asMember(user.id, () => registerForSeminar(seminarId, 'cash_event'));
   const [registrationRow] = await sql<{ id: number }[]>`select id from idoc.seminar_registrations where seminar_id=${seminarId}`;
-  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'cash_event', null));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'cash_event', 'RCPT-1'));
   await asMember(user.id, () => cancelOwnRegistration(seminarId));
   const [after] = await sql`select registration_status,payment_status from idoc.seminar_registrations where id=${registrationRow.id}`;
   assert.equal(after.registration_status, 'canceled');
@@ -241,7 +241,7 @@ test('recording a manual payment is rejected while a registration has an open St
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   await sql`update idoc.seminar_registrations set stripe_checkout_session_id='cs_open_fixture',checkout_status='open',payment_status='pending' where id=${registrationId}`;
   const stillOpenClient = { checkout: { sessions: { retrieve: async () => ({ status: 'open' }) } } };
-  await assert.rejects(asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, stillOpenClient)), SeminarRegistrationError);
+  await assert.rejects(asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', 'REF-OPEN', stillOpenClient)), SeminarRegistrationError);
   const [stillPending] = await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(stillPending.payment_status, 'pending');
   // The local checkout_status column only updates when createSeminarCheckoutSession is revisited, so
@@ -249,7 +249,7 @@ test('recording a manual payment is rejected while a registration has an open St
   // and permanently block a legitimate manual payment -- recordManualSeminarPayment must refresh it
   // against Stripe itself rather than trusting that possibly-stale local column.
   const expiredClient = { checkout: { sessions: { retrieve: async () => ({ status: 'expired' }) } } };
-  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, expiredClient));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', 'REF-EXPIRED', expiredClient));
   const [paid] = await sql`select checkout_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(paid.payment_status, 'paid');
   assert.equal(paid.checkout_status, 'expired', 'the refreshed status must be persisted, not just used in-memory for this one decision');
@@ -352,6 +352,25 @@ test('every seminar create, edit, status change, and registration mutation write
   for (const expected of ['admin.seminar.created', 'admin.seminar.edited', 'member.seminar_registration.registered', 'admin.seminar_registration.payment_marked_paid', 'member.seminar_registration.canceled']) {
     assert.ok(actions.includes(expected), `missing audit action: ${expected}`);
   }
+});
+
+test('an administrator marking a seminar registration paid queues exactly one "Seminar payment confirmed" notice for the registrant', async () => {
+  const admin = await adminUser();
+  const { profile, user } = await paidMember();
+  const seminarId = await publishedSeminar(admin.id, { price: '80.00' });
+  await asMember(user.id, () => registerForSeminar(seminarId, 'bank_transfer'));
+  const [registrationRow] = await sql<{ id: number }[]>`select id from idoc.seminar_registrations where seminar_id=${seminarId}`;
+  const queuedNotices = () => sql<{ kind: string; payload: Record<string, unknown> }[]>`select kind,payload from idoc.notification_outbox where kind='seminar.payment_confirmed' and (payload->>'registrationId')::int=${registrationRow.id}`;
+  assert.equal((await queuedNotices()).length, 0, 'no payment notice exists before the payment is recorded');
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'bank_transfer', 'REF-NOTICE'));
+  // Recording the same payment again is a no-op, so the registrant is never emailed twice.
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'bank_transfer', 'REF-NOTICE'));
+  const notices = await queuedNotices();
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].payload.amountCents, 8000);
+  assert.equal(notices[0].payload.seminarId, seminarId);
+  assert.ok(typeof notices[0].payload.to === 'string' && notices[0].payload.to.length > 0);
+  assert.equal((await sql`select profile_id from idoc.notification_outbox where dedupe_key=${`seminar.payment_confirmed:${registrationRow.id}:manual`}`)[0].profile_id, profile.id);
 });
 
 test('a Stripe Checkout Session completion marks the exact registration paid, verified against this seminar\'s own member price, and is idempotent on webhook replay', async () => {
@@ -570,7 +589,7 @@ test('Registration Status is independent of payment: non-FEI is Confirmed at reg
   const { registrationId: feiRegistration } = await asMember(other.id, () => registerForSeminar(feiId, 'cash_event'));
   const [fei] = await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`;
   assert.equal(fei.approval_status, 'pending_fei_approval');
-  await asAdmin(admin.id, () => recordManualSeminarPayment(feiRegistration, 'cash_event', null));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(feiRegistration, 'cash_event', 'RCPT-1'));
   assert.equal((await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`)[0].approval_status, 'pending_fei_approval', 'paying never approves an FEI registration');
   // The queued confirmation states the pending status and that the National Federation must register the member.
   const [queued] = await sql`select kind,payload from idoc.notification_outbox where kind like 'seminar.%registration_created' and (payload->>'registrationId')::int=${feiRegistration}`;

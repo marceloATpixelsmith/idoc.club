@@ -134,7 +134,7 @@ test('recording a manual payment refreshes a stale, locally-open Stripe checkout
 test('My Seminars never renders bank-transfer instructions in the registration listing', () => {
   assert.doesNotMatch(memberPage, /sanitizeBankInstructions/);
   assert.doesNotMatch(memberPage, /dangerouslySetInnerHTML/);
-  assert.match(memberPage, /Payment Method:/);
+  assert.doesNotMatch(memberPage, /Payment Method:/);
 });
 
 
@@ -211,8 +211,7 @@ test('a locked price input still submits its value through a hidden mirror', () 
 test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /APPROVAL_STATUS_LABELS/);
   assert.match(memberPage, /PAYMENT_STATUS_LABELS/);
-  assert.match(memberPage, /Registration Status:/);
-  assert.match(memberPage, /Payment Status:/);
+  assert.match(memberPage, /Status: <strong>\{registrationStatus === 'canceled'[^}]*APPROVAL_STATUS_LABELS\[approvalStatus\]\} \/ \$\{PAYMENT_STATUS_LABELS\[paymentStatus\]\}/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
   for (const label of ['Canceled', 'Registration closed', 'Full', 'Open', 'Past', 'Bank transfer pending', 'Cash pending', 'Paid', 'Unpaid']) {
     assert.ok(statusSource.includes(label), `label "${label}" is not defined in lib/seminars/status.ts`);
@@ -573,5 +572,42 @@ test('an administrator creates a registration by looking up an active member, wh
   assert.match(drawer, /<MemberLookup \/>/);
   assert.doesNotMatch(drawer, /name="firstName"|name="lastName"|name="email"|name="phone"/);
   // Seminar and payment method sit side by side at 50% each on desktop.
-  assert.match(drawer, /grid gap-4 md:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
+  assert.match(drawer, /grid gap-4 sm:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
+});
+
+test('an administrator recording a seminar payment queues the Seminar payment confirmed notice in the same transaction', () => {
+  const source = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const start = source.indexOf('export async function recordManualSeminarPayment');
+  const body = source.slice(start, source.indexOf('export async function', start + 10));
+  assert.match(body, /payment_status='paid'/);
+  assert.match(body, /'seminar\.payment_confirmed'/);
+  // staging owns its notice (production never claims it) and the action drains it, like every registration confirmation.
+  assert.match(body, /isStagingSeminarDirectDelivery\(\) \? 'seminar\.staging_payment_confirmed' : 'seminar\.payment_confirmed'/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8'), /queues the payment notice under its own kind[^\n]*\n\s+if \(isStagingSeminarDirectDelivery\(\)\) await processStagingSeminarConfirmationBatch\(\)/);
+  assert.match(readFileSync('lib/notifications/renewal-notices.ts', 'utf8'), /kind in \(\$\{STAGING_SEMINAR_CONFIRMATION_KIND\}, \$\{STAGING_SEMINAR_PAYMENT_KIND\}\)/);
+  assert.match(body, /seminar\.payment_confirmed:\$\{registrationId\.data\}:manual/);
+  assert.match(body, /on conflict\(dedupe_key\) do nothing/);
+  // The notice is queued inside the client.begin transaction that records the payment.
+  assert.ok(body.indexOf("'seminar.payment_confirmed'") > body.indexOf("payment_status='paid'"));
+  assert.ok(body.indexOf('client.begin') < body.indexOf("payment_status='paid'"));
+});
+
+test('offline seminar payments require method-labelled evidence, on create-as-Paid and when recording a received payment', () => {
+  const labels = readFileSync('lib/seminars/payment-reference.ts', 'utf8');
+  assert.match(labels, /bank_transfer: 'Bank Transfer Reference'/);
+  assert.match(labels, /cash_event: 'Receipt ID'/);
+  assert.match(labels, /online_stripe: 'Stripe Payment ID'/);
+  assert.match(registrationsSource, /RECEIVED_VIA_METHODS = \['bank_transfer', 'cash_event', 'online_stripe'\]/);
+  assert.match(registrationsSource, /if \(!reference\) throw new SeminarRegistrationError\(`Enter the \$\{seminarPaymentReferenceLabel\(method\)\}\.`\)/);
+  assert.match(registrationsSource, /if \(markPaid && !paymentReference\) throw new SeminarRegistrationError/);
+  const form = readFileSync('app/(dashboard)/admin/seminars/registrations/record-payment-form.tsx', 'utf8');
+  assert.match(form, /seminarPaymentReferenceLabel\(method\)/);
+  assert.match(form, /name="reference" onChange=\{[^}]*\} required/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8'), /paymentStatus === 'paid'[\s\S]*name="paymentReceivedVia"[\s\S]*name="paymentReference"[\s\S]*required/);
+  assert.ok(existsSync('docs/29-admin-table-and-form-style-guide.md'));
+});
+
+test('automatic cancellation refunds skip manually recorded Stripe payments that have no payment intent', () => {
+  const worker = readFileSync('lib/seminars/cancellation-worker.ts', 'utf8');
+  assert.match(worker, /\(r\.payment_status in \('paid','refund_failed'\) and r\.stripe_payment_intent_id is not null\)/);
 });

@@ -1,18 +1,28 @@
 'use client';
 
+import { useState } from 'react';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
 import { SeminarForm } from '@/components/seminars/seminar-form';
+import { SEMINAR_PAYMENT_RECEIVED_VIA, seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
+import { APPROVAL_STATUS_LABELS, FEI_APPROVAL_STATUSES } from '@/lib/seminars/status';
 import { createAdminSeminarRegistrationAction } from '../actions';
 import { MemberLookup } from './member-lookup';
 
 const SELECT_CLASSNAME = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
   paymentMethods: Array<{ canonical_id: string; display_label: string }>;
-  seminars: Array<{ id: number; title: string }>;
+  seminars: Array<{ id: number; isFei: boolean; title: string }>;
 }) {
+  const [seminarId, setSeminarId] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState('pending');
+  const [receivedVia, setReceivedVia] = useState<string>(SEMINAR_PAYMENT_RECEIVED_VIA[0].value);
+  const [paymentReference, setPaymentReference] = useState('');
+  const isFei = seminars.find((seminar) => String(seminar.id) === seminarId)?.isFei ?? false;
+  const approvalOptions = isFei ? FEI_APPROVAL_STATUSES : (['confirmed'] as const);
   return (
     <AdminFormDrawer closeHref="/admin/seminars/registrations" title="Registration">
       <div className="space-y-4 px-5 py-6 lg:px-8">
@@ -22,25 +32,57 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
         >
           <SeminarForm action={createAdminSeminarRegistrationAction} submitLabel="Create Registration">
             <MemberLookup />
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="seminarId">Seminar/Course</Label>
-                <select className={SELECT_CLASSNAME} id="seminarId" name="seminarId" required defaultValue="">
+                <select className={SELECT_CLASSNAME} id="seminarId" name="seminarId" onChange={(event) => setSeminarId(event.target.value)} required value={seminarId}>
                   <option disabled value="">Choose a seminar/course</option>
                   {seminars.map((seminar) => <option key={seminar.id} value={seminar.id}>{seminar.title}</option>)}
                 </select>
               </div>
+              {paymentStatus === 'paid' ? null : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentMethod">Payment Method</Label>
+                  <PaymentMethodSelect
+                    className={SELECT_CLASSNAME}
+                    defaultValue={paymentMethods[0]?.canonical_id ?? ''}
+                    id="paymentMethod"
+                    name="paymentMethod"
+                    options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="paymentMethod">Payment Method</Label>
-                <PaymentMethodSelect
-                  className={SELECT_CLASSNAME}
-                  defaultValue={paymentMethods[0]?.canonical_id ?? ''}
-                  id="paymentMethod"
-                  name="paymentMethod"
-                  options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
-                />
+                <Label htmlFor="approvalStatus">Registration Status</Label>
+                <select className={SELECT_CLASSNAME} id="approvalStatus" key={isFei ? 'fei' : 'standard'} name="approvalStatus" required>
+                  {approvalOptions.map((value) => <option key={value} value={value}>{APPROVAL_STATUS_LABELS[value]}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="paymentStatus">Payment Status</Label>
+                <select className={SELECT_CLASSNAME} id="paymentStatus" name="paymentStatus" onChange={(event) => { setPaymentStatus(event.target.value); setPaymentReference(''); }} required value={paymentStatus}>
+                  <option value="pending">Pending (awaiting payment)</option>
+                  <option value="paid">Paid</option>
+                </select>
               </div>
             </div>
+            {paymentStatus === 'paid' ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentReceivedVia">Payment received via</Label>
+                  <PaymentMethodSelect
+                    className={SELECT_CLASSNAME} defaultValue={receivedVia} id="paymentReceivedVia" name="paymentReceivedVia"
+                    onValueChange={(value) => { setReceivedVia(value); setPaymentReference(''); }} options={SEMINAR_PAYMENT_RECEIVED_VIA}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentReference">{seminarPaymentReferenceLabel(receivedVia)}</Label>
+                  <Input id="paymentReference" maxLength={1000} name="paymentReference" onChange={(event) => setPaymentReference(event.target.value)} required value={paymentReference} />
+                </div>
+              </div>
+            ) : null}
             {paymentMethods.length === 0 ? <p className="text-sm text-destructive">Enable Bank Transfer or Cash in Organization Settings before creating a registration.</p> : null}
           </SeminarForm>
         </AdminFormSection>

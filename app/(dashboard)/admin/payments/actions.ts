@@ -16,7 +16,8 @@ export async function recordManualPaymentForm(_state: ManualPaymentActionState, 
       paidAt: formData.get('paidAt'),
       profileId: formData.get('profileId'),
       reason: formData.get('reason'),
-      reference: formData.get('reference'),
+      // Cash and complimentary payments render no reference field, so FormData.get returns null; the schema accepts only a string or undefined.
+      reference: formData.get('reference') ?? undefined,
       source: formData.get('source'),
     });
   } catch (error) {

@@ -39,7 +39,8 @@ export async function processCanceledSeminarPayments(testStripe?: CancellationSt
       and r.registration_status='canceled'
       and r.payment_method_canonical_id='online_stripe'
       and (
-        r.payment_status in ('paid','refund_failed')
+        -- A payment an administrator recorded manually as Stripe has no payment intent and is never auto-refunded.
+        (r.payment_status in ('paid','refund_failed') and r.stripe_payment_intent_id is not null)
         or (r.stripe_checkout_session_id is not null and r.checkout_status='open')
       )
     order by r.updated_at asc,r.id asc
