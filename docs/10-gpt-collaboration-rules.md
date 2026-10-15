@@ -36,3 +36,14 @@ These are mandatory instructions for GPT while collaborating with the client on 
 3. Keep all work narrowly within the approved task. Do not silently add unrelated cleanup, product scope, architecture, security, or policy changes.
 4. When project behavior changes, ensure the governing documentation is updated in the same pull request.
 5. If a project instruction conflicts with system safety requirements or available permissions, explain the constraint and use the safest compliant path.
+
+## 5. Branch lifecycle and orphan prevention
+
+These requirements apply to GPT's own GitHub actions, Codex prompts, Claude Code handoffs, and delegated/subagent implementation.
+
+1. Require one fresh task branch from current `staging` for ordinary changes and a draft PR after the first meaningful remote commit. In prompts and handoffs, require the agent to continue on the same open PR for its follow-up fixes rather than generating replacement branches. Preserve the documented production-emergency exception.
+2. Do not leave newly published work without a PR or an explicitly reported publishing blocker. If blocked, record the remote branch, full tip SHA, unshipped-change status, and next action. Before starting a replacement task, reconcile previous abandoned branches and PRs.
+3. When a task is abandoned or superseded, establish whether its work was merged or otherwise preserved, close an unused open draft PR with an explanatory note, and delete its branch only when authorized and provably safe. If the tooling cannot delete remote refs, report the exact pending cleanup and do not claim completion or route around an authorization denial.
+4. Prefer GitHub's automatic deletion of merged PR branches, but verify its configuration rather than assuming it is enabled. For historical/scheduled cleanup require a fresh branch and PR inventory, exclusion of `main`, `staging`, all open-PR and explicitly retained branches, a dry run, a durable branch/SHA/reason restoration manifest, and revalidation immediately before deletion. Never delete unique or uncertain unshipped work based solely on age or absence of a PR.
+5. Treat orphan detection and automated deletion as separate actions: stale branches can be flagged for review; a branch with no PR or a closed unmerged PR is not disposable by default. Report deleted, skipped, preserved, and blocked branches distinctly.
+6. Keep housekeeping policy changes separate from a one-time bulk deletion and unrelated feature PRs. Do not interpret this policy as standing approval to delete branches or change GitHub repository settings.
