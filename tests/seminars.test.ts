@@ -219,12 +219,12 @@ test('the member Seminars page renders registration and payment status labels', 
   }
 });
 
-test('the member Seminars page separates current registrations from available seminars, with no redundant sub-heading repeating what the tab already says', () => {
+test('the member Seminars page shows the entire available catalog plus a separate registration history without redundant headings', () => {
   for (const label of ['Available seminars/courses', 'My seminar/course registrations', 'Past seminars/courses']) {
     assert.match(memberPage, new RegExp(label));
   }
   assert.match(memberPage, /const registered/);
-  assert.match(memberPage, /const upcoming/);
+  assert.match(memberPage, /\{seminars\.map\(row\)\}/);
   // "My seminar registrations" already says what this list is -- a second, identical sub-heading
   // directly under it is pure noise, and it previously stayed visible on the Past tab too, since it
   // never depended on which tab was selected.
