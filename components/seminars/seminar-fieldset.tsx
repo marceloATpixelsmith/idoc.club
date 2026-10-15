@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FormToggle } from '@/components/ui/form-toggle';
 import { LANGUAGE_OPTIONS } from '@/lib/seminars/language';
+import { SeminarLevelsField } from '@/components/seminars/seminar-levels-field';
 
 type ExistingSeminar = {
   accommodation_information: string; application: string; capacity: number; course_directors: string; course_venue_information: string;
@@ -17,7 +18,6 @@ type ExistingSeminar = {
 };
 
 const STATUS_LABELS: Record<string, string> = { canceled: 'Canceled', draft: 'Draft', published: 'Published' };
-const LEVEL_OPTIONS = [{ label: 'Level 1', value: 'level_1' }, { label: 'Level 2', value: 'level_2' }, { label: 'Level 3', value: 'level_3' }, { label: 'All Levels', value: 'all_levels' }] as const;
 
 export function SeminarFieldset({ allowCanceled = false, lockPrices = false, seminar }: { allowCanceled?: boolean; lockPrices?: boolean; seminar?: ExistingSeminar }) {
   const statuses = allowCanceled ? (['draft', 'published', 'canceled'] as const) : (['draft', 'published'] as const);
@@ -28,7 +28,7 @@ export function SeminarFieldset({ allowCanceled = false, lockPrices = false, sem
       <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="location">Location or online meeting link</Label><Textarea defaultValue={seminar?.location} id="location" maxLength={2000} name="location" required /></div>
       <div className="max-w-48 space-y-1.5"><Label className="whitespace-nowrap" htmlFor="capacity">Number of participants</Label><Input defaultValue={seminar?.capacity} id="capacity" min={1} name="capacity" required type="number" /></div>
       <div className="flex items-end pb-1"><FormToggle defaultChecked={seminar?.is_fei ?? false} id="isFei" label="FEI seminar" name="isFei" /></div>
-      <fieldset className="space-y-2 sm:col-span-2"><legend className="text-sm font-medium">Levels</legend><div className="flex flex-wrap gap-x-5 gap-y-3">{LEVEL_OPTIONS.map(({ label, value }) => <Label className="flex items-center gap-2 font-normal" key={value}><input defaultChecked={seminar?.levels?.includes(value) ?? false} name="levels" type="checkbox" value={value} />{label}</Label>)}</div></fieldset>
+      <SeminarLevelsField initialLevels={seminar?.levels} />
     </FormGrid></FormSection>
 
     <div className="grid content-start gap-6">
