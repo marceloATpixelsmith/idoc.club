@@ -103,7 +103,17 @@ export function SingleDatePicker({ defaultIso, id, name, min, max, required = tr
           startMonth={new Date(Math.min(1900, initialYear - 20), 0)}
         />
       </PopoverContent>
-      <input name={name} type="hidden" value={iso} />
+      <input
+        aria-hidden="true"
+        className="sr-only"
+        name={name}
+        onChange={() => {}}
+        onInvalid={() => setOpen(true)}
+        required={required}
+        tabIndex={-1}
+        type="text"
+        value={iso}
+      />
     </Popover>
   );
 }
