@@ -138,3 +138,28 @@ test('shared admin date filter renders safely when no date is selected', () => {
   assert.match(filter, /selectedDate \? formatTableDate\(toDateKey\(selectedDate\)\) : ''/);
   assert.doesNotMatch(filter, /toDateKey\(\(range\.from \?\? range\.to\)!\)/);
 });
+
+test('all date-only forms use shared click-to-open calendar fields without separate picker buttons', () => {
+  const single = source('components/forms/us-date-input.tsx');
+  const range = source('components/forms/date-range-picker.tsx');
+  const seminar = source('components/seminars/seminar-fieldset.tsx');
+  const news = source('app/(dashboard)/admin/news/news-drawer.tsx');
+  const payment = source('app/(dashboard)/admin/payments/manual-payment-form.tsx');
+  const expiration = source('app/(dashboard)/admin/members/extend-expiration-form.tsx');
+  const correction = source('app/(dashboard)/admin/members/entitlement-correction-form.tsx');
+
+  assert.match(single, /<PopoverTrigger asChild>/);
+  assert.match(single, /<button[\s\S]*type="button"/);
+  assert.match(single, /mode="single"/);
+  assert.doesNotMatch(single, /aria-label="Choose date" size="icon"/);
+  assert.match(single, /name={name} type="hidden" value={iso}/);
+  assert.match(range, /mode="range"/);
+  assert.match(range, /name={fromName} type="hidden" value={from}/);
+  assert.match(range, /name={toName} type="hidden" value={to}/);
+  assert.match(seminar, /fromName="startDate"[\s\S]*toName="endDate"/);
+  assert.match(seminar, /<SingleDatePicker[^>]*name="registrationDeadline"/);
+  for (const form of [news, payment, expiration, correction]) {
+    assert.match(form, /<SingleDatePicker/);
+    assert.doesNotMatch(form, /type="date"/);
+  }
+});
