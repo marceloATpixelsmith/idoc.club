@@ -151,9 +151,11 @@ test('all date-only forms use shared click-to-open calendar fields without separ
   assert.match(single, /<PopoverTrigger asChild>/);
   assert.match(single, /<button[\s\S]*type="button"/);
   assert.match(single, /mode="single"/);
+  assert.match(single, /onInvalid=\{\(\) => setOpen\(true\)\}/);
   assert.doesNotMatch(single, /aria-label="Choose date" size="icon"/);
   assert.match(single, /name={name}[\s\S]*required={required}[\s\S]*type="text"[\s\S]*value={iso}/);
   assert.match(range, /mode="range"/);
+  assert.match(range, /onInvalid=\{\(\) => setOpen\(true\)\}/);
   assert.match(range, /name={fromName}[^\n]*required={required}[^\n]*value={from}/);
   assert.match(range, /name={toName}[^\n]*required={required}[^\n]*value={to}/);
   assert.match(seminar, /fromName="startDate"[\s\S]*toName="endDate"/);
