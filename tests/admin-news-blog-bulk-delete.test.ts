@@ -157,3 +157,11 @@ test('seminar bulk actions preserve registration cancellation, audit trail, and 
   assert.match(safety, /end date at least one day before/);
   assert.match(runbook, /Set as Draft/);
 });
+
+test('verification workflows use the standard PostgreSQL image after external registry throttling', () => {
+  for (const workflow of ['auth-security-verification.yml', 'release-1-verification.yml']) {
+    const contents = readFileSync(`.github/workflows/${workflow}`, 'utf8');
+    assert.match(contents, /image: postgres:16-alpine/);
+    assert.doesNotMatch(contents, /public\.ecr\.aws\/docker\/library\/postgres/);
+  }
+});
