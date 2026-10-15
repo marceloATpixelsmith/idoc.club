@@ -23,10 +23,10 @@ export function formatSchedule(seminar: { end_date: string; start_date: string }
     : `${formatDate(seminar.start_date)} – ${formatDate(seminar.end_date)}`;
 }
 
-/** Slash-format dates are US mm/dd/yyyy; long-form dates (formatDate) are unchanged. */
+/** Slash-format admin dates are dd/mm/yyyy; long-form dates (formatDate) are unchanged. */
 export function formatAdminDate(value: string): string {
   const [year, month, day] = value.slice(0, 10).split('-');
-  return `${month}/${day}/${year}`;
+  return `${day}/${month}/${year}`;
 }
 
 export function money(cents: number): string {
