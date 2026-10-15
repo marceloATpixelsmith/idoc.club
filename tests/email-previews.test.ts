@@ -40,6 +40,9 @@ test('seminar payment and refund notices are previewed without processing transa
 test('preview send action remains server-authorized, CSRF-protected and navigation-free', () => {
   assert.match(previewAction, /requireCsrfToken\(/);
   assert.match(previewAction, /requireSuperAdmin\(/);
+  assert.match(previewAction, /requireAccountAccess\('administration'\)/);
+  assert.match(previewAction, /rawCanonicalSessionId\(\)/);
+  assert.match(previewAction, /rawCanonicalUserId\(\)/);
   assert.match(previewAction, /process\.env\.VERCEL_ENV === 'production'/);
   assert.doesNotMatch(previewAction, /redirect\(/);
   assert.match(previewAction, /await sendEmailPreview\(id\)/);
