@@ -10,10 +10,10 @@ This guide records how administrator tables, drawers and forms look and behave a
 ## 2. Tables
 
 - Every record table is the shared `DataTable`: server-backed search, facets, sort, page size 10/25/50/100, column visibility and order persisted per administrator, CSV export where the data is useful.
-- Row actions live in the Actions column (edit pencil, record-specific shortcuts). Navigation, export and preview shortcuts are table-level, never inside a drawer.
+- Row actions live in the Actions column (edit pencil, record-specific shortcuts). Seminars/Courses and News/Blog must also provide a Copy action that creates a separate draft with `(copy)` appended to the title, without copying registrations, payments, or analytics. Navigation, export and preview shortcuts are table-level, never inside a drawer.
 - Selection-based changes (close selected, apply status, delete) live in the table action bar and are server-authorized and audited.
-- Loading: the table shows its pulsing row skeleton whenever the page is re-rendering, including when a drawer is merely closed and nothing changed.
-- Dates in tables that use slash format are US **mm/dd/yyyy**. Long-form dates elsewhere read "October 20, 2026".
+- Loading: tables, revenue summary cards, and other server-backed data views show pulsing skeletons as soon as a filter, sort, search, page change, refresh, or successful mutation begins. Skeletons remain visible until the new data is reflected in the view; do not remove the loading indication merely when a request is submitted. Drawer-close refreshes also show skeletons.
+- All application date-only fields and admin table/date-range displays use **dd/mm/yyyy**. Long-form editorial dates can retain their explicitly designed month-name presentation.
 
 ## 3. Drawers
 
@@ -30,7 +30,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 - Labels sit directly above their control with a consistent gap; help text is visually separated from both.
 - Booleans are the shared toggle (`FormToggle`), not checkboxes or Yes/No selects. Multi-value checklists and mutually exclusive status radios keep their own controls.
 - Inputs are **controlled** wherever the server can reject a submission: React resets uncontrolled fields after a form action, which wipes what the administrator typed. Keep typed values on error.
-- Slash-format dates are typed `mm/dd/yyyy` (`UsDateInput`, submitted as ISO); there is no locale-dependent native date text.
+- All date-only form fields use a calendar picker and show `dd/mm/yyyy` inside the editable field. Date-range controls retain their existing selection behavior but display each endpoint in `dd/mm/yyyy`. The server continues receiving ISO (`yyyy-mm-dd`) values; do not rely on browser-dependent native date text.
 - Required fields are marked required in the control and enforced again on the server.
 
 ## 5. Payment evidence
