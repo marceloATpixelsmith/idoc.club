@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
 import { SeminarForm } from '@/components/seminars/seminar-form';
-import { seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
+import { SEMINAR_PAYMENT_RECEIVED_VIA, seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
 import { APPROVAL_STATUS_LABELS, FEI_APPROVAL_STATUSES } from '@/lib/seminars/status';
 import { createAdminSeminarRegistrationAction } from '../actions';
 import { MemberLookup } from './member-lookup';
@@ -18,8 +18,8 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
   seminars: Array<{ id: number; isFei: boolean; title: string }>;
 }) {
   const [seminarId, setSeminarId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]?.canonical_id ?? '');
   const [paymentStatus, setPaymentStatus] = useState('pending');
+  const [receivedVia, setReceivedVia] = useState<string>(SEMINAR_PAYMENT_RECEIVED_VIA[0].value);
   const [paymentReference, setPaymentReference] = useState('');
   const isFei = seminars.find((seminar) => String(seminar.id) === seminarId)?.isFei ?? false;
   const approvalOptions = isFei ? FEI_APPROVAL_STATUSES : (['confirmed'] as const);
@@ -40,17 +40,18 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
                   {seminars.map((seminar) => <option key={seminar.id} value={seminar.id}>{seminar.title}</option>)}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="paymentMethod">Payment Method</Label>
-                <PaymentMethodSelect
-                  className={SELECT_CLASSNAME}
-                  defaultValue={paymentMethods[0]?.canonical_id ?? ''}
-                  id="paymentMethod"
-                  name="paymentMethod"
-                  onValueChange={(value) => { setPaymentMethod(value); setPaymentReference(''); }}
-                  options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
-                />
-              </div>
+              {paymentStatus === 'paid' ? null : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentMethod">Payment Method</Label>
+                  <PaymentMethodSelect
+                    className={SELECT_CLASSNAME}
+                    defaultValue={paymentMethods[0]?.canonical_id ?? ''}
+                    id="paymentMethod"
+                    name="paymentMethod"
+                    options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
+                  />
+                </div>
+              )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -68,9 +69,18 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
               </div>
             </div>
             {paymentStatus === 'paid' ? (
-              <div className="max-w-sm space-y-1.5">
-                <Label htmlFor="paymentReference">{seminarPaymentReferenceLabel(paymentMethod)}</Label>
-                <Input id="paymentReference" maxLength={1000} name="paymentReference" onChange={(event) => setPaymentReference(event.target.value)} required value={paymentReference} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentReceivedVia">Payment received via</Label>
+                  <PaymentMethodSelect
+                    className={SELECT_CLASSNAME} defaultValue={receivedVia} id="paymentReceivedVia" name="paymentReceivedVia"
+                    onValueChange={(value) => { setReceivedVia(value); setPaymentReference(''); }} options={SEMINAR_PAYMENT_RECEIVED_VIA}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="paymentReference">{seminarPaymentReferenceLabel(receivedVia)}</Label>
+                  <Input id="paymentReference" maxLength={1000} name="paymentReference" onChange={(event) => setPaymentReference(event.target.value)} required value={paymentReference} />
+                </div>
               </div>
             ) : null}
             {paymentMethods.length === 0 ? <p className="text-sm text-destructive">Enable Bank Transfer or Cash in Organization Settings before creating a registration.</p> : null}

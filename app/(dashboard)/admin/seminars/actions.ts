@@ -72,6 +72,7 @@ export async function createAdminSeminarRegistrationAction(_state: AdminSeminarS
     await createAdminSeminarRegistration({
       approvalStatus: formData.get('approvalStatus'),
       paymentMethod: formData.get('paymentMethod'),
+      paymentReceivedVia: formData.get('paymentReceivedVia'),
       paymentReference: formData.get('paymentReference'),
       paymentStatus: formData.get('paymentStatus'),
       profileId: formData.get('profileId'),
