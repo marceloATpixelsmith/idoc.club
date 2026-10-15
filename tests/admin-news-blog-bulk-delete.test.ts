@@ -76,7 +76,7 @@ test('all five mutable record tables expose protected selected-row deletion', ()
   assert.match(bulk, /requireCsrfToken/);
   assert.match(bulk, /requireFreshStepUp/);
   assert.match(memberLifecycle, /Administrator accounts cannot be bulk deleted/);
-  assert.match(bulk, /must be Draft or Canceled and have no registration history/);
+  assert.match(bulk, /must be Draft, Canceled, or at least one day past its end date, and must have no registration history/);
   assert.match(bulk, /Registrations can only be deleted after cancellation/);
   assert.match(bulk, /Support conversations must be closed before they can be deleted/);
 });
@@ -138,4 +138,30 @@ test('News/Blog Article Type stays visible before Status in saved admin views', 
   const viewOptions = readFileSync('components/data-table/data-table-view-options.tsx', 'utf8');
   assert.match(viewOptions, /column\.columnDef\.meta\?\.lockedBefore/);
   assert.match(viewOptions, /nextOrder\.splice\(nextOrder\.indexOf\(before\), 0, column\.id\)/);
+});
+
+test('seminar bulk actions preserve registration cancellation, audit trail, and deletion eligibility', () => {
+  const ui = readFileSync('components/admin/bulk-update-selected.tsx', 'utf8');
+  assert.match(resourceTable, /BulkSeminarStatusSelected/);
+  assert.match(ui, /Cancel selected/);
+  assert.match(ui, /Set as Draft/);
+  assert.match(bulk, /export async function bulkSetSeminarStatus/);
+  assert.match(bulk, /status !== 'canceled' && status !== 'draft'/);
+  assert.match(bulk, /admin\.seminar\.bulk_status_changed/);
+  assert.match(bulk, /admin\.seminar\.registrations_canceled_by_cascade/);
+  assert.match(bulk, /processCanceledSeminarPayments/);
+  assert.match(bulk, /s\.end_date <= \(current_date - interval '1 day'\)::date/);
+  assert.match(bulk, /row\.registrations > 0/);
+  const safety = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
+  const runbook = readFileSync('docs/07-administrator-and-operations-runbook.md', 'utf8');
+  assert.match(safety, /end date at least one day before/);
+  assert.match(runbook, /Set as Draft/);
+});
+
+test('verification workflows use the standard PostgreSQL image after external registry throttling', () => {
+  for (const workflow of ['auth-security-verification.yml', 'release-1-verification.yml']) {
+    const contents = readFileSync(`.github/workflows/${workflow}`, 'utf8');
+    assert.match(contents, /image: postgres:16-alpine/);
+    assert.doesNotMatch(contents, /public\.ecr\.aws\/docker\/library\/postgres/);
+  }
 });

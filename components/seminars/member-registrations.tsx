@@ -40,15 +40,15 @@ export function SeminarListingCard({ children, href, seminar }: {
 }
 
 
-/** "Available seminars": the database-backed catalog of upcoming, published seminars this member
- * has not yet registered for -- one flat list, open or not (a full/closed seminar still belongs
+/** "Available seminars": the full database-backed catalog of upcoming published seminars, including
+ * seminars this member is already registered for -- one flat list, open or not (a full/closed seminar still belongs
  * here, just tagged, rather than being split into a second, confusingly-named section). Each row is
  * a single clickable link to that seminar's own detail page (/seminars/[id]), where the actual
  * registration form lives -- the listing itself is just a scannable summary, not a form.
  */
 async function AvailableSeminars({ profileId }: { profileId: number }) {
   const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(profileId), listPastPublishedSeminars()]);
-  const upcoming = seminars.filter((seminar) => seminar.registration_status === null);
+  //SHOW THE COMPLETE CATALOG; REGISTRATION STATUS CONTROLS ONLY THE REGISTER CTA ON DETAIL PAGES.
   const priceLine = (seminar: (typeof seminars)[number]) => money(seminar.member_price_cents);
   const row = (seminar: (typeof seminars)[number]) => (
     <li key={seminar.id}>
@@ -61,7 +61,7 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="section-label" id="available-seminars-heading">Available seminars/courses</h2>
-    {upcoming.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{upcoming.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no additional seminars/courses available to you.</p>}
+    {seminars.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
     {pastSeminars.length ? (
       <div className="mt-12">
         <h3 className="section-label">Past seminars/courses</h3>
@@ -143,7 +143,7 @@ export async function MemberRegistrations({ tab, view }: { tab?: string; view?: 
   // "Available Seminars/Courses" is the default landing tab for every visitor, signed in or not
   // (docs/08). A signed-in user with no member profile at all (an administrator, most commonly) sees
   // the same public catalog a signed-out visitor does rather than being blocked entirely. A profile
-  // gets its own profile-scoped catalog so seminars it is already registered for are excluded.
+  // gets its own profile-scoped catalog for registration-aware detail navigation without hiding rows.
   if (view !== 'my') {
     if (!member) return <PublicSeminarsCatalog />;
     return <AvailableSeminars profileId={member.profile.id} />;

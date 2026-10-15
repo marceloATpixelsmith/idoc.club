@@ -14,6 +14,7 @@ const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday
 const dateOnlyMigration = readFileSync('lib/db/migrations/0061_seminar_date_only_rich_information.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
+const levelsField = readFileSync('components/seminars/seminar-levels-field.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
@@ -174,7 +175,7 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
 
 test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted through create and update, and shown on the public listing cards and detail page', () => {
   assert.match(seminarFieldset, /name="isFei"/);
-  assert.match(seminarFieldset, /type="checkbox"/);
+  assert.match(readFileSync('components/ui/form-toggle.tsx', 'utf8'), /type="checkbox"/);
   assert.match(seminarsSource, /isFei: input\.isFei === 'on' \|\| input\.isFei === true/);
   assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
@@ -186,11 +187,11 @@ test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted thr
 });
 
 test('a seminar can be assigned one or more officiating levels via a multi-checkbox admin control, and picking All Levels always displays as the literal "All levels"', () => {
-  assert.match(seminarFieldset, /name="levels" type="checkbox" value=\{value\}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 1', value: 'level_1' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 2', value: 'level_2' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 3', value: 'level_3' \}/);
-  assert.match(seminarFieldset, /\{ label: 'All Levels', value: 'all_levels' \}/);
+  assert.match(levelsField, /name="levels"/);
+  assert.match(levelsField, /\{ label: 'Level 1', value: 'level_1' \}/);
+  assert.match(levelsField, /\{ label: 'Level 2', value: 'level_2' \}/);
+  assert.match(levelsField, /\{ label: 'Level 3', value: 'level_3' \}/);
+  assert.match(levelsField, /\{ label: 'All Levels', value: 'all_levels' \}/);
   assert.match(seminarsSource, /SEMINAR_LEVELS = \['level_1', 'level_2', 'level_3', 'all_levels'\]/);
   assert.match(seminarsSource, /selected\.includes\('all_levels'\) \? \['all_levels'\] : \[\.\.\.new Set\(selected\)\]/);
   const formatSource = readFileSync('lib/seminars/format.ts', 'utf8');
@@ -218,12 +219,12 @@ test('the member Seminars page renders registration and payment status labels', 
   }
 });
 
-test('the member Seminars page separates current registrations from available seminars, with no redundant sub-heading repeating what the tab already says', () => {
+test('the member Seminars page shows the entire available catalog plus a separate registration history without redundant headings', () => {
   for (const label of ['Available seminars/courses', 'My seminar/course registrations', 'Past seminars/courses']) {
     assert.match(memberPage, new RegExp(label));
   }
   assert.match(memberPage, /const registered/);
-  assert.match(memberPage, /const upcoming/);
+  assert.match(memberPage, /\{seminars\.map\(row\)\}/);
   // "My seminar registrations" already says what this list is -- a second, identical sub-heading
   // directly under it is pure noise, and it previously stayed visible on the Past tab too, since it
   // never depended on which tab was selected.
@@ -646,4 +647,21 @@ test('seminar create and edit drawers occupy at least 70vw on desktop', () => {
   const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
   assert.match(drawer, /wide \? 'sm:w-\[70vw\] sm:max-w-none'/);
   assert.equal((seminarDrawer.match(/title="Seminar\/Course" wide/g) ?? []).length, 2);
+});
+
+test('All Levels is exclusive and clearing it leaves no levels selected', () => {
+  assert.match(seminarFieldset, /<SeminarLevelsField initialLevels=/);
+  assert.match(levelsField, /checked \? \['all_levels'\] : \[\]/);
+  assert.match(levelsField, /previous\.filter\(\(item\) => item !== 'all_levels'/);
+  assert.match(levelsField, /checked=\{selected\.includes\(value\)\}/);
+});
+
+test('member seminar catalog includes registered courses while detail pages suppress repeat registration', () => {
+  const catalog = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  const detail = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(catalog, /listCurrentSeminarsForMember\(profileId\)/);
+  assert.match(catalog, /seminars\.map\(row\)/);
+  assert.doesNotMatch(catalog, /seminars\.filter\(\(seminar\) => seminar\.registration_status === null\)/);
+  assert.match(detail, /alreadyRegistered = seminar\.registration_status !== null/);
+  assert.match(detail, /alreadyRegistered \? null : seminar\.availability !== 'open'/);
 });
