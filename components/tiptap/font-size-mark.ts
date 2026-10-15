@@ -25,7 +25,7 @@ export const FontSizeMark = Mark.create({
         default: null,
         parseHTML: (element) => {
           const raw = (element as HTMLElement).style.fontSize;
-          return /^\\d+px$/.test(raw) ? nearestFontSize(raw) : null;
+          return /^\d+px$/.test(raw) ? nearestFontSize(raw) : null;
         },
         renderHTML: (attributes) =>
           attributes.size && FONT_SIZES.includes(Number(attributes.size) as typeof FONT_SIZES[number])
