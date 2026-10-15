@@ -14,6 +14,7 @@ const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday
 const dateOnlyMigration = readFileSync('lib/db/migrations/0061_seminar_date_only_rich_information.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
+const levelsField = readFileSync('components/seminars/seminar-levels-field.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
@@ -186,11 +187,11 @@ test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted thr
 });
 
 test('a seminar can be assigned one or more officiating levels via a multi-checkbox admin control, and picking All Levels always displays as the literal "All levels"', () => {
-  assert.match(seminarFieldset, /name="levels" type="checkbox" value=\{value\}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 1', value: 'level_1' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 2', value: 'level_2' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 3', value: 'level_3' \}/);
-  assert.match(seminarFieldset, /\{ label: 'All Levels', value: 'all_levels' \}/);
+  assert.match(levelsField, /name="levels"/);
+  assert.match(levelsField, /\{ label: 'Level 1', value: 'level_1' \}/);
+  assert.match(levelsField, /\{ label: 'Level 2', value: 'level_2' \}/);
+  assert.match(levelsField, /\{ label: 'Level 3', value: 'level_3' \}/);
+  assert.match(levelsField, /\{ label: 'All Levels', value: 'all_levels' \}/);
   assert.match(seminarsSource, /SEMINAR_LEVELS = \['level_1', 'level_2', 'level_3', 'all_levels'\]/);
   assert.match(seminarsSource, /selected\.includes\('all_levels'\) \? \['all_levels'\] : \[\.\.\.new Set\(selected\)\]/);
   const formatSource = readFileSync('lib/seminars/format.ts', 'utf8');
@@ -646,4 +647,11 @@ test('seminar create and edit drawers occupy at least 70vw on desktop', () => {
   const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
   assert.match(drawer, /wide \? 'sm:w-\[70vw\] sm:max-w-none'/);
   assert.equal((seminarDrawer.match(/title="Seminar\/Course" wide/g) ?? []).length, 2);
+});
+
+test('All Levels is exclusive and clearing it leaves no levels selected', () => {
+  assert.match(seminarFieldset, /<SeminarLevelsField initialLevels=/);
+  assert.match(levelsField, /checked \? \['all_levels'\] : \[\]/);
+  assert.match(levelsField, /previous\.filter\(\(item\) => item !== 'all_levels'/);
+  assert.match(levelsField, /checked=\{selected\.includes\(value\)\}/);
 });
