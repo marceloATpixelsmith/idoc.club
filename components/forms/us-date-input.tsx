@@ -78,6 +78,7 @@ export function SingleDatePicker({ defaultIso, id, name, min, max, required = tr
         <button
           aria-label={`Choose ${id} date`}
           aria-required={required}
+          data-idoc-table-control
           className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-dashed border-input bg-transparent px-3 text-left text-sm shadow-xs transition-[color,box-shadow] hover:border-ring focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           id={id}
           type="button"
