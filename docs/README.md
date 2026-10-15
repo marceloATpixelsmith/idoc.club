@@ -25,6 +25,7 @@ These Markdown files are the authoritative project documentation for the IDOC pl
 19. [Authentication and Security Remediation Backlog](23-auth-security-remediation-backlog.md)
 20. [Membership Billing and Access Remediation](25-membership-billing-and-access-remediation.md)
 21. [Auth, Membership Billing, and Seminar Registration — Current Staging Alignment](28-auth-membership-seminar-current-state.md)
+22. [Admin Table and Form Style Guide](29-admin-table-and-form-style-guide.md)
 
 Start with document 08 when planning the next development phase, then consult the subject document that governs the affected behavior. Authentication implementation and audits must additionally consult documents 13 and 14, document 21, document 22, document 23, and the current canonical `marceloATpixelsmith/pixelsmith-auth-reference` machine contract. Document 22 is the current authoritative canonical-ID-keyed status source; document 23 owns the actionable non-verified closure backlog; document 21 retains descriptive detail and its pull-request changelog but its own per-requirement status claims should be read as historical narrative. Every Codex implementation prompt must follow document 09. Every GPT collaboration task must follow document 10.
 

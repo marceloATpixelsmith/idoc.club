@@ -1,9 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useAdminDrawerClose } from '@/components/admin/admin-form-drawer';
 import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -80,7 +79,6 @@ export function MemberDetailSheet({
   selected: Selected;
   stripePayments: StripePayment[];
 }) {
-  const router = useRouter();
   const requestedTab = (TABS as readonly string[]).includes(initialTab ?? '') ? (initialTab as Tab) : 'overview';
   const [tab, setTab] = useState<Tab>(requestedTab === 'roles' && !isSuperAdmin ? 'overview' : requestedTab);
   const { profile } = selected;
@@ -90,14 +88,13 @@ export function MemberDetailSheet({
   // slower background navigation eventually unmounted it outright. Backing `open` with real state
   // lets Radix's own close animation start immediately, independent of how long closeHref's
   // navigation takes underneath.
-  const [open, setOpen] = useState(true);
-  const closeAndRefresh = useCallback(() => { setOpen(false); router.push(closeHref); router.refresh(); }, [closeHref, router]);
+  const { closeAndRefresh, onOpenChange, open } = useAdminDrawerClose(closeHref);
 
   // Sheet content is fetched server-side keyed off the profileId URL param (the same sanctioned
   // exception used elsewhere -- see app/(dashboard)/admin/members/page.tsx); closing just navigates
   // back to the bare members URL rather than tracking a separate open/closed flag beyond `open` itself.
   return (
-    <Sheet onOpenChange={(next) => { setOpen(next); if (!next) router.push(closeHref); }} open={open}>
+    <Sheet onOpenChange={onOpenChange} open={open}>
       <SheetContent className="w-full overflow-y-auto sm:w-[70vw] sm:max-w-4xl">
         <SheetHeader>
           <SheetTitle className="text-3xl font-semibold text-gold">Member</SheetTitle>

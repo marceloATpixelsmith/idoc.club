@@ -12,6 +12,7 @@ import { escapeHtml, IDOC_EMAIL_ICONS, idocEmailFeiLogoUrl } from '@/lib/notific
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { formatDate, formatLevels } from '@/lib/seminars/format';
+import { seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { APPROVAL_STATUS_LABELS, APPROVAL_STATUSES, computeSeminarAvailability, FEI_APPROVAL_STATUSES, initialApprovalStatus, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type ApprovalStatus, type PaymentStatus } from '@/lib/seminars/status';
 
@@ -82,7 +83,7 @@ export async function searchActiveMembersForRegistration(queryValue: unknown) {
 }
 
 export async function createAdminSeminarRegistration(fields: {
-  approvalStatus?: unknown; paymentMethod?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
+  approvalStatus?: unknown; paymentMethod?: unknown; paymentReference?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
 }): Promise<{ registrationId: number }> {
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(fields.seminarId);
@@ -98,6 +99,8 @@ export async function createAdminSeminarRegistration(fields: {
   // Payment Status on create: left at the method's pending state, or recorded as already paid.
   const markPaid = fields.paymentStatus === 'paid';
   if (fields.paymentStatus !== undefined && fields.paymentStatus !== '' && fields.paymentStatus !== 'pending' && !markPaid) throw new SeminarRegistrationError('Choose a valid payment status.');
+  const paymentReference = markPaid && typeof fields.paymentReference === 'string' && fields.paymentReference.trim() ? fields.paymentReference.trim().slice(0, 1000) : null;
+  if (markPaid && !paymentReference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(paymentMethod.data)}.`);
   const directDelivery = isStagingSeminarDirectDelivery();
 
   return client.begin(async (sql) => {
@@ -135,13 +138,13 @@ export async function createAdminSeminarRegistration(fields: {
       await sql`update seminar_registrations set registration_status='registered',payment_status=${paymentStatus},approval_status=${approvalStatus},
         payment_method_canonical_id=${paymentMethod.data},expected_amount_cents=${priceCents},currency='EUR',
         stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,stripe_payment_intent_id=null,
-        paid_at=${markPaid ? sql`now()` : null},marked_paid_by_user_id=${markPaid ? actor.id : null},payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
+        paid_at=${markPaid ? sql`now()` : null},marked_paid_by_user_id=${markPaid ? actor.id : null},payment_reference=${paymentReference},payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
         where id=${existing.id}`;
       registrationId = existing.id;
     } else {
       const [row] = await sql<{ id: number }[]>`insert into seminar_registrations
-        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency,paid_at,marked_paid_by_user_id)
-        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR',${markPaid ? sql`now()` : null},${markPaid ? actor.id : null}) returning id`;
+        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency,paid_at,marked_paid_by_user_id,payment_reference)
+        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR',${markPaid ? sql`now()` : null},${markPaid ? actor.id : null},${paymentReference}) returning id`;
       registrationId = row.id;
     }
     // The same confirmation a self-registration receives (including the FEI status message for FEI seminars).
@@ -480,6 +483,7 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
   const method = typeof methodValue === 'string' ? methodValue.trim() : '';
   if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Bank Transfer or Cash.');
   const reference = typeof referenceValue === 'string' && referenceValue.trim() ? referenceValue.trim().slice(0, 1000) : null;
+  if (!reference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(method)}.`);
   await client.begin(async (sql) => {
     const [existing] = await sql<{ checkout_status: string | null; payment_status: PaymentStatus; stripe_checkout_session_id: string | null }[]>`select payment_status,checkout_status,stripe_checkout_session_id from seminar_registrations where id=${registrationId.data} for update`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');

@@ -12,6 +12,8 @@ For every task that merges into `main`, investigates a difference between `stagi
 
 When code changes membership rules, member fields, data structures, authorization, security, billing, migration, notifications, administration, operations, CMS access, seminars, news, or publishing, update the corresponding document in `docs/` in the same pull request. Keep `docs/08-product-roadmap-and-functional-requirements.md` aligned when scope, sequencing, or release gates change.
 
+For any change to an administrator table, drawer or form, read and follow `docs/29-admin-table-and-form-style-guide.md`, and update it in the same pull request when a rule changes.
+
 Do not treat generated Word or PDF files as the source of truth.
 
 ## Efficient agent operation (applies to every agent working in this repo, including Claude Code, its subagents, and Codex)

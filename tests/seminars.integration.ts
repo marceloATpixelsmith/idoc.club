@@ -177,7 +177,7 @@ test('registration status and payment status are independent facts: canceling ne
   const seminarId = await publishedSeminar(admin.id);
   await asMember(user.id, () => registerForSeminar(seminarId, 'cash_event'));
   const [registrationRow] = await sql<{ id: number }[]>`select id from idoc.seminar_registrations where seminar_id=${seminarId}`;
-  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'cash_event', null));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationRow.id, 'cash_event', 'RCPT-1'));
   await asMember(user.id, () => cancelOwnRegistration(seminarId));
   const [after] = await sql`select registration_status,payment_status from idoc.seminar_registrations where id=${registrationRow.id}`;
   assert.equal(after.registration_status, 'canceled');
@@ -241,7 +241,7 @@ test('recording a manual payment is rejected while a registration has an open St
   const { registrationId } = await asMember(user.id, () => registerForSeminar(seminarId, 'online_stripe'));
   await sql`update idoc.seminar_registrations set stripe_checkout_session_id='cs_open_fixture',checkout_status='open',payment_status='pending' where id=${registrationId}`;
   const stillOpenClient = { checkout: { sessions: { retrieve: async () => ({ status: 'open' }) } } };
-  await assert.rejects(asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, stillOpenClient)), SeminarRegistrationError);
+  await assert.rejects(asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', 'REF-OPEN', stillOpenClient)), SeminarRegistrationError);
   const [stillPending] = await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(stillPending.payment_status, 'pending');
   // The local checkout_status column only updates when createSeminarCheckoutSession is revisited, so
@@ -249,7 +249,7 @@ test('recording a manual payment is rejected while a registration has an open St
   // and permanently block a legitimate manual payment -- recordManualSeminarPayment must refresh it
   // against Stripe itself rather than trusting that possibly-stale local column.
   const expiredClient = { checkout: { sessions: { retrieve: async () => ({ status: 'expired' }) } } };
-  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', null, expiredClient));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(registrationId, 'bank_transfer', 'REF-EXPIRED', expiredClient));
   const [paid] = await sql`select checkout_status,payment_status from idoc.seminar_registrations where id=${registrationId}`;
   assert.equal(paid.payment_status, 'paid');
   assert.equal(paid.checkout_status, 'expired', 'the refreshed status must be persisted, not just used in-memory for this one decision');
@@ -589,7 +589,7 @@ test('Registration Status is independent of payment: non-FEI is Confirmed at reg
   const { registrationId: feiRegistration } = await asMember(other.id, () => registerForSeminar(feiId, 'cash_event'));
   const [fei] = await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`;
   assert.equal(fei.approval_status, 'pending_fei_approval');
-  await asAdmin(admin.id, () => recordManualSeminarPayment(feiRegistration, 'cash_event', null));
+  await asAdmin(admin.id, () => recordManualSeminarPayment(feiRegistration, 'cash_event', 'RCPT-1'));
   assert.equal((await sql`select approval_status from idoc.seminar_registrations where id=${feiRegistration}`)[0].approval_status, 'pending_fei_approval', 'paying never approves an FEI registration');
   // The queued confirmation states the pending status and that the National Federation must register the member.
   const [queued] = await sql`select kind,payload from idoc.notification_outbox where kind like 'seminar.%registration_created' and (payload->>'registrationId')::int=${feiRegistration}`;

@@ -64,7 +64,7 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
 
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar/course saved.', `/admin/seminars/${id}`);
+  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar/course saved.', '/admin/seminars');
 }
 
 export async function createAdminSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
@@ -72,6 +72,7 @@ export async function createAdminSeminarRegistrationAction(_state: AdminSeminarS
     await createAdminSeminarRegistration({
       approvalStatus: formData.get('approvalStatus'),
       paymentMethod: formData.get('paymentMethod'),
+      paymentReference: formData.get('paymentReference'),
       paymentStatus: formData.get('paymentStatus'),
       profileId: formData.get('profileId'),
       seminarId: formData.get('seminarId'),

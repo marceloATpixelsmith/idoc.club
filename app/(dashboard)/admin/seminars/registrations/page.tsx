@@ -50,6 +50,6 @@ export default async function AdminSeminarRegistrationsPage({ searchParams }: { 
       seminarOptions={seminarOptions.map((seminar) => ({ label: String(seminar.title), value: String(seminar.id) }))}
       total={listing.total}
     />
-    {isNew ? <RegistrationCreateDrawer paymentMethods={enabledPaymentMethods.filter((method) => ['bank_transfer', 'cash_event'].includes(method.canonical_id))} seminars={openSeminars.map((seminar) => ({ id: seminar.id, isFei: seminar.is_fei, title: seminar.title }))} /> : selected ? <RegistrationDetailSheet closeHref="/admin/seminars/registrations" paymentMethods={paymentMethods} registration={selected} /> : null}
+    {isNew ? <RegistrationCreateDrawer key="new" paymentMethods={enabledPaymentMethods.filter((method) => ['bank_transfer', 'cash_event'].includes(method.canonical_id))} seminars={openSeminars.map((seminar) => ({ id: seminar.id, isFei: seminar.is_fei, title: seminar.title }))} /> : selected ? <RegistrationDetailSheet key={selected.id} closeHref="/admin/seminars/registrations" paymentMethods={paymentMethods} registration={selected} /> : null}
   </main>;
 }
