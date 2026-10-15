@@ -8,12 +8,14 @@ export function PaymentMethodSelect({
   defaultValue,
   id,
   name,
+  onValueChange,
   options,
 }: {
   className: string;
   defaultValue: string;
   id: string;
   name: string;
+  onValueChange?: (value: string) => void;
   options: ReadonlyArray<{ label: string; value: string }>;
 }) {
   const [value, setValue] = useState(defaultValue);
@@ -25,7 +27,7 @@ export function PaymentMethodSelect({
         className={className + ' pl-10'}
         id={id}
         name={name}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => { setValue(event.target.value); onValueChange?.(event.target.value); }}
         required
         value={value}
       >

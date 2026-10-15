@@ -591,3 +591,16 @@ test('an administrator recording a seminar payment queues the Seminar payment co
   assert.ok(body.indexOf("'seminar.payment_confirmed'") > body.indexOf("payment_status='paid'"));
   assert.ok(body.indexOf('client.begin') < body.indexOf("payment_status='paid'"));
 });
+
+test('offline seminar payments require method-labelled evidence, on create-as-Paid and when recording a received payment', () => {
+  const labels = readFileSync('lib/seminars/payment-reference.ts', 'utf8');
+  assert.match(labels, /bank_transfer: 'Bank Transfer Reference'/);
+  assert.match(labels, /cash_event: 'Receipt ID'/);
+  assert.match(registrationsSource, /if \(!reference\) throw new SeminarRegistrationError\(`Enter the \$\{seminarPaymentReferenceLabel\(method\)\}\.`\)/);
+  assert.match(registrationsSource, /if \(markPaid && !paymentReference\) throw new SeminarRegistrationError/);
+  const form = readFileSync('app/(dashboard)/admin/seminars/registrations/record-payment-form.tsx', 'utf8');
+  assert.match(form, /seminarPaymentReferenceLabel\(method\)/);
+  assert.match(form, /name="reference" onChange=\{[^}]*\} required/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8'), /paymentStatus === 'paid'[\s\S]*name="paymentReference"[\s\S]*required/);
+  assert.ok(existsSync('docs/29-admin-table-and-form-style-guide.md'));
+});

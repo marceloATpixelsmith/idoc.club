@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PaymentMethodSelect } from '@/components/seminars/payment-method-select';
 import { SeminarForm } from '@/components/seminars/seminar-form';
+import { seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
 import { APPROVAL_STATUS_LABELS, FEI_APPROVAL_STATUSES } from '@/lib/seminars/status';
 import { createAdminSeminarRegistrationAction } from '../actions';
 import { MemberLookup } from './member-lookup';
@@ -16,6 +18,9 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
   seminars: Array<{ id: number; isFei: boolean; title: string }>;
 }) {
   const [seminarId, setSeminarId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]?.canonical_id ?? '');
+  const [paymentStatus, setPaymentStatus] = useState('pending');
+  const [paymentReference, setPaymentReference] = useState('');
   const isFei = seminars.find((seminar) => String(seminar.id) === seminarId)?.isFei ?? false;
   const approvalOptions = isFei ? FEI_APPROVAL_STATUSES : (['confirmed'] as const);
   return (
@@ -42,6 +47,7 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
                   defaultValue={paymentMethods[0]?.canonical_id ?? ''}
                   id="paymentMethod"
                   name="paymentMethod"
+                  onValueChange={(value) => { setPaymentMethod(value); setPaymentReference(''); }}
                   options={paymentMethods.map((method) => ({ label: method.display_label, value: method.canonical_id }))}
                 />
               </div>
@@ -55,12 +61,18 @@ export function RegistrationCreateDrawer({ paymentMethods, seminars }: {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="paymentStatus">Payment Status</Label>
-                <select className={SELECT_CLASSNAME} defaultValue="pending" id="paymentStatus" name="paymentStatus" required>
+                <select className={SELECT_CLASSNAME} id="paymentStatus" name="paymentStatus" onChange={(event) => { setPaymentStatus(event.target.value); setPaymentReference(''); }} required value={paymentStatus}>
                   <option value="pending">Pending (awaiting payment)</option>
                   <option value="paid">Paid</option>
                 </select>
               </div>
             </div>
+            {paymentStatus === 'paid' ? (
+              <div className="max-w-sm space-y-1.5">
+                <Label htmlFor="paymentReference">{seminarPaymentReferenceLabel(paymentMethod)}</Label>
+                <Input id="paymentReference" maxLength={1000} name="paymentReference" onChange={(event) => setPaymentReference(event.target.value)} required value={paymentReference} />
+              </div>
+            ) : null}
             {paymentMethods.length === 0 ? <p className="text-sm text-destructive">Enable Bank Transfer or Cash in Organization Settings before creating a registration.</p> : null}
           </SeminarForm>
         </AdminFormSection>
