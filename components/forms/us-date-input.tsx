@@ -66,6 +66,7 @@ export function UsDateInput({ defaultIso, id, name }: { defaultIso?: string; id:
             <Calendar
               autoFocus
               captionLayout="dropdown"
+              endMonth={new Date(new Date().getFullYear() + 10, 11)}
               mode="single"
               onSelect={(date) => {
                 if (!date) return;
