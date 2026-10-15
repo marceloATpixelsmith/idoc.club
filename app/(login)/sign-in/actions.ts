@@ -126,7 +126,7 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
     });
   }
   await setSession(verifiedUser);
-  redirect(migrated || sessionGate === 'payment_only' ? destination : await consumeReturnTo(destination));
+  redirect(await consumeReturnTo(destination, { honor: !migrated && sessionGate !== 'payment_only' }));
 }, { skipCsrf: true });
 
 export const resendLoginOtp = validatedAction(z.object({}), async (_data, formData) => {

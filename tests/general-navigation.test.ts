@@ -42,8 +42,8 @@ test('an already-open protected page leaves for sign-in when its shared identity
   assert.match(protectedSessionRedirect, /fetch\('\/api\/user', \{ cache: 'no-store' \}\)/);
   assert.match(protectedSessionRedirect, /mutate\('\/api\/user', user, \{ revalidate: false \}\)/);
   assert.match(protectedSessionRedirect, /user === null && isProtectedPath\(window\.location\.pathname\)/);
-  // Reloads the current URL so middleware bounces to /sign-in and remembers this page for return-to.
-  assert.match(protectedSessionRedirect, /window\.location\.replace\(`\$\{window\.location\.pathname\}\$\{window\.location\.search\}`\)/);
+  // Leaves via the session-expired route, which remembers this page for return-to before sign-in.
+  assert.match(protectedSessionRedirect, /window\.location\.replace\(`\/api\/auth\/session-expired\?returnTo=\$\{encodeURIComponent\(here\)\}`\)/);
   assert.match(protectedSessionRedirect, /addEventListener\('pointerdown'/);
   assert.match(protectedSessionRedirect, /addEventListener\('focus'/);
   assert.match(protectedSessionRedirect, /visibilitychange/);

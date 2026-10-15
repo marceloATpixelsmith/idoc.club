@@ -56,9 +56,11 @@ export function ProtectedSessionRedirect({ initiallySignedIn }: { initiallySigne
         // Hard replacement removes the stale protected page from browser history and guarantees the
         // next render starts at the server-authenticated sign-in boundary.
         //
-        // Reload the current URL rather than going straight to /sign-in: middleware then bounces the
-        // expired session to sign-in and remembers this page, so signing back in returns here.
-        window.location.replace(`${window.location.pathname}${window.location.search}`);
+        // Go through the session-expired route, which remembers this page before sending the browser
+        // to /sign-in, so signing back in returns here. A reload would not work for a revoked session
+        // whose token is still fresh: middleware lets it through and the page redirects on its own.
+        const here = `${window.location.pathname}${window.location.search}`;
+        window.location.replace(`/api/auth/session-expired?returnTo=${encodeURIComponent(here)}`);
       }
     } finally {
       checking.current = false;

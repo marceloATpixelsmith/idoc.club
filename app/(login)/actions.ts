@@ -128,7 +128,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
       if (currentRole === 'member') {
         await clearPendingLogin();
         await setSession(foundUser);
-        redirect(sessionGate.gate === 'payment_only' ? loginDestination : await consumeReturnTo(loginDestination));
+        redirect(await consumeReturnTo(loginDestination, { honor: sessionGate.gate !== 'payment_only' }));
       }
       const [currentUser] = await db.select().from(users).where(and(
         eq(users.id, foundUser.id),
@@ -158,7 +158,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
   await clearPendingLogin();
   await setSession(foundUser);
-  redirect(sessionGate.gate === 'payment_only' ? loginDestination : await consumeReturnTo(loginDestination));
+  redirect(await consumeReturnTo(loginDestination, { honor: sessionGate.gate !== 'payment_only' }));
 }, { skipCsrf: true });
 
 const accountLinkSchema = z.object({ email: z.string().email().max(255) });
