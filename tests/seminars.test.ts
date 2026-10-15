@@ -165,8 +165,8 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
     assert.ok(seminarFieldset.includes(`initialHtml={sanitizeArticleContent(seminar?.${field} ?? '')}`), `${field} must be sanitized before loading the editor`);
   }
   assert.doesNotMatch(seminarFieldset, /name="startTime"|name="endTime"|name="timezone"/);
-  assert.match(seminarFieldset, /name="startDate"/);
-  assert.match(seminarFieldset, /name="endDate"/);
+  assert.match(seminarFieldset, /fromName="startDate"/);
+  assert.match(seminarFieldset, /toName="endDate"/);
   assert.match(seminarFieldset, /name="price"/);
   assert.doesNotMatch(seminarFieldset, /nonMemberPrice|Non-member|memberPrice|organizingNationalFederation/);
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
