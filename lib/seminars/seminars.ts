@@ -9,6 +9,7 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { sanitizeArticleContent, hasVisibleContent } from '@/lib/news/sanitize';
 import { canonicalLanguageTag } from '@/lib/seminars/language';
+import { normalizeSeminarDate } from '@/lib/seminars/date-input';
 import { seminarEndsAtUtc, SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
 
 export { SEMINAR_STATUSES, type SeminarStatus } from '@/lib/seminars/status';
@@ -30,7 +31,7 @@ export type SeminarLevel = (typeof SEMINAR_LEVELS)[number];
 
 const titleSchema = z.string().trim().min(1).max(SEMINAR_TITLE_MAX_LENGTH);
 const locationSchema = z.string().trim().min(1).max(SEMINAR_LOCATION_MAX_LENGTH);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 const capacitySchema = z.coerce.number().int().min(1).max(100_000);
 const priceSchema = z.coerce.number().min(0).max(SEMINAR_MAX_PRICE_CENTS / 100);
 const statusSchema = z.enum(SEMINAR_STATUSES);
@@ -78,13 +79,16 @@ function richText(value: unknown, label: string): string {
 function validateFields(input: SeminarInput) {
   const title = parse(titleSchema, input.title, 'Title is required and must be 200 characters or fewer.');
   const location = parse(locationSchema, input.location, 'Location or meeting link is required and must be 2,000 characters or fewer.');
-  const startDate = parse(dateSchema, input.startDate, 'Enter a valid start date.');
-  const endDate = parse(dateSchema, input.endDate, 'Enter a valid end date.');
+  const startDate = normalizeSeminarDate(input.startDate);
+  const endDate = normalizeSeminarDate(input.endDate);
+  if (!startDate) throw new SeminarValidationError('Enter a valid start date (dd/mm/yyyy).');
+  if (!endDate) throw new SeminarValidationError('Enter a valid end date (dd/mm/yyyy).');
   if (endDate < startDate) throw new SeminarValidationError('The end date must be on or after the start date.');
   const capacity = parse(capacitySchema, input.capacity, 'Capacity must be a whole number of at least 1.');
   const priceCents = Math.round(parse(priceSchema, input.price, 'Price must be zero or a positive amount.') * 100);
   const status = parse(statusSchema, input.status, 'Choose a valid publication status.');
-  const deadlineDate = parse(dateSchema, input.registrationDeadline, 'Enter a valid registration deadline.');
+  const deadlineDate = normalizeSeminarDate(input.registrationDeadline);
+  if (!deadlineDate) throw new SeminarValidationError('Enter a valid registration deadline (dd/mm/yyyy).');
   const registrationDeadline = new Date(`${deadlineDate}T00:00:00Z`);
   if (registrationDeadline.getTime() >= new Date(`${startDate}T00:00:00Z`).getTime()) throw new SeminarValidationError('The registration deadline must be before the seminar start date.');
   const language = typeof input.language === 'string' ? canonicalLanguageTag(input.language) : null;

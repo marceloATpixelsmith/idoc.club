@@ -138,3 +138,58 @@ test('shared admin date filter renders safely when no date is selected', () => {
   assert.match(filter, /selectedDate \? formatTableDate\(toDateKey\(selectedDate\)\) : ''/);
   assert.doesNotMatch(filter, /toDateKey\(\(range\.from \?\? range\.to\)!\)/);
 });
+
+test('all date-only forms use shared click-to-open calendar fields without separate picker buttons', () => {
+  const single = source('components/forms/us-date-input.tsx');
+  const range = source('components/forms/date-range-picker.tsx');
+  const seminar = source('components/seminars/seminar-fieldset.tsx');
+  const news = source('app/(dashboard)/admin/news/news-drawer.tsx');
+  const payment = source('app/(dashboard)/admin/payments/manual-payment-form.tsx');
+  const expiration = source('app/(dashboard)/admin/members/extend-expiration-form.tsx');
+  const correction = source('app/(dashboard)/admin/members/entitlement-correction-form.tsx');
+
+  assert.match(single, /<PopoverTrigger asChild>/);
+  assert.match(single, /data-idoc-table-control/);
+  assert.match(single, /<button[\s\S]*type="button"/);
+  assert.match(single, /mode="single"/);
+  assert.match(single, /onInvalid=\{\(\) => setOpen\(true\)\}/);
+  assert.doesNotMatch(single, /aria-label="Choose date" size="icon"/);
+  assert.match(single, /name={name}[\s\S]*required={required}[\s\S]*type="text"[\s\S]*value={iso}/);
+  assert.match(range, /mode="range"/);
+  assert.match(range, /data-idoc-table-control/);
+  assert.match(range, /onInvalid=\{\(\) => setOpen\(true\)\}/);
+  assert.match(range, /name={fromName}[^\n]*required={required}[^\n]*value={from}/);
+  assert.match(range, /name={toName}[^\n]*required={required}[^\n]*value={to}/);
+  assert.match(seminar, /fromName="startDate"[\s\S]*toName="endDate"/);
+  assert.match(seminar, /<SingleDatePicker[^>]*name="registrationDeadline"/);
+  for (const form of [news, payment, expiration, correction]) {
+    assert.match(form, /<SingleDatePicker/);
+    assert.doesNotMatch(form, /type="date"/);
+  }
+});
+
+test('shared Tiptap editor supports link targets and safe incremental font-size styling', async () => {
+  const editor = source('components/tiptap/simple-editor-field.tsx');
+  const mark = source('components/tiptap/font-size-mark.ts');
+  const sanitizer = source('lib/news/sanitize.ts');
+  assert.match(editor, /setLinkTarget\(/);
+  assert.match(editor, /<option value="_self">Same tab<\/option>/);
+  assert.match(editor, /<option value="_blank">New tab<\/option>/);
+  assert.match(editor, /noopener noreferrer/);
+  assert.match(editor, /Increase font size/);
+  assert.match(editor, /Decrease font size/);
+  assert.match(editor, /FontSizeMark/);
+  assert.match(mark, /font-size:/);
+  const { sanitizeArticleContent } = await import('../lib/news/sanitize.ts');
+  assert.equal(
+    sanitizeArticleContent('<p><a href="https://example.com" target="_blank" onclick="alert(1)">Link</a></p>'),
+    '<p><a href="https://example.com" target="_blank" rel="noopener noreferrer">Link</a></p>',
+  );
+  assert.equal(
+    sanitizeArticleContent('<span style="font-size: 20px; color: red" onclick="alert(1)">Big</span>'),
+    '<span style="font-size: 20px">Big</span>',
+  );
+  assert.equal(sanitizeArticleContent('<span style="font-size: 20px">Big</span>'), '<span style="font-size: 20px">Big</span>');
+  assert.equal(sanitizeArticleContent('<span style="font-size: 99px">Huge</span>'), '<span>Huge</span>');
+  assert.doesNotMatch(sanitizer, /targetAttributes.*_parent/);
+});
