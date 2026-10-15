@@ -187,7 +187,7 @@ test('shared Tiptap editor supports link targets and safe incremental font-size 
   );
   assert.equal(
     sanitizeArticleContent('<span style="font-size: 20px; color: red" onclick="alert(1)">Big</span>'),
-    '<span>Big</span>',
+    '<span style="font-size: 20px">Big</span>',
   );
   assert.equal(sanitizeArticleContent('<span style="font-size: 20px">Big</span>'), '<span style="font-size: 20px">Big</span>');
   assert.equal(sanitizeArticleContent('<span style="font-size: 99px">Huge</span>'), '<span>Huge</span>');
