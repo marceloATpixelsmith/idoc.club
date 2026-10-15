@@ -130,3 +130,11 @@ test('Tiptap images can be selected and drag-resized with their width persisted 
   assert.match(imageNodeView, /size-6 cursor-nwse-resize/);
   assert.match(imageNodeView, /className="block h-auto w-full max-w-full cursor-pointer"/);
 });
+
+test('shared admin date filter renders safely when no date is selected', () => {
+  const filter = source('components/admin/date-range-filter.tsx');
+  //ENSURE NEWS AND SEMINARS CAN RENDER WITHOUT A SELECTED DATE.
+  assert.match(filter, /const selectedDate = range\.from \?\? range\.to/);
+  assert.match(filter, /selectedDate \? formatTableDate\(toDateKey\(selectedDate\)\) : ''/);
+  assert.doesNotMatch(filter, /toDateKey\(\(range\.from \?\? range\.to\)!\)/);
+});
