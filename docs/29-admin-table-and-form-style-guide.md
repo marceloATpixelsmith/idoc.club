@@ -36,7 +36,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 ## 5. Payment evidence
 
 - A payment recorded by an administrator always carries evidence, required and labelled for how it was paid: **Stripe Payment ID** (Stripe), **Bank Transfer Reference** (Bank Transfer), **Receipt ID** (Cash). A complimentary membership grant is not a payment and has none.
-- The same rule applies to membership payments and to seminar registrations, whether the payment is recorded after the fact ("Record payment received" in the registration drawer) or when the registration is created as Paid.
+- Seminar registrations offer the same three sources as the member form -- Cash, Bank Transfer, Stripe -- with the same labels (**Receipt ID**, **Bank Transfer Reference**, **Stripe Payment ID**), via `lib/seminars/payment-reference.ts`. The same rule applies to membership payments and to seminar registrations, whether the payment is recorded after the fact ("Record payment received" in the registration drawer) or when the registration is created as Paid.
 - The evidence field is cleared when the payment source or method changes, so evidence typed for one source cannot be submitted as another. Online (Stripe Checkout) seminar payments are recorded by the webhook and never go through this form.
 
 ## 6. Where this is enforced

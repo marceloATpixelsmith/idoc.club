@@ -19,6 +19,8 @@ import { APPROVAL_STATUS_LABELS, APPROVAL_STATUSES, computeSeminarAvailability, 
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
+/** Methods an administrator can record a payment as received through: the offline two plus a Stripe payment taken outside Checkout. */
+const RECEIVED_VIA_METHODS = ['bank_transfer', 'cash_event', 'online_stripe'] as const;
 
 export function isStagingSeminarDirectDelivery(): boolean {
   try {
@@ -83,21 +85,27 @@ export async function searchActiveMembersForRegistration(queryValue: unknown) {
 }
 
 export async function createAdminSeminarRegistration(fields: {
-  approvalStatus?: unknown; paymentMethod?: unknown; paymentReference?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
+  approvalStatus?: unknown; paymentMethod?: unknown; paymentReceivedVia?: unknown; paymentReference?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
 }): Promise<{ registrationId: number }> {
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(fields.seminarId);
   if (!seminarId.success) throw new SeminarRegistrationError('Choose a seminar.');
   const profileId = idSchema.safeParse(fields.profileId);
   if (!profileId.success) throw new SeminarRegistrationError('Choose an active member to register.');
-  const paymentMethod = z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
-  if (!paymentMethod.success) throw new SeminarRegistrationError('Admin-created registrations must use Bank Transfer or Cash.');
-  const enabledMethods = await listEnabledSeminarPaymentMethods();
-  if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
-    throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
-  }
   // Payment Status on create: left at the method's pending state, or recorded as already paid.
   const markPaid = fields.paymentStatus === 'paid';
+  // A pending registration uses an enabled offline method; one created as Paid records how the payment was actually
+  // received (Cash, Bank Transfer or Stripe), which is then the registration's payment method.
+  const paymentMethod = markPaid
+    ? z.enum(RECEIVED_VIA_METHODS).safeParse(fields.paymentReceivedVia)
+    : z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
+  if (!paymentMethod.success) throw new SeminarRegistrationError(markPaid ? 'Choose Cash, Bank Transfer or Stripe.' : 'Admin-created registrations must use Bank Transfer or Cash.');
+  if (!markPaid) {
+    const enabledMethods = await listEnabledSeminarPaymentMethods();
+    if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
+      throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
+    }
+  }
   if (fields.paymentStatus !== undefined && fields.paymentStatus !== '' && fields.paymentStatus !== 'pending' && !markPaid) throw new SeminarRegistrationError('Choose a valid payment status.');
   const paymentReference = markPaid && typeof fields.paymentReference === 'string' && fields.paymentReference.trim() ? fields.paymentReference.trim().slice(0, 1000) : null;
   if (markPaid && !paymentReference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(paymentMethod.data)}.`);
@@ -481,7 +489,7 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
   const method = typeof methodValue === 'string' ? methodValue.trim() : '';
-  if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Bank Transfer or Cash.');
+  if (!(RECEIVED_VIA_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Cash, Bank Transfer or Stripe.');
   const reference = typeof referenceValue === 'string' && referenceValue.trim() ? referenceValue.trim().slice(0, 1000) : null;
   if (!reference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(method)}.`);
   await client.begin(async (sql) => {
