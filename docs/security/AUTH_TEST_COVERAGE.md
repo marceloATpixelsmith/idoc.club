@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **37 cases** — CI mapped 34, CI gaps 2, not applicable 1.
+Summary: **38 cases** — CI mapped 35, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -43,3 +43,4 @@ Summary: **37 cases** — CI mapped 34, CI gaps 2, not applicable 1.
 | LIVE-AUTH-035 | Member archive and permanent deletion enforce authorization, billing guards, and audit retention | mapped | required | AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003 |
 | LIVE-AUTH-036 | Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004, AUTH-CSRF-003 |
 | LIVE-AUTH-037 | A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002 |
+| LIVE-AUTH-038 | An expired protected-page session returns the user to the same page after sign-in, and active use keeps an administrator signed in | mapped | required | AUTH-SESSION-004, AUTH-SESSION-010 |

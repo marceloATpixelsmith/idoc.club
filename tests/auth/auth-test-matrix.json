@@ -1938,13 +1938,13 @@
           "Pay with a Stripe test card and wait for the verified webhook; confirm entitlement becomes active exactly once.",
           "Register for a seminar by each enabled payment method; for online payment complete Stripe test checkout and confirm the registration becomes paid once.",
           "Confirm a full seminar and a seminar past its registration deadline reject registration with a clear message, and that cancellation updates My Seminars.",
-   "Confirm My Seminars/Courses shows both Payment Status and Registration Status (Confirmed for a non-FEI seminar, Pending FEI Approval for an FEI one), and that in a signed-out browser the seminar detail page offers no Register button or guest path."
+          "Confirm My Seminars/Courses shows both Payment Status and Registration Status (Confirmed for a non-FEI seminar, Pending FEI Approval for an FEI one), and that in a signed-out browser the seminar detail page offers no Register button or guest path."
         ],
         "pass": [
           "Entitlement and seminar payment status change only after a verified provider event, never from browser redirects or client-supplied fields.",
           "Redelivered events do not double-credit.",
           "Capacity, deadline, disabled payment methods and unpaid-member restrictions are enforced server-side.",
-   "Seminar/course registration is members-only: a signed-out or non-entitled visitor can browse details but cannot register by any route, and no guest or non-member pricing path exists."
+          "Seminar/course registration is members-only: a signed-out or non-entitled visitor can browse details but cannot register by any route, and no guest or non-member pricing path exists."
         ],
         "fail": [
           "Entitlement or paid status is granted without a verified event, is granted twice, or a closed/full/disabled option accepts a registration."
@@ -2009,6 +2009,63 @@
         ],
         "fail": [
           "Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email."
+        ],
+        "cleanup": [
+          "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
+        ],
+        "evidence": [
+          "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
+        ]
+      }
+    },
+    {
+      "id": "LIVE-AUTH-038",
+      "title": "An expired protected-page session returns the user to the same page after sign-in, and active use keeps an administrator signed in",
+      "risk": "high",
+      "canonicalControls": [
+        "AUTH-SESSION-004",
+        "AUTH-SESSION-010"
+      ],
+      "applicability": "applicable",
+      "layers": {
+        "unit": true,
+        "integration": false,
+        "browser": false,
+        "live": true,
+        "adversarial": true
+      },
+      "ci": {
+        "coverage": "mapped",
+        "tests": [
+          "tests/return-to-path.test.ts",
+          "tests/general-navigation.test.ts",
+          "tests/canonical-session-lifecycle.test.ts"
+        ],
+        "rationale": "Unit tests cover the return-to path allow-list (protected same-origin paths only, no absolute or protocol-relative URLs) and the keep-alive wiring; the end-to-end return needs a real expired session and is exercised live."
+      },
+      "live": {
+        "enabled": true,
+        "destructive": false,
+        "requiresEmail": true,
+        "requiresAdmin": false,
+        "preconditions": [
+          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
+          "Use only disposable test identities and test data.",
+          "Use a disposable member account; an administrator account is optional for the idle-limit check."
+        ],
+        "steps": [
+          "Sign in and open a deep protected page such as /dashboard/profile?tab=security.",
+          "Sign out in another tab (or let the session expire), then reload the first tab and confirm it lands on /sign-in.",
+          "Complete sign-in (password, email code and MFA as required) and confirm the browser returns to the original deep page.",
+          "Request /sign-in?next=https://example.com and a signed-out visit to /api/user, sign in, and confirm neither is used as a destination.",
+          "As an administrator, keep clicking and typing on a protected page for longer than the 30-minute idle limit and confirm the session stays valid."
+        ],
+        "pass": [
+          "Sign-in returns to the originally requested protected page exactly once; the remembered destination is cleared afterward and never points outside /dashboard, /admin, or /onboarding.",
+          "An actively used privileged session is not signed out by the idle limit, while an untouched one still expires."
+        ],
+        "fail": [
+          "Sign-in lands on a different page after a protected-page redirect, honors an off-site or non-protected destination, reuses a stale destination on a later sign-in, or signs out an actively used session."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
