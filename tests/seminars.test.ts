@@ -655,3 +655,13 @@ test('All Levels is exclusive and clearing it leaves no levels selected', () => 
   assert.match(levelsField, /previous\.filter\(\(item\) => item !== 'all_levels'/);
   assert.match(levelsField, /checked=\{selected\.includes\(value\)\}/);
 });
+
+test('member seminar catalog includes registered courses while detail pages suppress repeat registration', () => {
+  const catalog = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  const detail = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(catalog, /listCurrentSeminarsForMember\(profileId\)/);
+  assert.match(catalog, /seminars\.map\(row\)/);
+  assert.doesNotMatch(catalog, /seminars\.filter\(\(seminar\) => seminar\.registration_status === null\)/);
+  assert.match(detail, /alreadyRegistered = seminar\.registration_status !== null/);
+  assert.match(detail, /alreadyRegistered \? null : seminar\.availability !== 'open'/);
+});
