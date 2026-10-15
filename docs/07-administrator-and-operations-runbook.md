@@ -1418,3 +1418,7 @@ Before that future task executes, decide the final authoritative legacy-import c
 ## Admin drawer close behavior
 
 Every admin drawer or sheet (News, Seminars/Courses, Registrations, Members, Support) closes the same way, through the shared `useAdminDrawerClose` hook: the URL returns to the bare table (replacing, never pushing, so Back cannot re-open the record and the record can be opened again), the table shows its loading skeleton while the page re-renders -- on a plain close as well as after a successful save -- and the table refreshes. Each drawer is mounted with a per-record `key` so selecting another record never inherits the previous drawer's closed state.
+
+### Staging Super Admin email-preview operation
+
+The staging-only **Email Previews** page can send sample transactional messages to its configured test recipient without creating registration, payment, or refund records. Separate previews cover FEI and non-FEI seminar registration confirmations, FEI approval-status changes, cancellation, paid confirmation, and refund confirmation. A preview send now reports acceptance or failure inline; provider acceptance means queued for delivery, not necessarily delivered to the inbox. Each send independently enforces current Super Admin authorization and CSRF validation. The page is unavailable in the Vercel production environment.
