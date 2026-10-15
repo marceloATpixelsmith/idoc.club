@@ -50,6 +50,7 @@ export function DateRangePicker({ defaultFrom, defaultTo, id, fromName, toName, 
         <button
           aria-label="Choose start and end dates"
           aria-required={required}
+          data-idoc-table-control
           className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-xs hover:border-ring focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           id={id}
           type="button"
