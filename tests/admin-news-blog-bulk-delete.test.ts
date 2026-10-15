@@ -152,4 +152,8 @@ test('seminar bulk actions preserve registration cancellation, audit trail, and 
   assert.match(bulk, /processCanceledSeminarPayments/);
   assert.match(bulk, /s\.end_date <= \(current_date - interval '1 day'\)::date/);
   assert.match(bulk, /row\.registrations > 0/);
+  const safety = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
+  const runbook = readFileSync('docs/07-administrator-and-operations-runbook.md', 'utf8');
+  assert.match(safety, /end date at least one day before/);
+  assert.match(runbook, /Set as Draft/);
 });
