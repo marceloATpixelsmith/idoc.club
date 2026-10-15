@@ -674,7 +674,8 @@ test('member seminar navigation uses a clear unboxed parent and contextual secon
   assert.match(catalog, /aria-current=\{showMySeminars \? 'page' : undefined\}/);
   assert.match(catalog, /aria-label="Registration history"/);
   assert.match(catalog, /sm:grid-cols-subgrid/);
-  assert.match(catalog, /sm:col-start-2/);
+  assert.doesNotMatch(catalog, /sm:col-start-2/);
+  assert.match(catalog, /className="flex flex-wrap items-center gap-x-7 gap-y-2"/);
   assert.match(catalog, /bg-surface\/45/);
   assert.doesNotMatch(catalog, /border-l-2 border-gold\/60/);
   assert.match(catalog, /aria-current=\{tab === 'past' \? 'page' : undefined\}/);

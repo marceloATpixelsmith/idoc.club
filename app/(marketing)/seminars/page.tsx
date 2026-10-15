@@ -44,7 +44,7 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
         {user ? (
-          //SHARE GRID COLUMNS BETWEEN BOTH LEVELS TO ALIGN SECONDARY LINKS WITH "MY SEMINARS".
+          //ALIGN THE SECONDARY LEVEL WITH THE LEFT EDGE OF THE SEMINARS CONTENT AREA.
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
             <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
               <Link
@@ -63,8 +63,8 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
               </Link>
             </nav>
             {showMySeminars ? (
-              <nav aria-label="Registration history" className="grid grid-cols-1 bg-surface/45 pb-3 pt-4 sm:col-span-2 sm:grid-cols-subgrid">
-                <div className="flex flex-wrap items-center gap-x-7 gap-y-2 sm:col-start-2">
+              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
+                <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
                   <Link
                     aria-current={tab !== 'past' ? 'page' : undefined}
                     className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${tab === 'past' ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold font-medium text-foreground'}`}
