@@ -167,3 +167,29 @@ test('all date-only forms use shared click-to-open calendar fields without separ
     assert.doesNotMatch(form, /type="date"/);
   }
 });
+
+test('shared Tiptap editor supports link targets and safe incremental font-size styling', async () => {
+  const editor = source('components/tiptap/simple-editor-field.tsx');
+  const mark = source('components/tiptap/font-size-mark.ts');
+  const sanitizer = source('lib/news/sanitize.ts');
+  assert.match(editor, /setLinkTarget\(/);
+  assert.match(editor, /<option value="_self">Same tab<\/option>/);
+  assert.match(editor, /<option value="_blank">New tab<\/option>/);
+  assert.match(editor, /noopener noreferrer/);
+  assert.match(editor, /Increase font size/);
+  assert.match(editor, /Decrease font size/);
+  assert.match(editor, /FontSizeMark/);
+  assert.match(mark, /font-size:/);
+  const { sanitizeArticleContent } = await import('../lib/news/sanitize.ts');
+  assert.equal(
+    sanitizeArticleContent('<p><a href="https://example.com" target="_blank" onclick="alert(1)">Link</a></p>'),
+    '<p><a href="https://example.com" target="_blank" rel="noopener noreferrer">Link</a></p>',
+  );
+  assert.equal(
+    sanitizeArticleContent('<span style="font-size: 20px; color: red" onclick="alert(1)">Big</span>'),
+    '<span>Big</span>',
+  );
+  assert.equal(sanitizeArticleContent('<span style="font-size: 20px">Big</span>'), '<span style="font-size: 20px">Big</span>');
+  assert.equal(sanitizeArticleContent('<span style="font-size: 99px">Huge</span>'), '<span>Huge</span>');
+  assert.doesNotMatch(sanitizer, /targetAttributes.*_parent/);
+});
