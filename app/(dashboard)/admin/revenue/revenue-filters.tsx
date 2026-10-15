@@ -69,8 +69,8 @@ export function RevenueFilters({ from, source, to }: { from?: string; source?: s
   const hasRange = Boolean(range.from || range.to);
   const dateText = !hasRange ? 'All time'
     : range.from && range.to && range.from.getTime() !== range.to.getTime()
-      ? `${formatTableDate(range.from)} - ${formatTableDate(range.to)}`
-      : formatTableDate(range.from ?? range.to);
+      ? `${formatTableDate(toDateKey(range.from))} - ${formatTableDate(toDateKey(range.to))}`
+      : formatTableDate(toDateKey((range.from ?? range.to)!));
 
   return (
     <div className="mt-6 flex flex-wrap items-end gap-3">
