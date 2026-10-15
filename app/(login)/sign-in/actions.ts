@@ -1,5 +1,6 @@
 'use server';
 
+import { consumeReturnTo } from '@/lib/auth/return-to';
 import { loadSessionGate } from '@/lib/membership/session-gate-loader';
 import { paymentOnlyDestination } from '@/lib/membership/session-gate';
 import { z } from 'zod';
@@ -125,7 +126,7 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
     });
   }
   await setSession(verifiedUser);
-  redirect(destination);
+  redirect(migrated || sessionGate === 'payment_only' ? destination : await consumeReturnTo(destination));
 }, { skipCsrf: true });
 
 export const resendLoginOtp = validatedAction(z.object({}), async (_data, formData) => {

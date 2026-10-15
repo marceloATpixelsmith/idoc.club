@@ -27,7 +27,14 @@ function isProtectedPath(pathname: string) {
  *
  * Deliberately no interval/polling: authenticated GETs refresh the session idle timer in middleware,
  * so background polling would keep an otherwise-idle session alive indefinitely.
+ *
+ * Real user activity (clicks, typing), however, does keep the session alive: pages driven mostly by
+ * Server Actions or long forms make no GET navigations, so without this an actively working
+ * administrator would hit the 30-minute idle limit. A throttled check on genuine input never fires
+ * while nobody is at the keyboard, so an abandoned page still expires.
  */
+const ACTIVITY_KEEPALIVE_MS = 5 * 60 * 1000;
+
 export function ProtectedSessionRedirect({ initiallySignedIn }: { initiallySignedIn: boolean }) {
   const pathname = usePathname();
   const { mutate } = useSWRConfig();
@@ -48,7 +55,10 @@ export function ProtectedSessionRedirect({ initiallySignedIn }: { initiallySigne
         //
         // Hard replacement removes the stale protected page from browser history and guarantees the
         // next render starts at the server-authenticated sign-in boundary.
-        window.location.replace('/sign-in');
+        //
+        // Reload the current URL rather than going straight to /sign-in: middleware then bounces the
+        // expired session to sign-in and remembers this page, so signing back in returns here.
+        window.location.replace(`${window.location.pathname}${window.location.search}`);
       }
     } finally {
       checking.current = false;
@@ -67,11 +77,24 @@ export function ProtectedSessionRedirect({ initiallySignedIn }: { initiallySigne
       if (event.persisted) void checkSession();
     };
 
+    let lastActivityCheck = Date.now();
+    const onActivity = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastActivityCheck < ACTIVITY_KEEPALIVE_MS) return;
+      lastActivityCheck = now;
+      void checkSession();
+    };
+
+    window.addEventListener('pointerdown', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity);
     window.addEventListener('focus', onFocus);
     window.addEventListener('online', onOnline);
     window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
+      window.removeEventListener('pointerdown', onActivity);
+      window.removeEventListener('keydown', onActivity);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('pageshow', onPageShow);

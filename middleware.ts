@@ -9,6 +9,7 @@ import {
   signToken,
   verifyToken,
 } from '@/lib/auth/session';
+import { RETURN_TO_COOKIE_NAME, returnToCookieOptions, returnToFromRequestUrl } from '@/lib/auth/return-to-path';
 import { touchSession } from '@/lib/auth/session-registry';
 import { readActiveSession } from '@/lib/auth/session-registry';
 import { paymentOnlyAllows, paymentOnlyDestination } from '@/lib/membership/session-gate';
@@ -105,8 +106,18 @@ export async function middleware(request: NextRequest) {
     return res;
   };
 
+  // Remember the protected page a signed-out visitor (or one whose session just expired) was headed
+  // for, so sign-in can return them there. GET navigations only: a Server Action POST has no page to
+  // resume. The value is validated to a protected same-origin path again when it is consumed.
+  const redirectToSignIn = () => {
+    const res = NextResponse.redirect(new URL('/sign-in', request.url));
+    const returnTo = request.method === 'GET' ? returnToFromRequestUrl(request.nextUrl) : null;
+    if (returnTo) res.cookies.set({ name: RETURN_TO_COOKIE_NAME, value: returnTo, ...returnToCookieOptions() });
+    return res;
+  };
+
   if (isProtectedRoute && !canonicalCookie) {
-    return finish(NextResponse.redirect(new URL('/sign-in', request.url)));
+    return finish(redirectToSignIn());
   }
 
   if (!canonicalCookie) {
@@ -173,9 +184,7 @@ export async function middleware(request: NextRequest) {
 
     return finish(res);
   } catch {
-    const res = isProtectedRoute
-      ? NextResponse.redirect(new URL('/sign-in', request.url))
-      : next();
+    const res = isProtectedRoute ? redirectToSignIn() : next();
     res.cookies.set({ name: canonicalName, value: '', ...expiredSessionCookieOptions() });
     return finish(res);
   }

@@ -11,6 +11,7 @@ import { users } from '@/lib/db/schema';
 import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
 import { requireCsrfTokenOrPendingNonce, requireCsrfTokenValue } from '@/lib/security/csrf';
 import { redirect } from 'next/navigation';
+import { consumeReturnTo } from '@/lib/auth/return-to';
 import {
   validatedAction,
   validatedActionWithUser
@@ -127,7 +128,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
       if (currentRole === 'member') {
         await clearPendingLogin();
         await setSession(foundUser);
-        redirect(loginDestination);
+        redirect(sessionGate.gate === 'payment_only' ? loginDestination : await consumeReturnTo(loginDestination));
       }
       const [currentUser] = await db.select().from(users).where(and(
         eq(users.id, foundUser.id),
@@ -157,7 +158,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
   await clearPendingLogin();
   await setSession(foundUser);
-  redirect(loginDestination);
+  redirect(sessionGate.gate === 'payment_only' ? loginDestination : await consumeReturnTo(loginDestination));
 }, { skipCsrf: true });
 
 const accountLinkSchema = z.object({ email: z.string().email().max(255) });
