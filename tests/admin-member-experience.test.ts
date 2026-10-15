@@ -120,8 +120,8 @@ test('transactional emails serve their icons and the FEI logo from the app origi
   assert.ok(positions.every((position, index) => position > 0 && (index === 0 || position > positions[index - 1])), 'email detail rows must follow the website order');
 });
 
-test('punchlist: US slash dates, Seminars/Courses admin label, create-registration statuses, and homepage partner sections', () => {
-  assert.match(read('lib/seminars/format.ts'), /return `\$\{month\}\/\$\{day\}\/\$\{year\}`/);
+test('punchlist: day-first admin dates, Seminars/Courses admin label, create-registration statuses, and homepage partner sections', () => {
+  assert.match(read('lib/seminars/format.ts'), /return `\$\{day\}\/\$\{month\}\/\$\{year\}`/);
   const fieldset = read('components/seminars/seminar-fieldset.tsx');
   for (const name of ['startDate', 'endDate', 'registrationDeadline']) assert.match(fieldset, new RegExp(`<UsDateInput[^>]*name="${name}"`));
   assert.match(read('components/admin-navigation.tsx'), /label: 'Seminars\/Courses'/);
