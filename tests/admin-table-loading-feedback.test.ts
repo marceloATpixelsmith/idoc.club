@@ -20,8 +20,8 @@ test('bulk mutations show the shared pulsing table skeleton and refresh after su
   assert.match(dataTable, /isLoading \? \(/);
   assert.match(bulkDelete, /mutation\.begin\(\)/);
   assert.match(bulkDelete, /mutation\.finish\(Boolean\(state\.success\)\)/);
-  assert.equal((bulkUpdate.match(/mutation\.begin\(\)/g) ?? []).length, 2);
-  assert.equal((bulkUpdate.match(/mutation\.finish\(Boolean\(result\.success\)\)/g) ?? []).length, 2);
+  assert.equal((bulkUpdate.match(/mutation\.begin\(\)/g) ?? []).length, 3);
+  assert.equal((bulkUpdate.match(/mutation\.finish\(Boolean\(result\.success\)\)/g) ?? []).length, 3);
 });
 
 test('homepage membership calls to action use shared rounded buttons', () => {
