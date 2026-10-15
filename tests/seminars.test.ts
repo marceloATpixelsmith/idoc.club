@@ -611,3 +611,16 @@ test('automatic cancellation refunds skip manually recorded Stripe payments that
   const worker = readFileSync('lib/seminars/cancellation-worker.ts', 'utf8');
   assert.match(worker, /\(r\.payment_status in \('paid','refund_failed'\) and r\.stripe_payment_intent_id is not null\)/);
 });
+
+test('Stripe webhook processing failures are logged categorically and rethrown so Stripe retries', () => {
+  const routeSource = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
+  const eventSource = readFileSync('lib/observability/security-events.ts', 'utf8');
+  assert.match(routeSource, /try \{\s*status = await processStripeEvent\(event, stripe\);\s*\} catch \(error\) \{\s*await logError\('stripe_webhook_processing_failed', \{ reason: 'processing_failed' \}\);[\s\S]*?throw error;/);
+  const definition = eventSource.match(/stripe_webhook_processing_failed: \{[^\n]*\}/)?.[0] ?? '';
+  assert.match(definition, /attribution: 'system'/);
+  assert.match(definition, /category: 'operational'/);
+  assert.match(definition, /resource: 'stripe-webhook'/);
+  assert.match(definition, /retentionClass: 'operational'/);
+  assert.match(definition, /reason: \['processing_failed'\]/);
+  assert.doesNotMatch(definition, /sentry/);
+});
