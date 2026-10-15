@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { consumeReturnTo } from '@/lib/auth/return-to';
 import {
   completeGoogleOidcCallback,
   GoogleOidcError,
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
       return clearBinding(NextResponse.redirect(new URL('/mfa', applicationOrigin), 302));
     }
     await setSession(authenticated.user);
-    return clearBinding(NextResponse.redirect(new URL(authenticated.redirectTo, applicationOrigin), 302));
+    return clearBinding(NextResponse.redirect(new URL(await consumeReturnTo(authenticated.redirectTo), applicationOrigin), 302));
   } catch (error) {
     await clearGoogleLinkFreshEvidence();
     const { alert, reason } = classifyGoogleOauthFailure(error, request.nextUrl.searchParams.get('error'));
