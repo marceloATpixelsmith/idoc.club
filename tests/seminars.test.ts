@@ -606,3 +606,8 @@ test('offline seminar payments require method-labelled evidence, on create-as-Pa
   assert.match(readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8'), /paymentStatus === 'paid'[\s\S]*name="paymentReceivedVia"[\s\S]*name="paymentReference"[\s\S]*required/);
   assert.ok(existsSync('docs/29-admin-table-and-form-style-guide.md'));
 });
+
+test('automatic cancellation refunds skip manually recorded Stripe payments that have no payment intent', () => {
+  const worker = readFileSync('lib/seminars/cancellation-worker.ts', 'utf8');
+  assert.match(worker, /\(r\.payment_status in \('paid','refund_failed'\) and r\.stripe_payment_intent_id is not null\)/);
+});
