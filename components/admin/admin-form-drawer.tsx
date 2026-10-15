@@ -29,13 +29,13 @@ export function useAdminDrawerClose(closeHref: string) {
   return { closeAndRefresh, onOpenChange, open };
 }
 
-export function AdminFormDrawer({ children, closeHref, title }: { children: ReactNode; closeHref: string; title: string }) {
+export function AdminFormDrawer({ children, closeHref, title, wide = false }: { children: ReactNode; closeHref: string; title: string; wide?: boolean }) {
   const { closeAndRefresh, onOpenChange, open } = useAdminDrawerClose(closeHref);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none sm:w-[70vw] sm:max-w-5xl">
+        <Dialog.Content className={`fixed inset-y-0 right-0 z-50 h-dvh w-full overflow-y-auto border-l bg-background shadow-2xl outline-none ${wide ? 'sm:w-[70vw] sm:max-w-none' : 'sm:w-[70vw] sm:max-w-5xl'}`}>
           <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-5 py-4 backdrop-blur lg:px-8">
             <Dialog.Title className="text-3xl font-semibold text-gold">{title}</Dialog.Title>
             <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden="true" /></Button></Dialog.Close>
