@@ -30,7 +30,8 @@ This guide records how administrator tables, drawers and forms look and behave a
 - Labels sit directly above their control with a consistent gap; help text is visually separated from both.
 - Booleans are the shared toggle (`FormToggle`), not checkboxes or Yes/No selects. Multi-value checklists and mutually exclusive status radios keep their own controls.
 - Inputs are **controlled** wherever the server can reject a submission: React resets uncontrolled fields after a form action, which wipes what the administrator typed. Keep typed values on error.
-- All date-only form fields use a calendar picker and show `dd/mm/yyyy` inside the editable field. Date-range controls retain their existing selection behavior but display each endpoint in `dd/mm/yyyy`. The server continues receiving ISO (`yyyy-mm-dd`) values; do not rely on browser-dependent native date text.
+- All single date-only fields in administrator **and member-facing** forms use the shared `SingleDatePicker` (`components/forms/us-date-input.tsx`): click anywhere on the date field to open its calendar, show `dd/mm/yyyy` in the trigger, do not render a separate calendar button, and submit ISO `yyyy-mm-dd`. This applies to publishing, payment, entitlement, and seminar deadline dates. Existing controlled payment date interactions must remain controlled; min/max bounds must be respected.
+- Seminar Start / End dates use one shared `DateRangePicker` (`components/forms/date-range-picker.tsx`) that selects both dates with one calendar and still submits `startDate` and `endDate` separately. Date range filters keep their own existing behavior and show `dd/mm/yyyy` endpoints. Neither form picker should use a locale-dependent native date input.
 - Required fields are marked required in the control and enforced again on the server.
 
 ## 5. Payment evidence
