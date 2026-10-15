@@ -30,7 +30,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const status = await processStripeEvent(event, stripe);
+  let status: Awaited<ReturnType<typeof processStripeEvent>>;
+  try {
+    status = await processStripeEvent(event, stripe);
+  } catch (error) {
+    await logError('stripe_webhook_processing_failed', { reason: 'processing_failed' });
+    // Rethrow so the route still returns 5xx and Stripe retries the delivery.
+    throw error;
+  }
 
   // Staging and production share Postgres, but only production runs the scheduled notification cron.
   // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after

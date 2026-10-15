@@ -77,6 +77,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   seminar_cancellation_resolution_failed: { attribution: 'system', category: 'operational', resource: 'seminar-cancellation-resolution', retentionClass: 'operational', sentry: true },
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational', sentry: true },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational', sentry: true },
+  stripe_webhook_processing_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['processing_failed'] }, resource: 'stripe-webhook', retentionClass: 'operational' },
   stripe_webhook_signature_verification_failed: { attribution: 'system', category: 'operational', metadata: { reason: ['invalid_signature'] }, resource: 'stripe-webhook', retentionClass: 'security' },
 } as const satisfies Record<string, SecurityEventDefinition>;
 
