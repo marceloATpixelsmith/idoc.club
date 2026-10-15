@@ -95,22 +95,6 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
   };
 
   return <section aria-labelledby="my-registrations-heading">
-    {/*//SUBNAV SITS IN A SOFT NAVY WASH, WITH THINNER GOLD INDICATOR THAN THE PARENT LEVEL.*/}
-    <div className="bg-surface/45 pb-3 pt-4">
-      <h2 className="sr-only" id="my-registrations-heading">My seminar/course registrations</h2>
-      <nav aria-label="Registration history" className="flex flex-wrap items-center gap-x-7 gap-y-2">
-        <Link
-          aria-current={!past ? 'page' : undefined}
-          className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${past ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold font-medium text-foreground'}`}
-          href="/seminars?view=my"
-        >Upcoming &amp; current</Link>
-        <Link
-          aria-current={past ? 'page' : undefined}
-          className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${past ? 'border-gold font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-          href="/seminars?view=my&tab=past"
-        >Past</Link>
-      </nav>
-    </div>
     <div className="mt-8">
       {registered.length ? <ul className="w-fit max-w-full divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar/course registrations.' : 'You have no upcoming seminar/course registrations.'}</p>}
     </div>
