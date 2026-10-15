@@ -15,6 +15,7 @@ import {
   Maximize2,
   Minimize2,
   Minus,
+  Type,
   Pilcrow,
   Quote,
   Redo2,
@@ -26,6 +27,7 @@ import {
 import { useEffect, useId, useRef, useState } from 'react';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import { ImageNode } from '@/components/tiptap/image-node';
+import { FontSizeMark, adjustFontSize, DEFAULT_FONT_SIZE } from '@/components/tiptap/font-size-mark';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -97,6 +99,7 @@ export function SimpleEditorField({
   const [html, setHtml] = useState(initialHtml);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkHref, setLinkHref] = useState('');
+  const [linkTarget, setLinkTarget] = useState<'_self' | '_blank'>('_self');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSourceMode, setIsSourceMode] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
@@ -129,6 +132,7 @@ export function SimpleEditorField({
         },
       }),
       ImageNode,
+      FontSizeMark,
     ],
     onUpdate: ({ editor: activeEditor }) => {
       setHtml(activeEditor.getHTML());
@@ -171,7 +175,12 @@ export function SimpleEditorField({
       return;
     }
 
-    editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+    //ALLOW ONLY THE TWO EXPECTED TARGETS; EXTERNAL-TAB LINKS GET SAFE REL ATTRIBUTES.
+    editor.chain().focus().extendMarkRange('link').setLink({
+      href,
+      target: linkTarget,
+      rel: linkTarget === '_blank' ? 'noopener noreferrer' : null,
+    }).run();
     setLinkOpen(false);
   };
 
@@ -180,6 +189,7 @@ export function SimpleEditorField({
 
     if (open) {
       setLinkHref(String(editor.getAttributes('link').href ?? ''));
+      setLinkTarget(editor.getAttributes('link').target === '_blank' ? '_blank' : '_self');
     }
   };
 
@@ -397,6 +407,30 @@ export function SimpleEditorField({
             <Underline />
           </ToolbarButton>
 
+          <ToolbarSeparator />
+
+          <ToolbarButton
+            label="Decrease font size"
+            onClick={() => {
+              const size = adjustFontSize(editor.getAttributes('fontSize').size ?? DEFAULT_FONT_SIZE, -1);
+              editor.chain().focus().setMark('fontSize', { size }).run();
+            }}
+          >
+            <span className="flex items-center gap-0.5"><Type className="size-3.5" /><Minus className="size-2.5" /></span>
+          </ToolbarButton>
+          <span aria-label="Selected font size" className="min-w-7 text-center text-xs text-muted-foreground">
+            {editor.getAttributes('fontSize').size ?? DEFAULT_FONT_SIZE}
+          </span>
+          <ToolbarButton
+            label="Increase font size"
+            onClick={() => {
+              const size = adjustFontSize(editor.getAttributes('fontSize').size ?? DEFAULT_FONT_SIZE, 1);
+              editor.chain().focus().setMark('fontSize', { size }).run();
+            }}
+          >
+            <span className="flex items-center gap-0.5"><Type className="size-3.5" /><span className="text-xs">+</span></span>
+          </ToolbarButton>
+
           <Popover onOpenChange={openLinkEditor} open={linkOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -430,6 +464,18 @@ export function SimpleEditorField({
                   placeholder="https://example.com"
                   value={linkHref}
                 />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium" htmlFor={`${editorId}-target`}>Open link in</label>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  id={`${editorId}-target`}
+                  onChange={(event) => setLinkTarget(event.target.value === '_blank' ? '_blank' : '_self')}
+                  value={linkTarget}
+                >
+                  <option value="_self">Same tab</option>
+                  <option value="_blank">New tab</option>
+                </select>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <Button
