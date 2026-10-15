@@ -70,8 +70,8 @@ export function DateRangePicker({ defaultFrom, defaultTo, id, fromName, toName, 
           startMonth={new Date(Math.min(1900, initialYear - 20), 0)}
         />
       </PopoverContent>
-      <input name={fromName} type="hidden" value={from} />
-      <input name={toName} type="hidden" value={to} />
+      <input aria-hidden="true" className="sr-only" name={fromName} onChange={() => {}} onInvalid={() => setOpen(true)} required={required} tabIndex={-1} type="text" value={from} />
+      <input aria-hidden="true" className="sr-only" name={toName} onChange={() => {}} onInvalid={() => setOpen(true)} required={required} tabIndex={-1} type="text" value={to} />
     </Popover>
   );
 }
