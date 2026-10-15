@@ -58,6 +58,7 @@ Before merge, the agent must:
 3. Confirm that the workflow completed successfully, not merely that it was queued.
 4. Check for new review comments and resolve every actionable comment.
 5. Merge only when the fast check, every required full check, and review state are all clear.
+6. Do not merge while a hold is recorded on the PR (draft status, the `hold-merge` label, or a hold comment) because the owner said more commits are coming; wait until they are pushed and checks and review have passed on the final head. The standing merge authorization applies only to PRs targeting `staging`; a PR targeting `main` also needs every promotion gate in docs/07 and explicit owner approval. See "Merging pull requests" in `AGENTS.md`.
 
 If a workflow is skipped by path filtering but the agent determines that the change is higher risk, the agent must manually dispatch that workflow before merging.
 
