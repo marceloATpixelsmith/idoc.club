@@ -88,3 +88,7 @@ The code paths used for this alignment include `lib/auth/session-tokens.ts`, `li
 ## Member communications and billing launch hold
 
 These communication and live-provider billing flows are conditional on the server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting. Only exact `false` releases the hold; missing, empty or invalid values block. Validated Stripe sandbox mutations remain usable, but outbound email remains held. Existing authorization, accounting and entitlement rules still apply. Follow [the launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for queue/webhook handling, separate staging/Production configuration and operator release checks.
+
+## Staging-only email preview behavior
+
+Super Admin Email Previews includes separate FEI and non-FEI registration confirmations, every FEI approval-status update (pending, approved, rejected, audit only), seminar cancellation, payment confirmation, and refund confirmation. FEI wording comes from the same rendering function used for real outgoing status updates. The previews have no associated durable seminar state changes. Each send displays its pending state and provider acceptance/failure inline without navigation; provider acceptance is not proof of inbox delivery.
