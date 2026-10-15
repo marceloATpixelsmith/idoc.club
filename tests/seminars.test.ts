@@ -175,7 +175,7 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
 
 test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted through create and update, and shown on the public listing cards and detail page', () => {
   assert.match(seminarFieldset, /name="isFei"/);
-  assert.match(seminarFieldset, /type="checkbox"/);
+  assert.match(readFileSync('components/ui/form-toggle.tsx', 'utf8'), /type="checkbox"/);
   assert.match(seminarsSource, /isFei: input\.isFei === 'on' \|\| input\.isFei === true/);
   assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
