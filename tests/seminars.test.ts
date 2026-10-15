@@ -624,3 +624,26 @@ test('Stripe webhook processing failures are logged categorically and rethrown s
   assert.match(definition, /reason: \['processing_failed'\]/);
   assert.doesNotMatch(definition, /sentry/);
 });
+
+test('seminar scheduling accepts picker ISO and displayed dd/mm/yyyy dates without reversing day and month', async () => {
+  const { normalizeSeminarDate } = await import('../lib/seminars/date-input.ts');
+  assert.equal(normalizeSeminarDate('2026-12-17'), '2026-12-17');
+  assert.equal(normalizeSeminarDate('17/12/2026'), '2026-12-17');
+  assert.equal(normalizeSeminarDate('19/12/2026'), '2026-12-19');
+  assert.equal(normalizeSeminarDate('30/10/2026'), '2026-10-30');
+  assert.equal(normalizeSeminarDate('29/02/2028'), '2028-02-29');
+  for (const input of ['29/02/2027', '31/04/2026', '2026-13-01', '12/31/2026', '2026-02-30', '', '17/12/20']) {
+    assert.equal(normalizeSeminarDate(input), null, input);
+  }
+  const seminarSource = readFileSync('lib/seminars/seminars.ts', 'utf8');
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.startDate\)/);
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.endDate\)/);
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.registrationDeadline\)/);
+});
+
+test('seminar create and edit drawers occupy at least 70vw on desktop', () => {
+  const drawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
+  const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
+  assert.match(drawer, /wide \? 'sm:w-\[70vw\] sm:max-w-none'/);
+  assert.equal((seminarDrawer.match(/title="Seminar\/Course" wide/g) ?? []).length, 2);
+});
