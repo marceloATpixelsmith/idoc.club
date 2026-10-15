@@ -152,10 +152,10 @@ test('all date-only forms use shared click-to-open calendar fields without separ
   assert.match(single, /<button[\s\S]*type="button"/);
   assert.match(single, /mode="single"/);
   assert.doesNotMatch(single, /aria-label="Choose date" size="icon"/);
-  assert.match(single, /name={name} type="hidden" value={iso}/);
+  assert.match(single, /name={name}[\s\S]*required={required}[\s\S]*type="text"[\s\S]*value={iso}/);
   assert.match(range, /mode="range"/);
-  assert.match(range, /name={fromName} type="hidden" value={from}/);
-  assert.match(range, /name={toName} type="hidden" value={to}/);
+  assert.match(range, /name={fromName}[^\n]*required={required}[^\n]*value={from}/);
+  assert.match(range, /name={toName}[^\n]*required={required}[^\n]*value={to}/);
   assert.match(seminar, /fromName="startDate"[\s\S]*toName="endDate"/);
   assert.match(seminar, /<SingleDatePicker[^>]*name="registrationDeadline"/);
   for (const form of [news, payment, expiration, correction]) {
