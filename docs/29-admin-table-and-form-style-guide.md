@@ -43,3 +43,9 @@ This guide records how administrator tables, drawers and forms look and behave a
 ## 6. Where this is enforced
 
 Source-level tests pin the shared drawer hook, the per-record keys, the half-width pairs, the evidence labels and the close behavior (`tests/admin-drawer-refresh.test.ts`, `tests/admin-form-success-behavior.test.ts`, `tests/admin-member-experience.test.ts`, `tests/seminars.test.ts`).
+
+## 7. Staging email previews
+
+- The Super Admin Email Previews page shows distinct FEI and non-FEI registration confirmations and four FEI registration-status change variants, using the actual registration-email body renderer. Payment-confirmed and refund-confirmed notices also have individual previews.
+- Each preview uses an asynchronous form submission, an immediate disabled Sending… button, and an inline acceptance/failure result; submitting an individual preview never requires a full-page navigation. Bulk sending lists any failed templates.
+- Every submission requires a valid CSRF token and Super Admin authorization; the preview page remains unavailable in Production. Sending previews never creates registrations, changes statuses, captures payments, or processes refunds.
