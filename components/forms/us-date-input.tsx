@@ -51,16 +51,25 @@ type SingleDatePickerProps = {
   id: string;
   name: string;
   min?: string;
+  max?: string;
   required?: boolean;
+  value?: string;
+  onChange?: (iso: string) => void;
 };
 
 //SHARED SINGLE-DATE PICKER FOR ADMIN AND MEMBER FORMS; THE FIELD ITSELF OPENS THE CALENDAR.
 //THE SERVER CONTINUES TO RECEIVE A YYYY-MM-DD VALUE AND DISPLAY USES DD/MM/YYYY.
-export function SingleDatePicker({ defaultIso, id, name, min, required = true }: SingleDatePickerProps) {
-  const [iso, setIso] = useState(defaultIso && calendarDate(defaultIso) ? defaultIso : '');
+export function SingleDatePicker({ defaultIso, id, name, min, max, required = true, value, onChange }: SingleDatePickerProps) {
+  const [internalIso, setInternalIso] = useState(defaultIso && calendarDate(defaultIso) ? defaultIso : '');
+  const iso = value !== undefined ? value : internalIso;
+  function updateIso(nextIso: string) {
+    if (value === undefined) setInternalIso(nextIso);
+    onChange?.(nextIso);
+  }
   const [open, setOpen] = useState(false);
   const selected = calendarDate(iso);
   const minimum = calendarDate(min);
+  const maximum = calendarDate(max);
   const currentYear = new Date().getFullYear();
   const initialYear = selected?.getFullYear() ?? currentYear;
   return (
@@ -69,7 +78,7 @@ export function SingleDatePicker({ defaultIso, id, name, min, required = true }:
         <button
           aria-label={`Choose ${id} date`}
           aria-required={required}
-          className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-xs transition-[color,box-shadow] hover:border-ring focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-dashed border-input bg-transparent px-3 text-left text-sm shadow-xs transition-[color,box-shadow] hover:border-ring focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           id={id}
           type="button"
         >
@@ -82,12 +91,12 @@ export function SingleDatePicker({ defaultIso, id, name, min, required = true }:
           autoFocus
           captionLayout="dropdown"
           defaultMonth={selected ?? minimum ?? new Date()}
-          disabled={minimum ? { before: minimum } : undefined}
+          disabled={minimum || maximum ? [{ before: minimum ?? new Date(1900, 0, 1) }, { after: maximum ?? new Date(9999, 11, 31) }] : undefined}
           endMonth={new Date(Math.max(currentYear + 20, initialYear + 10), 11)}
           mode="single"
           onSelect={(next) => {
             if (!next) return;
-            setIso(dateKey(next));
+            updateIso(dateKey(next));
             setOpen(false);
           }}
           selected={selected}
