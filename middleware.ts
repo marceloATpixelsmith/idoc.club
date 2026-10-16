@@ -14,6 +14,9 @@ import { touchSession } from '@/lib/auth/session-registry';
 import { readActiveSession } from '@/lib/auth/session-registry';
 import { paymentOnlyAllows, paymentOnlyDestination } from '@/lib/membership/session-gate';
 import { loadSessionGate } from '@/lib/membership/session-gate-loader';
+import { maintenanceModeEnabled, userIsSuperAdmin } from '@/lib/admin/maintenance-mode';
+import { maintenancePageHtml } from '@/lib/runtime/maintenance-page';
+import { maintenanceDecision } from '@/lib/runtime/maintenance-policy';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
 import { contentSecurityPolicy } from '@/lib/security/content-security-policy';
 import { csrfCookieName, csrfCookieOptions, signCsrfToken, verifyCsrfToken } from '@/lib/security/csrf-tokens';
@@ -115,6 +118,26 @@ export async function middleware(request: NextRequest) {
     if (returnTo) res.cookies.set({ name: RETURN_TO_COOKIE_NAME, value: returnTo, ...returnToCookieOptions() });
     return res;
   };
+
+  // Maintenance mode (docs/16): while on, only a signed-in Super Admin gets through. Visitors see the branded 503 page; APIs,
+  // Server Actions, Stripe webhooks, cron and queue calls get a JSON 503 so providers retry later. The cheap path check comes first
+  // so ordinary static/allow-listed requests never read the flag.
+  const maintenance = maintenanceDecision(pathname, request.method);
+  if (maintenance !== 'allow' && await maintenanceModeEnabled()) {
+    let superAdmin = false;
+    if (canonicalCookie) {
+      try {
+        const parsedForMaintenance = await verifyToken(canonicalCookie.value);
+        superAdmin = !!(await readActiveSession(parsedForMaintenance.sessionId, parsedForMaintenance.user.id)) && await userIsSuperAdmin(parsedForMaintenance.user.id);
+      } catch { /* not a valid Super Admin session */ }
+    }
+    if (!superAdmin) {
+      const headers = { 'Retry-After': '300', 'Cache-Control': 'no-store' };
+      return finish(maintenance === 'page'
+        ? new NextResponse(request.method === 'HEAD' ? null : maintenancePageHtml(), { status: 503, headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } })
+        : NextResponse.json({ error: 'Service temporarily unavailable for maintenance.' }, { status: 503, headers }));
+    }
+  }
 
   if (isProtectedRoute && !canonicalCookie) {
     return finish(redirectToSignIn());

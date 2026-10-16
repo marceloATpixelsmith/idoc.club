@@ -245,6 +245,17 @@ export const organizationSettings = idocSchema.table('organization_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [check('organization_settings_singleton_check', sql`${table.id} = 1`)]);
 
+/** Per-environment maintenance switch (one row per schema, so staging and Production are independent). While
+ * `enabled`, middleware answers every visitor except a signed-in Super Admin with a branded 503 page. Written only
+ * by the Super Admin Backups page (fresh TOTP step-up + audit row). */
+export const maintenanceMode = idocSchema.table('maintenance_mode', {
+  id: integer('id').primaryKey().default(1),
+  enabled: boolean('enabled').notNull().default(false),
+  reason: varchar('reason', { length: 200 }),
+  changedByUserId: integer('changed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('maintenance_mode_singleton_check', sql`${table.id} = 1`)]);
+
 /** Seminar payment choices are durable identities, not membership-payment provider state. */
 export const seminarPaymentMethods = idocSchema.table('seminar_payment_methods', {
   id: serial('id').primaryKey(),

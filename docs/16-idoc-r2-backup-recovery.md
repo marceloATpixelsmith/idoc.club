@@ -246,7 +246,7 @@ ls idoc.dump                                                   # the decrypted a
 
 In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the window. In your main window: `cd ~ && rm -rf ~/idoc-restore` (this removes the encrypted file, the decrypted dump and the scratch database), and `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY R2_ACCOUNT_ID`. If you did Part 9, also clear the database credentials in **every** window you used for it, then close those windows: `unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE TARGET_SCHEMA STAMP CONFIRM`. If you created a temporary R2 read token for this, revoke it in Cloudflare. Record in `docs/observability-implementation-status.md` (or the operations log) which backup was used, who approved it, and the outcome.
 
-## Super Admin backup and restore-drill tool (design, approved scope)
+## Super Admin backup and restore-drill tool
 
 **Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) runs a **restore drill**, and (3) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
 
@@ -263,6 +263,14 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 **Backup manifest.** The backup script is extended to record, inside the same snapshot as `pg_dump`, the per-table row counts for both schemas and to upload `manifest.json` (object path, sha256, size, started/finished time, counts) next to the dump. The manifest holds counts and names only, never row data.
 
 **Maintenance mode.** A per-environment switch (stored in the environment's own schema, so staging and production are independent). While on, every visitor except a signed-in Super Admin sees a branded, large-text "We'll be right back" page with HTTP 503 and `Retry-After`; the Stripe webhook and scheduled/queue endpoints also answer 503 so providers retry later instead of writing. `/api/health` and static assets stay available. Turning it on or off requires fresh TOTP and writes an audit row. The flag is read with a short (about 3 second) in-memory cache; if it cannot be read the site stays up rather than locking everyone out.
+
+**One-time setup.**
+1. Merge the pull request that adds the tool, then run **IDOC R2 Schema Backups** once from the Actions tab (on `main`) so a backup with a manifest exists. Older backups have no manifest and cannot be drilled.
+2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** and **Checks: Read-only**, expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
+3. In Vercel add `GITHUB_BACKUP_TOOL_TOKEN` (Sensitive, server-only) for **Production** and for **Preview scoped to the `staging` branch**; redeploy. Optional `GITHUB_BACKUP_TOOL_REPOSITORY` (default `marceloATpixelsmith/idoc.club`).
+4. Migration `0074_maintenance_mode` must be applied (staging applies itself; Production uses the reviewer-approved workflow).
+
+**Reading a result.** The Backups page shows **PASS** only when the workflow finished, the downloaded file's SHA-256 matched the manifest, every manifest table was restored, and every table's restored row count equalled the count recorded in the same snapshot as the dump. Anything else is **FAIL** with the reason, and the "workflow log" link opens the GitHub run. The same result is the `idoc-restore-result` annotation on the run, and each request is recorded in the audit log (`admin.restore_drill.requested`).
 
 **Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.
 
