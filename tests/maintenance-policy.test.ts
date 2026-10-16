@@ -5,7 +5,7 @@ import test from 'node:test';
 import { maintenanceDecision } from '../lib/runtime/maintenance-policy.ts';
 
 test('static files, the maintenance page, health and sign-in stay reachable', () => {
-  for (const path of ['/idoc-logo-white.svg', '/documents/a.pdf', '/api/health', '/sign-in', '/sign-in/', '/mfa', '/api/auth/google/callback', '/api/auth/session-expired']) {
+  for (const path of ['/idoc-logo-white.svg', '/documents/a.pdf', '/api/health', '/sign-in', '/sign-in/', '/mfa', '/api/auth/google/start', '/api/auth/google/callback', '/api/auth/session-expired']) {
     assert.equal(maintenanceDecision(path, 'GET'), 'allow', path);
   }
   assert.equal(maintenanceDecision('/sign-in', 'POST'), 'allow');
@@ -19,6 +19,15 @@ test('pages get the branded page and everything that can write gets a JSON 503',
     assert.equal(maintenanceDecision(path, 'POST'), 'api', path);
     assert.equal(maintenanceDecision(path, 'GET'), 'api', path);
   }
+});
+
+test('Google linking is not reachable during maintenance, only Super Admin sign-in is', () => {
+  for (const path of ['/api/auth/google/link/start', '/api/auth/google/link/status', '/api/auth/google/', '/api/auth/google']) {
+    assert.equal(maintenanceDecision(path, 'GET'), 'api', path);
+  }
+  const callback = readFileSync('app/api/auth/google/callback/route.ts', 'utf8');
+  assert.match(callback, /maintenanceModeEnabled\(\) && !\(await userIsSuperAdmin\(user\.id\)\)/);
+  assert.ok(callback.indexOf('maintenanceModeEnabled()') < callback.indexOf('linkGoogleIdentity({'));
 });
 
 test('look-alike paths are not allow-listed', () => {
