@@ -14,6 +14,14 @@ test('a well-formed backup manifest parses and totals rows', () => {
   assert.equal(parsed?.kind, 'daily');
 });
 
+test('the slim annotation form (totalRows, no counts) parses, and stays far below the 4096-character annotation limit', () => {
+  const { counts: _counts, ...slim } = manifest;
+  const text = JSON.stringify({ ...slim, totalRows: 123456 });
+  assert.ok(text.length < 600);
+  assert.equal(parseBackupManifest(text)?.totalRows, 123456);
+  assert.equal(parseBackupManifest(JSON.stringify(slim)), null); // neither counts nor totalRows
+});
+
 test('malformed or hostile manifests are rejected', () => {
   assert.equal(parseBackupManifest('not json'), null);
   assert.equal(parseBackupManifest(JSON.stringify({ ...manifest, object: '../../etc/passwd' })), null);

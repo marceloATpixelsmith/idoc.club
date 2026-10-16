@@ -121,3 +121,10 @@ test('the manifest (the "verified backup" marker) is uploaded only after the rou
   const fetchScript = readFileSync('scripts/restore-drill-fetch.sh', 'utf8');
   assert.match(fetchScript, /grep -E '\/manifest\\\.json\\\.gpg\$'/);
 });
+
+test('the backup annotation carries only the summary because GitHub truncates annotations at 4096 characters', () => {
+  const backup = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
+  assert.match(backup, /m\.pop\('counts'\)/);
+  assert.match(backup, /title=idoc-backup-manifest::\$\{summary_json/);
+  assert.doesNotMatch(backup, /title=idoc-backup-manifest::\$\{manifest_json/);
+});

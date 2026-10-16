@@ -116,5 +116,13 @@ if [[ "${IDOC_RESTORE_CHECK:-}" == true ]]; then
   cp "$tmp/manifest.json" "$RESTORE_CHECK_INPUT_DIR/manifest.json"
 fi
 echo "Verified IDOC-only backup object=$object sha256=$(sha256sum "$tmp/roundtrip.gpg" | cut -d' ' -f1)"
-# ::notice annotation = the manifest (counts only), readable through the GitHub API by the Super Admin Backups page. % and newlines escaped per workflow-command rules.
-if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::notice title=idoc-backup-manifest::${manifest_json//%/%25}"; fi
+# ::notice annotation = the manifest summary, readable through the GitHub API by the Super Admin Backups page. % and newlines escaped per workflow-command rules.
+# GitHub truncates an annotation message at 4096 characters, so the annotation carries only the summary (the full per-table counts stay in the encrypted manifest).
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  summary_json="$(MANIFEST="$manifest_json" python3 -c "
+import json, os
+m = json.loads(os.environ['MANIFEST'])
+m['totalRows'] = sum(m.pop('counts').values())
+print(json.dumps(m, separators=(',', ':'), sort_keys=True))")"
+  echo "::notice title=idoc-backup-manifest::${summary_json//%/%25}"
+fi
