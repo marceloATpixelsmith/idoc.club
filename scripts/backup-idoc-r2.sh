@@ -70,7 +70,9 @@ fingerprint="$(psql -Atqc "SELECT md5(coalesce(inet_server_addr()::text,'') || '
 [[ "$fingerprint" =~ ^[a-f0-9]{32}$ ]] || exit 1
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'server_fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"; fi
 # ONE pg_dump SNAPSHOT CONTAINS BOTH SCHEMAS AND RETAINS OWNER/ACL DETAILS.
-pg_dump --schema=idoc_staging --schema=idoc_production --format=custom --file="$tmp/idoc.dump"
+# Row counts are taken inside the same snapshot as the dump (scripts/dump-idoc-with-counts.sh), so a restore can be compared exactly.
+bash "$(dirname "${BASH_SOURCE[0]}")/dump-idoc-with-counts.sh" "$tmp/dump"
+mv "$tmp/dump/idoc.dump" "$tmp/idoc.dump"
 pg_restore --list "$tmp/idoc.dump" > "$tmp/toc"
 for schema in idoc_staging idoc_production; do
   grep -q "SCHEMA - $schema " "$tmp/toc" || { echo "::error::Missing $schema in archive"; exit 1; }
@@ -79,6 +81,22 @@ printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-
   --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$tmp/idoc.dump.gpg" "$tmp/idoc.dump"
 object="idoc/ayni_space/$BACKUP_KIND/$stamp-$run/idoc-both-schemas.dump.gpg"
 aws --endpoint-url "$endpoint" s3 cp "$tmp/idoc.dump.gpg" "s3://$R2_BUCKET/$object" --only-show-errors
+# MANIFEST: names and row counts only (never row data). Stored encrypted next to the dump and echoed as a workflow annotation so the
+# Super Admin Backups page can list backups without any R2 access.
+manifest_json="$(OBJECT="$object" STAMP="$stamp" KIND="$BACKUP_KIND" SHA="$(sha256sum "$tmp/idoc.dump.gpg" | cut -d' ' -f1)" SIZE="$(stat -c %s "$tmp/idoc.dump.gpg")" python3 - "$tmp/dump/counts.tsv" <<'PY'
+import json, os, sys
+counts = {}
+for line in open(sys.argv[1]):
+    table, n = line.rstrip('\n').split('\t')
+    counts[table] = int(n)
+print(json.dumps({'version': 1, 'object': os.environ['OBJECT'], 'startedAtUtc': os.environ['STAMP'], 'kind': os.environ['KIND'],
+  'sha256': os.environ['SHA'], 'sizeBytes': int(os.environ['SIZE']), 'tableCount': len(counts), 'counts': counts}, separators=(',', ':'), sort_keys=True))
+PY
+)"
+printf '%s' "$manifest_json" > "$tmp/manifest.json"
+printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+  --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$tmp/manifest.json.gpg" "$tmp/manifest.json"
+aws --endpoint-url "$endpoint" s3 cp "$tmp/manifest.json.gpg" "s3://$R2_BUCKET/${object%idoc-both-schemas.dump.gpg}manifest.json.gpg" --only-show-errors
 aws --endpoint-url "$endpoint" s3 cp "s3://$R2_BUCKET/$object" "$tmp/roundtrip.gpg" --only-show-errors
 cmp "$tmp/idoc.dump.gpg" "$tmp/roundtrip.gpg"
 printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
@@ -93,5 +111,8 @@ if [[ "${IDOC_RESTORE_CHECK:-}" == true ]]; then
   mkdir -p "$RESTORE_CHECK_INPUT_DIR"; chmod 700 "$RESTORE_CHECK_INPUT_DIR"
   cp "$tmp/roundtrip.dump" "$RESTORE_CHECK_INPUT_DIR/archive.dump"
   cp "$tmp/toc" "$RESTORE_CHECK_INPUT_DIR/toc"
+  cp "$tmp/manifest.json" "$RESTORE_CHECK_INPUT_DIR/manifest.json"
 fi
 echo "Verified IDOC-only backup object=$object sha256=$(sha256sum "$tmp/roundtrip.gpg" | cut -d' ' -f1)"
+# ::notice annotation = the manifest (counts only), readable through the GitHub API by the Super Admin Backups page. % and newlines escaped per workflow-command rules.
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::notice title=idoc-backup-manifest::${manifest_json//%/%25}"; fi

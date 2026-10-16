@@ -85,3 +85,30 @@ test('the nightly restore check runs in a separate step with no credentials and 
   assert.match(restore, /grep '\^pg_restore: error:'/);
   assert.match(readFileSync('docs/16-idoc-r2-backup-recovery.md', 'utf8'), /Automated restore check/);
 });
+
+test('the backup records row counts from the same snapshot as the dump and writes an encrypted manifest', () => {
+  const dumper = readFileSync('scripts/dump-idoc-with-counts.sh', 'utf8');
+  assert.match(dumper, /BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY/);
+  assert.match(dumper, /pg_export_snapshot\(\)/);
+  assert.match(dumper, /pg_dump --snapshot="\$snapshot"/);
+  assert.match(script, /dump-idoc-with-counts\.sh/);
+  assert.match(script, /manifest\.json\.gpg/);
+  assert.match(script, /title=idoc-backup-manifest/);
+});
+
+test('the restore drill separates the credentialed fetch from the credential-free restore and only runs from main', () => {
+  const workflow = readFileSync('.github/workflows/idoc-restore-drill.yml', 'utf8');
+  assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /environment: idoc-db-backups/);
+  const [, restoreStep] = workflow.split('name: Restore into a throwaway cluster');
+  assert.ok(restoreStep);
+  const stepBody = restoreStep.split('- name:')[0];
+  assert.doesNotMatch(stepBody, /secrets\./);
+  assert.doesNotMatch(stepBody, /IDOC_BACKUP|AWS_|R2_/);
+  const fetchScript = readFileSync('scripts/restore-drill-fetch.sh', 'utf8');
+  assert.doesNotMatch(fetchScript, /pg_restore[^\n]*--dbname/); // the credentialed step never executes archive SQL
+  assert.match(fetchScript, /\^idoc\/ayni_space\/\(daily\|pre-migration\)\//); // the selection is validated
+  const check = readFileSync('scripts/restore-check-idoc.sh', 'utf8');
+  assert.match(check, /rowCountMismatches/);
+  assert.match(check, /title=idoc-restore-result/);
+});
