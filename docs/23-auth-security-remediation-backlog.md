@@ -176,8 +176,9 @@ store. “Existing evidence” is deliberately candid when it is only source ins
    (AUTH-OPERATIONS-010, now fully verified). `docs/25-release-readiness-checklist.json` (new) is a
    machine-readable mirror of docs/07 §15.6, CI-integrity-enforced against drift and against
    evidence-free self-certification by `scripts/validate-release-checklist.mjs`, proven in
-   `tests/validate-release-checklist.test.ts` (AUTH-OPERATIONS-011's repository half). External
-   validation still needs to record the restore drill, deployed configuration validation, provider
+   `tests/validate-release-checklist.test.ts` (AUTH-OPERATIONS-011's repository half). The restore drill
+   was recorded on 2026-10-16 (docs/25 `production-backup-restore`). External
+   validation still needs to record deployed configuration validation, provider
    test, reconciliation, and incident exercise, plus dated operator confirmation that the clock-skew
    cron fires in production and a real, evidence-backed completion of the release-readiness checklist
    for an actual release. Migration: no expected. External provider: yes for the final validation
