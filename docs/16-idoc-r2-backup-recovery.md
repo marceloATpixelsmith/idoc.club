@@ -186,9 +186,9 @@ First name the schema you are recovering into, in the terminal you will use, and
 4. Run it against the live database, inside one transaction (`BEGIN; ... COMMIT;`), using a login that has write access to that schema, and only after taking a fresh backup (run the **IDOC R2 Schema Backups** workflow from GitHub Actions and wait for it to pass).
 5. Look at the result, then `COMMIT` or `ROLLBACK`.
 
-**9B. Replace a whole schema (a planned maintenance window, with a second person approving).**
+**9B. Replace a whole schema (a planned maintenance window).**
 
-This has not been rehearsed. Before using it on `idoc_production`, do all of it on `idoc_staging` first and correct this section with whatever is different. The commands use a variable so that the same steps serve both schemas, and you must confirm it before the rename and the restore:
+**Rehearsed on `idoc_staging` on 2026-10-16** (backup `20261016T171640Z`, run from a GitHub Codespace): it worked, and the corrections it required are folded into the steps below (create the empty schema first, re-grant schema `USAGE`, and revoke the backup login from the kept copy). Production uses the same steps with `idoc_production`. IDOC has one operator, so no second approver is required; the safeguards are the typed target confirmation, the single-transaction restore and the kept, renamed copy. **Warning:** the schema-owner login (`dbuser`, which acts as the role `ameyalli`) owns **every** schema in `ayni_space`, including other applications' schemas, so never type a schema name by hand and never run a restore command without `--schema="$TARGET_SCHEMA"`. The commands use a variable so that the same steps serve both schemas, and you must confirm it before the rename and the restore:
 
 ```
 read -r TARGET_SCHEMA            # type exactly: idoc_staging   (rehearsal)   or   idoc_production
@@ -230,10 +230,12 @@ ls idoc.dump                                                   # the decrypted a
    ```
 
    The `\echo` line only records in your terminal which names were used (they were already confirmed above, before this command); check it afterwards, and never retype the names from memory.
+4a. **Create the empty schema and re-grant its permissions.** `pg_restore --schema` restores the objects inside a schema but **not** the `CREATE SCHEMA` itself (the first attempt failed with `schema "idoc_staging" does not exist`) and not the schema-level grants. Before the restore, read the kept copy's grants with `select nspacl from pg_namespace where nspname = '<old>'`, then run `CREATE SCHEMA :"target";` and `GRANT USAGE ON SCHEMA :"target" TO <the same roles>;` (for staging: `ai_debugger, idoc_staging_app, idoc_backup_reader`; for production: `ai_debugger, idoc_production_app, idoc_backup_reader`).
 5. Restore the chosen schema from the archive into the live database **as one transaction**, so that either all of it is applied or none of it is: `pg_restore --single-transaction --exit-on-error --no-owner --dbname=<live database> --schema="$TARGET_SCHEMA" idoc.dump`, connected as the schema-owner login (add `--no-privileges` only if the grants in the archive cannot be applied; if it is used, the grants must be re-applied from the operations runbook, section "Database role provisioning"). Run this in the live-database window you set up before step 4. Without `--single-transaction --exit-on-error`, `pg_restore` carries on after an SQL error and can leave a half-built schema in place after the original has been renamed away. **If this command reports any error, nothing has been applied: put the original back with the same `psql` pattern as step 4 (`ALTER SCHEMA :"old" RENAME TO :"target";`, with `old` and `target` set the same way), confirm the application works, and stop.** Unverified points to check on staging: whether Render's schema-owner login can apply the archive's ownership and grants, whether functions and views that mention the schema by name still work after the rename, and whether sequence values are correct.
 
 6. Verify (row counts, newest rows, that the application works on the affected environment, and that `idoc_backup_reader` can still read the schema). Run **IDOC R2 Schema Backups** again; the role check in the script will fail if the grants are wrong.
-7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it with the second person's agreement.
+6a. **Remove the backup login from the kept copy:** `REVOKE USAGE ON SCHEMA <old> FROM idoc_backup_reader;`. The backup script's role check refuses to run if `idoc_backup_reader` can read any schema other than the two IDOC schemas, so the renamed copy makes **IDOC R2 Schema Backups** fail closed until this is done (found in the rehearsal).
+7. Keep `${TARGET_SCHEMA}_replaced_${STAMP}` for at least a week after you are satisfied, then drop it once you have confirmed nothing in it is still needed.
 
 ### Part 10: What to do if something fails
 
