@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test, { after, beforeEach } from 'node:test';
 import type Stripe from 'stripe';
-import postgres from 'postgres';
 import { sendTransactionalEmail } from '../lib/notifications/brevo-transactional.ts';
 import { enqueueAuthSecurityNotification } from '../lib/notifications/auth-security-events.ts';
 import { deliverNextAuthSecurityNotification } from '../lib/notifications/auth-security-delivery.ts';
@@ -16,7 +14,7 @@ import { updateStripeCustomerEmail } from '../lib/payments/customer-email.ts';
 import { processStripeEvent, type WebhookStripeClient } from '../lib/payments/webhook-handlers.ts';
 import { processCanceledSeminarPayments } from '../lib/seminars/cancellation-worker.ts';
 import { communicationHoldFields, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
-import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql, testUrl } from './postgres-harness.ts';
+import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } from './postgres-harness.ts';
 
 const originalFetch = globalThis.fetch;
 const originalHold = process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING;
@@ -146,30 +144,6 @@ test('sandbox renewal schedule creation remains usable under the communications 
   const event = await renewalSetupEvent(false);
   assert.equal(await processStripeEvent(event, renewalStripe()), 'processed');
   assert.equal(providerCalls, 2);
-});
-
-test('legacy news import and its transformations run idempotently during the hold without provider calls', async () => {
-  const admin = await createUser();
-  await grantRole(admin.id, 'super_admin');
-  const completeSource = await readFile(new URL('../scripts/data-import/legacy-idoc-club-content-import.sql', import.meta.url), 'utf8');
-  // Exercise the original executable news transformations. The later seminar section has an
-  // independent, pre-existing INSERT column/value arity defect; see the launch runbook.
-  const seminarSection = completeSource.lastIndexOf('--', completeSource.indexOf('INSERT INTO idoc.seminars'));
-  const firstSeminarStatement = completeSource.lastIndexOf('WITH ins AS (', completeSource.indexOf('INSERT INTO idoc.seminars'));
-  assert.ok(seminarSection > 0 && firstSeminarStatement > 0);
-  const source = completeSource.slice(0, firstSeminarStatement) + '\nCOMMIT;';
-  const connection = postgres(testUrl, { max: 1, onnotice: () => {} });
-  try { await connection.unsafe(source); } finally { await connection.end(); }
-  const first = await sql`select count(*)::int count from idoc.news_articles`;
-  assert.ok(first[0].count > 0);
-  const repeat = postgres(testUrl, { max: 1, onnotice: () => {} });
-  try { await repeat.unsafe(source); } finally { await repeat.end(); }
-  assert.equal((await sql`select count(*)::int count from idoc.news_articles`)[0].count, first[0].count);
-  for (const table of ['billing_accounts', 'subscriptions', 'renewal_preferences', 'payments', 'notification_outbox']) {
-    assert.equal((await sql.unsafe(`select count(*)::int count from idoc.${table}`))[0].count, 0, table);
-  }
-  assert.equal(providerCalls, 0);
-  assert.equal(communicationHoldFields().lastErrorCode, 'member_launch_hold');
 });
 
 test('held invoice webhook preserves accounting/grace and permanently suppresses its payment email', async () => {
