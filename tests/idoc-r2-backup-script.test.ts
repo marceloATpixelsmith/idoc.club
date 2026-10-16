@@ -128,3 +128,10 @@ test('the backup annotation carries only the summary because GitHub truncates an
   assert.match(backup, /title=idoc-backup-manifest::\$\{summary_json/);
   assert.doesNotMatch(backup, /title=idoc-backup-manifest::\$\{manifest_json/);
 });
+
+test('the drill download step reads the archive with the newest installed pg_restore, not whichever one is first on PATH', () => {
+  const fetchScript = readFileSync('scripts/restore-drill-fetch.sh', 'utf8');
+  assert.match(fetchScript, /pgbin="\$\(ls -d \/usr\/lib\/postgresql\/\*\/bin \| sort -V \| tail -1\)"/);
+  assert.match(fetchScript, /"\$pgbin\/pg_restore" --list/);
+  assert.doesNotMatch(fetchScript, /^pg_restore --list/m);
+});
