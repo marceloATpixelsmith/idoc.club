@@ -27,11 +27,18 @@ export function parseBackupManifest(message: string): BackupManifest | null {
   if (typeof object !== 'string' || !OBJECT_PATTERN.test(object)) return null;
   if (typeof startedAtUtc !== 'string' || !/^\d{8}T\d{6}Z$/.test(startedAtUtc)) return null;
   if (typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256)) return null;
-  if (!safeCount(sizeBytes) || !safeCount(tableCount) || !isRecord(counts)) return null;
+  if (!safeCount(sizeBytes) || !safeCount(tableCount)) return null;
+  // The workflow annotation carries a summary with `totalRows` (GitHub truncates annotations at 4096 characters); the full form carries `counts`.
   let totalRows = 0;
-  for (const count of Object.values(counts)) {
-    if (!safeCount(count)) return null;
-    totalRows += count;
+  if (isRecord(counts)) {
+    for (const count of Object.values(counts)) {
+      if (!safeCount(count)) return null;
+      totalRows += count;
+    }
+  } else if (safeCount(value.totalRows)) {
+    totalRows = value.totalRows;
+  } else {
+    return null;
   }
   return { object, startedAtUtc, kind: object.includes('/pre-migration/') ? 'pre-migration' : 'daily', sha256, sizeBytes, tableCount, totalRows };
 }
@@ -44,7 +51,7 @@ export function parseDrillResult(message: string): DrillResult | null {
   if (!Array.isArray(value.schemasRestored) || !value.schemasRestored.every((item) => typeof item === 'string')) return null;
   if (!Array.isArray(value.rowCountMismatches)) return null;
   const mismatches: DrillMismatch[] = [];
-  for (const item of value.rowCountMismatches.slice(0, 50)) {
+  for (const item of value.rowCountMismatches.slice(0, 15)) {
     if (!isRecord(item) || typeof item.table !== 'string') return null;
     const expected = item.expected === null ? null : item.expected;
     const actual = item.actual === null ? null : item.actual;
