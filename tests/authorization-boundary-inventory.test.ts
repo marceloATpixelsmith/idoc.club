@@ -68,7 +68,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     publishNewsArticle: 'delegates-to-data-access', scheduleNewsArticle: 'delegates-to-data-access',
     unpublishNewsArticle: 'delegates-to-data-access', updateNewsArticle: 'delegates-to-data-access',
   },
-  'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access', updateAdminTableInlineField: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/bulk-actions.ts': { bulkArchiveMembers: 'delegates-to-data-access', bulkCloseSupportRows: 'delegates-to-data-access', bulkDeleteAdminRows: 'delegates-to-data-access', bulkSetNewsStatus: 'delegates-to-data-access', bulkSetSeminarStatus: 'delegates-to-data-access', updateAdminTableInlineField: 'delegates-to-data-access' },
   'app/(dashboard)/admin/seminars/actions.ts': {
     createAdminSeminarRegistrationAction: 'delegates-to-data-access', createSeminarAction: 'delegates-to-data-access', recordManualSeminarPaymentAction: 'delegates-to-data-access',
     refundSeminarRegistrationAction: 'delegates-to-data-access', searchRegistrationMembersAction: 'delegates-to-data-access',
@@ -87,6 +87,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     suspendUserAccountForm: 'delegates-to-data-access', reinstateUserAccountForm: 'delegates-to-data-access',
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
+  'app/(dashboard)/admin/email-previews/actions.ts': { sendPreviewForm: 'delegates-to-data-access' },
   'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access', saveMembershipPerks: 'delegates-to-data-access' },
   // The public contact form: no session/entitlement involved on either side, only Turnstile +
   // rate-limiting + CSRF, the same anonymous-safe shape as the pre-authentication login actions --
@@ -119,6 +120,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/renewal-notice-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
   'app/api/cron/seminar-cancellation-resolution/route.ts': 'shared-secret-header',
+  'app/api/auth/session-expired/route.ts': 'public-redirect-sets-validated-return-cookie-no-data-access',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
   'app/api/internal/postgres-metrics/route.ts': 'staging-branch-only-shared-secret-header',
   'app/api/qstash/jobs/route.ts': 'qstash-signed-jwt-body-and-destination',

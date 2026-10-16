@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { consumeReturnTo } from '@/lib/auth/return-to';
 import {
   completeGoogleOidcCallback,
   GoogleOidcError,
@@ -22,6 +23,7 @@ import {
   GoogleAccountNotEligibleError,
 } from '@/lib/auth/google-account';
 import { getUser } from '@/lib/db/queries';
+import { maintenanceModeEnabled, userIsSuperAdmin } from '@/lib/admin/maintenance-mode';
 import {
   clearGoogleLinkFreshEvidence,
   readGoogleLinkFreshEvidence,
@@ -93,6 +95,11 @@ export async function GET(request: NextRequest) {
     if (identity.oauthTransactionPurpose === 'external_identity_link') {
       const user = await getUser();
       if (!user || identity.oauthAuthenticatedUserId !== String(user.id)) throw new Error('Invalid Google link subject binding.');
+      // A link started just before maintenance mode was switched on must not complete during the window (docs/16).
+      if (await maintenanceModeEnabled() && !(await userIsSuperAdmin(user.id))) {
+        await clearGoogleLinkFreshEvidence();
+        return clearBinding(flashRedirect(applicationOrigin, '/dashboard/security', 'google-auth-failed'));
+      }
       const evidence = await readGoogleLinkFreshEvidence(user.id);
       if (!evidence) throw new Error('Fresh verification is required for Google linking.');
       const result = await linkGoogleIdentity({ userId: String(user.id), identity, freshEvidence: evidence });
@@ -112,7 +119,7 @@ export async function GET(request: NextRequest) {
       return clearBinding(NextResponse.redirect(new URL('/mfa', applicationOrigin), 302));
     }
     await setSession(authenticated.user);
-    return clearBinding(NextResponse.redirect(new URL(authenticated.redirectTo, applicationOrigin), 302));
+    return clearBinding(NextResponse.redirect(new URL(await consumeReturnTo(authenticated.redirectTo), applicationOrigin), 302));
   } catch (error) {
     await clearGoogleLinkFreshEvidence();
     const { alert, reason } = classifyGoogleOauthFailure(error, request.nextUrl.searchParams.get('error'));

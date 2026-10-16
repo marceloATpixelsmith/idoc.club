@@ -9,6 +9,7 @@ import { ArticleThumbnailField } from '@/components/news/article-thumbnail-field
 import { NewsForm } from '@/components/news/news-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SingleDatePicker } from '@/components/forms/us-date-input';
 import { Label } from '@/components/ui/label';
 import { getAdminArticle, STATUS_LABELS } from '@/lib/news/articles';
 import { createNewsArticle, updateNewsArticle } from './actions';
@@ -53,7 +54,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
               <ArticleAccessField />
               <div className="max-w-sm space-y-1.5">
                 <Label htmlFor="publicationDate">Publication date (UTC)</Label>
-                <Input id="publicationDate" name="publicationDate" required type="date" />
+                <SingleDatePicker id="publicationDate" name="publicationDate" required />
               </div>
             </AdminFormSection>
             <AdminFormSection title="Article details">
@@ -100,7 +101,7 @@ export async function AdminNewsDrawer({ articleId, isNew = false }: { articleId?
             <ArticleAccessField initialAudience={Array.isArray(article.audience) ? article.audience.map(String) : ['public']} />
             <div className="max-w-sm space-y-1.5">
               <Label htmlFor="publicationDate">Publication date (UTC)</Label>
-              <Input defaultValue={toDateOnlyUtc(article.publication_date)} id="publicationDate" name="publicationDate" required type="date" />
+              <SingleDatePicker defaultIso={toDateOnlyUtc(article.publication_date)} id="publicationDate" name="publicationDate" required />
             </div>
           </AdminFormSection>
           <AdminFormSection title="Article details">

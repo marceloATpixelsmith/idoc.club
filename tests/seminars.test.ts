@@ -14,6 +14,7 @@ const multiDayMigration = readFileSync('lib/db/migrations/0056_seminars_multiday
 const dateOnlyMigration = readFileSync('lib/db/migrations/0061_seminar_date_only_rich_information.sql', 'utf8');
 const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/route.ts', 'utf8');
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
+const levelsField = readFileSync('components/seminars/seminar-levels-field.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
 const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
@@ -134,7 +135,7 @@ test('recording a manual payment refreshes a stale, locally-open Stripe checkout
 test('My Seminars never renders bank-transfer instructions in the registration listing', () => {
   assert.doesNotMatch(memberPage, /sanitizeBankInstructions/);
   assert.doesNotMatch(memberPage, /dangerouslySetInnerHTML/);
-  assert.match(memberPage, /Payment Method:/);
+  assert.doesNotMatch(memberPage, /Payment Method:/);
 });
 
 
@@ -165,8 +166,8 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
     assert.ok(seminarFieldset.includes(`initialHtml={sanitizeArticleContent(seminar?.${field} ?? '')}`), `${field} must be sanitized before loading the editor`);
   }
   assert.doesNotMatch(seminarFieldset, /name="startTime"|name="endTime"|name="timezone"/);
-  assert.match(seminarFieldset, /name="startDate"/);
-  assert.match(seminarFieldset, /name="endDate"/);
+  assert.match(seminarFieldset, /fromName="startDate"/);
+  assert.match(seminarFieldset, /toName="endDate"/);
   assert.match(seminarFieldset, /name="price"/);
   assert.doesNotMatch(seminarFieldset, /nonMemberPrice|Non-member|memberPrice|organizingNationalFederation/);
   assert.doesNotMatch(seminarFieldset, /paymentMethodId|name="paymentMethod"/);
@@ -174,7 +175,7 @@ test('the seminar fieldset uses date-only scheduling and re-sanitizes all five r
 
 test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted through create and update, and shown on the public listing cards and detail page', () => {
   assert.match(seminarFieldset, /name="isFei"/);
-  assert.match(seminarFieldset, /type="checkbox"/);
+  assert.match(readFileSync('components/ui/form-toggle.tsx', 'utf8'), /type="checkbox"/);
   assert.match(seminarsSource, /isFei: input\.isFei === 'on' \|\| input\.isFei === true/);
   assert.match(seminarsSource, /status,is_fei,levels,created_by_user_id/);
   assert.match(seminarsSource, /is_fei=\$\{fields\.isFei\}/);
@@ -186,11 +187,11 @@ test('a seminar can be flagged as FEI-affiliated: an admin toggle, persisted thr
 });
 
 test('a seminar can be assigned one or more officiating levels via a multi-checkbox admin control, and picking All Levels always displays as the literal "All levels"', () => {
-  assert.match(seminarFieldset, /name="levels" type="checkbox" value=\{value\}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 1', value: 'level_1' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 2', value: 'level_2' \}/);
-  assert.match(seminarFieldset, /\{ label: 'Level 3', value: 'level_3' \}/);
-  assert.match(seminarFieldset, /\{ label: 'All Levels', value: 'all_levels' \}/);
+  assert.match(levelsField, /name="levels"/);
+  assert.match(levelsField, /\{ label: 'Level 1', value: 'level_1' \}/);
+  assert.match(levelsField, /\{ label: 'Level 2', value: 'level_2' \}/);
+  assert.match(levelsField, /\{ label: 'Level 3', value: 'level_3' \}/);
+  assert.match(levelsField, /\{ label: 'All Levels', value: 'all_levels' \}/);
   assert.match(seminarsSource, /SEMINAR_LEVELS = \['level_1', 'level_2', 'level_3', 'all_levels'\]/);
   assert.match(seminarsSource, /selected\.includes\('all_levels'\) \? \['all_levels'\] : \[\.\.\.new Set\(selected\)\]/);
   const formatSource = readFileSync('lib/seminars/format.ts', 'utf8');
@@ -211,20 +212,19 @@ test('a locked price input still submits its value through a hidden mirror', () 
 test('the member Seminars page renders registration and payment status labels', () => {
   assert.match(memberPage, /APPROVAL_STATUS_LABELS/);
   assert.match(memberPage, /PAYMENT_STATUS_LABELS/);
-  assert.match(memberPage, /Registration Status:/);
-  assert.match(memberPage, /Payment Status:/);
+  assert.match(memberPage, /Status: <strong>\{registrationStatus === 'canceled'[^}]*APPROVAL_STATUS_LABELS\[approvalStatus\]\} \/ \$\{PAYMENT_STATUS_LABELS\[paymentStatus\]\}/);
   const statusSource = readFileSync('lib/seminars/status.ts', 'utf8');
   for (const label of ['Canceled', 'Registration closed', 'Full', 'Open', 'Past', 'Bank transfer pending', 'Cash pending', 'Paid', 'Unpaid']) {
     assert.ok(statusSource.includes(label), `label "${label}" is not defined in lib/seminars/status.ts`);
   }
 });
 
-test('the member Seminars page separates current registrations from available seminars, with no redundant sub-heading repeating what the tab already says', () => {
+test('the member Seminars page shows the entire available catalog plus a separate registration history without redundant headings', () => {
   for (const label of ['Available seminars/courses', 'My seminar/course registrations', 'Past seminars/courses']) {
     assert.match(memberPage, new RegExp(label));
   }
   assert.match(memberPage, /const registered/);
-  assert.match(memberPage, /const upcoming/);
+  assert.match(memberPage, /\{seminars\.map\(row\)\}/);
   // "My seminar registrations" already says what this list is -- a second, identical sub-heading
   // directly under it is pure noise, and it previously stayed visible on the Past tab too, since it
   // never depended on which tab was selected.
@@ -573,5 +573,113 @@ test('an administrator creates a registration by looking up an active member, wh
   assert.match(drawer, /<MemberLookup \/>/);
   assert.doesNotMatch(drawer, /name="firstName"|name="lastName"|name="email"|name="phone"/);
   // Seminar and payment method sit side by side at 50% each on desktop.
-  assert.match(drawer, /grid gap-4 md:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
+  assert.match(drawer, /grid gap-4 sm:grid-cols-2[\s\S]*name="seminarId"[\s\S]*name="paymentMethod"/);
+});
+
+test('an administrator recording a seminar payment queues the Seminar payment confirmed notice in the same transaction', () => {
+  const source = readFileSync('lib/seminars/registrations.ts', 'utf8');
+  const start = source.indexOf('export async function recordManualSeminarPayment');
+  const body = source.slice(start, source.indexOf('export async function', start + 10));
+  assert.match(body, /payment_status='paid'/);
+  assert.match(body, /'seminar\.payment_confirmed'/);
+  // staging owns its notice (production never claims it) and the action drains it, like every registration confirmation.
+  assert.match(body, /isStagingSeminarDirectDelivery\(\) \? 'seminar\.staging_payment_confirmed' : 'seminar\.payment_confirmed'/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8'), /queues the payment notice under its own kind[^\n]*\n\s+if \(isStagingSeminarDirectDelivery\(\)\) await processStagingSeminarConfirmationBatch\(\)/);
+  assert.match(readFileSync('lib/notifications/renewal-notices.ts', 'utf8'), /kind in \(\$\{STAGING_SEMINAR_CONFIRMATION_KIND\}, \$\{STAGING_SEMINAR_PAYMENT_KIND\}\)/);
+  assert.match(body, /seminar\.payment_confirmed:\$\{registrationId\.data\}:manual/);
+  assert.match(body, /on conflict\(dedupe_key\) do nothing/);
+  // The notice is queued inside the client.begin transaction that records the payment.
+  assert.ok(body.indexOf("'seminar.payment_confirmed'") > body.indexOf("payment_status='paid'"));
+  assert.ok(body.indexOf('client.begin') < body.indexOf("payment_status='paid'"));
+});
+
+test('offline seminar payments require method-labelled evidence, on create-as-Paid and when recording a received payment', () => {
+  const labels = readFileSync('lib/seminars/payment-reference.ts', 'utf8');
+  assert.match(labels, /bank_transfer: 'Bank Transfer Reference'/);
+  assert.match(labels, /cash_event: 'Receipt ID'/);
+  assert.match(labels, /online_stripe: 'Stripe Payment ID'/);
+  assert.match(registrationsSource, /RECEIVED_VIA_METHODS = \['bank_transfer', 'cash_event', 'online_stripe'\]/);
+  assert.match(registrationsSource, /if \(!reference\) throw new SeminarRegistrationError\(`Enter the \$\{seminarPaymentReferenceLabel\(method\)\}\.`\)/);
+  assert.match(registrationsSource, /if \(markPaid && !paymentReference\) throw new SeminarRegistrationError/);
+  const form = readFileSync('app/(dashboard)/admin/seminars/registrations/record-payment-form.tsx', 'utf8');
+  assert.match(form, /seminarPaymentReferenceLabel\(method\)/);
+  assert.match(form, /name="reference" onChange=\{[^}]*\} required/);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/registrations/registration-create-drawer.tsx', 'utf8'), /paymentStatus === 'paid'[\s\S]*name="paymentReceivedVia"[\s\S]*name="paymentReference"[\s\S]*required/);
+  assert.ok(existsSync('docs/29-admin-table-and-form-style-guide.md'));
+});
+
+test('automatic cancellation refunds skip manually recorded Stripe payments that have no payment intent', () => {
+  const worker = readFileSync('lib/seminars/cancellation-worker.ts', 'utf8');
+  assert.match(worker, /\(r\.payment_status in \('paid','refund_failed'\) and r\.stripe_payment_intent_id is not null\)/);
+});
+
+test('Stripe webhook processing failures are logged categorically and rethrown so Stripe retries', () => {
+  const routeSource = readFileSync('app/api/stripe/webhook/route.ts', 'utf8');
+  const eventSource = readFileSync('lib/observability/security-events.ts', 'utf8');
+  assert.match(routeSource, /try \{\s*status = await processStripeEvent\(event, stripe\);\s*\} catch \(error\) \{\s*await logError\('stripe_webhook_processing_failed', \{ reason: 'processing_failed' \}\);[\s\S]*?throw error;/);
+  const definition = eventSource.match(/stripe_webhook_processing_failed: \{[^\n]*\}/)?.[0] ?? '';
+  assert.match(definition, /attribution: 'system'/);
+  assert.match(definition, /category: 'operational'/);
+  assert.match(definition, /resource: 'stripe-webhook'/);
+  assert.match(definition, /retentionClass: 'operational'/);
+  assert.match(definition, /reason: \['processing_failed'\]/);
+  assert.doesNotMatch(definition, /sentry/);
+});
+
+test('seminar scheduling accepts picker ISO and displayed dd/mm/yyyy dates without reversing day and month', async () => {
+  const { normalizeSeminarDate } = await import('../lib/seminars/date-input.ts');
+  assert.equal(normalizeSeminarDate('2026-12-17'), '2026-12-17');
+  assert.equal(normalizeSeminarDate('17/12/2026'), '2026-12-17');
+  assert.equal(normalizeSeminarDate('19/12/2026'), '2026-12-19');
+  assert.equal(normalizeSeminarDate('30/10/2026'), '2026-10-30');
+  assert.equal(normalizeSeminarDate('29/02/2028'), '2028-02-29');
+  for (const input of ['29/02/2027', '31/04/2026', '2026-13-01', '12/31/2026', '2026-02-30', '', '17/12/20']) {
+    assert.equal(normalizeSeminarDate(input), null, input);
+  }
+  const seminarSource = readFileSync('lib/seminars/seminars.ts', 'utf8');
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.startDate\)/);
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.endDate\)/);
+  assert.match(seminarSource, /normalizeSeminarDate\(input\.registrationDeadline\)/);
+});
+
+test('seminar create and edit drawers occupy at least 70vw on desktop', () => {
+  const drawer = readFileSync('components/admin/admin-form-drawer.tsx', 'utf8');
+  const seminarDrawer = readFileSync('app/(dashboard)/admin/seminars/seminar-drawer.tsx', 'utf8');
+  assert.match(drawer, /wide \? 'sm:w-\[70vw\] sm:max-w-none'/);
+  assert.equal((seminarDrawer.match(/title="Seminar\/Course" wide/g) ?? []).length, 2);
+});
+
+test('All Levels is exclusive and clearing it leaves no levels selected', () => {
+  assert.match(seminarFieldset, /<SeminarLevelsField initialLevels=/);
+  assert.match(levelsField, /checked \? \['all_levels'\] : \[\]/);
+  assert.match(levelsField, /previous\.filter\(\(item\) => item !== 'all_levels'/);
+  assert.match(levelsField, /checked=\{selected\.includes\(value\)\}/);
+});
+
+test('member seminar catalog includes registered courses while detail pages suppress repeat registration', () => {
+  const catalog = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  const detail = readFileSync('app/(marketing)/seminars/[id]/page.tsx', 'utf8');
+  assert.match(catalog, /listCurrentSeminarsForMember\(profileId\)/);
+  assert.match(catalog, /seminars\.map\(row\)/);
+  assert.doesNotMatch(catalog, /seminars\.filter\(\(seminar\) => seminar\.registration_status === null\)/);
+  assert.match(detail, /alreadyRegistered = seminar\.registration_status !== null/);
+  assert.match(detail, /alreadyRegistered \? null : seminar\.availability !== 'open'/);
+});
+
+test('member seminar navigation uses a clear unboxed parent and contextual secondary level', () => {
+  const catalog = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
+  const member = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  assert.match(catalog, /aria-label="Seminars\/Courses view"/);
+  assert.match(catalog, /border-b-\[3px\]/);
+  assert.match(catalog, /aria-current=\{showMySeminars \? 'page' : undefined\}/);
+  assert.match(catalog, /aria-label="Registration history"/);
+  assert.match(catalog, /sm:grid-cols-subgrid/);
+  assert.doesNotMatch(catalog, /sm:col-start-2/);
+  assert.match(catalog, /className="flex flex-wrap items-center gap-x-7 gap-y-2"/);
+  assert.match(catalog, /bg-surface\/45/);
+  assert.doesNotMatch(catalog, /border-l-2 border-gold\/60/);
+  assert.match(catalog, /aria-current=\{tab === 'past' \? 'page' : undefined\}/);
+  assert.match(catalog, /href="\/seminars\?view=my&tab=past"/);
+  assert.doesNotMatch(member, /aria-label="Registration history"/);
+  assert.doesNotMatch(member, /const upcoming = seminars\.filter/);
 });

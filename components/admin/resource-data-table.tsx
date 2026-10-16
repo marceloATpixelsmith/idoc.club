@@ -1,14 +1,15 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Download, LoaderCircle, Newspaper, Pencil, X } from 'lucide-react';
+import { Archive, BookOpenText, CircleAlert, CircleCheck, CircleDashed, ClipboardList, Clock3, Copy, Download, LoaderCircle, Newspaper, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { updateAdminTableInlineField } from '@/app/(dashboard)/admin/bulk-actions';
+import { duplicateAdminRecord } from '@/app/(dashboard)/admin/duplicate-record';
 import { BulkDeleteSelected } from '@/components/admin/bulk-delete-selected';
-import { BulkNewsStatusSelected } from '@/components/admin/bulk-update-selected';
+import { BulkNewsStatusSelected, BulkSeminarStatusSelected } from '@/components/admin/bulk-update-selected';
 import { persistTablePreferences, TablePreferenceSync } from '@/components/admin/table-preference-sync';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { downloadCsv } from '@/components/admin/download-csv';
@@ -70,7 +71,7 @@ const CONFIG: Record<ResourceType, ResourceConfig> = {
     types: [{ label: 'NEWS', value: 'news' }, { label: 'BLOG', value: 'blog' }],
   },
   seminars: {
-    columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Price' }, { id: 'registrations', label: 'Registered / Capacity' }],
+    columns: [{ id: 'title', label: 'Title' }, { id: 'status', label: 'Status' }, { id: 'start', label: 'Start' }, { id: 'end', label: 'End' }, { id: 'deadline', label: 'Deadline' }, { id: 'prices', label: 'Price' }, { id: 'registrations', label: 'REG/CAPS' }],
     dateFilter: true,
     path: '/admin/seminars',
     searchLabel: 'Search seminar title or location',
@@ -237,6 +238,46 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   );
 }
 
+//KEEP THE TABLE BUSY UNTIL REFRESHED SERVER ROWS ARRIVE, NOT JUST UNTIL THE MUTATION RETURNS.
+function DuplicateRecordButton({ id, tableType }: { id: number; tableType: ResourceType }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+
+  async function duplicate() {
+    if (pending) return;
+    setPending(true);
+    window.dispatchEvent(new Event('idoc:table-refresh-start'));
+    try {
+      const result = await duplicateAdminRecord(tableType, id, readCsrfTokenFromDocumentCookie());
+      if (result.error) {
+        window.dispatchEvent(new Event('idoc:table-refresh-end'));
+        window.alert(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      window.dispatchEvent(new Event('idoc:table-refresh-end'));
+      window.alert('Unable to duplicate this record. Please try again.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Button
+      aria-label={`Copy ${tableType === 'news' ? 'article' : 'seminar'}`}
+      disabled={pending}
+      onClick={() => { void duplicate(); }}
+      size="icon-sm"
+      title="Copy as draft"
+      type="button"
+      variant="ghost"
+    >
+      {pending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Copy aria-hidden />}
+    </Button>
+  );
+}
+
 function downloadSelected(rows: ResourceRow[], columns: ResourceConfig['columns'], type: ResourceType) {
   downloadCsv(
     `${type}-selected.csv`,
@@ -345,6 +386,7 @@ export function ResourceDataTable({
               }}
             ><Pencil aria-hidden="true" /></Link>
           </Button>
+          <DuplicateRecordButton id={row.original.id} tableType={tableType} />
           {tableType === 'seminars' && <>
             <Button asChild aria-label="Registrations" size="icon-sm" title="View registrations" variant="ghost">
               <Link href={`/admin/seminars/registrations?seminarId=${row.original.id}`} onClick={(event) => openTableAction(event, `/admin/seminars/registrations?seminarId=${row.original.id}`)}><ClipboardList aria-hidden="true" /></Link>
@@ -476,7 +518,7 @@ export function ResourceDataTable({
     : undefined;
   return <>
     <TablePreferenceSync table={tableType as AdminTableIdentifier} />
-    <DataTable table={table} columnStyles={newsColumnStyles} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+    <DataTable table={table} columnStyles={newsColumnStyles} pageSizeOptions={[10, 25, 50, 100]} loading={isPending} emptyState={<div><strong>{filtered ? 'No records match this view' : 'No records yet'}</strong><span className="block text-muted-foreground">{filtered ? 'Change or clear the filters.' : 'Create a record to get started.'}</span></div>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={() => downloadSelected(selected, config.columns, tableType)}>Export selected CSV</ActionBarItem>{tableType === 'news' ? <BulkNewsStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}{tableType === 'seminars' ? <BulkSeminarStatusSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} /> : null}<BulkDeleteSelected clearSelection={() => table.resetRowSelection()} ids={selected.map((row) => String(row.id))} table={tableType} /><ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
       <DataTableToolbar
         className="mt-5 rounded-xl border bg-background p-3"
         table={table}

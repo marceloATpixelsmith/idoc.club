@@ -1113,3 +1113,36 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-038 — An expired protected-page session returns the user to the same page after sign-in, and active use keeps an administrator signed in
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-SESSION-004, AUTH-SESSION-010
+- **CI coverage:** mapped — `tests/return-to-path.test.ts`, `tests/general-navigation.test.ts`, `tests/canonical-session-lifecycle.test.ts` — Unit tests cover the return-to path allow-list (protected same-origin paths only, no absolute or protocol-relative URLs) and the keep-alive wiring; the end-to-end return needs a real expired session and is exercised live.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- Use a disposable member account; an administrator account is optional for the idle-limit check.
+
+### Steps
+1. Sign in and open a deep protected page such as /dashboard/profile?tab=security.
+2. Sign out in another tab (or let the session expire), then reload the first tab and confirm it lands on /sign-in.
+3. Complete sign-in (password, email code and MFA as required) and confirm the browser returns to the original deep page.
+4. Request /sign-in?next=https://example.com and a signed-out visit to /api/user, sign in, and confirm neither is used as a destination.
+5. As an administrator, keep clicking and typing on a protected page for longer than the 30-minute idle limit and confirm the session stays valid.
+
+### PASS
+- Sign-in returns to the originally requested protected page exactly once; the remembered destination is cleared afterward and never points outside /dashboard, /admin, or /onboarding.
+- An actively used privileged session is not signed out by the idle limit, while an untouched one still expires.
+
+### FAIL
+- Sign-in lands on a different page after a protected-page redirect, honors an off-site or non-protected destination, reuses a stale destination on a later sign-in, or signs out an actively used session.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.

@@ -29,3 +29,20 @@ test('shared data table displays loading skeleton while a saved drawer refreshes
 test('news drawer remounts when another article is selected', () => {
   assert.match(newsPage, /<AdminNewsDrawer key=\{params\.articleId\} articleId=\{params\.articleId\}/);
 });
+
+test('every admin drawer closes back to the bare table URL and remounts per record', () => {
+  assert.doesNotMatch(drawer, /router\.push\(closeHref\)/);
+  assert.match(drawer, /export function useAdminDrawerClose/);
+  assert.match(drawer, /idoc:table-refresh-end/);
+  assert.match(table, /addEventListener\('idoc:table-refresh-end', end\)/);
+  const members = readFileSync('app/(dashboard)/admin/members/member-detail-sheet.tsx', 'utf8');
+  assert.match(members, /useAdminDrawerClose\(closeHref\)/);
+  assert.doesNotMatch(members, /router\.push\(closeHref\)|router\.refresh\(\)/);
+  const mounts: Array<[string, RegExp]> = [
+    ['app/(dashboard)/admin/seminars/registrations/page.tsx', /<RegistrationCreateDrawer key="new"[\s\S]*<RegistrationDetailSheet key=\{selected\.id\}/],
+    ['app/(dashboard)/admin/seminars/page.tsx', /<AdminSeminarDrawer key="new" isNew \/>[\s\S]*<AdminSeminarDrawer key=\{seminarId\}/],
+    ['app/(dashboard)/admin/support/page.tsx', /<SupportDetailDrawer key=\{supportId\}/],
+  ];
+  for (const [path, pattern] of mounts) assert.match(readFileSync(path, 'utf8'), pattern, path);
+  assert.match(readFileSync('app/(dashboard)/admin/seminars/actions.ts', 'utf8'), /'Seminar\/course saved\.', '\/admin\/seminars'\)/);
+});

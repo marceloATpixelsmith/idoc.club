@@ -246,6 +246,34 @@ ls idoc.dump                                                   # the decrypted a
 
 In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the window. In your main window: `cd ~ && rm -rf ~/idoc-restore` (this removes the encrypted file, the decrypted dump and the scratch database), and `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY R2_ACCOUNT_ID`. If you did Part 9, also clear the database credentials in **every** window you used for it, then close those windows: `unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSSLMODE TARGET_SCHEMA STAMP CONFIRM`. If you created a temporary R2 read token for this, revoke it in Cloudflare. Record in `docs/observability-implementation-status.md` (or the operations log) which backup was used, who approved it, and the outcome.
 
+## Super Admin backup and restore-drill tool
+
+**Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) runs a **restore drill**, and (3) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
+
+**One-person operation.** IDOC has a single operator, so no second approver is required. The controls are instead: Super Admin role, fresh privileged TOTP step-up for every action, an explicit confirmation, an immutable audit row, and the existing GitHub environment protections.
+
+**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the drill workflow and read its result. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
+
+**How a drill works.**
+1. The Super Admin presses *Run restore drill* (choose the latest backup or a listed one), passes TOTP, confirms. The app records an audit row and dispatches the `IDOC Restore Drill` workflow on `main`.
+2. The workflow runs in the `idoc-db-backups` environment, downloads the chosen object from R2, verifies its SHA-256 against the manifest written when it was backed up, decrypts it, and hands it to a separate credential-free step.
+3. That step restores it into a throwaway PostgreSQL cluster (same isolation as the nightly check), counts the rows of every table in both schemas, and compares them with the **row counts captured in the same snapshot as the dump** (the manifest). It writes a small JSON result (`restore-drill-result`) and a job summary.
+4. The page reads that result through the GitHub API and shows PASS or FAIL with: backup object and time, checksum match, tables expected/restored, per-table row-count comparison, who started it, when, and a link to the workflow run. PASS requires every check to pass; anything else is FAIL.
+
+**Backup manifest.** The backup script is extended to record, inside the same snapshot as `pg_dump`, the per-table row counts for both schemas and to upload `manifest.json` (object path, sha256, size, started/finished time, counts) next to the dump. The manifest holds counts and names only, never row data.
+
+**Maintenance mode.** A per-environment switch (stored in the environment's own schema, so staging and production are independent). While on, every visitor except a signed-in Super Admin sees a branded, large-text "We'll be right back" page with HTTP 503 and `Retry-After`; the Stripe webhook and scheduled/queue endpoints also answer 503 so providers retry later instead of writing. `/api/health` and static assets stay available. Turning it on or off requires fresh TOTP and writes an audit row. The flag is read with a short (about 3 second) in-memory cache; if it cannot be read the site stays up rather than locking everyone out.
+
+**One-time setup.**
+1. Merge the pull request that adds the tool, then run **IDOC R2 Schema Backups** once from the Actions tab (on `main`) so a backup with a manifest exists. Older backups have no manifest and cannot be drilled.
+2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** and **Checks: Read-only**, expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
+3. In Vercel add `GITHUB_BACKUP_TOOL_TOKEN` (Sensitive, server-only) for **Production** and for **Preview scoped to the `staging` branch**; redeploy. Optional `GITHUB_BACKUP_TOOL_REPOSITORY` (default `marceloATpixelsmith/idoc.club`).
+4. Migration `0074_maintenance_mode` must be applied (staging applies itself; Production uses the reviewer-approved workflow).
+
+**Reading a result.** The Backups page shows **PASS** only when the workflow finished, the downloaded file's SHA-256 matched the manifest, every manifest table was restored, and every table's restored row count equalled the count recorded in the same snapshot as the dump. Anything else is **FAIL** with the reason, and the "workflow log" link opens the GitHub run. The same result is the `idoc-restore-result` annotation on the run, and each request is recorded in the audit log (`admin.restore_drill.requested`).
+
+**Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.
+
 ## Known pre-existing blocker
 
 The migration runner fails closed on historical Drizzle journal/ledger discrepancies in both schemas; creating backups does not fix or bypass this. Reconcile the existing migration history separately before running migration 0071. No automated restoration, migration execution, R2 bucket provisioning, environment secret installation, or changes to Production data happen merely because this PR merges.

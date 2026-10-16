@@ -58,9 +58,10 @@ Before merge, the agent must:
 3. Confirm that the workflow completed successfully, not merely that it was queued.
 4. Check for new review comments and resolve every actionable comment.
 5. Merge only when the fast check, every required full check, and review state are all clear.
+6. Do not merge while a hold is recorded on the PR (draft status, the `hold-merge` label, or a hold comment) because the owner said more commits are coming; wait until they are pushed and checks and review have passed on the final head. The standing merge authorization applies only to PRs targeting `staging`; a PR targeting `main` also needs every promotion gate in docs/07 and explicit owner approval. See "Merging pull requests" in `AGENTS.md`.
 
 If a workflow is skipped by path filtering but the agent determines that the change is higher risk, the agent must manually dispatch that workflow before merging.
 
 ## Launch-hold boundary verification
 
-Changes to the member communications/live billing hold, its queue producers/consumers or webhook guards require the full release and authentication/security workflows. The fast workflow includes fail-closed parsing and mutation/read boundary tests in `tests/member-launch-hold.test.ts`; the release PostgreSQL suite discovers `tests/member-launch-hold.integration.ts` for actual email, renewal, durable queue, webhook and legacy news-import coverage. The isolated browser suite explicitly releases the hold with intercepted providers; this is not a production configuration. See [the operator runbook](27-member-communications-and-billing-launch-hold.md).
+Changes to the member communications/live billing hold, its queue producers/consumers or webhook guards require the full release and authentication/security workflows. The fast workflow includes fail-closed parsing and mutation/read boundary tests in `tests/member-launch-hold.test.ts`; the release PostgreSQL suite discovers `tests/member-launch-hold.integration.ts` for actual email, renewal, durable queue and webhook coverage. The isolated browser suite explicitly releases the hold with intercepted providers; this is not a production configuration. See [the operator runbook](27-member-communications-and-billing-launch-hold.md).

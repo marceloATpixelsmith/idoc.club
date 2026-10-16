@@ -3,6 +3,7 @@
 import {
   ArrowUpFromLine,
   BookOpen,
+  DatabaseBackup,
   Building2,
   ClipboardList,
   FileDown,
@@ -30,12 +31,13 @@ const SHARED_ITEMS = [
   { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
   { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
   { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
-  { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars' },
+  { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars/Courses' },
   { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [
   { href: '/admin/operations/data-promotion', icon: ArrowUpFromLine, label: 'Data promotion' },
+  { href: '/admin/operations/backups', icon: DatabaseBackup, label: 'Backups & restore' },
   { href: '/admin/organization', icon: Building2, label: 'Organization settings' },
   { href: '/admin/support/defaults', icon: Settings, label: 'Support defaults' },
   { href: '/admin/security', icon: ShieldCheck, label: 'Security operations' },

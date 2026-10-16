@@ -48,7 +48,7 @@ function selectedRecords(value: string | string[] | undefined) {
 
 function datasetLabel(dataset: PromotionDataset) {
   if (dataset === 'news') return 'News / Blog';
-  if (dataset === 'seminar') return 'Seminars';
+  if (dataset === 'seminar') return 'Seminars/Courses';
   return 'Organization Settings';
 }
 
@@ -99,7 +99,7 @@ export default async function DataPromotionPage({
 
   const tabs: Array<{ dataset: PromotionDataset; label: string }> = [
     { dataset: 'news', label: 'News / Blog' },
-    { dataset: 'seminar', label: 'Seminars' },
+    { dataset: 'seminar', label: 'Seminars/Courses' },
     { dataset: 'organization', label: 'Organization Settings' },
   ];
 

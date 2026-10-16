@@ -16,7 +16,8 @@ test('cancellation dispatches immediately after database commit in both admin pa
 test('date-only publishing is normalized to midnight UTC and runs once daily', () => {
   const form = read('app/(dashboard)/admin/news/news-drawer.tsx');
   assert.doesNotMatch(form, /datetime-local/);
-  assert.match(form, /name="publicationDate" required type="date"/);
+  assert.match(form, /<SingleDatePicker id="publicationDate" name="publicationDate" required \/>/);
+  assert.doesNotMatch(form, /type="date"/);
   const articles = read('lib/news/articles.ts');
   assert.match(articles, /T00:00:00\.000/);
   assert.match(articles, /publication_date at time zone 'UTC'/);

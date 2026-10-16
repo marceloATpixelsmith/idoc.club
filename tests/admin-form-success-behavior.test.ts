@@ -15,7 +15,7 @@ const successAwareForms = [
 ].map((path) => ({ path, source: readFileSync(path, 'utf8') }));
 
 test('every mutating member admin form closes the sheet and refreshes the table on success', () => {
-  assert.match(memberDetailSheet, /const closeAndRefresh = useCallback\(\(\) => \{ setOpen\(false\); router\.push\(closeHref\); router\.refresh\(\); \}, \[closeHref, router\]\);/);
+  assert.match(memberDetailSheet, /const \{ closeAndRefresh, onOpenChange, open \} = useAdminDrawerClose\(closeHref\);/);
 
   const expectedBindings = [
     'AdminProfileForm',
@@ -61,7 +61,7 @@ test('shared table-backed admin drawers close immediately and refresh after succ
   assert.match(drawer, /window\.dispatchEvent\(new Event\('idoc:table-refresh-start'\)\)/);
   assert.match(drawer, /setOpen\(false\)/);
   assert.match(drawer, /router\.replace\(closeHref\)/);
-  assert.match(drawer, /<Dialog\.Root open=\{open\} onOpenChange=\{\(nextOpen\) => \{ setOpen\(nextOpen\); if \(!nextOpen\) router\.push\(closeHref\); \}\}>/);
+  assert.match(drawer, /<Dialog\.Root open=\{open\} onOpenChange=\{onOpenChange\}>/);
 
   for (const path of [
     'components/news/news-form.tsx',

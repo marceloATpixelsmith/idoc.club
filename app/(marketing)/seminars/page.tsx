@@ -44,20 +44,41 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
         {user ? (
-          <nav aria-label="Seminars/Courses view" className="mt-10 flex gap-4 border-b border-border">
-            <Link
-              href="/seminars"
-              className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'text-muted-foreground' : 'border-b-2 border-gold'}`}
-            >
-              Available Seminars/Courses
-            </Link>
-            <Link
-              href="/seminars?view=my"
-              className={`pb-2 text-xs uppercase tracking-[0.14em] ${showMySeminars ? 'border-b-2 border-gold' : 'text-muted-foreground'}`}
-            >
-              My Seminars/Courses
-            </Link>
-          </nav>
+          //ALIGN THE SECONDARY LEVEL WITH THE LEFT EDGE OF THE SEMINARS CONTENT AREA.
+          <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
+            <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
+              <Link
+                aria-current={!showMySeminars ? 'page' : undefined}
+                href="/seminars"
+                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold text-foreground'}`}
+              >
+                Available Seminars/Courses
+              </Link>
+              <Link
+                aria-current={showMySeminars ? 'page' : undefined}
+                href="/seminars?view=my"
+                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              >
+                My Seminars/Courses
+              </Link>
+            </nav>
+            {showMySeminars ? (
+              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
+                <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
+                  <Link
+                    aria-current={tab !== 'past' ? 'page' : undefined}
+                    className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${tab === 'past' ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold font-medium text-foreground'}`}
+                    href="/seminars?view=my"
+                  >Upcoming &amp; current</Link>
+                  <Link
+                    aria-current={tab === 'past' ? 'page' : undefined}
+                    className={`border-b-2 pb-1.5 text-sm tracking-[0.025em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${tab === 'past' ? 'border-gold font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                    href="/seminars?view=my&tab=past"
+                  >Past</Link>
+                </div>
+              </nav>
+            ) : null}
+          </div>
         ) : null}
         {user ? (
           <MemberRegistrations tab={tab} view={showMySeminars ? 'my' : 'available'} />

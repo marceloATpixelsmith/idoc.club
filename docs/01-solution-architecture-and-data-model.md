@@ -162,6 +162,8 @@ The URL is the shareable current-view authority. If a URL contains table-state p
 
 ## Membership perks data model
 
+`idoc.maintenance_mode` is a one-row-per-schema switch (`enabled`, optional internal `reason`, `changed_by_user_id`, `changed_at`; migration `0074`). Only the Super Admin Backups page writes it, with a fresh authenticator step-up and an audit row; middleware reads it to serve the branded maintenance page.
+
 `idoc.membership_perks` is the ordered, server-owned list of perk labels displayed on each membership-tier box on the public membership page and in the dashboard payment box. Super Admins replace the complete list transactionally; labels are trimmed and capped at 200 characters, no more than 50 rows are accepted, display order is explicit, and every changed replacement is audit logged. Concurrent replacements are serialized on a stable transaction-level lock so the audit record reflects the committed prior list.
 
 Migration `0049` completes durable payment lifecycle evidence. Seminar registrations retain the Checkout Session, Payment Intent, expected EUR amount, checkout lifecycle, payment timestamps, disputes, and chargebacks. `payment_refunds` links each idempotent Stripe refund to exactly one original seminar registration or membership payment and preserves amount, status, reason, administrator, provider evidence, failure, and timestamps. Reconciliation findings cover unmatched refunds, partial-policy conflicts, disputes, chargebacks, and seminar payment conflicts. The governing policy is [10 Refund Policy](10-refund-policy.md).

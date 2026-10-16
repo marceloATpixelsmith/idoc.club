@@ -55,7 +55,7 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
     await createSeminar(seminarFields(formData));
     revalidatePath('/admin/seminars');
     revalidatePath('/seminars');
-    return { success: 'Seminar created.' };
+    return { success: 'Seminar/course created.' };
   } catch (error) {
     if (error instanceof Error && ['AuthorizationError', 'CsrfError', 'SeminarValidationError'].includes(error.name)) return { error: error.message };
     return { error: 'The seminar could not be created.' };
@@ -64,13 +64,17 @@ export async function createSeminarAction(_state: AdminSeminarState, formData: F
 
 export async function updateSeminarAction(_state: AdminSeminarState, formData: FormData) {
   const id = formData.get('id');
-  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar saved.', `/admin/seminars/${id}`);
+  return run(formData, () => updateSeminar(id, seminarFields(formData)), 'Seminar/course saved.', '/admin/seminars');
 }
 
 export async function createAdminSeminarRegistrationAction(_state: AdminSeminarState, formData: FormData): Promise<AdminSeminarState> {
   return run(formData, async () => {
     await createAdminSeminarRegistration({
+      approvalStatus: formData.get('approvalStatus'),
       paymentMethod: formData.get('paymentMethod'),
+      paymentReceivedVia: formData.get('paymentReceivedVia'),
+      paymentReference: formData.get('paymentReference'),
+      paymentStatus: formData.get('paymentStatus'),
       profileId: formData.get('profileId'),
       seminarId: formData.get('seminarId'),
     });
@@ -98,8 +102,11 @@ export async function setAdminRegistrationApprovalStatusAction(_state: AdminSemi
 }
 
 export async function recordManualSeminarPaymentAction(_state: AdminSeminarState, formData: FormData) {
-  return run(formData, () => recordManualSeminarPayment(formData.get('registrationId'), formData.get('method'), formData.get('reference')),
-    'Payment recorded.', '/admin/seminars/registrations');
+  return run(formData, async () => {
+    await recordManualSeminarPayment(formData.get('registrationId'), formData.get('method'), formData.get('reference'));
+    // staging.idoc.club queues the payment notice under its own kind that the production cron never claims, so drain it now.
+    if (isStagingSeminarDirectDelivery()) await processStagingSeminarConfirmationBatch();
+  }, 'Payment recorded.', '/admin/seminars/registrations');
 }
 
 export async function setAdminRegistrationStatusAction(_state: AdminSeminarState, formData: FormData) {

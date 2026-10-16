@@ -8,16 +8,19 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { isEntitled } from '@/lib/membership/entitlement';
-import { escapeHtml } from '@/lib/notifications/email-template';
+import { escapeHtml, IDOC_EMAIL_ICONS, idocEmailFeiLogoUrl } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { formatDate, formatLevels } from '@/lib/seminars/format';
+import { seminarPaymentReferenceLabel } from '@/lib/seminars/payment-reference';
 import { languageNameForTag } from '@/lib/seminars/language';
 import { APPROVAL_STATUS_LABELS, APPROVAL_STATUSES, computeSeminarAvailability, FEI_APPROVAL_STATUSES, initialApprovalStatus, initialPaymentStatusForMethod, PAYMENT_STATUSES, REGISTRATION_STATUSES, type ApprovalStatus, type PaymentStatus } from '@/lib/seminars/status';
 
 const idSchema = z.coerce.number().int().positive();
 const REGISTRATION_EXPORT_LIMIT = 25_000;
 const MANUAL_PAYMENT_METHODS = ['bank_transfer', 'cash_event'] as const;
+/** Methods an administrator can record a payment as received through: the offline two plus a Stripe payment taken outside Checkout. */
+const RECEIVED_VIA_METHODS = ['bank_transfer', 'cash_event', 'online_stripe'] as const;
 
 export function isStagingSeminarDirectDelivery(): boolean {
   try {
@@ -82,23 +85,37 @@ export async function searchActiveMembersForRegistration(queryValue: unknown) {
 }
 
 export async function createAdminSeminarRegistration(fields: {
-  paymentMethod?: unknown; profileId?: unknown; seminarId?: unknown;
+  approvalStatus?: unknown; paymentMethod?: unknown; paymentReceivedVia?: unknown; paymentReference?: unknown; paymentStatus?: unknown; profileId?: unknown; seminarId?: unknown;
 }): Promise<{ registrationId: number }> {
   const actor = await requireSeminarAdministrator();
   const seminarId = idSchema.safeParse(fields.seminarId);
   if (!seminarId.success) throw new SeminarRegistrationError('Choose a seminar.');
   const profileId = idSchema.safeParse(fields.profileId);
   if (!profileId.success) throw new SeminarRegistrationError('Choose an active member to register.');
-  const paymentMethod = z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
-  if (!paymentMethod.success) throw new SeminarRegistrationError('Admin-created registrations must use Bank Transfer or Cash.');
-  const enabledMethods = await listEnabledSeminarPaymentMethods();
-  if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
-    throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
+  // Payment Status on create: left at the method's pending state, or recorded as already paid.
+  const markPaid = fields.paymentStatus === 'paid';
+  // A pending registration uses an enabled offline method; one created as Paid records how the payment was actually
+  // received (Cash, Bank Transfer or Stripe), which is then the registration's payment method.
+  const paymentMethod = markPaid
+    ? z.enum(RECEIVED_VIA_METHODS).safeParse(fields.paymentReceivedVia)
+    : z.enum(MANUAL_PAYMENT_METHODS).safeParse(fields.paymentMethod);
+  if (!paymentMethod.success) throw new SeminarRegistrationError(markPaid ? 'Choose Cash, Bank Transfer or Stripe.' : 'Admin-created registrations must use Bank Transfer or Cash.');
+  if (!markPaid) {
+    const enabledMethods = await listEnabledSeminarPaymentMethods();
+    if (!enabledMethods.some((method) => method.canonical_id === paymentMethod.data)) {
+      throw new SeminarRegistrationError('That payment method is currently disabled in Organization Settings.');
+    }
   }
+  if (fields.paymentStatus !== undefined && fields.paymentStatus !== '' && fields.paymentStatus !== 'pending' && !markPaid) throw new SeminarRegistrationError('Choose a valid payment status.');
+  const paymentReference = markPaid && typeof fields.paymentReference === 'string' && fields.paymentReference.trim() ? fields.paymentReference.trim().slice(0, 1000) : null;
+  if (markPaid && !paymentReference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(paymentMethod.data)}.`);
   const directDelivery = isStagingSeminarDirectDelivery();
 
   return client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
+    // Registration Status on create: non-FEI seminars are always Confirmed; FEI seminars take any FEI status.
+    const requestedApproval = typeof fields.approvalStatus === 'string' && fields.approvalStatus !== '' ? fields.approvalStatus : initialApprovalStatus(seminar.is_fei);
+    if (!(seminar.is_fei ? (FEI_APPROVAL_STATUSES as readonly string[]) : ['confirmed']).includes(requestedApproval)) throw new SeminarRegistrationError('Choose a valid registration status for this seminar/course.');
     const [member] = await sql<{ email: string; first_name: string; grace_ends_on: string | null; id: number; status: string | null; valid_until: string | null }[]>`select p.id,p.first_name,coalesce(u.email_display,u.email) email,
       m.status,m.valid_until,m.grace_ends_on
       from profiles p join users u on u.id=p.user_id and u.deleted_at is null and u.account_state='active'
@@ -115,8 +132,8 @@ export async function createAdminSeminarRegistration(fields: {
     }, new Date().toISOString().slice(0, 10)));
     if (!memberEntitled) throw new SeminarRegistrationError('Registrations can only be created for active members.');
 
-    const paymentStatus = initialPaymentStatusForMethod(paymentMethod.data);
-    const approvalStatus = initialApprovalStatus(seminar.is_fei);
+    const paymentStatus = markPaid ? 'paid' : initialPaymentStatusForMethod(paymentMethod.data);
+    const approvalStatus = requestedApproval as ApprovalStatus;
     const priceCents = seminar.member_price_cents;
     let registrationId: number;
     const [existing] = await sql<{ id: number; payment_status: string; registration_status: string }[]>`select id,registration_status,payment_status
@@ -129,13 +146,13 @@ export async function createAdminSeminarRegistration(fields: {
       await sql`update seminar_registrations set registration_status='registered',payment_status=${paymentStatus},approval_status=${approvalStatus},
         payment_method_canonical_id=${paymentMethod.data},expected_amount_cents=${priceCents},currency='EUR',
         stripe_checkout_session_id=null,checkout_status=null,checkout_created_at=null,stripe_payment_intent_id=null,
-        paid_at=null,marked_paid_by_user_id=null,payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
+        paid_at=${markPaid ? sql`now()` : null},marked_paid_by_user_id=${markPaid ? actor.id : null},payment_reference=${paymentReference},payment_status_updated_at=now(),registered_at=now(),canceled_at=null,updated_at=now()
         where id=${existing.id}`;
       registrationId = existing.id;
     } else {
       const [row] = await sql<{ id: number }[]>`insert into seminar_registrations
-        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency)
-        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR') returning id`;
+        (seminar_id,profile_id,payment_status,approval_status,payment_method_canonical_id,expected_amount_cents,currency,paid_at,marked_paid_by_user_id,payment_reference)
+        values (${seminarId.data},${member.id},${paymentStatus},${approvalStatus},${paymentMethod.data},${priceCents},'EUR',${markPaid ? sql`now()` : null},${markPaid ? actor.id : null},${paymentReference}) returning id`;
       registrationId = row.id;
     }
     // The same confirmation a self-registration receives (including the FEI status message for FEI seminars).
@@ -144,6 +161,14 @@ export async function createAdminSeminarRegistration(fields: {
       (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${member.id},${confirmationKind},
         jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'paymentMethod',${paymentMethod.data}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
         ${`seminar.registration_created:admin:${registrationId}:${Date.now()}`})`;
+    // Created as Paid: the member also gets the same payment-confirmed notice an administrator's "Mark paid" sends.
+    if (markPaid) {
+      const paymentKind = directDelivery ? 'seminar.staging_payment_confirmed' : 'seminar.payment_confirmed';
+      await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${member.id},${paymentKind},
+          jsonb_build_object('amountCents',${priceCents}::int,'firstName',${member.first_name}::text,'registrationId',${registrationId}::int,'seminarId',${seminarId.data}::int,'to',${member.email}::text),
+          ${`seminar.payment_confirmed:admin:${registrationId}:${Date.now()}`})`;
+    }
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,after_json) values
       (${actor.id},'admin.seminar_registration.created','seminar_registration',${String(registrationId)},
        ${JSON.stringify({ approvalStatus, paymentMethod: paymentMethod.data, profileId: member.id, seminarId: seminarId.data })}::jsonb)`;
@@ -366,19 +391,6 @@ export type SeminarEmailDetails = {
   start_date: string; title: string;
 };
 
-const EMAIL_ICON_BASE = 'https://res.cloudinary.com/z6xv27qx/image/upload/e_colorize,co_rgb:d3af37,w_20,h_20,c_fit/idoc-email-icons';
-
-const SEMINAR_EMAIL_ICONS = {
-  banknote: `${EMAIL_ICON_BASE}/banknote.png`,
-  calendar: `${EMAIL_ICON_BASE}/calendar.png`,
-  deadline: `${EMAIL_ICON_BASE}/calendar-clock.png`,
-  flag: `${EMAIL_ICON_BASE}/flag.png`,
-  language: `${EMAIL_ICON_BASE}/languages.png`,
-  layers: `${EMAIL_ICON_BASE}/layers.png`,
-  location: `${EMAIL_ICON_BASE}/map-pin.png`,
-  users: `${EMAIL_ICON_BASE}/users.png`,
-};
-
 function seminarEmailInfoRow(iconUrl: string, value: string) {
   return `<tr>
     <td width="52" style="width:52px;padding:20px 8px 20px 20px;border-bottom:1px solid #343d55;vertical-align:middle;">
@@ -427,14 +439,14 @@ export async function seminarRegistrationConfirmationBodyHtml({ amountCents, app
   }
 
   const detailsCard = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0b152c" class="idoc-email-card" style="width:100%;margin:0 0 24px;border-collapse:separate;border-spacing:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;overflow:hidden;">
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.location, escapeHtml(seminar.location))}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
-    ${levels ? seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
-    ${seminarEmailInfoRow(SEMINAR_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
-    ${seminar.is_fei ? '<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><strong class="idoc-email-text" style="color:#eff2f7 !important;font-size:13px;letter-spacing:.08em;">FEI SEMINAR</strong></td></tr>' : ''}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.calendar, escapeHtml(dateRange))}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.location, escapeHtml(seminar.location))}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.language, `Language: ${escapeHtml(languageNameForTag(seminar.language))}`)}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.users, `Number of participants: ${escapeHtml(String(seminar.capacity))}`)}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.banknote, `Price: ${escapeHtml(price)}`)}
+    ${levels ? seminarEmailInfoRow(IDOC_EMAIL_ICONS.layers, escapeHtml(levels)) : ''}
+    ${seminarEmailInfoRow(IDOC_EMAIL_ICONS.deadline, `Registration deadline: ${escapeHtml(formatDate(dateOnly(seminar.registration_deadline)))}`)}
+    ${seminar.is_fei ? `<tr><td colspan="2" style="padding:20px;border-top:1px solid #343d55;"><a href="https://www.fei.org/dressage" style="text-decoration:none;"><img alt="FEI" src="${idocEmailFeiLogoUrl()}" width="153" height="24" style="display:block;width:153px;height:24px;border:0;" /></a></td></tr>` : ''}
   </table>`;
 
   const informationCard = `<div class="idoc-email-card" style="margin:0;background:#0b152c !important;border:1px solid #343d55;border-radius:8px;padding:24px 22px;">
@@ -477,8 +489,9 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
   const registrationId = idSchema.safeParse(registrationIdValue);
   if (!registrationId.success) throw new SeminarRegistrationError('Registration not found.');
   const method = typeof methodValue === 'string' ? methodValue.trim() : '';
-  if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Bank Transfer or Cash.');
+  if (!(RECEIVED_VIA_METHODS as readonly string[]).includes(method)) throw new SeminarRegistrationError('Choose Cash, Bank Transfer or Stripe.');
   const reference = typeof referenceValue === 'string' && referenceValue.trim() ? referenceValue.trim().slice(0, 1000) : null;
+  if (!reference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(method)}.`);
   await client.begin(async (sql) => {
     const [existing] = await sql<{ checkout_status: string | null; payment_status: PaymentStatus; stripe_checkout_session_id: string | null }[]>`select payment_status,checkout_status,stripe_checkout_session_id from seminar_registrations where id=${registrationId.data} for update`;
     if (!existing) throw new SeminarRegistrationError('Registration not found.');
@@ -509,6 +522,22 @@ export async function recordManualSeminarPayment(registrationIdValue: unknown, m
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json) values
       (${actor.id},'admin.seminar_registration.payment_marked_paid','seminar_registration',${String(registrationId.data)},
       ${JSON.stringify({ paymentStatus: existing.payment_status })}::jsonb,${JSON.stringify({ method, reference })}::jsonb)`;
+    // Tell the registrant their payment was recorded (the same "Seminar payment confirmed" notice the website
+    // describes). Queued in this transaction so a payment can never be recorded without its notice; the dedupe key
+    // makes a retried request a no-op. Stripe payments email through the verified webhook instead.
+    const [recipient] = await sql<{ amount: number | null; email: string | null; first_name: string | null; profile_id: number | null; seminar_id: number }[]>`select r.expected_amount_cents amount,r.profile_id,r.seminar_id,
+      p.first_name,coalesce(u.email_display,u.email) email
+      from seminar_registrations r join profiles p on p.id=r.profile_id join users u on u.id=p.user_id where r.id=${registrationId.data}`;
+    if (recipient?.email) {
+      // staging.idoc.club queues under its own kind, which the production worker never claims and which the calling
+      // action drains straight away; every other environment uses the production kind.
+      const noticeKind = isStagingSeminarDirectDelivery() ? 'seminar.staging_payment_confirmed' : 'seminar.payment_confirmed';
+      await sql`insert into notification_outbox(dead_lettered_at,last_error_code,profile_id,kind,payload,dedupe_key) values
+        (${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,${recipient.profile_id},${noticeKind},
+          jsonb_build_object('amountCents',${recipient.amount}::int,'firstName',${recipient.first_name ?? ''}::text,'registrationId',${registrationId.data}::int,'seminarId',${recipient.seminar_id}::int,'to',${recipient.email}::text),
+          ${`seminar.payment_confirmed:${registrationId.data}:manual`})
+        on conflict(dedupe_key) do nothing`;
+    }
   });
 }
 
@@ -622,6 +651,17 @@ export async function getSeminarRegistrationCounts(seminarIdValue: unknown): Pro
   const [row] = await client<{ active: number; total: number }[]>`select count(*) filter(where registration_status='registered')::int active,count(*)::int total
     from seminar_registrations where seminar_id=${seminarId.data}`;
   return row ?? { active: 0, total: 0 };
+}
+
+/** Seminars an administrator can actually create a registration for: the same conditions
+ * requireSeminarOpenForRegistration enforces (published, before the registration deadline, not yet ended, not full),
+ * so the New Registration dropdown never offers a seminar the server would then reject as closed or full. */
+export async function listSeminarsOpenForAdminRegistration() {
+  await requireSeminarAdministrator();
+  return client<{ id: number; is_fei: boolean; title: string }[]>`select s.id,s.title,s.is_fei from seminars s
+    where s.status='published' and now() <= s.registration_deadline and now() < ((s.end_date + 1)::timestamp at time zone 'UTC')
+    and (select count(*) from seminar_registrations r where r.seminar_id=s.id and r.registration_status='registered') < s.capacity
+    order by s.start_date,s.id`;
 }
 
 /** Seminars an administrator can filter the registrations roster by -- published only, per the

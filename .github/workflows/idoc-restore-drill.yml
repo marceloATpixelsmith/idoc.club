@@ -1,0 +1,57 @@
+name: IDOC Restore Drill
+
+# Restores a chosen R2 backup into a THROWAWAY PostgreSQL cluster on the runner and compares every table's row count with the counts
+# recorded in the same snapshot as the backup. It never connects to the live database and never writes anywhere but the runner.
+# Started from the Super Admin Backups page (fresh TOTP, audit row) or by hand from the Actions tab. Result = the
+# `idoc-restore-result` annotation on the "Restore drill" job.
+on:
+  workflow_dispatch:
+    inputs:
+      backup:
+        description: 'latest, or a full backup object key under idoc/ayni_space/'
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idoc-restore-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    if: github.ref == 'refs/heads/main'
+    name: Restore drill
+    runs-on: ubuntu-latest
+    environment: idoc-db-backups
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo sed -i 's/^#\?create_main_cluster = .*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf || true
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-17 postgresql-client-17 gnupg
+          aws --version
+      - name: Fetch, checksum and decrypt the backup
+        env:
+          BACKUP_SELECTION: ${{ inputs.backup }}
+          IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.IDOC_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.IDOC_R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
+        run: bash scripts/restore-drill-fetch.sh "${{ runner.temp }}/idoc-restore-input"
+      # Deliberately no secrets here: this step executes SQL taken from the archive (pg_restore).
+      - name: Restore into a throwaway cluster and compare row counts (no credentials)
+        run: bash scripts/restore-check-idoc.sh "${{ runner.temp }}/idoc-restore-input"
+      - name: Remove restore input
+        if: always()
+        run: rm -rf "${{ runner.temp }}/idoc-restore-input"

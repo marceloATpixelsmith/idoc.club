@@ -8,11 +8,12 @@ import { emailButton, escapeHtml, renderTransactionalEmail } from '@/lib/notific
 import { renderNotice } from '@/lib/notifications/renewal-notices';
 import { seminarRegistrationConfirmationBodyHtml, type SeminarEmailDetails } from '@/lib/seminars/registrations';
 import { formatDateTime } from '@/lib/format';
+import { APPROVAL_STATUS_LABELS, type ApprovalStatus } from '@/lib/seminars/status';
 
 export const EMAIL_PREVIEW_RECIPIENT = 'zangfuqi@gmail.com';
 
 export type EmailPreviewDefinition = {
-  category: 'Account & authentication' | 'Security' | 'Membership & billing' | 'Seminars';
+  category: 'Account & authentication' | 'Security' | 'Membership & billing' | 'Seminars/Courses';
   id: string;
   label: string;
 };
@@ -34,10 +35,15 @@ const MEMBERSHIP_PREVIEWS = [
 ] as const;
 
 const SEMINAR_PREVIEWS = [
-  ['seminar.registration_created', 'Seminar registration confirmation'],
+  ['seminar.registration_created', 'Seminar/Course registration confirmation (FEI)'],
+  ['seminar.registration_created_non_fei', 'Seminar/Course registration confirmation (non-FEI)'],
+  ['seminar.registration_status_pending', 'Registration Status Change: Pending FEI Approval'],
+  ['seminar.registration_status_approved', 'Registration Status Change: Approved by FEI'],
+  ['seminar.registration_status_rejected', 'Registration Status Change: Not Approved by FEI'],
+  ['seminar.registration_status_audit', 'Registration Status Change: Approved to Audit Only by FEI'],
   ['seminar.registration_canceled', 'Seminar registration canceled'],
-  ['seminar.payment_confirmed', 'Seminar payment confirmed'],
-  ['seminar.refund_confirmed', 'Seminar refund confirmed'],
+  ['seminar.payment_confirmed', 'Payment Status Changed: Paid'],
+  ['seminar.refund_confirmed', 'Payment Status Changed: Refunded'],
 ] as const;
 
 export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
@@ -47,7 +53,7 @@ export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
   { category: 'Account & authentication', id: 'account:verify_email', label: 'Verify changed email address' },
   ...AUTH_SECURITY_KINDS.map((kind) => ({ category: 'Security' as const, id: `security:${kind}`, label: AUTH_SECURITY_CONTENT[kind].heading })),
   ...MEMBERSHIP_PREVIEWS.map(([id, label]) => ({ category: 'Membership & billing' as const, id, label })),
-  ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars' as const, id, label })),
+  ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars/Courses' as const, id, label })),
 ];
 
 function previewSubject(subject: string) {
@@ -112,22 +118,43 @@ const SAMPLE_SEMINAR: SeminarEmailDetails = {
   title: 'Sample IDOC Dressage Seminar',
 };
 
-async function seminarRegistrationPreview() {
+async function seminarRegistrationPreview({
+  approvalStatus,
+  isFei,
+  statusUpdate = false,
+}: {
+  approvalStatus: ApprovalStatus;
+  isFei: boolean;
+  statusUpdate?: boolean;
+}) {
+  const seminar = { ...SAMPLE_SEMINAR, is_fei: isFei };
   return {
     html: renderTransactionalEmail({
       bodyHtml: await seminarRegistrationConfirmationBodyHtml({
         amountCents: 12000,
-        approvalStatus: 'pending_fei_approval',
+        approvalStatus,
         firstName: 'Ameyalli',
         paymentConfirmed: true,
         paymentMethod: 'online_stripe',
-        seminar: SAMPLE_SEMINAR,
+        seminar,
+        statusUpdate,
       }),
-      heading: `Thank you for registering for ${escapeHtml(SAMPLE_SEMINAR.title)}`,
+      heading: statusUpdate
+        ? `Your registration status for ${seminar.title}`
+        : `Thank you for registering for ${seminar.title}`,
     }),
-    subject: 'Your IDOC seminar registration',
+    subject: statusUpdate
+      ? `Your IDOC seminar registration status: ${APPROVAL_STATUS_LABELS[approvalStatus]}`
+      : 'Your IDOC seminar registration',
   };
 }
+
+const SEMINAR_STATUS_PREVIEW_VARIANTS: Record<string, ApprovalStatus> = {
+  'seminar.registration_status_pending': 'pending_fei_approval',
+  'seminar.registration_status_approved': 'approved_by_fei',
+  'seminar.registration_status_rejected': 'not_approved_by_fei',
+  'seminar.registration_status_audit': 'approved_audit_only_by_fei',
+};
 
 async function renderPreview(id: string): Promise<{ html: string; subject: string }> {
   if (id.startsWith('otp:')) {
@@ -143,7 +170,11 @@ async function renderPreview(id: string): Promise<{ html: string; subject: strin
     if (!(AUTH_SECURITY_KINDS as readonly string[]).includes(kind)) throw new Error('Unknown preview.');
     return securityPreview(kind);
   }
-  if (id === 'seminar.registration_created') return seminarRegistrationPreview();
+  if (id === 'seminar.registration_created') return seminarRegistrationPreview({ approvalStatus: 'pending_fei_approval', isFei: true });
+  if (id === 'seminar.registration_created_non_fei') return seminarRegistrationPreview({ approvalStatus: 'confirmed', isFei: false });
+  if (Object.hasOwn(SEMINAR_STATUS_PREVIEW_VARIANTS, id)) {
+    return seminarRegistrationPreview({ approvalStatus: SEMINAR_STATUS_PREVIEW_VARIANTS[id], isFei: true, statusUpdate: true });
+  }
   if (MEMBERSHIP_PREVIEWS.some(([kind]) => kind === id) || SEMINAR_PREVIEWS.some(([kind]) => kind === id)) {
     return renderNotice(id, {
       amountCents: 18000,

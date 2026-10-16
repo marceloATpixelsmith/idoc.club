@@ -74,3 +74,14 @@ These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.clu
 ## 7. Rule maintenance
 
 Update this document when the repository's approved tooling, architecture, security controls, or delivery workflow changes. Any exception requires an explicit task instruction and must be recorded in the relevant pull request.
+
+## 8. Branch lifecycle and cleanup
+
+These instructions implement the all-agent policy in `AGENTS.md`.
+
+1. Begin each ordinary task on a fresh branch from current `staging` when available, and retain that branch for all revisions of the task. Do not start a replacement branch merely because CI or review fails; repair the existing open PR. Follow the existing production-emergency exception.
+2. Open a regular, non-draft PR to `staging` in the same step as the first push of the task; never leave a pushed task branch without a PR. **Never create or convert a PR to draft**, even when implementation, CI, or review work is ongoing. Keep using the same open PR for all follow-up work; mark an explicit merge hold with `hold-merge` and a PR comment when necessary. If PR creation is blocked, do not leave the branch published: report the branch name, tip SHA, precise blocker, and the next required action.
+3. Before switching tasks or abandoning one, inspect its PR and preserve unique changes. Explicitly close superseded or abandoned PRs with a reason. Delete a remote branch only if its PR is no longer open and all unique changes have been merged, otherwise retained, or explicitly approved for disposal. If deletion is blocked, record it as pending cleanup; never silently attempt another credential route.
+4. Check whether repository-wide automatic deletion of merged PR head branches is enabled; do not enable or recommend enabling it without explicit owner approval and enforceable protections for all intentionally retained branches. Otherwise handle merged heads through authorized, verified manual cleanup. Never edit or push to a merged or closed PR branch.
+5. For any manual or scheduled cleanup, apply the safeguards in `AGENTS.md`: protected and open-PR branches are excluded; branch age or lack of a PR is not deletion proof; preserve unshipped/uncertain work; record full SHAs and reasons in a recovery manifest; dry-run and revalidate before deleting. Bulk deletion requires explicit user approval.
+6. At task completion, abandonment, or supersession, delete every remote branch this task created that is not the head of an open or preserved PR, per `AGENTS.md` branch-lifecycle item 9, listing each name and full tip SHA in the final report. Include outstanding orphan branches or cleanup blockers in the final report. Never conflate branch-reference deletion with immediate deletion of commit objects.

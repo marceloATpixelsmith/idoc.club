@@ -2,7 +2,7 @@
 
 import { CheckCircle2, RefreshCcw } from 'lucide-react';
 import { useState, useTransition } from 'react';
-import { bulkCloseSupportRows, bulkSetNewsStatus } from '@/app/(dashboard)/admin/bulk-actions';
+import { bulkCloseSupportRows, bulkSetNewsStatus, bulkSetSeminarStatus } from '@/app/(dashboard)/admin/bulk-actions';
 import { ActionBarItem } from '@/components/ui/action-bar';
 import { useDataTableMutation } from '@/components/data-table/data-table';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
@@ -84,6 +84,44 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
       <ActionBarItem disabled={pending} onSelect={applyStatus}>
         <RefreshCcw aria-hidden="true" className="mr-2 size-4" />
         {pending ? 'Applying…' : 'Apply status'}
+      </ActionBarItem>
+    </>
+  );
+}
+
+export function BulkSeminarStatusSelected({ clearSelection, ids }: { clearSelection: () => void; ids: string[] }) {
+  const [pending, startTransition] = useTransition();
+  const mutation = useDataTableMutation();
+
+  function changeSelected(event: Event, status: 'canceled' | 'draft') {
+    event.preventDefault();
+    if (!ids.length || pending) return;
+    if (status === 'canceled' && !window.confirm(`Cancel ${ids.length} selected seminar(s)? Active registrations will be canceled and the existing refund-resolution process will run.`)) return;
+    mutation.begin();
+    startTransition(async () => {
+      try {
+        const formData = selectionFormData(ids);
+        formData.set('table', 'seminars');
+        formData.set('status', status);
+        const result = await bulkSetSeminarStatus({}, formData);
+        mutation.finish(Boolean(result.success));
+        if (result.error) window.alert(result.error);
+        if (result.success) clearSelection();
+      } catch {
+        mutation.finish(false);
+        window.alert('The selected seminars could not be updated.');
+      }
+    });
+  }
+  return (
+    <>
+      <ActionBarItem disabled={pending} onSelect={(event) => changeSelected(event, 'canceled')}>
+        <RefreshCcw aria-hidden="true" className="mr-2 size-4" />
+        {pending ? 'Updating…' : 'Cancel selected'}
+      </ActionBarItem>
+      <ActionBarItem disabled={pending} onSelect={(event) => changeSelected(event, 'draft')}>
+        <RefreshCcw aria-hidden="true" className="mr-2 size-4" />
+        {pending ? 'Updating…' : 'Set as Draft'}
       </ActionBarItem>
     </>
   );

@@ -3,7 +3,7 @@
 import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SingleDatePicker } from '@/components/forms/us-date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { correctEntitlementForm } from './actions';
@@ -25,7 +25,7 @@ export function EntitlementCorrectionForm({ currentValidUntil, onSuccess, profil
     <input type="hidden" name="profileId" value={profileId} />
     <div className="space-y-1.5">
       <Label htmlFor="correct-validUntil">New paid-through date</Label>
-      <Input defaultValue={currentValidUntil ?? ''} id="correct-validUntil" name="validUntil" type="date" />
+      <SingleDatePicker defaultIso={currentValidUntil ?? undefined} id="correct-validUntil" name="validUntil" required={false} />
     </div>
     <div className="space-y-1.5">
       <Label htmlFor="correct-status">New status</Label>

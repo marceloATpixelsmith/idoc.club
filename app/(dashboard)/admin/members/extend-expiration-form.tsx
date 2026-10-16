@@ -4,7 +4,7 @@ import { useActionState, useEffect } from 'react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SingleDatePicker } from '@/components/forms/us-date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { extendExpirationForm } from './actions';
@@ -17,7 +17,7 @@ export function ExtendExpirationForm({ currentValidUntil, onSuccess, profileId }
     <input name="profileId" type="hidden" value={profileId} />
     <div className="space-y-1.5">
       <Label htmlFor="extend-validUntil">New expiration date</Label>
-      <Input id="extend-validUntil" min={currentValidUntil} name="validUntil" required type="date" />
+      <SingleDatePicker id="extend-validUntil" min={currentValidUntil} name="validUntil" required />
     </div>
     <div className="space-y-1.5">
       <Label htmlFor="extend-reason">Administrator reason (required)</Label>

@@ -8,7 +8,7 @@ export default async function AdminSeminarsPage({ searchParams }: { searchParams
   return (
     <>
       <ResourceListPage tableType="seminars" />
-      {isNew ? <AdminSeminarDrawer isNew /> : seminarId ? <AdminSeminarDrawer seminarId={seminarId} /> : null}
+      {isNew ? <AdminSeminarDrawer key="new" isNew /> : seminarId ? <AdminSeminarDrawer key={seminarId} seminarId={seminarId} /> : null}
     </>
   );
 }

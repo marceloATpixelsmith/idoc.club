@@ -11,9 +11,9 @@ import { lockLatestMembership } from '@/lib/membership/locking';
 import { MANUAL_PAYMENT_SOURCES, MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, type ManualPaymentSource } from './pricing';
 import { nextValidUntil } from './renewal';
 
-// Stripe/bank transfer need a Stripe Payment ID / bank transfer reference as evidence (docs/02 §4);
-// cash and complimentary grants may not have one.
-const REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource[] = ['stripe_manual', 'bank_transfer'];
+// Stripe needs a Stripe Payment ID, bank transfer a bank transfer reference, and cash a receipt ID as evidence
+// (docs/02 §4); only a complimentary grant, which is not a payment, may have none.
+const REFERENCE_REQUIRED_SOURCES: readonly ManualPaymentSource[] = ['stripe_manual', 'bank_transfer', 'cash'];
 
 // docs/02 §5/§8: a manual payment always uses "the actual payment date" — a date that hasn't
 // happened yet can never be an actual payment date, so future dates are rejected outright rather

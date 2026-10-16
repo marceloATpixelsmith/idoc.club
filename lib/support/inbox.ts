@@ -18,7 +18,7 @@ export type AdminSupportRow = {
 
 export const CATEGORY_LABELS: Record<SupportCategory, string> = {
   billing_membership: 'Billing/Membership',
-  seminars: 'Seminars',
+  seminars: 'Seminars/Courses',
   technical_support: 'Technical Support',
   suggestion: 'Make a suggestion',
   other: 'Other',

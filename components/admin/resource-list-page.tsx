@@ -13,7 +13,7 @@ type ResourceType = 'news' | 'seminars';
 
 const CONFIG = {
   news: { path: '/admin/news', title: 'News / Blog', description: 'Create, schedule, preview, and publish public articles.', create: 'New Article', createHref: '/admin/news?new=1' },
-  seminars: { path: '/admin/seminars', title: 'Seminars', description: 'Create, publish, and manage seminar registrations.', create: 'New Seminar', createHref: '/admin/seminars?new=1' },
+  seminars: { path: '/admin/seminars', title: 'Seminars/Courses', description: 'Create, publish, and manage seminar/course registrations.', create: 'New Seminar/Course', createHref: '/admin/seminars?new=1' },
 } as const;
 
 export async function ResourceListPage({ tableType }: { tableType: ResourceType }) {

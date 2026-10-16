@@ -1,5 +1,6 @@
 'use server';
 
+import { consumeReturnTo } from '@/lib/auth/return-to';
 import { eq, sql } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -118,7 +119,7 @@ export const verifyLoginTotp = validatedAction(loginCodeSchema, async ({ code, r
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   await setSession(context.user);
-  redirect(context.pending.returnTo);
+  redirect(await consumeReturnTo(context.pending.returnTo));
 }, { skipCsrf: true });
 
 // A rejected recovery-code attempt previously left no durable trace anywhere -- only a thrown
@@ -263,7 +264,7 @@ export const acknowledgeRecoveryCodes = validatedAction(z.object({ saved: z.lite
   await clearPendingPrimaryAuth();
   await clearPendingLogin();
   await setSession(context.user);
-  redirect(context.pending.returnTo);
+  redirect(await consumeReturnTo(context.pending.returnTo));
 }, { skipCsrf: true });
 
 export const cancelMfa = validatedAction(z.object({ cancel: z.literal('yes') }), async (_data, formData) => {
