@@ -81,6 +81,14 @@ printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-
   --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$tmp/idoc.dump.gpg" "$tmp/idoc.dump"
 object="idoc/ayni_space/$BACKUP_KIND/$stamp-$run/idoc-both-schemas.dump.gpg"
 aws --endpoint-url "$endpoint" s3 cp "$tmp/idoc.dump.gpg" "s3://$R2_BUCKET/$object" --only-show-errors
+aws --endpoint-url "$endpoint" s3 cp "s3://$R2_BUCKET/$object" "$tmp/roundtrip.gpg" --only-show-errors
+cmp "$tmp/idoc.dump.gpg" "$tmp/roundtrip.gpg"
+printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+  --passphrase-fd 0 --decrypt --output "$tmp/roundtrip.dump" "$tmp/roundtrip.gpg"
+cmp "$tmp/idoc.dump" "$tmp/roundtrip.dump"
+pg_restore --list "$tmp/roundtrip.dump" > /dev/null
+# The manifest is the marker that this backup is complete and verified: it is uploaded only after the byte-for-byte round trip and decryption checks above pass, and
+# the drill's "latest" and the Backups page list backups by manifest, so a failed or partial attempt is never offered.
 # MANIFEST: names and row counts only (never row data). Stored encrypted next to the dump and echoed as a workflow annotation so the
 # Super Admin Backups page can list backups without any R2 access.
 manifest_json="$(OBJECT="$object" STAMP="$stamp" KIND="$BACKUP_KIND" SHA="$(sha256sum "$tmp/idoc.dump.gpg" | cut -d' ' -f1)" SIZE="$(stat -c %s "$tmp/idoc.dump.gpg")" python3 - "$tmp/dump/counts.tsv" <<'PY'
@@ -97,12 +105,6 @@ printf '%s' "$manifest_json" > "$tmp/manifest.json"
 printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
   --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "$tmp/manifest.json.gpg" "$tmp/manifest.json"
 aws --endpoint-url "$endpoint" s3 cp "$tmp/manifest.json.gpg" "s3://$R2_BUCKET/${object%idoc-both-schemas.dump.gpg}manifest.json.gpg" --only-show-errors
-aws --endpoint-url "$endpoint" s3 cp "s3://$R2_BUCKET/$object" "$tmp/roundtrip.gpg" --only-show-errors
-cmp "$tmp/idoc.dump.gpg" "$tmp/roundtrip.gpg"
-printf '%s' "$IDOC_BACKUP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
-  --passphrase-fd 0 --decrypt --output "$tmp/roundtrip.dump" "$tmp/roundtrip.gpg"
-cmp "$tmp/idoc.dump" "$tmp/roundtrip.dump"
-pg_restore --list "$tmp/roundtrip.dump" > /dev/null
 # OPTIONAL RESTORE CHECK (nightly workflow only): hand the verified archive to a separate workflow step that runs
 # scripts/restore-check-idoc.sh with NO credentials. pg_restore executes SQL taken from the archive, so it must never run in a
 # process that holds the database password, the R2 keys or the encryption passphrase.

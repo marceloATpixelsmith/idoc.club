@@ -80,7 +80,7 @@ export default async function BackupsPage() {
   }
   const requests = await listDrillRequests();
   const newest = backups[0]?.manifest;
-  const options = backups.map(({ manifest }) => ({ value: manifest.object, label: `${manifest.kind === 'daily' ? 'Daily' : 'Pre-migration'} ${backupTime(manifest.startedAtUtc)} (${megabytes(manifest.sizeBytes)})` }));
+  const options = backups.map(({ manifest }) => ({ value: manifest.object, label: `${manifest === newest ? 'Latest — ' : ''}${manifest.kind === 'daily' ? 'Daily' : 'Pre-migration'} ${backupTime(manifest.startedAtUtc)} (${megabytes(manifest.sizeBytes)})` }));
 
   return (
     <main className="space-y-8 px-5 py-8 lg:px-8">

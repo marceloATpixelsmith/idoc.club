@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { and, eq, isNull } from 'drizzle-orm';
+import { readActiveSession, sessionVersionIsCurrent } from '@/lib/auth/session-registry';
+import type { SessionData } from '@/lib/auth/session-tokens';
 import { db } from '@/lib/db/drizzle';
 import { applicationRoles, auditLog, maintenanceMode } from '@/lib/db/schema';
 
@@ -26,6 +28,19 @@ export async function userIsSuperAdmin(userId: number): Promise<boolean> {
   const rows = await db.select({ role: applicationRoles.role }).from(applicationRoles)
     .where(and(eq(applicationRoles.userId, userId), eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt))).limit(1);
   return rows.length > 0;
+}
+
+/** The same checks getSession() applies to a canonical session (active registry row, matching session version on the row, the token
+ * and the user, and the same authenticated/absolute-expiry instants), then the Super Admin grant. A stale cookie after a password
+ * reset or role change therefore never bypasses maintenance mode. Read-only: it does not touch last-activity. */
+export async function sessionIsActiveSuperAdmin(session: SessionData): Promise<boolean> {
+  const record = await readActiveSession(session.sessionId, session.user.id);
+  if (!record) return false;
+  if (record.sessionVersion !== session.user.sessionVersion) return false;
+  if (!(await sessionVersionIsCurrent(session.user.id, session.user.sessionVersion))) return false;
+  if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) return false;
+  if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) return false;
+  return userIsSuperAdmin(session.user.id);
 }
 
 export type MaintenanceState = { enabled: boolean; reason: string | null; changedAt: Date | null; changedByUserId: number | null };

@@ -14,7 +14,7 @@ import { touchSession } from '@/lib/auth/session-registry';
 import { readActiveSession } from '@/lib/auth/session-registry';
 import { paymentOnlyAllows, paymentOnlyDestination } from '@/lib/membership/session-gate';
 import { loadSessionGate } from '@/lib/membership/session-gate-loader';
-import { maintenanceModeEnabled, userIsSuperAdmin } from '@/lib/admin/maintenance-mode';
+import { maintenanceModeEnabled, sessionIsActiveSuperAdmin } from '@/lib/admin/maintenance-mode';
 import { maintenancePageHtml } from '@/lib/runtime/maintenance-page';
 import { maintenanceDecision } from '@/lib/runtime/maintenance-policy';
 import { REQUEST_ID_HEADER } from '@/lib/observability/request-id-header';
@@ -128,7 +128,7 @@ export async function middleware(request: NextRequest) {
     if (canonicalCookie) {
       try {
         const parsedForMaintenance = await verifyToken(canonicalCookie.value);
-        superAdmin = !!(await readActiveSession(parsedForMaintenance.sessionId, parsedForMaintenance.user.id)) && await userIsSuperAdmin(parsedForMaintenance.user.id);
+        superAdmin = await sessionIsActiveSuperAdmin(parsedForMaintenance);
       } catch { /* not a valid Super Admin session */ }
     }
     if (!superAdmin) {

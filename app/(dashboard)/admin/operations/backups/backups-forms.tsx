@@ -48,7 +48,7 @@ export function MaintenanceForm({ action, enabled, reason }: { action: Action; e
 export function DrillForm({ action, options, disabled }: { action: Action; options: Array<{ value: string; label: string }>; disabled: boolean }) {
   const router = useRouter();
   const [state, run, pending, challenge] = useFreshStepUpAction<BackupsActionState>(action, {});
-  const [selection, setSelection] = useState('latest');
+  const [selection, setSelection] = useState(options[0]?.value ?? 'latest');
   useEffect(() => { if (state.success) router.refresh(); }, [router, state.success]);
   return (
     <>
@@ -57,7 +57,6 @@ export function DrillForm({ action, options, disabled }: { action: Action; optio
         <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
           Backup to restore
           <select className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="selection" onChange={(event) => setSelection(event.target.value)} value={selection}>
-            <option value="latest">Latest daily backup</option>
             {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>

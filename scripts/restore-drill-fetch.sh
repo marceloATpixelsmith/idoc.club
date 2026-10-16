@@ -13,7 +13,11 @@ export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 if [[ "$selection" == latest ]]; then
-  object="$(aws --endpoint-url "$endpoint" s3 ls "s3://$R2_BUCKET/idoc/ayni_space/daily/" --recursive | awk '{print $4}' | grep -E '/idoc-both-schemas\.dump\.gpg$' | sort | tail -1)"
+  # "latest" = the newest daily backup that has a manifest. The manifest is uploaded only after the backup was verified (round trip and
+  # decryption), so an attempt that failed part-way is never chosen.
+  manifest_key="$(aws --endpoint-url "$endpoint" s3 ls "s3://$R2_BUCKET/idoc/ayni_space/daily/" --recursive | awk '{print $4}' | grep -E '/manifest\.json\.gpg$' | sort | tail -1)"
+  object="${manifest_key%manifest.json.gpg}idoc-both-schemas.dump.gpg"
+  [[ -n "$manifest_key" ]] || object=""
   [[ -n "$object" ]] || { echo "::error::No daily backup found"; exit 1; }
 else
   # Only an object of the expected shape, under the IDOC prefix, is accepted (no path tricks, no other bucket content).

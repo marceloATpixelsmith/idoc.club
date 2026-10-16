@@ -112,3 +112,12 @@ test('the restore drill separates the credentialed fetch from the credential-fre
   assert.match(check, /rowCountMismatches/);
   assert.match(check, /title=idoc-restore-result/);
 });
+
+test('the manifest (the "verified backup" marker) is uploaded only after the round-trip checks, and "latest" is resolved from manifests', () => {
+  const backup = readFileSync('scripts/backup-idoc-r2.sh', 'utf8');
+  const roundTrip = backup.indexOf('cmp "$tmp/idoc.dump" "$tmp/roundtrip.dump"');
+  const manifestUpload = backup.indexOf('manifest.json.gpg" "s3://');
+  assert.ok(roundTrip > 0 && manifestUpload > roundTrip);
+  const fetchScript = readFileSync('scripts/restore-drill-fetch.sh', 'utf8');
+  assert.match(fetchScript, /grep -E '\/manifest\\\.json\\\.gpg\$'/);
+});

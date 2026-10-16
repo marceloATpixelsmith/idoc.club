@@ -30,7 +30,8 @@ test('look-alike paths are not allow-listed', () => {
 test('middleware gates on the flag only after the cheap path check, lets only a Super Admin session through and fails open', () => {
   const middleware = readFileSync('middleware.ts', 'utf8');
   assert.match(middleware, /maintenance !== 'allow' && await maintenanceModeEnabled\(\)/);
-  assert.match(middleware, /readActiveSession\(parsedForMaintenance\.sessionId[\s\S]*userIsSuperAdmin\(/);
+  assert.match(middleware, /sessionIsActiveSuperAdmin\(parsedForMaintenance\)/);
+  assert.match(readFileSync('lib/admin/maintenance-mode.ts', 'utf8'), /sessionVersionIsCurrent[\s\S]*authenticatedAt[\s\S]*absoluteExpiresAt[\s\S]*userIsSuperAdmin/); // same checks as getSession()
   assert.match(middleware, /status: 503/);
   assert.match(middleware, /'Retry-After'/);
   const module = readFileSync('lib/admin/maintenance-mode.ts', 'utf8');
