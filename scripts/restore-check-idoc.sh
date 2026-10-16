@@ -48,7 +48,7 @@ actual = {}
 for line in open(sys.argv[2]):
     t, n = line.rstrip('\n').split('\t'); actual[t] = int(n)
 bad = [{'table': t, 'expected': expected.get(t), 'actual': actual.get(t)} for t in sorted(set(expected) | set(actual)) if expected.get(t) != actual.get(t)]
-print('mismatches=%s tables_expected=%d status=%s' % (shlex.quote(json.dumps(bad[:50])), len(expected), 'FAIL' if bad else 'PASS'))
+print('mismatches=%s tables_expected=%d status=%s' % (shlex.quote(json.dumps(bad[:15])), len(expected), 'FAIL' if bad else 'PASS'))
 PY
 )"
 fi

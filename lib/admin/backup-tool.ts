@@ -13,8 +13,8 @@ export class BackupToolError extends Error {
   constructor(message: string) { super(message); this.name = 'BackupToolError'; }
 }
 
-/** The only credential the web app holds for this tool: a fine-grained GitHub token limited to this repository (Actions read/write,
- * Checks read). It cannot reach R2, the database owner login or the backup passphrase. Never logged or returned to the browser. */
+/** The only credential the web app holds for this tool: a fine-grained GitHub token limited to this repository (Actions read/write only;
+ * annotations of this public repository need no extra permission). It cannot reach R2, the database owner login or the backup passphrase. Never logged or returned to the browser. */
 function configuration() {
   const token = process.env.GITHUB_BACKUP_TOOL_TOKEN?.trim();
   const repository = process.env.GITHUB_BACKUP_TOOL_REPOSITORY?.trim() || DEFAULT_REPOSITORY;
