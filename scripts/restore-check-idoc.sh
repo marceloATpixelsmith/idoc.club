@@ -35,4 +35,38 @@ for schema in idoc_staging idoc_production; do
   fi
   summary="$summary $schema=$actual"
 done
-echo "Restore check passed (tables restored:$summary)"
+# ROW-COUNT COMPARISON (when the backup carried a manifest): every table must exist with exactly the row count recorded in the same
+# snapshot as the dump. Counts and table names only are printed, never row data.
+status=PASS; mismatches='[]'; tables_expected=0
+if [[ -f "$dir/manifest.json" ]]; then
+  count_sql="$(pg "$pgbin/psql" -d restore_check_db -Atqc "SELECT string_agg(format('SELECT %L AS t, count(*) AS n FROM %I.%I', table_schema || '.' || table_name, table_schema, table_name), ' UNION ALL ') FROM information_schema.tables WHERE table_schema IN ('idoc_staging','idoc_production') AND table_type = 'BASE TABLE'")"
+  pg "$pgbin/psql" -d restore_check_db -Atq -F $'\t' -c "SELECT t, n FROM ($count_sql) c ORDER BY t" > "$work/restored-counts.tsv"
+  eval "$(python3 - "$dir/manifest.json" "$work/restored-counts.tsv" <<'PY'
+import json, shlex, sys
+expected = json.load(open(sys.argv[1]))['counts']
+actual = {}
+for line in open(sys.argv[2]):
+    t, n = line.rstrip('\n').split('\t'); actual[t] = int(n)
+bad = [{'table': t, 'expected': expected.get(t), 'actual': actual.get(t)} for t in sorted(set(expected) | set(actual)) if expected.get(t) != actual.get(t)]
+print('mismatches=%s tables_expected=%d status=%s' % (shlex.quote(json.dumps(bad[:50])), len(expected), 'FAIL' if bad else 'PASS'))
+PY
+)"
+fi
+RESULT_FILE="${RESULT_FILE:-$work/restore-result.json}"
+if [[ -f "$dir/manifest.json" ]]; then
+  STATUS="$status" MISMATCHES="$mismatches" EXPECTED="$tables_expected" SUMMARY="$summary" python3 - "$dir" "$RESULT_FILE" <<'PY'
+import json, os, sys, datetime
+d, out = sys.argv[1], sys.argv[2]
+manifest = json.load(open(os.path.join(d, 'manifest.json'))) if os.path.exists(os.path.join(d, 'manifest.json')) else {}
+checks = json.load(open(os.path.join(d, 'checks.json'))) if os.path.exists(os.path.join(d, 'checks.json')) else {}
+res = {'version': 1, 'status': os.environ['STATUS'], 'object': manifest.get('object'), 'backupStartedAtUtc': manifest.get('startedAtUtc'),
+  'checkedAtUtc': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+  'checksumMatched': checks.get('checksumMatched'), 'manifestTables': int(os.environ['EXPECTED']), 'schemasRestored': os.environ['SUMMARY'].split(),
+  'rowCountMismatches': json.loads(os.environ['MISMATCHES'])}
+if res['checksumMatched'] is False: res['status'] = 'FAIL'
+json.dump(res, open(out, 'w'), separators=(',', ':'), sort_keys=True)
+PY
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::notice title=idoc-restore-result::$(sed 's/%/%25/g' "$RESULT_FILE")"; fi
+  grep -q '"status":"PASS"' "$RESULT_FILE" || { echo "::error::Restore verification FAILED (see the result annotation)"; exit 1; }
+fi
+echo "Restore check passed (tables restored:$summary; manifest row counts: $([[ -f "$dir/manifest.json" ]] && echo "$tables_expected tables compared" || echo none))"

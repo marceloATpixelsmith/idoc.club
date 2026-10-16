@@ -1247,6 +1247,13 @@ Two application conditions were added to the same policy on 2026-10-11 and read 
 
 `vcs.ref.head.name` is the span attribute that separates the `staging` branch from other `preview` deployments. A count of slow requests is used instead of a percentile because staging traffic is low (43 to 701 requests a day), which makes percentiles unreliable. Neither condition has fired yet. Verified on 2026-10-11: the destination's test notification arrived, then a deliberate failure (the liveness monitor's text validation temporarily changed to a value the response does not contain) produced a real alert email. The text was restored to `"status":"ok"` and the recovery produced a closed email. To repeat the test, change a monitor's **Text validation** in **Settings > General > Advanced options**, wait for the email, then restore it. Still to do: a Postgres alert (after the hourly export is registered), acknowledgement or escalation, and per-job result counts beyond HTTP status.
 
+## Backups, restore drills and maintenance mode (Super Admin)
+
+Super Admins open **Backups & restore** (`/admin/operations/backups`) to see the latest backup, run a **restore drill** and switch **maintenance mode**. Every action requires a fresh authenticator code and a CSRF-checked Server Action; the page is a 404 for everyone else.
+
+- **Restore drill:** starts the `IDOC Restore Drill` GitHub workflow, which restores the chosen backup into a throwaway PostgreSQL cluster and compares every table's row count with the counts recorded when the backup was made. It never touches the live database. A result is PASS only when checksum, restore and all row counts agree. Setup (token, Vercel variables), result reading and limits are in [16 IDOC-only R2 backup and recovery](16-idoc-r2-backup-recovery.md#super-admin-backup-and-restore-drill-tool). Live schema replacement remains the operator procedure in that document.
+- **Maintenance mode:** a per-environment switch stored in `idoc.maintenance_mode` (migration `0074`). While on, every visitor except a signed-in Super Admin sees the branded "We'll be right back" page with HTTP 503; APIs, Server Actions, Stripe webhooks, cron and queue endpoints answer 503 with `Retry-After` so providers retry later. `/api/health`, static files, sign-in and MFA stay reachable so the Super Admin can sign in and switch it off. Turning it on/off is audited (`admin.maintenance_mode.enabled/disabled`). The flag is cached for about 3 seconds per instance and is fail-open: if it cannot be read, the site stays up. Sign-in remains open for other accounts, so maintenance mode is not a write freeze; a future live restore must add its own quiesce step.
+
 ## Permanent staging-to-production data promotion
 
 ### Scope and security boundary

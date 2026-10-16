@@ -331,6 +331,8 @@ The selected-row menu supports an audited, server-authorized CSV export of selec
 
 ## Membership perks capability
 
+The Super Admin **Backups & restore** page (backup status, restore drill with row-count verification, and a per-environment maintenance-mode switch) is implemented as a launch prerequisite; a proven restore drill result is part of the `production-backup-restore` release evidence. Live schema restore from the web app is deliberately out of scope until drills have been repeated successfully. See [16](16-idoc-r2-backup-recovery.md#super-admin-backup-and-restore-drill-tool).
+
 The Organization Settings membership-perks capability is implemented for Super Admins and the public/member payment surfaces. It maintains one ordered, complete replacement list in `idoc.membership_perks`, accepts at most 50 non-empty labels of up to 200 characters, serializes concurrent saves, and records administrative changes in the audit log.
 
 ### Privileged fresh-TOTP continuation invariant

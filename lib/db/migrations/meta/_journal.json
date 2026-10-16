@@ -519,6 +519,13 @@
       "when": 1791580000000,
       "tag": "0073_remove_guest_and_non_member_legacy",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1791670000000,
+      "tag": "0074_maintenance_mode",
+      "breakpoints": true
     }
   ]
 }
