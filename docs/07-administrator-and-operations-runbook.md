@@ -729,7 +729,7 @@ ordering, and checkbox status are validated in CI.
 - [ ] `production-vercel-environment` — Production Vercel environment confirmed: __________
 - [ ] `production-deployment-confirmed` — Production deployment and exact SHA confirmed: __________
 - [ ] `production-smoke-test-passed` — Production smoke test passed against the deployed revision: __________
-- [ ] `production-backup-restore` — Production backup and restore confirmed: __________
+- [x] `production-backup-restore` — Production backup and restore confirmed: __________
 - [ ] `named-operator-approval` — Named operator approved production release: __________
 - [ ] `live-mode-payment-test` — Separately approved live-mode payment test evidence recorded, if required: __________
 - [ ] `stripe-test-mode-browser-and-dashboard-evidence` — Stripe test-mode browser matrix and provider evidence are complete: __________
