@@ -7,7 +7,11 @@ umask 077
 : "${R2_ACCOUNT_ID:?}" "${R2_BUCKET:?}" "${AWS_ACCESS_KEY_ID:?}" "${AWS_SECRET_ACCESS_KEY:?}" "${IDOC_BACKUP_ENCRYPTION_PASSPHRASE:?}"
 out="${1:?usage: restore-drill-fetch.sh OUTPUT_DIR}"
 selection="${BACKUP_SELECTION:-latest}"
-for cmd in aws gpg sha256sum pg_restore python3; do command -v "$cmd" >/dev/null; done
+for cmd in aws gpg sha256sum python3; do command -v "$cmd" >/dev/null; done
+# A plain `pg_restore` can resolve to an older client than the one that wrote the archive ("unsupported version (1.16) in file header"). Use the newest installed
+# PostgreSQL client, exactly as the credential-free restore step does.
+pgbin="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)"
+[[ -x "$pgbin/pg_restore" ]] || { echo "::error::No PostgreSQL client found"; exit 1; }
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 export AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=auto
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
@@ -36,7 +40,7 @@ expected="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['sha
 if [[ "$actual" == "$expected" ]]; then matched=true; else matched=false; fi
 echo "Downloaded object=$object sha256=$actual manifest-sha256-match=$matched"
 gpg_decrypt "$tmp/idoc.dump.gpg" "$tmp/archive.dump" || { echo "::error::Cannot decrypt the backup (wrong passphrase?)"; exit 1; }
-pg_restore --list "$tmp/archive.dump" > "$tmp/toc"
+"$pgbin/pg_restore" --list "$tmp/archive.dump" > "$tmp/toc"
 mkdir -p "$out"; chmod 700 "$out"
 cp "$tmp/archive.dump" "$out/archive.dump"; cp "$tmp/toc" "$out/toc"; cp "$tmp/manifest.json" "$out/manifest.json"
 printf '{"checksumMatched":%s}' "$matched" > "$out/checks.json"
