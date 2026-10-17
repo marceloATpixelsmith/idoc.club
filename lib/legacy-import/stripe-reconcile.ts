@@ -15,7 +15,8 @@ export interface StripeSnapshot {
   subscriptions: Array<{ id: string; customerId: string; status: string; email: string }>;
   customerIds: Set<string>;
   chargeRefs: Set<string>;
-  partial: boolean;
+  /** True when a list was cut short; each list reports its own truncation so only the checks that depend on it are skipped. */
+  truncated: { subscriptions: boolean; customers: boolean; charges: boolean };
 }
 
 export interface StripeReconciliation {
@@ -39,27 +40,27 @@ export function legacyStripeKey(env: Record<string, string | undefined> = proces
 export async function fetchStripeSnapshot(key: string, now: () => number = Date.now): Promise<StripeSnapshot> {
   const stripe = new Stripe(key, { apiVersion: '2025-08-27.basil', maxNetworkRetries: 2 });
   const started = now();
-  let partial = false;
-  async function collect<T>(list: AsyncIterable<T>, each: (item: T) => void): Promise<void> {
+  async function collect<T>(list: AsyncIterable<T>, each: (item: T) => void): Promise<boolean> {
     let count = 0;
     for await (const item of list) {
       each(item);
-      if (++count >= MAX_ITEMS_PER_LIST || now() - started > TIME_BUDGET_MS) { partial = true; break; }
+      if (++count >= MAX_ITEMS_PER_LIST || now() - started > TIME_BUDGET_MS) return true;
     }
+    return false;
   }
   const subscriptions: StripeSnapshot['subscriptions'] = [];
   const customerIds = new Set<string>();
   const chargeRefs = new Set<string>();
-  await collect(stripe.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer'] }), (sub) => {
+  const subscriptionsTruncated = await collect(stripe.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer'] }), (sub) => {
     const customer = sub.customer;
     subscriptions.push({ id: sub.id, customerId: typeof customer === 'string' ? customer : customer.id, status: sub.status, email: typeof customer === 'string' || customer.deleted ? '' : (customer.email ?? '') });
   });
-  await collect(stripe.customers.list({ limit: 100 }), (customer) => { customerIds.add(customer.id); });
-  await collect(stripe.charges.list({ limit: 100 }), (charge) => {
+  const customersTruncated = await collect(stripe.customers.list({ limit: 100 }), (customer) => { customerIds.add(customer.id); });
+  const chargesTruncated = await collect(stripe.charges.list({ limit: 100 }), (charge) => {
     chargeRefs.add(charge.id);
     if (typeof charge.payment_intent === 'string') chargeRefs.add(charge.payment_intent);
   });
-  return { subscriptions, customerIds, chargeRefs, partial };
+  return { subscriptions, customerIds, chargeRefs, truncated: { subscriptions: subscriptionsTruncated, customers: customersTruncated, charges: chargesTruncated } };
 }
 
 const COLUMNS = ['legacy_user_id', 'email', 'first_name', 'last_name', 'membership_status', 'paid_through', 'legacy_subscription_id', 'legacy_customer_id', 'stripe_subscription_id', 'stripe_customer_id', 'stripe_status'];
@@ -90,15 +91,15 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     const subId = member.stripe.subscriptionId;
     const customerId = member.stripe.customerId;
     const stripeSub = subId ? bySubscription.get(subId) : undefined;
-    if (subId && !stripeSub) by.stripe_subscription_missing.rows.push(row(member, {}));
+    if (subId && !stripeSub && !snapshot.truncated.subscriptions) by.stripe_subscription_missing.rows.push(row(member, {}));
     if (stripeSub) {
       const detail = { subscriptionId: stripeSub.id, customerId: stripeSub.customerId, status: stripeSub.status };
       if (DEAD_SUBSCRIPTION.has(stripeSub.status)) by.stripe_cancelled_legacy_active.rows.push(row(member, detail));
       if (customerId && stripeSub.customerId !== customerId) by.stripe_customer_mismatch.rows.push(row(member, detail));
     }
-    if (!snapshot.partial && customerId && !snapshot.customerIds.has(customerId)) by.stripe_customer_missing.rows.push(row(member, { customerId }));
+    if (!snapshot.truncated.customers && customerId && !snapshot.customerIds.has(customerId)) by.stripe_customer_missing.rows.push(row(member, { customerId }));
     const refs = member.payments.filter((payment) => payment.source === 'stripe' && payment.outcome === 'paid' && payment.reference && /^(ch|py|pi)_/.test(payment.reference)).map((payment) => payment.reference!);
-    if (!snapshot.partial && refs.length > 0 && refs.every((ref) => !snapshot.chargeRefs.has(ref))) by.stripe_payments_missing.rows.push(row(member, {}));
+    if (!snapshot.truncated.charges && refs.some((ref) => !snapshot.chargeRefs.has(ref))) by.stripe_payments_missing.rows.push(row(member, {}));
   }
   const memberByStripeSub = new Map(importable.filter((member) => member.stripe.subscriptionId).map((member) => [member.stripe.subscriptionId!, member]));
   const memberByCustomer = new Map(importable.filter((member) => member.stripe.customerId).map((member) => [member.stripe.customerId!, member]));
@@ -122,9 +123,10 @@ export async function runStripeReconciliation(members: PlannedMember[], env: Rec
   if (!/^(?:sk|rk)_live_/.test(key)) return { state: 'unusable_key', message: 'LEGACY_STRIPE_SECRET_KEY is not a live-mode key, so it was not used.', ...empty };
   try {
     const snapshot = await fetcher(key);
+    const partial = Object.values(snapshot.truncated).some(Boolean);
     return {
-      state: 'ok', partial: snapshot.partial,
-      message: snapshot.partial ? 'Stripe has more records than one report can read, so the comparison is incomplete. Missing-customer and missing-payment checks were skipped.' : null,
+      state: 'ok', partial: partial,
+      message: partial ? `Stripe has more records than one report can read (${Object.entries(snapshot.truncated).filter(([, cut]) => cut).map(([name]) => name).join(', ')} cut short), so the checks that need the complete list were skipped and the rest may be incomplete.` : null,
       fetched: { subscriptions: snapshot.subscriptions.length, customers: snapshot.customerIds.size, charges: snapshot.chargeRefs.size },
       groups: reconcileWithStripe(members, snapshot),
     };
