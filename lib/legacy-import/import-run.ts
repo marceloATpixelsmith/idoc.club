@@ -91,6 +91,23 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
       throw new LegacyImportBlockedError(`${ids.length} member(s) already have an account in this environment with the same email (legacy user IDs: ${ids.slice(0, 20).join(', ')}${ids.length > 20 ? ', …' : ''}). Nothing was imported. Decide what to do with those accounts first.`);
     }
 
+    // Stripe IDs are unique in the database. A clash (inside the files, or with data already here) would otherwise be dropped
+    // silently, leaving a member imported without their billing link or history, so it stops the whole run instead.
+    const duplicates = (values: string[]) => values.filter((value, index) => values.indexOf(value) !== index);
+    const customerIds = rows.flatMap((row) => (row.billingCustomerId ? [row.billingCustomerId] : []));
+    const subscriptionIds = rows.flatMap((row) => (row.subscription ? [row.subscription.externalSubscriptionId] : []));
+    const paymentIds = rows.flatMap((row) => row.payments.flatMap((payment) => (payment.externalPaymentId ? [payment.externalPaymentId] : [])));
+    const insideFiles = new Set([...duplicates(customerIds), ...duplicates(subscriptionIds), ...duplicates(paymentIds)]);
+    const existingIds = new Set<string>();
+    for (const part of chunks(customerIds)) for (const row of await tx.select({ id: billingAccounts.externalCustomerId }).from(billingAccounts).where(inArray(billingAccounts.externalCustomerId, part))) existingIds.add(row.id);
+    for (const part of chunks(subscriptionIds)) for (const row of await tx.select({ id: subscriptions.externalSubscriptionId }).from(subscriptions).where(inArray(subscriptions.externalSubscriptionId, part))) existingIds.add(row.id);
+    for (const part of chunks(paymentIds)) for (const row of await tx.select({ id: payments.externalPaymentId }).from(payments).where(inArray(payments.externalPaymentId, part))) if (row.id) existingIds.add(row.id);
+    if (insideFiles.size > 0 || existingIds.size > 0) {
+      const clashing = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
+        .some((id) => id && (insideFiles.has(id) || existingIds.has(id)))).map((row) => row.legacyUserId);
+      throw new LegacyImportBlockedError(`${clashing.length} member(s) have a Stripe customer, subscription or payment ID that is used twice in the files or already exists in this environment (legacy user IDs: ${clashing.slice(0, 20).join(', ')}${clashing.length > 20 ? ', …' : ''}). Nothing was imported.`);
+    }
+
     const userIdByLegacy = new Map<string, number>();
     for (const part of chunks(rows)) {
       const inserted = await tx.insert(users).values(part.map((row) => row.user)).returning({ id: users.id, email: users.email });
@@ -112,13 +129,13 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     const billing = rows.filter((row) => row.billingCustomerId);
     let billingCount = 0;
     for (const part of chunks(billing)) {
-      const inserted = await tx.insert(billingAccounts).values(part.map((row) => ({ profileId: profileId(row), externalCustomerId: row.billingCustomerId! }))).onConflictDoNothing().returning({ id: billingAccounts.id });
+      const inserted = await tx.insert(billingAccounts).values(part.map((row) => ({ profileId: profileId(row), externalCustomerId: row.billingCustomerId! }))).returning({ id: billingAccounts.id });
       billingCount += inserted.length;
     }
     const withSubscription = rows.filter((row) => row.subscription);
     let subscriptionCount = 0;
     for (const part of chunks(withSubscription)) {
-      const inserted = await tx.insert(subscriptions).values(part.map((row) => ({ ...row.subscription!, profileId: profileId(row) }))).onConflictDoNothing().returning({ id: subscriptions.id });
+      const inserted = await tx.insert(subscriptions).values(part.map((row) => ({ ...row.subscription!, profileId: profileId(row) }))).returning({ id: subscriptions.id });
       subscriptionCount += inserted.length;
     }
     for (const part of chunks(rows)) await tx.insert(renewalPreferences).values(part.map((row) => ({ ...row.renewal, profileId: profileId(row) })));
@@ -130,11 +147,10 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
       paidAt: payment.paidAt, reference: payment.reference, reason: payment.reason, administratorId: payment.source === 'legacy_import' ? input.actorId : null,
     });
     const plain = rows.flatMap((row) => row.payments.filter((payment) => !payment.refunded).map((payment) => paymentValues(row, payment)));
-    for (const part of chunks(plain)) paymentCount += (await tx.insert(payments).values(part).onConflictDoNothing().returning({ id: payments.id })).length;
+    for (const part of chunks(plain)) paymentCount += (await tx.insert(payments).values(part).returning({ id: payments.id })).length;
     for (const row of rows) {
       for (const payment of row.payments.filter((candidate) => candidate.refunded)) {
-        const [stored] = await tx.insert(payments).values(paymentValues(row, payment)).onConflictDoNothing().returning({ id: payments.id });
-        if (!stored) continue;
+        const [stored] = await tx.insert(payments).values(paymentValues(row, payment)).returning({ id: payments.id });
         paymentCount += 1;
         await tx.insert(paymentRefunds).values({
           membershipPaymentId: stored.id, idempotencyKey: `legacy-import-refund-${row.legacyUserId}-${payment.legacyTransactionId}`, amountCents: payment.amountCents,

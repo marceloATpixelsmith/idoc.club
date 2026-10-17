@@ -27,7 +27,7 @@ export interface ImportMemberRows {
   user: { email: string; emailDisplay: string; passwordHash: string; accountState: 'migrated_pending'; role: 'member'; createdAt: Date; legacyPasswordHash: string | null; legacyPasswordFormat: 'phpass' | 'wp_bcrypt' | null };
   profile: { legacyWpUserId: number; firstName: string; lastName: string; address1: string; address2: string | null; city: string; stateProvince: string; postalCode: string; countryCode: string };
   roles: Array<{ roleType: string; nationalFederationCountryCode: string | null; idocRegion: string | null; feiId: string | null; officialStatuses: string[] | null; isTechnicalDelegate: boolean | null }>;
-  membership: { status: 'active' | 'grace' | 'expired' | 'review_required'; startsOn: string; validUntil: string; graceEndsOn: string | null; membershipType: 'standard'; source: 'legacy_import'; notes: string | null };
+  membership: { status: 'active' | 'grace' | 'expired' | 'review_required'; startsOn: string; validUntil: string; graceEndsOn: string | null; membershipType: 'standard'; source: 'migration'; notes: string | null };
   billingCustomerId: string | null;
   subscription: { externalSubscriptionId: string; priceId: string; status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean } | null;
   renewal: { currentMode: 'recurring' | 'non_recurring'; pendingMode: 'non_recurring' | null; effectiveOn: string | null; transitionState: 'current' | 'cancel_pending' };
@@ -104,7 +104,8 @@ export function buildMemberRows(
       status: membership.status === 'unknown' ? 'review_required' : membership.status,
       startsOn, validUntil: validUntil < startsOn ? startsOn : validUntil,
       graceEndsOn: membership.status === 'grace' && membership.paidThrough ? addDays(membership.paidThrough, GRACE_DAYS) : null,
-      membershipType: 'standard', source: 'legacy_import',
+      // 'migration' is the source the account-activation foundation recognises (lib/membership/account-recovery.ts).
+      membershipType: 'standard', source: 'migration',
       notes: membership.status === 'unknown' ? 'Legacy import: a completed payment has no expiry date; confirm the paid-through date.' : null,
     },
     billingCustomerId: orNull(member.stripe.customerId),

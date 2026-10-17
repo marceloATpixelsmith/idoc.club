@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
+import { db } from '../lib/db/drizzle.ts';
+import { validateMigrationActivationFoundation } from '../lib/membership/account-recovery.ts';
 import { assertImportAllowed, LegacyImportBlockedError, runLegacyImport } from '../lib/legacy-import/import-run.ts';
 import { parseMysqlDump } from '../lib/legacy-import/mysql-dump.ts';
 import { isNeededLegacyTable } from '../lib/legacy-import/reduce-dump.ts';
@@ -81,9 +83,9 @@ test('the import writes members, memberships, payments, subscriptions and mappin
   const memberships = await sql`select p.legacy_wp_user_id as legacy, m.status, m.valid_until::text as valid_until, m.grace_ends_on::text as grace_ends_on, m.source
     from idoc.memberships m join idoc.profiles p on p.id = m.profile_id order by p.legacy_wp_user_id`;
   assert.deepEqual(memberships.map((row) => ({ ...row })), [
-    { legacy: 1, status: 'active', valid_until: '2027-05-01', grace_ends_on: null, source: 'legacy_import' },
-    { legacy: 2, status: 'active', valid_until: '2027-09-01', grace_ends_on: null, source: 'legacy_import' },
-    { legacy: 3, status: 'grace', valid_until: '2026-10-15', grace_ends_on: '2026-10-20', source: 'legacy_import' },
+    { legacy: 1, status: 'active', valid_until: '2027-05-01', grace_ends_on: null, source: 'migration' },
+    { legacy: 2, status: 'active', valid_until: '2027-09-01', grace_ends_on: null, source: 'migration' },
+    { legacy: 3, status: 'grace', valid_until: '2026-10-15', grace_ends_on: '2026-10-20', source: 'migration' },
   ]);
 
   const paymentRows = await sql`select source, external_payment_id, amount_cents, administrator_id from idoc.payments order by id`;
@@ -99,6 +101,10 @@ test('the import writes members, memberships, payments, subscriptions and mappin
   // Nothing was queued for delivery.
   assert.equal((await sql`select count(*)::int as n from idoc.account_delivery_outbox`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from idoc.notification_outbox`)[0].n, 0);
+
+  // The imported rows satisfy the existing account-activation foundation (profile, role, entitlement source and mapping).
+  const [{ user_id: complete }] = await sql`select user_id from idoc.profiles where legacy_wp_user_id = 2`;
+  assert.equal(await db.transaction((tx) => validateMigrationActivationFoundation(tx, complete)), true);
 
   const again = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'.repeat(64), 'b'.repeat(64)] });
   assert.equal(again.imported, 0);
@@ -125,4 +131,14 @@ test('the import refuses to run unless every precondition holds', async () => {
   const withDecision = { ...report, review: [{ key: 'x', text: 'x', kind: 'review' as const, remedy: null, held: false, count: 1, columns: [], rows: [] }] };
   assert.throws(() => assertImportAllowed(withDecision, { DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'true' }, 'idoc'), /need your decision/);
   await createUser();
+});
+
+test('a Stripe ID that already exists here stops the whole import instead of being skipped', async () => {
+  const admin = await adminUser();
+  const user = await createUser();
+  const [profileRow] = await sql`insert into idoc.profiles (user_id, first_name, last_name, address_1, city, state_province, postal_code, country_code) values (${user.id}, 'X', 'Y', '1', 'C', 'S', '1', 'DE') returning id`;
+  await sql`insert into idoc.billing_accounts (profile_id, external_customer_id) values (${profileRow.id}, 'cus_ADA')`;
+  const { plan: reviewedPlan, report } = reviewed();
+  await assert.rejects(runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }), /used twice|already exists/);
+  assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
 });
