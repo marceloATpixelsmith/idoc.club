@@ -315,3 +315,7 @@ The Members bulk Delete action permanently removes member identity, profile, pay
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.
+
+## Legacy import file handling
+
+The temporary Super Admin legacy import (document 03 section 12) accepts credential-bearing MySQL dump files. Requirements: Super Admin only with fresh TOTP step-up and CSRF protection on every request; disabled unless `LEGACY_IMPORT_ENABLED` is exactly `true`; files are processed in memory and never written to disk, a database or object storage; parser errors name only the table, never row content; the report and the audit row contain aggregate counts, legacy user IDs and file checksums only, never names, emails, password hashes or payment references. The Server Action body limit is raised to 4 MB solely for this tool and is removed with it.
