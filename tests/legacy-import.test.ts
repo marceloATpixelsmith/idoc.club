@@ -59,6 +59,9 @@ function buildDump() {
     pay(13, 10, 'ch_13', 'complete', '2023-01-01 00:00:00', '2025-10-16 00:00:00'),
     pay(14, 11, 'ch_14', 'complete', '2023-01-01 00:00:00', '2025-10-17 00:00:00'),
     pay(15, 13, 'ch_15', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    // Orphans: 97 paid long ago and 96 never completed a payment (both removed by the rules); 98 has an active subscription (always reviewed).
+    pay(17, 97, 'ch_17', 'complete', '2019-01-01 00:00:00', '2020-01-01 00:00:00'),
+    pay(18, 96, 'ch_18', 'failed', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
     // Ivy, Lee (12) and Ned (14) never paid.
     pay(16, 9, 'ch_16', 'failed', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
   ]);
@@ -154,9 +157,9 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.equal(byId.get('11')!.membership.status, 'expired');
   for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
 
-  assert.deepEqual(plan.orphanPaymentUserIds, ['99']);
+  assert.deepEqual(plan.orphanPaymentUserIds, ['96', '97', '99']);
   assert.deepEqual(plan.orphanSubscriptionUserIds, ['98']);
-  assert.equal(plan.orphans.length, 2);
+  assert.deepEqual(plan.orphans.map((orphan) => [orphan.legacyUserId, orphan.removedByRules]), [['96', true], ['97', true], ['98', false], ['99', false]]);
 });
 
 test('summarizePlan leaves removed members out of every figure and separates expected from review', () => {
@@ -166,7 +169,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.equal(report.inScope, 9);
   assert.equal(report.held, 4);
   assert.equal(report.importable, 5);
-  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3]]);
+  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3], ['no_account_record_removed', 2]]);
   assert.deepEqual(report.membershipStatus, { active: 3, expired: 2 });
   assert.equal(report.profile.needsOnboarding, 3);
   assert.equal(report.payments.paid, 5, 'payments of held and removed members are not counted');
@@ -181,6 +184,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
   assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email') && review.has('no_account_record'));
+  assert.deepEqual(review.get('no_account_record')?.rows.map((row) => row.legacy_user_id), ['98', '99'], 'only orphans who stay in scope, or have an active subscription, need review');
   assert.equal(review.has('incomplete_profile'), false);
   assert.equal(expected.has('duplicate_email'), false);
 

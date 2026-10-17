@@ -145,7 +145,7 @@ export interface LegacyImportPlan {
   orphanPaymentUserIds: string[];
   orphanSubscriptionUserIds: string[];
   /** Payments or subscriptions whose user has no account row. */
-  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; subscriptionStatuses: string[] }>;
+  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[]; removedByRules: boolean }>;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
@@ -368,10 +368,15 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
   const orphanSubscriptionUserIds = [...new Set(subscriptions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b));
   const orphans = [...new Set([...orphanPaymentUserIds, ...orphanSubscriptionUserIds])].sort((a, b) => Number(a) - Number(b)).map((legacyUserId) => {
     const paidRows = (txByUser.get(legacyUserId) ?? []).filter((tx) => text(tx.txn_type) === 'payment' && text(tx.status) === 'complete');
+    const orphanSubs = (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
+    const paidThrough = paidRows.map((tx) => isoDay(tx.expires_at)).filter((day): day is string => day !== null).sort().pop() ?? null;
+    const hasActiveSubscription = orphanSubs.some((sub) => text(sub.status) === 'active');
+    // The same cleanup rules apply, except that a still-active subscription always needs a human look: it may still be billing someone.
+    const removedByRules = !hasActiveSubscription && (paidRows.length === 0 || (paidThrough !== null && paidThrough <= yearBefore(options.asOf)));
     return {
       legacyUserId, paymentCount: paidRows.length,
       lastPaidOn: paidRows.map((tx) => isoDay(tx.created_at)).filter((day): day is string => day !== null).sort().pop() ?? null,
-      subscriptionStatuses: (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated).map((sub) => text(sub.status) || '(blank)'),
+      paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'), removedByRules,
     };
   });
   return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans };
@@ -417,7 +422,7 @@ export const MEMBER_COLUMNS = [
   'legacy_user_id', 'email', 'first_name', 'last_name', 'registered', 'membership_product', 'membership_status', 'paid_through', 'first_paid_on', 'last_paid_on',
   'completed_payments', 'subscription_statuses', 'active_subscription_id', 'stripe_customer_id', 'country', 'national_federation', 'idoc_region', 'missing_fields', 'issues', 'notes',
 ];
-const ORPHAN_COLUMNS = ['legacy_user_id', 'completed_payments', 'last_paid_on', 'subscription_statuses'];
+const ORPHAN_COLUMNS = ['legacy_user_id', 'completed_payments', 'last_paid_on', 'paid_through', 'subscription_statuses', 'has_active_subscription'];
 
 function memberRow(member: PlannedMember): ReportRow {
   const official = member.roles.find((role) => role.roleType !== 'veterinarian');
@@ -454,18 +459,24 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
     const members = [...issues(code, 'exceptions'), ...issues(code, 'notes')];
     if (members.length > 0) groups.push(group(code, info, members));
   }
-  if (plan.orphans.length > 0) {
-    groups.push({
-      key: 'no_account_record', text: 'Payments or subscriptions belong to a user with no account record (not imported; check for an active subscription)', kind: 'review', remedy: null, held: false,
-      count: plan.orphans.length, columns: ORPHAN_COLUMNS,
-      rows: plan.orphans.map((orphan) => ({
-        legacy_user_id: orphan.legacyUserId, completed_payments: String(orphan.paymentCount), last_paid_on: orphan.lastPaidOn ?? '', subscription_statuses: orphan.subscriptionStatuses.join(' > '),
-      })),
-    });
+  const orphanGroup = (key: string, text: string, kind: ReportGroup['kind'], orphans: LegacyImportPlan['orphans']): ReportGroup => ({
+    key, text, kind, remedy: null, held: false, count: orphans.length, columns: ORPHAN_COLUMNS,
+    rows: orphans.map((orphan) => ({
+      legacy_user_id: orphan.legacyUserId, completed_payments: String(orphan.paymentCount), last_paid_on: orphan.lastPaidOn ?? '', paid_through: orphan.paidThrough ?? '',
+      subscription_statuses: orphan.subscriptionStatuses.join(' > '), has_active_subscription: orphan.hasActiveSubscription ? 'yes' : 'no',
+    })),
+  });
+  const orphansToReview = plan.orphans.filter((orphan) => !orphan.removedByRules);
+  const orphansRemoved = plan.orphans.filter((orphan) => orphan.removedByRules);
+  if (orphansToReview.length > 0) {
+    groups.push(orphanGroup('no_account_record', 'Payments or subscriptions belong to a user with no account record (not imported; check for an active subscription)', 'review', orphansToReview));
   }
   const bySize = (a: ReportGroup, b: ReportGroup) => Number(b.held) - Number(a.held) || b.count - a.count || a.key.localeCompare(b.key);
   const excluded = (Object.keys(EXCLUSION_INFO) as ExclusionCode[]).map((code) => group(code, { text: EXCLUSION_INFO[code], kind: 'excluded', remedy: null, held: false }, plan.members.filter((member) => member.exclusion === code)));
 
+  if (orphansRemoved.length > 0) {
+    excluded.push(orphanGroup('no_account_record_removed', 'Payment history for a user with no account record, expired a year or more or never paid: ignored', 'excluded', orphansRemoved));
+  }
   return {
     asOf: plan.asOf,
     legacyUsers: plan.members.length,
