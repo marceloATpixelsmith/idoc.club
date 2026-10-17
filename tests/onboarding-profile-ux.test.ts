@@ -70,7 +70,7 @@ test('a canonical membership URL parameter survives signup and preselects an emp
   assert.match(signupPage, /parseMemberClassification\(params\.membership\)/);
   assert.match(pendingSignup, /membership: MemberClassification \| null/);
   assert.match(dashboardPage, /initialClassification=\{parseMemberClassification\(membership\)\}/);
-  assert.match(source, /useState<Classification \| null>\(initialClassification\)/);
+  assert.match(source, /useState<Classification \| null>\(prefill\?\.classification \?\? initialClassification\)/);
   assert.match(source, /checked=\{classification === option\.value\}/);
   assert.match(source, /ring-2 ring-primary/);
 });
@@ -92,7 +92,7 @@ test('country selectors display names while preserving ISO alpha-2 values', () =
 });
 
 test('national federation defaults from address country without overwriting an explicit federation', () => {
-  assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(''\)/);
+  assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(prefill\?\.nationalFederationCountryCode \?\? ''\)/);
   assert.match(source, /const \[federationWasManuallyEdited, setFederationWasManuallyEdited\] = useState\(false\)/);
   assert.match(source, /if \(!nationalFederationCountryCode \|\| !federationWasManuallyEdited\)/);
   assert.match(source, /setNationalFederationCountryCode\(nextCountryCode\)/);
@@ -145,7 +145,7 @@ test('changing address country clears stale structured address values', () => {
 
 test('IDOC Region defaults from address country without overwriting an explicit manual selection', () => {
   assert.match(source, /import \{ IDOC_REGION_BY_COUNTRY \} from '@\/lib\/membership\/idoc-regions-by-country'/);
-  assert.match(source, /const \[idocRegion, setIdocRegion\] = useState\(''\)/);
+  assert.match(source, /const \[idocRegion, setIdocRegion\] = useState\(prefill\?\.idocRegion \?\? ''\)/);
   assert.match(source, /const \[regionWasManuallyEdited, setRegionWasManuallyEdited\] = useState\(false\)/);
   assert.match(source, /if \(!regionWasManuallyEdited\)/);
   assert.match(source, /setIdocRegion\(nextCountryCode \? IDOC_REGION_BY_COUNTRY\[nextCountryCode\] \?\? '' : ''\)/);

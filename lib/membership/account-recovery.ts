@@ -80,10 +80,18 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * and left for reconciliation rather than mutating anything, so the caller's own claim (a token, or
  * an already-consumed OTP) is never spent on a foundation that can't yet be activated. */
 export async function validateMigrationActivationFoundation(tx: Tx, userId: number): Promise<boolean> {
+  return (await inspectMigrationActivationFoundation(tx, userId)).valid;
+}
+
+/** Same checks as validateMigrationActivationFoundation, and also reports whether the imported profile is complete. The legacy
+ * import deliberately leaves required fields blank for members whose old record lacked them (docs/03); such an incomplete profile
+ * is a valid foundation, but the member must finish it in onboarding, so activation moves them to `onboarding`, not `active`. */
+export async function inspectMigrationActivationFoundation(tx: Tx, userId: number): Promise<{ valid: boolean; profileComplete: boolean }> {
+  const invalid = { valid: false, profileComplete: false };
   const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user || user.accountState !== 'migrated_pending') return false;
+  if (!user || user.accountState !== 'migrated_pending') return invalid;
   const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
-  if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(userId), entityType: 'user', reason: 'missing_imported_profile' }); return false; }
+  if (!profile) { await tx.insert(auditLog).values({ action: 'account.migration_activation.reconciliation_required', entityId: String(userId), entityType: 'user', reason: 'missing_imported_profile' }); return invalid; }
   const [roles, entitlements, mappings] = await Promise.all([
     tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
     tx.select().from(memberships).where(eq(memberships.profileId, profile.id)),
@@ -104,7 +112,11 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
     })),
   });
   const entitlement = entitlements.find(({ source }) => source === 'migration');
-  const foundationValid = importedProfile.success && mappings.length === 1 && Boolean(entitlement)
+  // An imported profile with blank required fields (never a fabricated value) is accepted when it still identifies the person
+  // and carries at least one role; onboarding collects the rest.
+  const incompleteButUsable = !importedProfile.success && profile.legacyWpUserId !== null
+    && profile.firstName.trim() !== '' && profile.lastName.trim() !== '' && roles.length > 0;
+  const foundationValid = (importedProfile.success || incompleteButUsable) && mappings.length === 1 && Boolean(entitlement)
     && Boolean(entitlement?.startsOn) && Boolean(entitlement?.validUntil)
     && ['active', 'grace', 'expired', 'complimentary', 'canceled'].includes(entitlement?.status ?? '');
   if (!foundationValid) {
@@ -113,22 +125,22 @@ export async function validateMigrationActivationFoundation(tx: Tx, userId: numb
       entityId: String(userId), entityType: 'user', reason: 'incomplete_import_foundation',
     });
   }
-  return foundationValid;
+  return { valid: foundationValid, profileComplete: importedProfile.success };
 }
 
 /** Applies the activation effects after the caller has proven the identity. Password establishment
  * is optional because the canonical normal-login path may already have verified a usable imported
  * credential; the compatibility activation path still supplies a new password. */
-async function applyMigrationActivationMutation(tx: Tx, userId: number, password?: string): Promise<boolean> {
+async function applyMigrationActivationMutation(tx: Tx, userId: number, password: string | undefined, profileComplete: boolean): Promise<boolean> {
   const now = new Date();
   const passwordUpdate = password === undefined ? {} : { passwordHash: await hashPassword(password), passwordSetAt: now };
   const [claimed] = await tx.update(users)
-    .set({ ...passwordUpdate, accountState: 'active', emailVerifiedAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
+    .set({ ...passwordUpdate, accountState: profileComplete ? 'active' : 'onboarding', emailVerifiedAt: now, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now })
     .where(and(eq(users.id, userId), eq(users.accountState, 'migrated_pending')))
     .returning({ id: users.id });
   if (!claimed) return false;
   await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, userId), eq(accountTokens.purpose, 'migration_activation'), isNull(accountTokens.consumedAt)));
-  await tx.insert(auditLog).values({ actorId: userId, action: 'account.migration_activation.completed', entityId: String(userId), entityType: 'user' });
+  await tx.insert(auditLog).values({ actorId: userId, action: 'account.migration_activation.completed', entityId: String(userId), entityType: 'user', afterJson: { accountState: profileComplete ? 'active' : 'onboarding' } });
   return true;
 }
 
@@ -138,8 +150,9 @@ async function applyMigrationActivationMutation(tx: Tx, userId: number, password
  * session invalidation, and outstanding-token invalidation as token-based activation. */
 export async function finalizeMigratedAccountAfterVerifiedPassword(userId: number): Promise<{ status: 'invalid' | 'success' }> {
   return db.transaction(async (tx) => {
-    if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };
-    if (!(await applyMigrationActivationMutation(tx, userId))) return { status: 'invalid' };
+    const foundation = await inspectMigrationActivationFoundation(tx, userId);
+    if (!foundation.valid) return { status: 'invalid' };
+    if (!(await applyMigrationActivationMutation(tx, userId, undefined, foundation.profileComplete))) return { status: 'invalid' };
     return { status: 'success' };
   });
 }
@@ -149,8 +162,9 @@ export async function finalizeMigratedAccountAfterVerifiedPassword(userId: numbe
  * the migration foundation and identity proof have been validated. */
 export async function activateMigratedAccountByUserId(userId: number, password: string): Promise<{ status: 'invalid' | 'success' }> {
   return db.transaction(async (tx) => {
-    if (!(await validateMigrationActivationFoundation(tx, userId))) return { status: 'invalid' };
-    if (!(await applyMigrationActivationMutation(tx, userId, password))) return { status: 'invalid' };
+    const foundation = await inspectMigrationActivationFoundation(tx, userId);
+    if (!foundation.valid) return { status: 'invalid' };
+    if (!(await applyMigrationActivationMutation(tx, userId, password, foundation.profileComplete))) return { status: 'invalid' };
     return { status: 'success' };
   });
 }
@@ -176,10 +190,11 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
     const [record] = await tx.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, digest(rawToken)), eq(accountTokens.purpose, purpose), isNull(accountTokens.consumedAt), gt(accountTokens.expiresAt, new Date()))).limit(1);
     if (!record) return { status: 'invalid' as const };
     if (purpose === 'migration_activation') {
-      if (!(await validateMigrationActivationFoundation(tx, record.userId))) return { status: 'invalid' as const };
+      const foundation = await inspectMigrationActivationFoundation(tx, record.userId);
+      if (!foundation.valid) return { status: 'invalid' as const };
       const [claimed] = await tx.update(accountTokens).set({ consumedAt: new Date() }).where(and(eq(accountTokens.id, record.id), isNull(accountTokens.consumedAt))).returning({ id: accountTokens.id });
       if (!claimed) return { status: 'invalid' as const };
-      if (!(await applyMigrationActivationMutation(tx, record.userId, password))) return { status: 'invalid' as const };
+      if (!(await applyMigrationActivationMutation(tx, record.userId, password, foundation.profileComplete))) return { status: 'invalid' as const };
       return { status: 'success' as const };
     }
     const [user] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).limit(1);

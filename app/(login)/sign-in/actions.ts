@@ -105,12 +105,14 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   // fully set-up account gets the "login lands on the homepage" destination.
   // A member without a current membership sees only the payment page, so sign-in lands them there.
   const { gate: sessionGate } = await loadSessionGate(verifiedUser.id);
+  // A migrated member whose imported profile still has blank required fields is now in `onboarding`: the wizard lives at /dashboard.
+  const migratedNeedsOnboarding = migrated && verifiedUser.accountState === 'onboarding';
   const destination = migrated
-    ? '/dashboard/profile'
+    ? (migratedNeedsOnboarding ? '/dashboard' : '/dashboard/profile')
     : sessionGate === 'payment_only'
       ? paymentOnlyDestination(verifiedUser.accountState)
       : verifiedUser.accountState === 'onboarding' ? '/dashboard' : '/';
-  if (migrated) await setUiFlash('profile-confirm-details', '/dashboard/profile');
+  if (migrated && !migratedNeedsOnboarding) await setUiFlash('profile-confirm-details', '/dashboard/profile');
   const role = await authoritativeMfaRole(verifiedUser.id);
   if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');
