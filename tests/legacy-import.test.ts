@@ -285,3 +285,39 @@ test('reconcileWithStripe flags differences between the plan and live Stripe, an
   assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'sk_test_x' })).state, 'unusable_key');
   assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'rk_live_x' }, async () => { throw new Error('boom'); })).state, 'error');
 });
+
+test('monthWindows covers the range in whole UTC months', async () => {
+  const { monthWindows } = await import('../lib/legacy-import/stripe-reconcile.ts');
+  const windows = monthWindows(new Date('2023-11-20T00:00:00Z'), new Date('2024-02-05T00:00:00Z'));
+  assert.equal(windows.length, 4);
+  assert.equal(windows[0].gte, Date.UTC(2023, 10, 1) / 1000);
+  assert.equal(windows[3].lt, Date.UTC(2024, 2, 1) / 1000);
+  assert.ok(windows.every((window, index) => index === 0 || window.gte === windows[index - 1].lt));
+});
+
+test('duplicate payment references: identical rows on one member are dropped as expected; conflicting or cross-member ones need a decision', () => {
+  const row = (id: number, user: number, ref: string, amount: string) => [id, amount, amount, user, 2042, ref, 'complete', 'payment', 'stripe', 0, '2024-05-01 00:00:00', '2025-05-01 00:00:00'];
+  const user = (id: number) => [id, `u${id}`, 'x', `u${id}@example.com`, '2020-01-01 00:00:00', 0, 0, 0];
+  const dump = parseMysqlDump([
+    insert('wp_users', USER_COLUMNS, [user(1), user(2), user(3), user(4), user(5)]),
+    insert('wp_usermeta', META_COLUMNS, [[1, 1, 'first_name', 'Ada']]),
+    insert('wp_mepr_transactions', TX_COLUMNS, [
+      row(1, 1, 'ch_same', '10'), row(2, 1, 'ch_same', '10'),
+      row(3, 2, 'ch_conflict', '10'), row(4, 2, 'ch_conflict', '25'),
+      row(5, 3, 'ch_cross', '10'), row(6, 4, 'ch_cross', '10'),
+      row(7, 5, 'ch_ok', '10'),
+    ]),
+    insert('wp_mepr_subscriptions', SUB_COLUMNS, [[1, 99, 2042, 'sub_x', 'cancelled', '2020-01-01 00:00:00']]),
+  ].join(''), isNeededLegacyTable);
+  const plan = planLegacyImport(dump, { asOf: '2024-06-01' });
+  const member = (id: string) => plan.members.find((m) => m.legacyUserId === id)!;
+  assert.equal(member('1').payments.length, 1);
+  assert.ok(member('1').notes.includes('duplicate_payment_row_removed'));
+  assert.equal(member('1').exceptions.some((code) => code.startsWith('duplicate_payment')), false);
+  assert.ok(member('2').exceptions.includes('duplicate_payment_reference_same_member'));
+  assert.ok(member('3').exceptions.includes('duplicate_payment_reference') && member('4').exceptions.includes('duplicate_payment_reference'));
+  assert.equal(member('5').exceptions.some((code) => code.startsWith('duplicate_payment')), false);
+  const report = summarizePlan(plan);
+  assert.ok(report.expected.some((group) => group.key === 'duplicate_payment_row_removed'));
+  assert.ok(report.review.some((group) => group.key === 'duplicate_payment_reference_same_member'));
+});

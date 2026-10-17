@@ -23,12 +23,15 @@ export interface StripeReconciliation {
   state: 'not_configured' | 'unusable_key' | 'error' | 'ok';
   message: string | null;
   partial: boolean;
+  /** Checks that could not run because a Stripe list was cut short; shown so an empty result is never read as "all clear". */
+  skipped: string[];
   fetched: { subscriptions: number; customers: number; charges: number };
   groups: ReportGroup[];
 }
 
 const MAX_ITEMS_PER_LIST = 50_000;
-const TIME_BUDGET_MS = 40_000;
+const TIME_BUDGET_MS = 45_000;
+const CHARGE_CONCURRENCY = 8;
 const LIVE_SUBSCRIPTION = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
 const DEAD_SUBSCRIPTION = new Set(['canceled', 'incomplete_expired']);
 
@@ -37,7 +40,20 @@ export function legacyStripeKey(env: Record<string, string | undefined> = proces
   return key ? key : null;
 }
 
-export async function fetchStripeSnapshot(key: string, now: () => number = Date.now): Promise<StripeSnapshot> {
+/** Month windows (UTC, as unix seconds) from `since` to `until`, so the charge list can be read in parallel instead of one long page-by-page walk. */
+export function monthWindows(since: Date, until: Date): Array<{ gte: number; lt: number }> {
+  const windows: Array<{ gte: number; lt: number }> = [];
+  let start = Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), 1);
+  while (start <= until.getTime()) {
+    const next = new Date(start);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    windows.push({ gte: start / 1000, lt: next.getTime() / 1000 });
+    start = next.getTime();
+  }
+  return windows;
+}
+
+export async function fetchStripeSnapshot(key: string, since: Date, now: () => number = Date.now): Promise<StripeSnapshot> {
   const stripe = new Stripe(key, { apiVersion: '2025-08-27.basil', maxNetworkRetries: 2 });
   const started = now();
   async function collect<T>(list: AsyncIterable<T>, each: (item: T) => void): Promise<boolean> {
@@ -56,10 +72,21 @@ export async function fetchStripeSnapshot(key: string, now: () => number = Date.
     subscriptions.push({ id: sub.id, customerId: typeof customer === 'string' ? customer : customer.id, status: sub.status, email: typeof customer === 'string' || customer.deleted ? '' : (customer.email ?? '') });
   });
   const customersTruncated = await collect(stripe.customers.list({ limit: 100 }), (customer) => { customerIds.add(customer.id); });
-  const chargesTruncated = await collect(stripe.charges.list({ limit: 100 }), (charge) => {
-    chargeRefs.add(charge.id);
-    if (typeof charge.payment_intent === 'string') chargeRefs.add(charge.payment_intent);
-  });
+  // Charges are the big list: read one month per request stream, several months at a time.
+  const windows = monthWindows(since, new Date(now()));
+  let chargesTruncated = false;
+  let nextWindow = 0;
+  const worker = async () => {
+    while (nextWindow < windows.length) {
+      const window = windows[nextWindow++];
+      const cut = await collect(stripe.charges.list({ limit: 100, created: { gte: window.gte, lt: window.lt } }), (charge) => {
+        chargeRefs.add(charge.id);
+        if (typeof charge.payment_intent === 'string') chargeRefs.add(charge.payment_intent);
+      });
+      if (cut) chargesTruncated = true;
+    }
+  };
+  await Promise.all(Array.from({ length: CHARGE_CONCURRENCY }, worker));
   return { subscriptions, customerIds, chargeRefs, truncated: { subscriptions: subscriptionsTruncated, customers: customersTruncated, charges: chargesTruncated } };
 }
 
@@ -116,16 +143,24 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
 }
 
 /** Runs the whole reconciliation; never throws, so a Stripe problem cannot stop the dry run itself. */
-export async function runStripeReconciliation(members: PlannedMember[], env: Record<string, string | undefined> = process.env, fetcher: typeof fetchStripeSnapshot = fetchStripeSnapshot): Promise<StripeReconciliation> {
-  const empty = { partial: false, fetched: { subscriptions: 0, customers: 0, charges: 0 }, groups: [] as ReportGroup[] };
+export async function runStripeReconciliation(members: PlannedMember[], env: Record<string, string | undefined> = process.env, fetcher: (key: string, since: Date) => Promise<StripeSnapshot> = (k, since) => fetchStripeSnapshot(k, since)): Promise<StripeReconciliation> {
+  const empty = { partial: false, skipped: [] as string[], fetched: { subscriptions: 0, customers: 0, charges: 0 }, groups: [] as ReportGroup[] };
   const key = legacyStripeKey(env);
   if (!key) return { state: 'not_configured', message: 'No live Stripe key is configured for this report (LEGACY_STRIPE_SECRET_KEY), so nothing was compared with Stripe.', ...empty };
   if (!/^(?:sk|rk)_live_/.test(key)) return { state: 'unusable_key', message: 'LEGACY_STRIPE_SECRET_KEY is not a live-mode key, so it was not used.', ...empty };
   try {
-    const snapshot = await fetcher(key);
+    const paidDates = members.flatMap((member) => member.payments.filter((payment) => payment.source === 'stripe').map((payment) => payment.paidOn)).filter(Boolean).sort();
+    const since = paidDates.length > 0 ? new Date(`${paidDates[0].slice(0, 10)}T00:00:00Z`) : new Date();
+    since.setUTCDate(since.getUTCDate() - 7);
+    const snapshot = await fetcher(key, since);
     const partial = Object.values(snapshot.truncated).some(Boolean);
     return {
-      state: 'ok', partial: partial,
+      state: 'ok', partial,
+      skipped: [
+        ...(snapshot.truncated.subscriptions ? ['legacy subscriptions missing in Stripe'] : []),
+        ...(snapshot.truncated.customers ? ['stored customer IDs missing in Stripe'] : []),
+        ...(snapshot.truncated.charges ? ['Stripe payments missing in Stripe'] : []),
+      ],
       message: partial ? `Stripe has more records than one report can read (${Object.entries(snapshot.truncated).filter(([, cut]) => cut).map(([name]) => name).join(', ')} cut short), so the checks that need the complete list were skipped and the rest may be incomplete.` : null,
       fetched: { subscriptions: snapshot.subscriptions.length, customers: snapshot.customerIds.size, charges: snapshot.chargeRefs.size },
       groups: reconcileWithStripe(members, snapshot),

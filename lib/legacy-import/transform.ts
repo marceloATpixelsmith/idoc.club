@@ -76,9 +76,9 @@ export type ExceptionCode =
   | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
   | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
   | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
-  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference';
+  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
 
-export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time';
+export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time' | 'duplicate_payment_row_removed';
 export type ExclusionCode = 'expired_over_a_year' | 'never_paid';
 
 /** "expected": the plan already has a remedy, nothing to decide. "review": a person has to look at it and decide. */
@@ -95,6 +95,7 @@ export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
   unsupported_password_hash: { text: 'Password hash is not a supported WordPress format', kind: 'expected', remedy: 'Uses the one-time secure activation / password-set flow', held: false },
   country_filled_from_federation: { text: 'Address country was blank and was filled from the national federation country', kind: 'expected', remedy: 'Filled automatically; the member confirms it in onboarding', held: false },
   technical_delegate_defaulted_no: { text: 'Technical delegate answer was blank and defaulted to No', kind: 'expected', remedy: 'Defaulted automatically; the member can change it', held: false },
+  duplicate_payment_row_removed: { text: 'The same payment (same Stripe reference, amount and outcome) appears twice on this member', kind: 'expected', remedy: 'Imported once; the duplicated row is dropped', held: false },
   product_changed_over_time: { text: 'The member has paid under more than one membership product over time', kind: 'expected', remedy: 'The most recent product decides the roles', held: false },
   user_flagged_deleted_or_spam: { text: 'WordPress marks the user deleted or spam', kind: 'review', remedy: null, held: true },
   invalid_email: { text: 'Email address is missing or not valid', kind: 'review', remedy: null, held: true },
@@ -109,7 +110,8 @@ export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
   invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', kind: 'review', remedy: null, held: false },
   multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', kind: 'review', remedy: null, held: false },
   active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', kind: 'review', remedy: null, held: false },
-  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on more than one transaction', kind: 'review', remedy: null, held: false },
+  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on transactions of DIFFERENT members', kind: 'review', remedy: null, held: false },
+  duplicate_payment_reference_same_member: { text: 'The same Stripe payment reference appears on the SAME member with a different amount or outcome (cannot tell which row is right)', kind: 'review', remedy: null, held: false },
 };
 
 export interface PlannedRole {
@@ -260,6 +262,8 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       const reference = text(tx.trans_num) || null;
       const manual = !reference || reference.startsWith('mp-') || text(tx.gateway) === 'manual';
       const amount = Math.round(Number(text(tx.total) || text(tx.amount) || '0') * 100);
+      const duplicate = reference && !manual && payments.some((earlier) => earlier.reference === reference && earlier.amountCents === (Number.isFinite(amount) ? amount : 0) && earlier.outcome === (status === 'refunded' ? 'refunded' : 'paid'));
+      if (duplicate) { notes.add('duplicate_payment_row_removed'); continue; }
       payments.push({
         legacyTransactionId: text(tx.id), reference, source: manual ? 'manual' : 'stripe', amountCents: Number.isFinite(amount) ? amount : 0,
         paidOn: isoDay(tx.created_at) ?? '', expiresOn: isoDay(tx.expires_at), outcome: status === 'refunded' ? 'refunded' : 'paid',
@@ -370,12 +374,22 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       referenceOwners.set(payment.reference, owners);
     }
   }
-  const duplicateOwners = new Set<string>();
+  const crossMemberOwners = new Set<string>();
+  const sameMemberOwners = new Set<string>();
   for (const owners of referenceOwners.values()) {
-    if (owners.size > 1) for (const owner of owners) duplicateOwners.add(owner.split(':')[0]);
+    if (owners.size < 2) continue;
+    const perMember = new Map<string, number>();
+    for (const owner of owners) perMember.set(owner.split(':')[0], (perMember.get(owner.split(':')[0]) ?? 0) + 1);
+    for (const [memberId, count] of perMember) {
+      if (perMember.size > 1) crossMemberOwners.add(memberId);
+      if (count > 1) sameMemberOwners.add(memberId);
+    }
   }
   for (const member of inScope) {
-    if (duplicateOwners.has(member.legacyUserId)) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, 'duplicate_payment_reference'])].sort();
+    const extra: ExceptionCode[] = [];
+    if (crossMemberOwners.has(member.legacyUserId)) extra.push('duplicate_payment_reference');
+    if (sameMemberOwners.has(member.legacyUserId)) extra.push('duplicate_payment_reference_same_member');
+    if (extra.length > 0) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, ...extra])].sort();
   }
 
   const orphanPaymentUserIds = [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b));
