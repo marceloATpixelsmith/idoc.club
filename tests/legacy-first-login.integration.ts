@@ -17,6 +17,8 @@ import { closeHarness, createUser, profileInput, resetIdoc, sql } from './postgr
 Object.assign(process.env, {
   AUTH_SECRET: 'legacy-first-login-secret-long-enough',
   BASE_URL: 'http://localhost:3000',
+  BREVO_API_KEY: 'integration-only-provider-key',
+  BREVO_FROM_EMAIL: 'accounts@idoc.club',
   MFA_PENDING_AUTH_SIGNING_KEY: randomBytes(32).toString('base64url'),
   MFA_RECOVERY_CODE_DIGEST_KEY: randomBytes(32).toString('base64url'),
   MFA_TOTP_ACTIVE_KEY_ID: 'legacy-first-login',
