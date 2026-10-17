@@ -1,12 +1,14 @@
 'use client';
 
 import { Download } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { useFreshStepUpAction, type StepUpActionState } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import type { DryRunResult } from '@/lib/legacy-import/dry-run';
 import { toCsv } from '@/lib/admin/csv';
+import { LEGACY_TABLE_NAMES, reduceDumpText } from '@/lib/legacy-import/reduce-dump';
 import type { DryRunReport, ReportGroup } from '@/lib/legacy-import/transform';
 
 export type LegacyImportActionState = StepUpActionState & { error?: string; result?: DryRunResult };
@@ -110,8 +112,38 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
   );
 }
 
+const NEEDED_TABLES: ReadonlySet<string> = new Set(Object.values(LEGACY_TABLE_NAMES));
+
+/** Keeps only the four needed tables of each dump, in the browser, so unneeded data never leaves the computer and the upload stays small. */
+async function trimUpload(formData: FormData): Promise<{ data: FormData; bytes: number }> {
+  const data = new FormData();
+  let bytes = 0;
+  for (const [key, value] of formData.entries()) {
+    if ((key === 'usersFile' || key === 'meprFile') && value instanceof File) {
+      const trimmed = new File([reduceDumpText(await value.text(), NEEDED_TABLES)], value.name, { type: 'text/plain' });
+      bytes += trimmed.size;
+      data.append(key, trimmed);
+    } else {
+      data.append(key, value);
+    }
+  }
+  return { data, bytes };
+}
+
 export function DryRunForm({ action }: { action: Action }) {
-  const [state, run, pending, challenge] = useFreshStepUpAction<LegacyImportActionState>(action, {});
+  const safeAction = useMemo<Action>(() => async (state, formData) => {
+    let bytes = 0;
+    try {
+      const trimmed = await trimUpload(formData);
+      bytes = trimmed.bytes;
+      return await action(state, trimmed.data);
+    } catch {
+      // A step-up request returns normally; only a failure to send or read the response lands here.
+      const megabytes = (bytes / 1_048_576).toFixed(1);
+      return { error: `The files could not be sent to the server (${megabytes} MB after trimming to the tables the importer needs). Try again; if it keeps happening, tell your developer this size and the time.` };
+    }
+  }, [action]);
+  const [state, run, pending, challenge] = useFreshStepUpAction<LegacyImportActionState>(safeAction, {});
   return (
     <>
       <form action={run} className="space-y-4">

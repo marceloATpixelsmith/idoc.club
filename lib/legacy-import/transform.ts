@@ -12,13 +12,9 @@
 import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES, memberProfileSchema, normalizeEmail } from '../membership/validation.ts';
 import type { DumpRow, ParsedDump } from './mysql-dump.ts';
 import { checkedKeysFromPhpArray } from './php-serialized.ts';
+import { LEGACY_TABLE_NAMES } from './reduce-dump.ts';
 
-export const LEGACY_TABLES = {
-  users: 'psspaceusers',
-  usermeta: 'psspaceusermeta',
-  transactions: 'psspace58_mepr_transactions',
-  subscriptions: 'psspace58_mepr_subscriptions',
-} as const;
+export const LEGACY_TABLES = LEGACY_TABLE_NAMES;
 export const REQUIRED_LEGACY_TABLES: ReadonlySet<string> = new Set(Object.values(LEGACY_TABLES));
 
 type Classification = 'judge' | 'steward' | 'judge_steward' | 'veterinarian';

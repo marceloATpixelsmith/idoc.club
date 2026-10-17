@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { parseMysqlDump, DumpParseError } from '../lib/legacy-import/mysql-dump.ts';
 import { checkedKeysFromPhpArray } from '../lib/legacy-import/php-serialized.ts';
+import { reduceDumpText } from '../lib/legacy-import/reduce-dump.ts';
 import { planLegacyImport, summarizePlan, REQUIRED_LEGACY_TABLES } from '../lib/legacy-import/transform.ts';
 
 const q = (value: string | number | null) => (value === null ? 'NULL' : typeof value === 'number' ? String(value) : `'${value.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`);
@@ -201,4 +202,26 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   // People's details may be downloaded, but never password hashes or Stripe payment references.
   const serialized = JSON.stringify(report);
   for (const secret of ['$P$', '$wp$', 'weird', 'ch_1', 'mp-9']) assert.equal(serialized.includes(secret), false, `report must not contain ${secret}`);
+});
+
+test('reduceDumpText keeps only the needed tables and parses identically afterwards', () => {
+  const sql = [
+    '-- comment', '/*!40101 SET NAMES utf8 */;', 'DROP TABLE IF EXISTS `psspaceusers`;',
+    'CREATE TABLE `psspaceusers` (\n  `ID` int,\n  `user_login` text\n) ENGINE=InnoDB;',
+    'LOCK TABLES `psspaceusers` WRITE;',
+    "INSERT INTO `psspaceusers` (`ID`, `user_login`) VALUES\n(1,\t'a;'),\n(2,\t'it''s);'),\n(3,\tNULL);",
+    'CREATE TABLE `psspace58_mepr_events` (\n  `id` int\n) ENGINE=InnoDB;',
+    "INSERT INTO `psspace58_mepr_events` (`id`) VALUES\n(1),\n(2);",
+    'CREATE TABLE `psspaceusermeta` (\n  `umeta_id` int,\n  `user_id` int,\n  `meta_key` text,\n  `meta_value` text\n) ENGINE=InnoDB;',
+    "INSERT INTO `psspaceusermeta` VALUES (1,1,'k','v'),(2,1,'k2',NULL);",
+    "INSERT INTO `psspace58_mepr_events` (`id`) VALUES (9);",
+    'UNLOCK TABLES;',
+  ].join('\n') + '\n';
+  const needed = new Set(['psspaceusers', 'psspaceusermeta']);
+  const reduced = reduceDumpText(sql, needed);
+  assert.equal(reduced.includes('psspace58_mepr_events'), false);
+  assert.equal(reduced.includes('LOCK TABLES'), false);
+  assert.deepEqual(parseMysqlDump(reduced, needed), parseMysqlDump(sql, needed));
+  assert.equal(parseMysqlDump(reduced, needed).get('psspaceusers')!.length, 3);
+  assert.equal(reduceDumpText('nothing here', needed), '');
 });
