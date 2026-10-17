@@ -146,6 +146,8 @@ export interface PlannedMember {
   /** Set when a cleanup rule removes the member from the import and from every report figure. */
   exclusion: ExclusionCode | null;
   subscriptionStatuses: string[];
+  /** Every valid Stripe subscription ID stored for the member, whatever its legacy status. */
+  subscriptionRefs: string[];
   stripe: { customerId: string | null; subscriptionId: string | null };
   payments: PlannedPayment[];
   ignoredPayments: number;
@@ -159,7 +161,7 @@ export interface LegacyImportPlan {
   orphanSubscriptionUserIds: string[];
   /** Payments or subscriptions whose user has no account row. */
   sourceTables: ResolvedLegacyTables['found'];
-  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[] }>;
+  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[]; subscriptionRefs: string[] }>;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
@@ -349,6 +351,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     return {
       legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
       membership: { status: membershipStatus, paidThrough, firstPaidOn, lastPaidOn }, exclusion, subscriptionStatuses: userSubs.map((sub) => text(sub.status) || '(blank)'),
+      subscriptionRefs: userSubs.map((sub) => text(sub.subscr_id)).filter((ref) => ref.startsWith('sub_')),
       stripe: { customerId, subscriptionId }, payments, ignoredPayments,
       exceptions: [...exceptions].sort(), notes: [...notes].sort(),
     };
@@ -403,6 +406,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       legacyUserId, paymentCount: paidRows.length,
       lastPaidOn: paidRows.map((tx) => isoDay(tx.created_at)).filter((day): day is string => day !== null).sort().pop() ?? null,
       paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'),
+      subscriptionRefs: orphanSubs.map((sub) => text(sub.subscr_id)).filter((ref) => ref.startsWith('sub_')),
     };
   });
   return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans, sourceTables: resolved.found };

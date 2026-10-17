@@ -35,7 +35,7 @@ async function dryRunAction(_state: LegacyImportActionState, formData: FormData)
       files.push({ name: file.name.slice(0, 120), bytes: new Uint8Array(await file.arrayBuffer()) });
     }
     const { plan, ...result } = runLegacyDryRun(files, new Date().toISOString().slice(0, 10));
-    result.report.stripeReconciliation = await runStripeReconciliation(plan.members);
+    result.report.stripeReconciliation = await runStripeReconciliation(plan.members, plan.orphans);
     await db.insert(auditLog).values({
       actorId: actor.id, action: 'admin.legacy_import.dry_run', entityType: 'legacy_import', entityId: result.files.map((file) => file.sha256.slice(0, 12)).join('+'),
       afterJson: { stripeComparison: result.report.stripeReconciliation?.state, legacyUsers: result.report.legacyUsers, importable: result.report.importable, held: result.report.held, files: result.files.map(({ bytes, sha256 }) => ({ bytes, sha256 })) },

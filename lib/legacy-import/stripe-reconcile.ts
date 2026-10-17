@@ -1,7 +1,6 @@
 import Stripe from 'stripe';
 
-import type { ReportGroup, ReportRow } from './transform.ts';
-import type { PlannedMember } from './transform.ts';
+import type { LegacyImportPlan, PlannedMember, ReportGroup, ReportRow } from './transform.ts';
 
 /**
  * Read-only comparison of the legacy subscriptions and payments with LIVE Stripe, for the temporary legacy import report.
@@ -27,6 +26,8 @@ export interface StripeReconciliation {
   skipped: string[];
   fetched: { subscriptions: number; customers: number; charges: number };
   groups: ReportGroup[];
+  /** What live Stripe says about the subscriptions of people who are not being imported (deleted users and removed members). `undetermined` when the subscription list was cut short. */
+  removedPeople: { checked: number; live: number; cancelled: number; notFound: number; undetermined: boolean };
 }
 
 const MAX_ITEMS_PER_LIST = 50_000;
@@ -98,11 +99,22 @@ const row = (member: PlannedMember | null, stripe: { subscriptionId?: string; cu
 });
 
 /** Pure comparison of the plan with a Stripe snapshot. Members removed by the cleanup rules are used only to recognise Stripe subscriptions that belong to them. */
-export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSnapshot): ReportGroup[] {
+export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSnapshot, orphans: LegacyImportPlan['orphans'] = []): { groups: ReportGroup[]; removedPeople: StripeReconciliation['removedPeople'] } {
   const bySubscription = new Map(snapshot.subscriptions.map((sub) => [sub.id, sub]));
   const importable = members.filter((member) => !member.exclusion && !member.held);
-  const removedSubscriptionIds = new Set(members.filter((member) => member.exclusion && member.stripe.subscriptionId).map((member) => member.stripe.subscriptionId!));
   const importableSubscriptionIds = new Set(importable.map((member) => member.stripe.subscriptionId).filter((id): id is string => Boolean(id)));
+  // Subscriptions of people who are not being imported: say exactly what live Stripe holds for each one.
+  const removedRefs = new Set<string>([
+    ...orphans.flatMap((orphan) => orphan.subscriptionRefs),
+    ...members.filter((member) => member.exclusion).flatMap((member) => member.subscriptionRefs),
+  ]);
+  const removedPeople = { checked: removedRefs.size, live: 0, cancelled: 0, notFound: 0, undetermined: snapshot.truncated.subscriptions };
+  for (const ref of removedRefs) {
+    const sub = bySubscription.get(ref);
+    if (!sub) removedPeople.notFound++;
+    else if (LIVE_SUBSCRIPTION.has(sub.status)) removedPeople.live++;
+    else removedPeople.cancelled++;
+  }
   const defs: Array<{ key: string; text: string; remedy: string | null; rows: ReportRow[] }> = [
     { key: 'stripe_subscription_missing', text: 'Legacy active subscription not found in live Stripe', remedy: null, rows: [] },
     { key: 'stripe_cancelled_legacy_active', text: 'Active in the legacy data but cancelled in live Stripe', remedy: null, rows: [] },
@@ -110,7 +122,7 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     { key: 'stripe_customer_mismatch', text: 'The Stripe subscription belongs to a different customer than the legacy record', remedy: null, rows: [] },
     { key: 'stripe_customer_missing', text: 'Stored Stripe customer ID not found in live Stripe', remedy: null, rows: [] },
     { key: 'stripe_payments_missing', text: 'Member has Stripe payments that are not found in live Stripe', remedy: null, rows: [] },
-    { key: 'stripe_live_for_removed_person', text: 'Still billing in live Stripe for a person removed by the cleanup rules', remedy: 'These subscriptions are to be cancelled in a later, separately confirmed step before the import goes live.', rows: [] },
+    { key: 'stripe_live_for_removed_person', text: 'Still billing in live Stripe for a deleted user or a person removed by the cleanup rules', remedy: null, rows: [] },
     { key: 'stripe_live_unlinked', text: 'Still billing in live Stripe but not linked to any legacy record', remedy: null, rows: [] },
   ];
   const by = Object.fromEntries(defs.map((def) => [def.key, def]));
@@ -134,17 +146,18 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     if (!LIVE_SUBSCRIPTION.has(sub.status)) continue;
     const detail = { subscriptionId: sub.id, customerId: sub.customerId, status: sub.status, email: sub.email };
     if (importableSubscriptionIds.has(sub.id)) continue;
-    if (removedSubscriptionIds.has(sub.id)) { by.stripe_live_for_removed_person.rows.push(row(null, detail)); continue; }
+    if (removedRefs.has(sub.id)) { by.stripe_live_for_removed_person.rows.push(row(null, detail)); continue; }
     const owner = memberByStripeSub.get(sub.id) ?? memberByCustomer.get(sub.customerId);
     if (owner) by.stripe_live_legacy_inactive.rows.push(row(owner, detail));
     else by.stripe_live_unlinked.rows.push(row(null, detail));
   }
-  return defs.filter((def) => def.rows.length > 0).map((def) => ({ key: def.key, text: def.text, kind: def.key === 'stripe_live_for_removed_person' ? 'expected' as const : 'review' as const, remedy: def.remedy, held: false, count: def.rows.length, columns: COLUMNS, rows: def.rows }));
+  const groups = defs.filter((def) => def.rows.length > 0).map((def) => ({ key: def.key, text: def.text, kind: 'review' as const, remedy: def.remedy, held: false, count: def.rows.length, columns: COLUMNS, rows: def.rows }));
+  return { groups, removedPeople };
 }
 
 /** Runs the whole reconciliation; never throws, so a Stripe problem cannot stop the dry run itself. */
-export async function runStripeReconciliation(members: PlannedMember[], env: Record<string, string | undefined> = process.env, fetcher: (key: string, since: Date) => Promise<StripeSnapshot> = (k, since) => fetchStripeSnapshot(k, since)): Promise<StripeReconciliation> {
-  const empty = { partial: false, skipped: [] as string[], fetched: { subscriptions: 0, customers: 0, charges: 0 }, groups: [] as ReportGroup[] };
+export async function runStripeReconciliation(members: PlannedMember[], orphans: LegacyImportPlan['orphans'], env: Record<string, string | undefined> = process.env, fetcher: (key: string, since: Date) => Promise<StripeSnapshot> = (k, since) => fetchStripeSnapshot(k, since)): Promise<StripeReconciliation> {
+  const empty = { partial: false, skipped: [] as string[], removedPeople: { checked: 0, live: 0, cancelled: 0, notFound: 0, undetermined: true }, fetched: { subscriptions: 0, customers: 0, charges: 0 }, groups: [] as ReportGroup[] };
   const key = legacyStripeKey(env);
   if (!key) return { state: 'not_configured', message: 'No live Stripe key is configured for this report (LEGACY_STRIPE_SECRET_KEY), so nothing was compared with Stripe.', ...empty };
   if (!/^(?:sk|rk)_live_/.test(key)) return { state: 'unusable_key', message: 'LEGACY_STRIPE_SECRET_KEY is not a live-mode key, so it was not used.', ...empty };
@@ -163,7 +176,7 @@ export async function runStripeReconciliation(members: PlannedMember[], env: Rec
       ],
       message: partial ? `Stripe has more records than one report can read (${Object.entries(snapshot.truncated).filter(([, cut]) => cut).map(([name]) => name).join(', ')} cut short), so the checks that need the complete list were skipped and the rest may be incomplete.` : null,
       fetched: { subscriptions: snapshot.subscriptions.length, customers: snapshot.customerIds.size, charges: snapshot.chargeRefs.size },
-      groups: reconcileWithStripe(members, snapshot),
+      ...reconcileWithStripe(members, snapshot, orphans),
     };
   } catch {
     return { state: 'error', message: 'Live Stripe could not be read (check that the key has read access to customers, subscriptions and charges). The legacy report above is unaffected.', ...empty };
