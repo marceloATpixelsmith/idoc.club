@@ -45,7 +45,7 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
       </div>
       <div>
         <h3 className="text-sm font-semibold text-foreground">Exceptions (legacy user IDs only)</h3>
-        {report.exceptions.length === 0 && report.orphans.paymentUsers === 0 ? <p className="text-sm text-muted-foreground">None</p> : (
+        {report.exceptions.length === 0 && report.orphans.paymentUsers === 0 && report.orphans.subscriptionUsers === 0 ? <p className="text-sm text-muted-foreground">None</p> : (
           <ul className="space-y-2 text-sm">
             {report.exceptions.map((item) => (
               <li className="rounded-md border border-border p-3" key={item.code}>
@@ -56,7 +56,8 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
             {report.orphans.paymentUsers > 0 || report.orphans.subscriptionUsers > 0 ? (
               <li className="rounded-md border border-border p-3">
                 <p className="font-medium text-foreground">{fmt(report.orphans.paymentUsers)} payment users and {fmt(report.orphans.subscriptionUsers)} subscription users have no account record (not imported)</p>
-                <p className="break-words text-xs text-muted-foreground">{report.orphans.paymentUserIds.join(', ')}</p>
+                <p className="break-words text-xs text-muted-foreground">Payment users: {report.orphans.paymentUserIds.join(', ') || 'none'}</p>
+                <p className="break-words text-xs text-muted-foreground">Subscription users: {report.orphans.subscriptionUserIds.join(', ') || 'none'}</p>
               </li>
             ) : null}
           </ul>

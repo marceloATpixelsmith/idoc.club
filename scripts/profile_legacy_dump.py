@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read-only profile of the legacy WordPress/MemberPress dumps. Prints AGGREGATE COUNTS ONLY:
-no names, emails, hashes, IDs or other personal data. Usage: python3 profile_legacy_dump.py USERS.sql MEPR.sql"""
+no names, emails, hashes, IDs or other personal data. Usage: python3 scripts/profile_legacy_dump.py USERS.sql MEPR.sql"""
 import re, sys, datetime
 from collections import Counter
 

@@ -31,6 +31,7 @@ function buildDump() {
     [4, 'di', '$P$Bghi', 'DUP@example.com', '2023-01-01 00:00:00', 0, 0, 0],
     [5, 'ed', 'weird', 'ed@example.com', '2023-01-01 00:00:00', 0, 1, 0],
     [6, 'flo', '$P$Bjkl', 'flo@example.com', '2023-01-01 00:00:00', 0, 0, 0],
+    [7, 'gus', '$P$Bmno', 'member@', '2023-01-01 00:00:00', 0, 0, 0],
   ]);
   const usermeta = insert('psspaceusermeta', META_COLUMNS, [
     ...meta(1, fullProfile),
@@ -46,12 +47,15 @@ function buildDump() {
     [4, '80.00', '80.00', 6, 2042, 'ch_6', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
     [5, '80.00', '80.00', 6, 2042, 'ch_6', 'failed', 'payment', 'ry81hi-42d', null, '2023-02-01 00:00:00', '2999-01-01 00:00:00'],
     [6, '80.00', '80.00', 99, 2042, 'ch_99', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
+    [7, '80.00', '80.00', 7, 2042, 'ch_7', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
+    [8, '80.00', '80.00', 7, 2042, 'ch_8', 'failed', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
   ]);
   const subscriptions = insert('psspace58_mepr_subscriptions', SUB_COLUMNS, [
     [9, 1, 2042, 'sub_old', 'cancelled', '2022-01-01 00:00:00'],
     [10, 1, 2042, 'sub_new', 'active', '2024-01-01 00:00:00'],
     [11, 6, 2042, 'sub_a', 'active', '2023-01-01 00:00:00'],
     [12, 6, 2042, 'sub_b', 'active', '2024-01-01 00:00:00'],
+    [13, 98, 2042, 'sub_orphan', 'active', '2024-01-01 00:00:00'],
   ]);
   return parseMysqlDump(users + usermeta + transactions + subscriptions, REQUIRED_LEGACY_TABLES);
 }
@@ -125,14 +129,19 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.equal(flo.stripe.subscriptionId, null, 'two active subscriptions are never resolved silently');
   assert.equal(flo.payments.length, 1, 'a failed payment never counts');
 
+  assert.ok(byId.get('7')!.exceptions.includes('invalid_email') && byId.get('7')!.held, 'an address the application would reject is held');
   assert.deepEqual(plan.orphanPaymentUserIds, ['99']);
+  assert.deepEqual(plan.orphanSubscriptionUserIds, ['98']);
 });
 
 test('summarizePlan reports aggregate counts and ids only', () => {
   const report = summarizePlan(planLegacyImport(buildDump(), { asOf: '2026-10-16' }));
-  assert.equal(report.legacyUsers, 6);
-  assert.equal(report.held, 3);
+  assert.equal(report.legacyUsers, 7);
+  assert.equal(report.held, 4);
   assert.equal(report.importable, 3);
+  assert.equal(report.payments.paid, 3, 'payments of held members (including the failed one) are not counted');
+  assert.equal(report.payments.ignoredFailedOrPending, 1);
+  assert.deepEqual(report.orphans.subscriptionUserIds, ['98']);
   assert.deepEqual(report.membershipStatus, { active: 2, expired: 1 });
   assert.equal(report.profile.needsOnboarding, 1);
   assert.equal(report.orphans.paymentUsers, 1);

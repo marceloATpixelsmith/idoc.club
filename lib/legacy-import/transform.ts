@@ -9,7 +9,7 @@
  *
  * TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished.
  */
-import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES, memberProfileSchema } from '../membership/validation.ts';
+import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES, memberProfileSchema, normalizeEmail } from '../membership/validation.ts';
 import type { DumpRow, ParsedDump } from './mysql-dump.ts';
 import { checkedKeysFromPhpArray } from './php-serialized.ts';
 
@@ -120,6 +120,7 @@ export interface PlannedMember {
   membership: { status: 'active' | 'grace' | 'expired' | 'no_eligible_payment'; paidThrough: string | null; firstPaidOn: string | null };
   stripe: { customerId: string | null; subscriptionId: string | null };
   payments: PlannedPayment[];
+  ignoredPayments: number;
   exceptions: ExceptionCode[];
   notes: NoteCode[];
 }
@@ -129,10 +130,13 @@ export interface LegacyImportPlan {
   orphanPaymentUserIds: string[];
   orphanSubscriptionUserIds: string[];
   subscriptionsByStatus: Record<string, number>;
-  ignoredPayments: number;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
+/** The application's own canonical email rules; anything it would reject is not importable. Empty string means invalid. */
+function canonicalEmail(value: string | null | undefined): string {
+  try { return normalizeEmail(text(value)); } catch { return ''; }
+}
 const isoDay = (value: string | null | undefined): string | null => {
   const day = text(value).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && !day.startsWith('0000') ? day : null;
@@ -193,13 +197,12 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
   const subsByUser = groupBy(subscriptions, (row) => text(row.user_id));
   const emailCounts = new Map<string, number>();
   for (const user of users) {
-    const email = text(user.user_email).toLowerCase();
+    const email = canonicalEmail(user.user_email);
     if (email) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
   }
   const userIds = new Set(users.map((user) => text(user.ID)));
 
   const paymentReferenceUsers = new Map<string, Set<string>>();
-  let ignoredPayments = 0;
   const members: PlannedMember[] = users.map((user) => {
     const legacyUserId = text(user.ID);
     const exceptions = new Set<ExceptionCode>();
@@ -207,9 +210,9 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const meta = metaByUser.get(legacyUserId) ?? new Map<string, string | null>();
     const metaText = (key: string) => text(meta.get(key));
 
-    const email = text(user.user_email).toLowerCase();
+    const email = canonicalEmail(user.user_email);
     if (text(user.deleted) !== '0' && text(user.deleted) !== '' || text(user.spam) !== '0' && text(user.spam) !== '') exceptions.add('user_flagged_deleted_or_spam');
-    if (!email || !email.includes('@')) exceptions.add('invalid_email');
+    if (!email) exceptions.add('invalid_email');
     if (email && (emailCounts.get(email) ?? 0) > 1) exceptions.add('duplicate_email');
     const legacyPasswordHash = text(user.user_pass);
     const format = hashFormat(legacyPasswordHash);
@@ -218,6 +221,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     // Payments: only completed (or refunded) "payment" transactions count; failed and pending ones never extend a date.
     const userTx = (txByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
     const payments: PlannedPayment[] = [];
+    let ignoredPayments = 0;
     for (const tx of userTx) {
       if (text(tx.txn_type) !== 'payment') continue;
       const status = text(tx.status);
@@ -314,7 +318,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const held = exceptions.has('user_flagged_deleted_or_spam') || exceptions.has('invalid_email') || exceptions.has('duplicate_email');
     return {
       legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
-      membership: { status: membershipStatus, paidThrough, firstPaidOn }, stripe: { customerId, subscriptionId }, payments,
+      membership: { status: membershipStatus, paidThrough, firstPaidOn }, stripe: { customerId, subscriptionId }, payments, ignoredPayments,
       exceptions: [...exceptions].sort(), notes: [...notes].sort(),
     };
   });
@@ -331,7 +335,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
   const subscriptionsByStatus: Record<string, number> = {};
   for (const sub of subscriptions) subscriptionsByStatus[text(sub.status) || '(blank)'] = (subscriptionsByStatus[text(sub.status) || '(blank)'] ?? 0) + 1;
   return {
-    asOf: options.asOf, members, ignoredPayments, subscriptionsByStatus,
+    asOf: options.asOf, members, subscriptionsByStatus,
     orphanPaymentUserIds: [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
     orphanSubscriptionUserIds: [...new Set(subscriptions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
   };
@@ -367,7 +371,8 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
   for (const member of plan.members) {
     for (const code of member.exceptions) exceptionIds.set(code, [...(exceptionIds.get(code) ?? []), member.legacyUserId]);
   }
-  const allPayments = plan.members.flatMap((member) => member.payments);
+  // Held members are not imported, so their payments are not "payments to import".
+  const allPayments = importable.flatMap((member) => member.payments);
   return {
     asOf: plan.asOf,
     legacyUsers: plan.members.length,
@@ -393,7 +398,7 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
       refunded: allPayments.filter((payment) => payment.outcome === 'refunded').length,
       stripe: allPayments.filter((payment) => payment.source === 'stripe').length,
       manual: allPayments.filter((payment) => payment.source === 'manual').length,
-      ignoredFailedOrPending: plan.ignoredPayments,
+      ignoredFailedOrPending: importable.reduce((sum, member) => sum + member.ignoredPayments, 0),
     },
     notes: tally(importable.flatMap((member) => member.notes), (note) => note),
     exceptions: [...exceptionIds.entries()].map(([code, ids]) => ({
