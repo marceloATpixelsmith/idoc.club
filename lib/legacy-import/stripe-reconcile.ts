@@ -102,12 +102,11 @@ const row = (member: PlannedMember | null, stripe: { subscriptionId?: string; cu
 export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSnapshot, orphans: LegacyImportPlan['orphans'] = []): { groups: ReportGroup[]; removedPeople: StripeReconciliation['removedPeople'] } {
   const bySubscription = new Map(snapshot.subscriptions.map((sub) => [sub.id, sub]));
   const importable = members.filter((member) => !member.exclusion && !member.held);
-  const removedSubscriptionIds = new Set(members.filter((member) => member.exclusion && member.stripe.subscriptionId).map((member) => member.stripe.subscriptionId!));
   const importableSubscriptionIds = new Set(importable.map((member) => member.stripe.subscriptionId).filter((id): id is string => Boolean(id)));
   // Subscriptions of people who are not being imported: say exactly what live Stripe holds for each one.
   const removedRefs = new Set<string>([
     ...orphans.flatMap((orphan) => orphan.subscriptionRefs),
-    ...members.filter((member) => member.exclusion && member.stripe.subscriptionId).map((member) => member.stripe.subscriptionId!),
+    ...members.filter((member) => member.exclusion).flatMap((member) => member.subscriptionRefs),
   ]);
   const removedPeople = { checked: removedRefs.size, live: 0, cancelled: 0, notFound: 0, undetermined: snapshot.truncated.subscriptions };
   for (const ref of removedRefs) {
@@ -147,7 +146,7 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     if (!LIVE_SUBSCRIPTION.has(sub.status)) continue;
     const detail = { subscriptionId: sub.id, customerId: sub.customerId, status: sub.status, email: sub.email };
     if (importableSubscriptionIds.has(sub.id)) continue;
-    if (removedSubscriptionIds.has(sub.id) || removedRefs.has(sub.id)) { by.stripe_live_for_removed_person.rows.push(row(null, detail)); continue; }
+    if (removedRefs.has(sub.id)) { by.stripe_live_for_removed_person.rows.push(row(null, detail)); continue; }
     const owner = memberByStripeSub.get(sub.id) ?? memberByCustomer.get(sub.customerId);
     if (owner) by.stripe_live_legacy_inactive.rows.push(row(owner, detail));
     else by.stripe_live_unlinked.rows.push(row(null, detail));

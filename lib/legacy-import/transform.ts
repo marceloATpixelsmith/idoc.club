@@ -146,6 +146,8 @@ export interface PlannedMember {
   /** Set when a cleanup rule removes the member from the import and from every report figure. */
   exclusion: ExclusionCode | null;
   subscriptionStatuses: string[];
+  /** Every valid Stripe subscription ID stored for the member, whatever its legacy status. */
+  subscriptionRefs: string[];
   stripe: { customerId: string | null; subscriptionId: string | null };
   payments: PlannedPayment[];
   ignoredPayments: number;
@@ -349,6 +351,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     return {
       legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
       membership: { status: membershipStatus, paidThrough, firstPaidOn, lastPaidOn }, exclusion, subscriptionStatuses: userSubs.map((sub) => text(sub.status) || '(blank)'),
+      subscriptionRefs: userSubs.map((sub) => text(sub.subscr_id)).filter((ref) => ref.startsWith('sub_')),
       stripe: { customerId, subscriptionId }, payments, ignoredPayments,
       exceptions: [...exceptions].sort(), notes: [...notes].sort(),
     };
