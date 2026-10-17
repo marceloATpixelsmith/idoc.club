@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHmac } from 'node:crypto';
+import postgres from 'postgres';
 import { E2E_TOTP_SECRET } from './global-setup';
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -24,6 +25,10 @@ function totp(secret: string) {
 // close with an error), because the first verification's state was kept by the always-mounted dialog.
 test('the authenticator dialog is usable again for a second protected action on the same page', async ({ browser }) => {
   test.setTimeout(90_000);
+  // Other specs deliberately exhaust the step-up verification limiter for this same account; start from a clean one.
+  const sql = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
+  await sql`delete from idoc.account_request_limits where purpose like 'mfa_%'`;
+  await sql.end();
   const context = await browser.newContext({ storageState: '.security-e2e/super-administrator.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/security');
