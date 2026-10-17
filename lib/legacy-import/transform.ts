@@ -418,7 +418,6 @@ export const MEMBER_COLUMNS = [
   'completed_payments', 'subscription_statuses', 'active_subscription_id', 'stripe_customer_id', 'country', 'national_federation', 'idoc_region', 'missing_fields', 'issues', 'notes',
 ];
 const ORPHAN_COLUMNS = ['legacy_user_id', 'completed_payments', 'last_paid_on', 'subscription_statuses'];
-const MAX_ROWS = 5000;
 
 function memberRow(member: PlannedMember): ReportRow {
   const official = member.roles.find((role) => role.roleType !== 'veterinarian');
@@ -440,7 +439,7 @@ function tally<T>(items: T[], key: (item: T) => string): Record<string, number> 
 }
 
 function group(key: string, info: { text: string; kind: IssueKind | 'excluded'; remedy: string | null; held: boolean }, members: PlannedMember[]): ReportGroup {
-  return { key, ...info, count: members.length, columns: MEMBER_COLUMNS, rows: members.slice(0, MAX_ROWS).map(memberRow) };
+  return { key, ...info, count: members.length, columns: MEMBER_COLUMNS, rows: members.map(memberRow) };
 }
 
 /** Aggregate figures for the operator, plus one row per person behind every group. No password hashes or payment references. */
@@ -459,7 +458,7 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
     groups.push({
       key: 'no_account_record', text: 'Payments or subscriptions belong to a user with no account record (not imported; check for an active subscription)', kind: 'review', remedy: null, held: false,
       count: plan.orphans.length, columns: ORPHAN_COLUMNS,
-      rows: plan.orphans.slice(0, MAX_ROWS).map((orphan) => ({
+      rows: plan.orphans.map((orphan) => ({
         legacy_user_id: orphan.legacyUserId, completed_payments: String(orphan.paymentCount), last_paid_on: orphan.lastPaidOn ?? '', subscription_statuses: orphan.subscriptionStatuses.join(' > '),
       })),
     });
