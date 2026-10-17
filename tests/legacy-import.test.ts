@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import { parseMysqlDump, DumpParseError } from '../lib/legacy-import/mysql-dump.ts';
 import { checkedKeysFromPhpArray } from '../lib/legacy-import/php-serialized.ts';
@@ -335,4 +336,15 @@ test('both portable phpass prefixes are kept as supported hashes', () => {
   ].join(''), isNeededLegacyTable);
   const formats = Object.fromEntries(planLegacyImport(dump, { asOf: '2026-06-01' }).members.map((member) => [member.legacyUserId, member.hashFormat]));
   assert.deepEqual(formats, { '1': 'phpass', '2': 'phpass', '3': 'unsupported' });
+});
+
+test('the import page form is submitted by hand so the chosen files, backup box and typed phrase survive the dry run', () => {
+  const source = readFileSync(new URL('../app/(dashboard)/admin/operations/legacy-import/legacy-import-forms.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /<form action=\{run\}/);
+  assert.match(source, /onSubmit=\{\(event\) => \{ event\.preventDefault\(\); run\(new FormData\(event\.currentTarget/);
+});
+
+test('the step-up dialog is mounted fresh for each challenge so an earlier verification cannot disable the next one', () => {
+  const source = readFileSync(new URL('../components/auth/fresh-step-up-action.tsx', import.meta.url), 'utf8');
+  assert.match(source, /challengeOpen\s*\?\s*<FreshStepUpDialog[^>]*key=\{challengeId\}/);
 });

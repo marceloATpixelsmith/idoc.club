@@ -236,7 +236,9 @@ export function DryRunForm({ action, environment }: { action: Action; environmen
   useEffect(() => { if (state.result) setResult(state.result); }, [state.result]);
   return (
     <>
-      <form action={run} className="space-y-4">
+      {/* Submitted by hand rather than as a React form action: a form action resets the form afterwards, which cleared the chosen files, the
+          backup box and the typed phrase, so the import needed everything chosen again after the dry run. */}
+      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(new FormData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter)); }}>
         <CsrfField />
         <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
           Users dump (WordPress users and usermeta tables)
