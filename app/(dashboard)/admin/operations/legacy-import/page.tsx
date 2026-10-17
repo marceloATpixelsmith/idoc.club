@@ -56,7 +56,7 @@ export default async function LegacyImportPage() {
         <h1 className="text-3xl font-semibold text-gold">Legacy member import</h1>
         <p className="max-w-3xl text-muted-foreground">
           Reads the exported WordPress and MemberPress dump files and reports exactly what would be imported: members, memberships, payments and subscriptions only.
-          This step is a dry run. It writes nothing, stores nothing and sends no email. The files are read in memory and discarded. The report shows counts; each group can be downloaded as a CSV with one row per person (name, email, membership and Stripe details). Password hashes are never included.
+          This step is a dry run. It writes nothing, stores nothing and sends no email. Your browser first trims each file to just the four tables it needs, so the rest never leaves your computer. The server reads what it receives in memory and discards it. The report shows counts; each group can be downloaded as a CSV with one row per person (name, email, membership and Stripe details). Password hashes are never included.
         </p>
       </header>
       {enabled ? (

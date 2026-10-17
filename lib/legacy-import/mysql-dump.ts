@@ -28,14 +28,14 @@ function createTableColumns(text: string): Map<string, string[]> {
 }
 
 /** Parses every INSERT row of the requested tables (all tables when `onlyTables` is omitted). */
-export function parseMysqlDump(text: string, onlyTables?: ReadonlySet<string>): ParsedDump {
+export function parseMysqlDump(text: string, only?: ReadonlySet<string> | ((table: string) => boolean)): ParsedDump {
   const result: ParsedDump = new Map();
   const declared = createTableColumns(text);
   const insertPattern = /INSERT INTO `([^`]+)`(?: \(([^)]*)\))? VALUES/g;
   let match: RegExpExecArray | null;
   while ((match = insertPattern.exec(text)) !== null) {
     const table = match[1];
-    const wanted = !onlyTables || onlyTables.has(table);
+    const wanted = !only || (typeof only === 'function' ? only(table) : only.has(table));
     const columns = match[2] ? match[2].split(',').map((column) => column.trim().replace(/^`|`$/g, '')) : declared.get(table) ?? [];
     let i = match.index + match[0].length;
     const length = text.length;

@@ -12,15 +12,26 @@
 import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES, memberProfileSchema, normalizeEmail } from '../membership/validation.ts';
 import type { DumpRow, ParsedDump } from './mysql-dump.ts';
 import { checkedKeysFromPhpArray } from './php-serialized.ts';
+import { legacyTableRole, type LegacyTableRole } from './reduce-dump.ts';
 
-export const LEGACY_TABLES = {
-  users: 'psspaceusers',
-  usermeta: 'psspaceusermeta',
-  transactions: 'psspace58_mepr_transactions',
-  subscriptions: 'psspace58_mepr_subscriptions',
-} as const;
-export const REQUIRED_LEGACY_TABLES: ReadonlySet<string> = new Set(Object.values(LEGACY_TABLES));
+export interface ResolvedLegacyTables {
+  tables: Partial<Record<LegacyTableRole, string>>;
+  missing: LegacyTableRole[];
+  /** Every table that was found for a role, with its row count. The largest is used; the others are listed so nothing is hidden. */
+  found: Array<{ role: LegacyTableRole; table: string; rows: number; used: boolean }>;
+}
 
+/** Picks, for each role (users, usermeta, MemberPress transactions and subscriptions), the matching table with the most rows. */
+export function resolveLegacyTables(dump: ParsedDump): ResolvedLegacyTables {
+  const found: ResolvedLegacyTables['found'] = [];
+  const tables: ResolvedLegacyTables['tables'] = {};
+  for (const role of ['users', 'usermeta', 'transactions', 'subscriptions'] as const) {
+    const candidates = [...dump.entries()].filter(([table]) => legacyTableRole(table) === role).sort(([a, rowsA], [b, rowsB]) => rowsB.length - rowsA.length || a.localeCompare(b));
+    candidates.forEach(([table, rows], index) => found.push({ role, table, rows: rows.length, used: index === 0 }));
+    if (candidates.length > 0) tables[role] = candidates[0][0];
+  }
+  return { tables, found, missing: (['users', 'usermeta', 'transactions', 'subscriptions'] as const).filter((role) => !tables[role]) };
+}
 type Classification = 'judge' | 'steward' | 'judge_steward' | 'veterinarian';
 const PRODUCT_CLASSIFICATION: Record<string, Classification> = {
   '2042': 'judge', '2053': 'steward', '2787': 'judge_steward', '3038': 'veterinarian',
@@ -145,6 +156,7 @@ export interface LegacyImportPlan {
   orphanPaymentUserIds: string[];
   orphanSubscriptionUserIds: string[];
   /** Payments or subscriptions whose user has no account row. */
+  sourceTables: ResolvedLegacyTables['found'];
   orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[] }>;
 }
 
@@ -198,10 +210,12 @@ function missingFieldNames(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyK
 }
 
 export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): LegacyImportPlan {
-  const users = dump.get(LEGACY_TABLES.users) ?? [];
-  const metaRows = dump.get(LEGACY_TABLES.usermeta) ?? [];
-  const transactions = dump.get(LEGACY_TABLES.transactions) ?? [];
-  const subscriptions = dump.get(LEGACY_TABLES.subscriptions) ?? [];
+  const resolved = resolveLegacyTables(dump);
+  if (resolved.missing.length > 0) throw new Error(`Missing legacy tables: ${resolved.missing.join(', ')}`);
+  const users = dump.get(resolved.tables.users!) ?? [];
+  const metaRows = dump.get(resolved.tables.usermeta!) ?? [];
+  const transactions = dump.get(resolved.tables.transactions!) ?? [];
+  const subscriptions = dump.get(resolved.tables.subscriptions!) ?? [];
 
   const metaByUser = new Map<string, Map<string, string | null>>();
   const stripeCustomersByUser = new Map<string, string[]>();
@@ -377,7 +391,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'),
     };
   });
-  return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans };
+  return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans, sourceTables: resolved.found };
 }
 
 
@@ -399,6 +413,7 @@ export interface ReportGroup {
 }
 export interface DryRunReport {
   asOf: string;
+  sourceTables: ResolvedLegacyTables['found'];
   legacyUsers: number;
   removedByRules: number;
   inScope: number;
@@ -480,6 +495,7 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
 
   return {
     asOf: plan.asOf,
+    sourceTables: plan.sourceTables,
     legacyUsers: plan.members.length,
     removedByRules: plan.members.length - inScope.length,
     inScope: inScope.length,

@@ -3,7 +3,8 @@ import test from 'node:test';
 
 import { parseMysqlDump, DumpParseError } from '../lib/legacy-import/mysql-dump.ts';
 import { checkedKeysFromPhpArray } from '../lib/legacy-import/php-serialized.ts';
-import { planLegacyImport, summarizePlan, REQUIRED_LEGACY_TABLES } from '../lib/legacy-import/transform.ts';
+import { reduceDumpText, isNeededLegacyTable } from '../lib/legacy-import/reduce-dump.ts';
+import { planLegacyImport, summarizePlan, resolveLegacyTables } from '../lib/legacy-import/transform.ts';
 
 const q = (value: string | number | null) => (value === null ? 'NULL' : typeof value === 'number' ? String(value) : `'${value.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`);
 const insert = (table: string, columns: string[], rows: Array<Array<string | number | null>>) =>
@@ -73,7 +74,7 @@ function buildDump() {
     [13, 98, 2042, 'sub_orphan', 'active', '2024-01-01 00:00:00'],
     [14, 8, 2042, 'sub_hal', 'active', '2022-01-01 00:00:00'],
   ]);
-  return parseMysqlDump(users + usermeta + transactions + subscriptions, REQUIRED_LEGACY_TABLES);
+  return parseMysqlDump(users + usermeta + transactions + subscriptions, isNeededLegacyTable);
 }
 
 test('dump reader handles escapes, doubled quotes, NULL, tabs and statements without a column list', () => {
@@ -201,4 +202,50 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   // People's details may be downloaded, but never password hashes or Stripe payment references.
   const serialized = JSON.stringify(report);
   for (const secret of ['$P$', '$wp$', 'weird', 'ch_1', 'mp-9']) assert.equal(serialized.includes(secret), false, `report must not contain ${secret}`);
+});
+
+test('reduceDumpText keeps only the needed tables and parses identically afterwards', () => {
+  const sql = [
+    '-- comment', '/*!40101 SET NAMES utf8 */;', 'DROP TABLE IF EXISTS `psspaceusers`;',
+    'CREATE TABLE `psspaceusers` (\n  `ID` int,\n  `user_login` text\n) ENGINE=InnoDB;',
+    'LOCK TABLES `psspaceusers` WRITE;',
+    "INSERT INTO `psspaceusers` (`ID`, `user_login`) VALUES\n(1,\t'a;'),\n(2,\t'it''s);'),\n(3,\tNULL);",
+    'CREATE TABLE `psspace58_mepr_events` (\n  `id` int\n) ENGINE=InnoDB;',
+    "INSERT INTO `psspace58_mepr_events` (`id`) VALUES\n(1),\n(2);",
+    'CREATE TABLE `psspaceusermeta` (\n  `umeta_id` int,\n  `user_id` int,\n  `meta_key` text,\n  `meta_value` text\n) ENGINE=InnoDB;',
+    "INSERT INTO `psspaceusermeta` VALUES (1,1,'k','v'),(2,1,'k2',NULL);",
+    "INSERT INTO `psspace58_mepr_events` (`id`) VALUES (9);",
+    'UNLOCK TABLES;',
+  ].join('\n') + '\n';
+  const needed = isNeededLegacyTable;
+  const reduced = reduceDumpText(sql, needed);
+  assert.equal(reduced.includes('psspace58_mepr_events'), false);
+  assert.equal(reduced.includes('LOCK TABLES'), false);
+  assert.deepEqual(parseMysqlDump(reduced, needed), parseMysqlDump(sql, needed));
+  assert.equal(parseMysqlDump(reduced, needed).get('psspaceusers')!.length, 3);
+  assert.equal(reduceDumpText('nothing here', needed), '');
+});
+
+test('tables are detected by role whatever the prefix, using the largest match', () => {
+  const sql = [
+    "CREATE TABLE `wp_users` (\n  `ID` int\n) ENGINE=InnoDB;", "INSERT INTO `wp_users` (`ID`) VALUES (1),(2),(3);",
+    "CREATE TABLE `old_users` (\n  `ID` int\n) ENGINE=InnoDB;", "INSERT INTO `old_users` (`ID`) VALUES (1);",
+    "INSERT INTO `wp_usermeta` (`user_id`) VALUES (1);",
+    "INSERT INTO `wp_mepr_transactions` (`id`) VALUES (1);",
+    "INSERT INTO `wp_mepr_subscriptions` (`id`) VALUES (1);",
+    "INSERT INTO `wp_mepr_events` (`id`) VALUES (1);",
+  ].join('\n') + '\n';
+  const resolved = resolveLegacyTables(parseMysqlDump(reduceDumpText(sql, isNeededLegacyTable), isNeededLegacyTable));
+  assert.deepEqual(resolved.missing, []);
+  assert.equal(resolved.tables.users, 'wp_users');
+  assert.equal(resolved.tables.transactions, 'wp_mepr_transactions');
+  assert.equal(resolved.found.some((f) => f.table === 'wp_mepr_events'), false);
+  assert.equal(resolved.found.find((f) => f.table === 'old_users')!.used, false);
+});
+
+test('reduceDumpText ends a one-line CREATE TABLE so later tables are not kept by mistake', () => {
+  const sql = ['CREATE TABLE `wp_users` (`ID` int) ENGINE=InnoDB;', 'INSERT INTO `wp_events` (`id`) VALUES', '(1),', '(2);', 'CREATE TABLE `wp_events` (`id` int) ENGINE=InnoDB;', "INSERT INTO `wp_usermeta` (`user_id`) VALUES (1);"].join('\n') + '\n';
+  const reduced = reduceDumpText(sql, isNeededLegacyTable);
+  assert.equal(reduced.includes('wp_events'), false);
+  assert.equal(reduced.includes('wp_usermeta'), true);
 });
