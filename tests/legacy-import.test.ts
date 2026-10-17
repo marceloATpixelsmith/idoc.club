@@ -24,15 +24,15 @@ const fullProfile = {
 };
 
 function buildDump() {
-  const users = insert('psspaceusers', USER_COLUMNS, [
-    [1, 'ada', '$P$Babc', 'Ada@Example.com', '2023-01-01 00:00:00', 0, 0, 0],
-    [2, 'bea', '$wp$2y$10$abc', 'bea@example.com', '2023-01-01 00:00:00', 0, 0, 0],
-    [3, 'cy', '$P$Bdef', 'dup@example.com', '2023-01-01 00:00:00', 0, 0, 0],
-    [4, 'di', '$P$Bghi', 'DUP@example.com', '2023-01-01 00:00:00', 0, 0, 0],
-    [5, 'ed', 'weird', 'ed@example.com', '2023-01-01 00:00:00', 0, 1, 0],
-    [6, 'flo', '$P$Bjkl', 'flo@example.com', '2023-01-01 00:00:00', 0, 0, 0],
-    [7, 'gus', '$P$Bmno', 'member@', '2023-01-01 00:00:00', 0, 0, 0],
-  ]);
+  const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+  const emails: Record<number, string> = {
+    1: 'Ada@Example.com', 2: 'bea@example.com', 3: 'dup@example.com', 4: 'DUP@example.com', 5: 'ed@example.com', 6: 'flo@example.com', 7: 'member@',
+    8: 'hal@example.com', 9: 'ivy@example.com', 10: 'jon@example.com', 11: 'kim@example.com', 12: 'dup@example.com', 13: 'solo@example.com', 14: 'solo@example.com',
+  };
+  const hashes: Record<number, string> = { 5: 'weird' };
+  const users = insert('psspaceusers', USER_COLUMNS, ids.map((id) => [
+    id, `user${id}`, hashes[id] ?? (id === 2 ? '$wp$2y$10$abc' : `$P$B${id}`), emails[id], '2023-01-01 00:00:00', 0, id === 5 ? 1 : 0, 0,
+  ]));
   const usermeta = insert('psspaceusermeta', META_COLUMNS, [
     ...meta(1, fullProfile),
     // Bea: steward, no address at all, blank federation -> needs onboarding; country cannot be filled.
@@ -40,15 +40,27 @@ function buildDump() {
     // Flo: judge product but steward statuses -> mismatch; country blank but federation present -> filled.
     ...meta(6, { ...fullProfile, 'mepr-address-country': '', mepr_official_status_as_steward: 'a:1:{s:25:"national-dressage-steward";s:2:"on";}', mepr_are_you_a_technical_delegate: '' }),
   ]);
+  const pay = (txId: number, userId: number, ref: string, status: string, created: string, expires: string, product = 2042) =>
+    [txId, '80.00', '80.00', userId, product, ref, status, 'payment', 'ry81hi-42d', null, created, expires];
   const transactions = insert('psspace58_mepr_transactions', TX_COLUMNS, [
-    [1, '80.00', '80.00', 1, 2042, 'ch_1', 'complete', 'payment', 'ry81hi-42d', 10, '2024-01-01 00:00:00', '2999-01-01 00:00:00'],
+    pay(1, 1, 'ch_1', 'complete', '2024-01-01 00:00:00', '2999-01-01 00:00:00'),
     [2, '0.00', '0.00', 1, 2042, 'sub_1', 'confirmed', 'subscription_confirmation', 'ry81hi-42d', 10, '2024-01-01 00:00:00', '0000-00-00 00:00:00'],
-    [3, '80.00', '80.00', 2, 2053, 'mp-9', 'complete', 'payment', 'manual', null, '2020-01-01 00:00:00', '2020-06-01 00:00:00'],
-    [4, '80.00', '80.00', 6, 2042, 'ch_6', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
-    [5, '80.00', '80.00', 6, 2042, 'ch_6', 'failed', 'payment', 'ry81hi-42d', null, '2023-02-01 00:00:00', '2999-01-01 00:00:00'],
-    [6, '80.00', '80.00', 99, 2042, 'ch_99', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
-    [7, '80.00', '80.00', 7, 2042, 'ch_7', 'complete', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
-    [8, '80.00', '80.00', 7, 2042, 'ch_8', 'failed', 'payment', 'ry81hi-42d', null, '2023-01-01 00:00:00', '2999-01-01 00:00:00'],
+    [3, '80.00', '80.00', 2, 2053, 'mp-9', 'complete', 'payment', 'manual', null, '2025-09-01 00:00:00', '2026-09-01 00:00:00'],
+    pay(4, 6, 'ch_6', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(5, 6, 'ch_6f', 'failed', '2023-02-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(6, 99, 'ch_99', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(7, 7, 'ch_7', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(8, 7, 'ch_8', 'failed', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(9, 3, 'ch_3', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(10, 4, 'ch_4', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    pay(11, 5, 'ch_5', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    // Expired for more than a year (Hal), exactly one year before the as-of date (Jon: removed), one day inside the year (Kim: kept).
+    pay(12, 8, 'ch_12', 'complete', '2023-01-01 00:00:00', '2025-01-01 00:00:00'),
+    pay(13, 10, 'ch_13', 'complete', '2023-01-01 00:00:00', '2025-10-16 00:00:00'),
+    pay(14, 11, 'ch_14', 'complete', '2023-01-01 00:00:00', '2025-10-17 00:00:00'),
+    pay(15, 13, 'ch_15', 'complete', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
+    // Ivy, Lee (12) and Ned (14) never paid.
+    pay(16, 9, 'ch_16', 'failed', '2023-01-01 00:00:00', '2999-01-01 00:00:00'),
   ]);
   const subscriptions = insert('psspace58_mepr_subscriptions', SUB_COLUMNS, [
     [9, 1, 2042, 'sub_old', 'cancelled', '2022-01-01 00:00:00'],
@@ -56,6 +68,7 @@ function buildDump() {
     [11, 6, 2042, 'sub_a', 'active', '2023-01-01 00:00:00'],
     [12, 6, 2042, 'sub_b', 'active', '2024-01-01 00:00:00'],
     [13, 98, 2042, 'sub_orphan', 'active', '2024-01-01 00:00:00'],
+    [14, 8, 2042, 'sub_hal', 'active', '2022-01-01 00:00:00'],
   ]);
   return parseMysqlDump(users + usermeta + transactions + subscriptions, REQUIRED_LEGACY_TABLES);
 }
@@ -95,6 +108,7 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.deepEqual(ada.missingFields, []);
   assert.equal(ada.membership.status, 'active');
   assert.equal(ada.membership.paidThrough, '2999-01-01');
+  assert.equal(ada.exclusion, null);
   assert.equal(ada.stripe.customerId, 'cus_AAA');
   assert.equal(ada.stripe.subscriptionId, 'sub_new', 'the newest active subscription is the live one');
   assert.deepEqual(ada.exceptions, []);
@@ -111,6 +125,7 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.ok(bea.exceptions.includes('incomplete_profile'));
   assert.ok(bea.missingFields.includes('address1') && bea.missingFields.includes('steward.idocRegion'));
   assert.equal(bea.membership.status, 'expired');
+  assert.equal(bea.exclusion, null, 'expired for only about six weeks: still imported');
   assert.equal(bea.payments[0].source, 'manual');
   assert.equal(bea.held, false, 'an incomplete profile is imported and sent through onboarding, never held');
 
@@ -118,6 +133,7 @@ test('planLegacyImport applies the agreed rules', () => {
     assert.ok(byId.get(id)!.exceptions.includes('duplicate_email'));
     assert.equal(byId.get(id)!.held, true);
   }
+  assert.equal(byId.get('13')!.exceptions.includes('duplicate_email'), false, 'a duplicate that is removed by a cleanup rule is not a duplicate');
   const ed = byId.get('5')!;
   assert.ok(ed.exceptions.includes('user_flagged_deleted_or_spam') && ed.exceptions.includes('unsupported_password_hash') && ed.held);
 
@@ -130,24 +146,52 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.equal(flo.payments.length, 1, 'a failed payment never counts');
 
   assert.ok(byId.get('7')!.exceptions.includes('invalid_email') && byId.get('7')!.held, 'an address the application would reject is held');
+
+  // Cleanup rules.
+  assert.equal(byId.get('8')!.exclusion, 'expired_over_a_year');
+  assert.equal(byId.get('10')!.exclusion, 'expired_over_a_year', 'exactly one year ago counts as a year or more');
+  assert.equal(byId.get('11')!.exclusion, null, 'one day inside the year is kept');
+  assert.equal(byId.get('11')!.membership.status, 'expired');
+  for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
+
   assert.deepEqual(plan.orphanPaymentUserIds, ['99']);
   assert.deepEqual(plan.orphanSubscriptionUserIds, ['98']);
+  assert.equal(plan.orphans.length, 2);
 });
 
-test('summarizePlan reports aggregate counts and ids only', () => {
+test('summarizePlan leaves removed members out of every figure and separates expected from review', () => {
   const report = summarizePlan(planLegacyImport(buildDump(), { asOf: '2026-10-16' }));
-  assert.equal(report.legacyUsers, 7);
+  assert.equal(report.legacyUsers, 14);
+  assert.equal(report.removedByRules, 5);
+  assert.equal(report.inScope, 9);
   assert.equal(report.held, 4);
-  assert.equal(report.importable, 3);
-  assert.equal(report.payments.paid, 3, 'payments of held members (including the failed one) are not counted');
+  assert.equal(report.importable, 5);
+  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3]]);
+  assert.deepEqual(report.membershipStatus, { active: 3, expired: 2 });
+  assert.equal(report.profile.needsOnboarding, 3);
+  assert.equal(report.payments.paid, 5, 'payments of held and removed members are not counted');
   assert.equal(report.payments.ignoredFailedOrPending, 1);
-  assert.deepEqual(report.orphans.subscriptionUserIds, ['98']);
-  assert.deepEqual(report.membershipStatus, { active: 2, expired: 1 });
-  assert.equal(report.profile.needsOnboarding, 1);
-  assert.equal(report.orphans.paymentUsers, 1);
+  assert.equal(report.stripe.withActiveSubscription, 1, 'the removed member with an active subscription is not counted');
+  assert.deepEqual(report.subscriptionsByStatus, { active: 3, cancelled: 1 });
+
+  const expected = new Map(report.expected.map((item) => [item.key, item]));
+  const review = new Map(report.review.map((item) => [item.key, item]));
+  assert.equal(expected.get('incomplete_profile')?.count, 7, 'removed members are not counted as incomplete');
+  assert.ok(expected.get('incomplete_profile')?.remedy);
+  assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
+  assert.equal(review.get('duplicate_email')?.count, 2);
+  assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email') && review.has('no_account_record'));
+  assert.equal(review.has('incomplete_profile'), false);
+  assert.equal(expected.has('duplicate_email'), false);
+
+  // Every group carries one downloadable row per person, with the columns declared for it.
+  const dup = review.get('duplicate_email')!;
+  assert.equal(dup.rows.length, 2);
+  assert.ok(dup.rows.every((row) => dup.columns.every((column) => column in row)));
+  assert.deepEqual(dup.rows.map((row) => row.email).sort(), ['dup@example.com', 'dup@example.com']);
+  assert.equal(report.excluded[1].rows.length, 3);
+
+  // People's details may be downloaded, but never password hashes or Stripe payment references.
   const serialized = JSON.stringify(report);
-  for (const secret of ['example.com', '$P$', '$wp$', 'cus_AAA', 'sub_new', 'ch_1', 'Ada', 'Lovelace']) {
-    assert.equal(serialized.includes(secret), false, `report must not contain ${secret}`);
-  }
-  assert.equal(report.exceptions.find((e) => e.code === 'duplicate_email')?.count, 2);
+  for (const secret of ['$P$', '$wp$', 'weird', 'ch_1', 'mp-9']) assert.equal(serialized.includes(secret), false, `report must not contain ${secret}`);
 });
