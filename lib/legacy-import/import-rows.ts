@@ -9,7 +9,7 @@ import type { StripeSnapshot } from './stripe-reconcile.ts';
  */
 const GRACE_DAYS = 5;
 /** Stored in users.password_hash for imported accounts: it can never verify (not Argon2id, not bcrypt) until the first-login flow sets a real hash. */
-export const UNUSABLE_PASSWORD_HASH = '!legacy-import-no-password-yet';
+export const UNVERIFIABLE_HASH_PLACEHOLDER = '!legacy-import-no-password-yet';
 const STORED_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired']);
 
 export interface ImportPaymentRow {
@@ -79,7 +79,7 @@ export function buildMemberRows(
     user: {
       email: forms.normalizeEmail(member.email),
       emailDisplay: forms.emailDisplayForm(member.emailDisplay || member.email),
-      passwordHash: UNUSABLE_PASSWORD_HASH,
+      passwordHash: UNVERIFIABLE_HASH_PLACEHOLDER,
       accountState: 'migrated_pending',
       role: 'member',
       createdAt: new Date(`${member.registeredAt.slice(0, 10) || '1970-01-01'}T00:00:00Z`),
