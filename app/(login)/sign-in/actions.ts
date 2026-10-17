@@ -74,12 +74,15 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   }
 
   const migrated = user.accountState === 'migrated_pending';
+  // Activation increments the session version itself, so the guarded re-read below expects exactly that value.
+  let expectedSessionVersion = pending.sessionVersion;
   if (migrated) {
     const activation = await finalizeMigratedAccountAfterVerifiedPassword(user.id);
     if (activation.status !== 'success') {
       await clearPendingLogin();
       return { error: `We could not finish signing you in automatically. Contact ${supportEmailForServer()} for help.` };
     }
+    expectedSessionVersion = activation.sessionVersion;
   } else {
     const now = new Date();
     await db.update(users).set({
@@ -96,7 +99,7 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   const [verifiedUser] = await db.select().from(users).where(and(
     eq(users.id, user.id),
     eq(users.email, pending.email),
-    eq(users.sessionVersion, pending.sessionVersion),
+    eq(users.sessionVersion, expectedSessionVersion),
   )).limit(1);
   if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
     return { error: 'Your sign-in session expired. Start again.' };
@@ -105,12 +108,14 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   // fully set-up account gets the "login lands on the homepage" destination.
   // A member without a current membership sees only the payment page, so sign-in lands them there.
   const { gate: sessionGate } = await loadSessionGate(verifiedUser.id);
+  // A migrated member whose imported profile still has blank required fields is now in `onboarding`: the wizard lives at /dashboard.
+  const migratedNeedsOnboarding = migrated && verifiedUser.accountState === 'onboarding';
   const destination = migrated
-    ? '/dashboard/profile'
+    ? (migratedNeedsOnboarding ? '/dashboard' : '/dashboard/profile')
     : sessionGate === 'payment_only'
       ? paymentOnlyDestination(verifiedUser.accountState)
       : verifiedUser.accountState === 'onboarding' ? '/dashboard' : '/';
-  if (migrated) await setUiFlash('profile-confirm-details', '/dashboard/profile');
+  if (migrated && !migratedNeedsOnboarding) await setUiFlash('profile-confirm-details', '/dashboard/profile');
   const role = await authoritativeMfaRole(verifiedUser.id);
   if (pending.allowRemember && role === 'member' && remember === 'on') await issueLoginDeviceTrust(verifiedUser);
   if (await beginPrimaryMfa(verifiedUser, 'password', destination)) redirect('/mfa');

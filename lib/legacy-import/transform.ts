@@ -202,7 +202,8 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
 const byCreated = (a: DumpRow, b: DumpRow) => text(a.created_at).localeCompare(text(b.created_at)) || Number(a.id) - Number(b.id);
 
 function hashFormat(hash: string): PlannedMember['hashFormat'] {
-  if (hash.startsWith('$P$')) return 'phpass';
+  // Portable phpass: `$P$` (WordPress) and `$H$` (phpBB-style) are the same algorithm, and the first-login verifier accepts both.
+  if (hash.startsWith('$P$') || hash.startsWith('$H$')) return 'phpass';
   if (hash.startsWith('$wp$2y$')) return 'wp_bcrypt';
   return 'unsupported';
 }

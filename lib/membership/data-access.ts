@@ -1,3 +1,4 @@
+import type { OnboardingPrefill } from './classification';
 import 'server-only';
 import { communicationHoldFields } from '@/lib/runtime/member-launch-hold';
 
@@ -95,6 +96,23 @@ export async function getOwnPrivateMember() {
   return profile ? getPrivateMember(profile.id) : null;
 }
 
+/** What the legacy import already knows about a member who must finish onboarding, so the wizard starts filled in. */
+export async function getOnboardingPrefill(userId: number): Promise<OnboardingPrefill | null> {
+  const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+  if (!profile || profile.legacyWpUserId === null) return null;
+  const roles = await db.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo)));
+  const judge = roles.find((role) => role.roleType === 'judge');
+  const steward = roles.find((role) => role.roleType === 'steward');
+  const classification = judge && steward ? 'judge_steward' : judge ? 'judge' : steward ? 'steward' : roles.some((role) => role.roleType === 'veterinarian') ? 'veterinarian' : null;
+  const official = judge ?? steward;
+  return {
+    classification, firstName: profile.firstName, lastName: profile.lastName, countryCode: profile.countryCode, address1: profile.address1,
+    address2: profile.address2 ?? '', city: profile.city, stateProvince: profile.stateProvince, postalCode: profile.postalCode,
+    nationalFederationCountryCode: official?.nationalFederationCountryCode ?? '', idocRegion: official?.idocRegion ?? '', feiId: official?.feiId ?? '',
+    judgeStatuses: judge?.officialStatuses ?? [], stewardStatuses: steward?.officialStatuses ?? [], isTechnicalDelegate: judge?.isTechnicalDelegate === true,
+  };
+}
+
 export async function createOwnMemberProfile(untrustedInput: unknown, untrustedConsent?: OnboardingConsentInput) {
   const input = memberProfileSchema.parse(untrustedInput);
   const consent = validatedConsent(untrustedConsent);
@@ -106,10 +124,21 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
     if (!account || account.account_state !== 'onboarding') {
       throw new Error('This account is not eligible for onboarding.');
     }
-    const [existing] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
-    if (existing) throw new Error('A member profile already exists for this account.');
-    const [profile] = await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
+    const [existing] = await tx.select().from(profiles).where(eq(profiles.userId, actor.id)).limit(1);
+    // A profile created by the legacy import may have blank required fields: onboarding completes it in place (docs/03).
+    // Any other existing profile still means onboarding already happened.
+    if (existing && existing.legacyWpUserId === null) throw new Error('A member profile already exists for this account.');
+    const beforeRoles = existing
+      ? await tx.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, existing.id), isNull(professionalRoles.effectiveTo)))
+      : [];
+    const completedAt = new Date();
+    const [profile] = existing
+      ? await tx.update(profiles).set({ ...profileColumns(input), updatedAt: completedAt }).where(eq(profiles.id, existing.id)).returning()
+      : await tx.insert(profiles).values({ ...profileColumns(input), userId: actor.id }).returning();
     injectProfileTransactionFailure('profile-write');
+    if (existing && beforeRoles.length > 0) {
+      await tx.update(professionalRoles).set({ effectiveTo: completedAt }).where(and(eq(professionalRoles.profileId, existing.id), isNull(professionalRoles.effectiveTo)));
+    }
     await tx.insert(professionalRoles).values(input.roles.map((role) => ({ ...role, profileId: profile.id })));
     injectProfileTransactionFailure('role-insertion');
     const submittedAt = new Date();
@@ -121,9 +150,9 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
     });
     injectProfileTransactionFailure('consent-write');
     const after = { profile, roles: input.roles };
-    await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: {}, profileId: profile.id });
+    await tx.insert(profileChangeHistory).values({ actorId: actor.id, afterJson: after, beforeJson: existing ? { profile: existing, roles: beforeRoles } : {}, profileId: profile.id });
     injectProfileTransactionFailure('profile-history-insertion');
-    await tx.insert(auditLog).values({ action: 'member.profile.created', actorId: actor.id, afterJson: after, entityId: String(profile.id), entityType: 'profile' });
+    await tx.insert(auditLog).values({ action: existing ? 'member.profile.completed_after_import' : 'member.profile.created', actorId: actor.id, afterJson: after, entityId: String(profile.id), entityType: 'profile' });
     injectProfileTransactionFailure('audit-insertion');
     await tx.update(users).set({ accountState: 'active', updatedAt: new Date() })
       .where(and(eq(users.id, actor.id), eq(users.accountState, 'onboarding')));

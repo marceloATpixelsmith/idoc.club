@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireAccountAccess } from '@/lib/membership/data-access';
+import { getOnboardingPrefill, requireAccountAccess } from '@/lib/membership/data-access';
 import { getUser } from '@/lib/db/queries';
 import { parseMemberClassification } from '@/lib/membership/classification';
 import { OnboardingWizard } from '@/app/(dashboard)/onboarding/onboarding-wizard';
@@ -16,9 +16,10 @@ export default async function DashboardEntryPage({ searchParams }: { searchParam
 
   if (onboarding) {
     const { membership } = await searchParams;
+    const prefill = user ? await getOnboardingPrefill(user.id) : null;
     return (
       <main className="flex-1 py-4 lg:py-8 px-5 lg:px-8">
-        <OnboardingWizard initialClassification={parseMemberClassification(membership)} />
+        <OnboardingWizard initialClassification={parseMemberClassification(membership)} prefill={prefill} />
       </main>
     );
   }
