@@ -1435,9 +1435,10 @@ Design, mapping rules and removal plan: [03 section 12](03-legacy-data-migration
 **Run a dry run (staging first).**
 
 1. In Vercel, set `LEGACY_IMPORT_ENABLED=true` for the environment you are testing (Preview/staging), then redeploy that environment. Leave it unset or any other value everywhere else; only the exact value `true` enables the page.
+1a. Optional, for the live-Stripe comparison: create a restricted live-mode key in Stripe with Read on Customers, Subscriptions, Invoices, Charges and PaymentIntents (nothing else), and set it as `LEGACY_STRIPE_SECRET_KEY` for the Preview environment of the `staging` branch only. Never set it in Production. Revoke the key and remove the variable when finished (step 5).
 2. Sign in as Super Admin and open **Legacy import (temporary)** under Operations.
 3. Choose the users dump and the MemberPress dump (4 MB in total) and run the dry run; enter your authenticator code when asked.
 4. Read the report. It first shows who the cleanup rules removed (expired a year or more, or never paid), then the figures for everyone who remains, then problems split into **Expected** (already handled) and **Needs a decision**. Use the download icon on any group for a CSV of the people in it. Nothing was written and the files were not kept.
-5. When finished, remove `LEGACY_IMPORT_ENABLED` and redeploy. Do not leave the switch on between runs.
+5. When finished, remove `LEGACY_IMPORT_ENABLED` (and `LEGACY_STRIPE_SECRET_KEY`, revoking that key in Stripe) and redeploy. Do not leave the switch on between runs.
 
-The dry run never calls Stripe and never changes member data. Keep the dump files only in approved, access-controlled migration storage and delete them according to the credential-bearing export retention rules in document 03.
+The dry run changes no member data and makes no Stripe changes; if `LEGACY_STRIPE_SECRET_KEY` is set it makes read-only list calls to live Stripe (step 1a), otherwise it makes no Stripe calls. Keep the dump files only in approved, access-controlled migration storage and delete them according to the credential-bearing export retention rules in document 03.

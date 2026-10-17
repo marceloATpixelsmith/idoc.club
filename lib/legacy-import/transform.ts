@@ -429,6 +429,8 @@ export interface DryRunReport {
   payments: { paid: number; refunded: number; stripe: number; manual: number; ignoredFailedOrPending: number };
   expected: ReportGroup[];
   review: ReportGroup[];
+  /** Filled in by the server after the comparison with live Stripe; absent until then. */
+  stripeReconciliation?: import('./stripe-reconcile.ts').StripeReconciliation;
 }
 
 export const MEMBER_COLUMNS = [

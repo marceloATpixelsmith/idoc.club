@@ -11,7 +11,7 @@ import { toCsv } from '@/lib/admin/csv';
 import { isNeededLegacyTable, reduceDumpText } from '@/lib/legacy-import/reduce-dump';
 import type { DryRunReport, ReportGroup } from '@/lib/legacy-import/transform';
 
-export type LegacyImportActionState = StepUpActionState & { error?: string; result?: DryRunResult };
+export type LegacyImportActionState = StepUpActionState & { error?: string; result?: Omit<DryRunResult, 'plan'> };
 type Action = (state: LegacyImportActionState, formData: FormData) => Promise<LegacyImportActionState>;
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
@@ -97,7 +97,7 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
           <Counts counts={{
             'with a stored Stripe customer': report.stripe.withCustomerId, 'with a live (newest active) subscription': report.stripe.withActiveSubscription,
             'active subscription but no customer ID': report.stripe.activeSubscriptionWithoutCustomer, 'customer ID but no active subscription': report.stripe.customerWithoutActiveSubscription,
-          }} title="Stripe linkage (from the legacy data; not yet checked against Stripe)" />
+          }} title="Stripe linkage (from the legacy data; compared with live Stripe below)" />
           <Counts counts={report.subscriptionsByStatus} title="Legacy subscriptions by status" />
           <Counts counts={{ paid: report.payments.paid, refunded: report.payments.refunded, 'Stripe references': report.payments.stripe, 'manual (no Stripe ID)': report.payments.manual, 'ignored (failed or pending)': report.payments.ignoredFailedOrPending }} title="Payments to import" />
         </div>
@@ -107,6 +107,21 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
         <h3 className="text-base font-semibold text-foreground">Expected — already handled, nothing for you to decide</h3>
         <GroupList asOf={report.asOf} empty="None" groups={report.expected} />
       </section>
+
+      {report.stripeReconciliation ? (
+        <section className="space-y-2">
+          <h3 className="text-base font-semibold text-foreground">Compared with live Stripe (read-only)</h3>
+          {report.stripeReconciliation.message ? <p className="text-sm text-amber-200" role="status">{report.stripeReconciliation.message}</p> : null}
+          {report.stripeReconciliation.state === 'ok' ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Read {fmt(report.stripeReconciliation.fetched.subscriptions)} subscriptions, {fmt(report.stripeReconciliation.fetched.customers)} customers and {fmt(report.stripeReconciliation.fetched.charges)} charge references from live Stripe. Nothing was changed in Stripe.
+              </p>
+              <GroupList asOf={report.asOf} empty="No differences found between the legacy data and live Stripe." groups={report.stripeReconciliation.groups} />
+            </>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <h3 className="text-base font-semibold text-amber-200">Needs a decision from you</h3>
