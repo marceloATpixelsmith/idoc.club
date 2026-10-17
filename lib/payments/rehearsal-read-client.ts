@@ -1,9 +1,9 @@
 import 'server-only';
 
 import Stripe from 'stripe';
-import { getDatabaseSchemaName } from '@/lib/db/schema-name';
-import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
-import { stripeDeploymentMode } from '@/lib/runtime/stripe-configuration.mjs';
+import { getDatabaseSchemaName } from '../db/schema-name.ts';
+import { memberCommunicationsDisabled } from '../runtime/member-launch-hold.ts';
+import { stripeDeploymentMode } from '../runtime/stripe-configuration.mjs';
 
 // TEMPORARY legacy import rehearsal mode (docs/03 section 12): while the legacy member data is being evaluated, staging's
 // billing reconciliation may read LIVE Stripe so imported live customer and subscription IDs can be compared with what
