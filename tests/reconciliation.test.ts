@@ -122,3 +122,12 @@ test('a missing or canceled pending Subscription Schedule is actionable and neve
   assert.deepEqual(missing, [{ externalSubscriptionId: 'sub_sched_missing', kind: 'pending_schedule_conflict', profileId: 41, stripeStatus: 'missing' }]);
   assert.match(summarizeFinding(missing[0]), /inspect before changing local billing state/);
 });
+
+test('local subscriptions missing from Stripe are reported only when the rehearsal option is on', () => {
+  const local = { billingAccounts: [{ externalCustomerId: 'cus_1', profileId: 1 }], subscriptions: [{ externalSubscriptionId: 'sub_gone', profileId: 1, status: 'active' }, { externalSubscriptionId: 'sub_here', profileId: 2, status: 'active' }] };
+  const stripe = { customers: [{ id: 'cus_1' }], openInvoices: [], subscriptions: [{ customer: 'cus_2', id: 'sub_here', status: 'active' }] };
+  assert.deepEqual(computeReconciliationFindings(local, stripe), []);
+  const findings = computeReconciliationFindings(local, stripe, 2, { reportLocalMissingInStripe: true });
+  assert.deepEqual(findings, [{ externalSubscriptionId: 'sub_gone', kind: 'status_conflict', localStatus: 'active', profileId: 1, stripeStatus: 'missing' }]);
+  assert.match(summarizeFinding(findings[0]), /was not found in Stripe/);
+});

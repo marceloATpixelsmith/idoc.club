@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
+import { getRehearsalReadClient } from './rehearsal-read-client';
 import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
 
 // Only the calls this module makes, and only the fields it actually reads back, so tests can
@@ -68,7 +69,12 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     // ReconciliationStripeClient exactly — the cast documents that gap rather than hiding a real
     // one. Constructing the real client (which validates STRIPE_SECRET_KEY) stays inside this try
     // block so a misconfigured key is recorded as a failed run like any other scan failure.
-    const stripe: ReconciliationStripeClient = testStripeClient ?? (getStripeServerClient() as unknown as ReconciliationStripeClient);
+    // TEMPORARY legacy import rehearsal (docs/03 section 12): on staging, with the communications hold on and the restricted
+    // live key configured, billing reconciliation reads live Stripe through a read-only facade. Seminar registrations are
+    // skipped then, because staging's own seminar payments live in the sandbox, not in live Stripe.
+    const rehearsal = testStripeClient ? null : getRehearsalReadClient();
+    if (rehearsal) console.warn('[rehearsal_read_mode]', { action: 'reconciliation_scan' });
+    const stripe: ReconciliationStripeClient = testStripeClient ?? (rehearsal ?? getStripeServerClient()) as unknown as ReconciliationStripeClient;
     const [localBillingAccounts, localSubscriptions, localPreferences] = await Promise.all([
       db.select({ externalCustomerId: billingAccounts.externalCustomerId, profileId: billingAccounts.profileId }).from(billingAccounts),
       db.select({ externalSubscriptionId: subscriptions.externalSubscriptionId, profileId: subscriptions.profileId, status: subscriptions.status }).from(subscriptions),
@@ -76,7 +82,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         profileId: renewalPreferences.profileId, transitionState: renewalPreferences.transitionState }).from(renewalPreferences),
     ]);
     //SCAN ONLY STRIPE-ONLINE REGISTRATIONS WITH RECORDED CHECKOUT OR PAYMENT REFERENCES.
-    const localSeminarRegistrations = await db.select({
+    const localSeminarRegistrations = rehearsal ? [] : await db.select({
       id: seminarRegistrations.id,
       profileId: seminarRegistrations.profileId,
       paymentStatus: seminarRegistrations.paymentStatus,
@@ -101,6 +107,8 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         schedules: stripeSchedules,
         subscriptions: stripeSubscriptions,
       },
+      undefined,
+      { reportLocalMissingInStripe: Boolean(rehearsal) },
     );
 
     //KEEP A FAILED STRIPE LOOKUP FROM PRODUCING A FALSE ALL-CLEAR RESULT.
@@ -141,7 +149,10 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     }
 
     await db.transaction(async (tx) => {
-      await tx.delete(reconciliationFindings).where(sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+      // Rehearsal skips the seminar checks, so it must also leave the previous seminar findings in place.
+      await tx.delete(reconciliationFindings).where(rehearsal
+        ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`
+        : sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
       if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });
