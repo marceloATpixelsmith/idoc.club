@@ -63,30 +63,42 @@ const GRACE_DAYS = 5;
 export type ExceptionCode =
   | 'user_flagged_deleted_or_spam' | 'invalid_email' | 'duplicate_email' | 'unsupported_password_hash'
   | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
-  | 'no_eligible_payment' | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
+  | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
   | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
   | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference';
 
 export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time';
+export type ExclusionCode = 'expired_over_a_year' | 'never_paid';
 
-export const EXCEPTION_DESCRIPTIONS: Record<ExceptionCode, { text: string; held: boolean }> = {
-  user_flagged_deleted_or_spam: { text: 'WordPress marks the user deleted or spam: not imported', held: true },
-  invalid_email: { text: 'Email address is missing or not valid: not imported', held: true },
-  duplicate_email: { text: 'Same email as another legacy user: held for a merge-or-separate decision', held: true },
-  unsupported_password_hash: { text: 'Password hash is not a supported WordPress format: member uses the one-time activation flow', held: false },
-  no_membership_product: { text: 'No payment or subscription names a membership product, so the roles are unknown', held: false },
-  product_profile_mismatch: { text: 'Membership product disagrees with the judge/steward details on the profile', held: false },
-  unmapped_legacy_value: { text: 'A judge/steward status, region or federation value has no approved mapping', held: false },
-  incomplete_profile: { text: 'Required profile fields are missing: member completes them in onboarding after first sign-in', held: false },
-  no_eligible_payment: { text: 'No completed payment: paid-through date unknown, payment-only after sign-in', held: false },
-  blank_expiry_on_paid_transaction: { text: 'A completed payment has no expiry date (lifetime or blank): needs a decision', held: false },
-  multiple_active_subscriptions: { text: 'More than one active subscription: possible double billing, review in Stripe', held: false },
-  active_subscription_not_newest: { text: 'The active subscription is not the newest one: review', held: false },
-  invalid_subscription_reference: { text: 'Subscription has no valid Stripe subscription ID (sub_...)', held: false },
-  invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', held: false },
-  multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', held: false },
-  active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', held: false },
-  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on more than one transaction', held: false },
+/** "expected": the plan already has a remedy, nothing to decide. "review": a person has to look at it and decide. */
+export type IssueKind = 'expected' | 'review';
+export interface IssueInfo { text: string; kind: IssueKind; remedy: string | null; held: boolean }
+
+export const EXCLUSION_INFO: Record<ExclusionCode, string> = {
+  expired_over_a_year: 'Expired for a year or more: not imported (they can sign up again)',
+  never_paid: 'No completed payment on record: not imported (they can sign up again)',
+};
+
+export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
+  incomplete_profile: { text: 'Required profile fields are missing', kind: 'expected', remedy: 'Imported, then required to complete the missing fields in onboarding at first sign-in', held: false },
+  unsupported_password_hash: { text: 'Password hash is not a supported WordPress format', kind: 'expected', remedy: 'Uses the one-time secure activation / password-set flow', held: false },
+  country_filled_from_federation: { text: 'Address country was blank and was filled from the national federation country', kind: 'expected', remedy: 'Filled automatically; the member confirms it in onboarding', held: false },
+  technical_delegate_defaulted_no: { text: 'Technical delegate answer was blank and defaulted to No', kind: 'expected', remedy: 'Defaulted automatically; the member can change it', held: false },
+  product_changed_over_time: { text: 'The member has paid under more than one membership product over time', kind: 'expected', remedy: 'The most recent product decides the roles', held: false },
+  user_flagged_deleted_or_spam: { text: 'WordPress marks the user deleted or spam', kind: 'review', remedy: null, held: true },
+  invalid_email: { text: 'Email address is missing or not valid', kind: 'review', remedy: null, held: true },
+  duplicate_email: { text: 'Same email as another legacy user (merge or keep separate?)', kind: 'review', remedy: null, held: true },
+  no_membership_product: { text: 'No payment or subscription names a membership product, so the roles are unknown', kind: 'review', remedy: null, held: false },
+  product_profile_mismatch: { text: 'Membership product disagrees with the judge/steward details on the profile', kind: 'review', remedy: null, held: false },
+  unmapped_legacy_value: { text: 'A judge/steward status, region or federation value has no approved mapping', kind: 'review', remedy: null, held: false },
+  blank_expiry_on_paid_transaction: { text: 'A completed payment has no expiry date (lifetime or blank)', kind: 'review', remedy: null, held: false },
+  multiple_active_subscriptions: { text: 'More than one active subscription: possible double billing, check Stripe', kind: 'review', remedy: null, held: false },
+  active_subscription_not_newest: { text: 'The active subscription is not the newest one', kind: 'review', remedy: null, held: false },
+  invalid_subscription_reference: { text: 'Active subscription has no valid Stripe subscription ID (sub_...)', kind: 'review', remedy: null, held: false },
+  invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', kind: 'review', remedy: null, held: false },
+  multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', kind: 'review', remedy: null, held: false },
+  active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', kind: 'review', remedy: null, held: false },
+  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on more than one transaction', kind: 'review', remedy: null, held: false },
 };
 
 export interface PlannedRole {
@@ -117,7 +129,10 @@ export interface PlannedMember {
   classification: Classification | null;
   roles: PlannedRole[];
   missingFields: string[];
-  membership: { status: 'active' | 'grace' | 'expired' | 'no_eligible_payment'; paidThrough: string | null; firstPaidOn: string | null };
+  membership: { status: 'active' | 'grace' | 'expired' | 'unknown'; paidThrough: string | null; firstPaidOn: string | null; lastPaidOn: string | null };
+  /** Set when a cleanup rule removes the member from the import and from every report figure. */
+  exclusion: ExclusionCode | null;
+  subscriptionStatuses: string[];
   stripe: { customerId: string | null; subscriptionId: string | null };
   payments: PlannedPayment[];
   ignoredPayments: number;
@@ -129,7 +144,8 @@ export interface LegacyImportPlan {
   members: PlannedMember[];
   orphanPaymentUserIds: string[];
   orphanSubscriptionUserIds: string[];
-  subscriptionsByStatus: Record<string, number>;
+  /** Payments or subscriptions whose user has no account row. */
+  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; subscriptionStatuses: string[] }>;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
@@ -144,6 +160,14 @@ const isoDay = (value: string | null | undefined): string | null => {
 function addDays(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+/** The same calendar date one year earlier (29 February falls back to 28 February). */
+function yearBefore(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  const month = date.getUTCMonth();
+  date.setUTCFullYear(date.getUTCFullYear() - 1);
+  if (date.getUTCMonth() !== month) date.setUTCDate(0);
   return date.toISOString().slice(0, 10);
 }
 function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
@@ -195,14 +219,8 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
   }
   const txByUser = groupBy(transactions, (row) => text(row.user_id));
   const subsByUser = groupBy(subscriptions, (row) => text(row.user_id));
-  const emailCounts = new Map<string, number>();
-  for (const user of users) {
-    const email = canonicalEmail(user.user_email);
-    if (email) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
-  }
   const userIds = new Set(users.map((user) => text(user.ID)));
 
-  const paymentReferenceUsers = new Map<string, Set<string>>();
   const members: PlannedMember[] = users.map((user) => {
     const legacyUserId = text(user.ID);
     const exceptions = new Set<ExceptionCode>();
@@ -213,7 +231,6 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const email = canonicalEmail(user.user_email);
     if (text(user.deleted) !== '0' && text(user.deleted) !== '' || text(user.spam) !== '0' && text(user.spam) !== '') exceptions.add('user_flagged_deleted_or_spam');
     if (!email) exceptions.add('invalid_email');
-    if (email && (emailCounts.get(email) ?? 0) > 1) exceptions.add('duplicate_email');
     const legacyPasswordHash = text(user.user_pass);
     const format = hashFormat(legacyPasswordHash);
     if (format === 'unsupported') exceptions.add('unsupported_password_hash');
@@ -233,22 +250,17 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
         legacyTransactionId: text(tx.id), reference, source: manual ? 'manual' : 'stripe', amountCents: Number.isFinite(amount) ? amount : 0,
         paidOn: isoDay(tx.created_at) ?? '', expiresOn: isoDay(tx.expires_at), outcome: status === 'refunded' ? 'refunded' : 'paid',
       });
-      if (!manual && reference) {
-        const owners = paymentReferenceUsers.get(reference) ?? new Set<string>();
-        owners.add(`${legacyUserId}:${text(tx.id)}`);
-        paymentReferenceUsers.set(reference, owners);
-      }
     }
     const paid = payments.filter((payment) => payment.outcome === 'paid');
     if (paid.some((payment) => payment.expiresOn === null)) exceptions.add('blank_expiry_on_paid_transaction');
     const paidThrough = paid.map((payment) => payment.expiresOn).filter((day): day is string => day !== null).sort().pop() ?? null;
     const firstPaidOn = paid.map((payment) => payment.paidOn).filter(Boolean).sort()[0] ?? null;
-    let membershipStatus: PlannedMember['membership']['status'] = 'no_eligible_payment';
-    if (paidThrough) {
-      membershipStatus = paidThrough >= options.asOf ? 'active' : addDays(paidThrough, GRACE_DAYS) >= options.asOf ? 'grace' : 'expired';
-    } else {
-      exceptions.add('no_eligible_payment');
-    }
+    const lastPaidOn = paid.map((payment) => payment.paidOn).filter(Boolean).sort().pop() ?? null;
+    let membershipStatus: PlannedMember['membership']['status'] = 'unknown';
+    if (paidThrough) membershipStatus = paidThrough >= options.asOf ? 'active' : addDays(paidThrough, GRACE_DAYS) >= options.asOf ? 'grace' : 'expired';
+    // Cleanup rules: nobody with no completed payment, or expired for a year or more, is imported or counted.
+    const exclusion: ExclusionCode | null = paid.length === 0 ? 'never_paid'
+      : paidThrough !== null && paidThrough <= yearBefore(options.asOf) ? 'expired_over_a_year' : null;
 
     // Subscriptions: the newest active one is the live one; anything else is history.
     const userSubs = (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
@@ -318,34 +330,78 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const held = exceptions.has('user_flagged_deleted_or_spam') || exceptions.has('invalid_email') || exceptions.has('duplicate_email');
     return {
       legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
-      membership: { status: membershipStatus, paidThrough, firstPaidOn }, stripe: { customerId, subscriptionId }, payments, ignoredPayments,
+      membership: { status: membershipStatus, paidThrough, firstPaidOn, lastPaidOn }, exclusion, subscriptionStatuses: userSubs.map((sub) => text(sub.status) || '(blank)'),
+      stripe: { customerId, subscriptionId }, payments, ignoredPayments,
       exceptions: [...exceptions].sort(), notes: [...notes].sort(),
     };
   });
 
+  const inScope = members.filter((member) => !member.exclusion);
+  // Duplicate emails are judged only among members who stay in scope.
+  const emailCounts = new Map<string, number>();
+  for (const member of inScope) if (member.email) emailCounts.set(member.email, (emailCounts.get(member.email) ?? 0) + 1);
+  for (const member of inScope) {
+    if (member.email && (emailCounts.get(member.email) ?? 0) > 1) {
+      member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, 'duplicate_email'])].sort();
+      member.held = true;
+    }
+  }
   // A Stripe payment reference must belong to exactly one transaction; otherwise importing it would violate the unique reference.
+  const referenceOwners = new Map<string, Set<string>>();
+  for (const member of inScope) {
+    for (const payment of member.payments) {
+      if (payment.source !== 'stripe' || !payment.reference) continue;
+      const owners = referenceOwners.get(payment.reference) ?? new Set<string>();
+      owners.add(`${member.legacyUserId}:${payment.legacyTransactionId}`);
+      referenceOwners.set(payment.reference, owners);
+    }
+  }
   const duplicateOwners = new Set<string>();
-  for (const owners of paymentReferenceUsers.values()) {
+  for (const owners of referenceOwners.values()) {
     if (owners.size > 1) for (const owner of owners) duplicateOwners.add(owner.split(':')[0]);
   }
-  for (const member of members) {
+  for (const member of inScope) {
     if (duplicateOwners.has(member.legacyUserId)) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, 'duplicate_payment_reference'])].sort();
   }
 
-  const subscriptionsByStatus: Record<string, number> = {};
-  for (const sub of subscriptions) subscriptionsByStatus[text(sub.status) || '(blank)'] = (subscriptionsByStatus[text(sub.status) || '(blank)'] ?? 0) + 1;
-  return {
-    asOf: options.asOf, members, subscriptionsByStatus,
-    orphanPaymentUserIds: [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
-    orphanSubscriptionUserIds: [...new Set(subscriptions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
-  };
+  const orphanPaymentUserIds = [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b));
+  const orphanSubscriptionUserIds = [...new Set(subscriptions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b));
+  const orphans = [...new Set([...orphanPaymentUserIds, ...orphanSubscriptionUserIds])].sort((a, b) => Number(a) - Number(b)).map((legacyUserId) => {
+    const paidRows = (txByUser.get(legacyUserId) ?? []).filter((tx) => text(tx.txn_type) === 'payment' && text(tx.status) === 'complete');
+    return {
+      legacyUserId, paymentCount: paidRows.length,
+      lastPaidOn: paidRows.map((tx) => isoDay(tx.created_at)).filter((day): day is string => day !== null).sort().pop() ?? null,
+      subscriptionStatuses: (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated).map((sub) => text(sub.status) || '(blank)'),
+    };
+  });
+  return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans };
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Report. Aggregate figures cover only members who stay in scope (the two cleanup rules remove everyone else from every figure).
+// Each group also carries one row per person, for the operator's CSV download. Rows never include password hashes.
+// ---------------------------------------------------------------------------------------------------------------------
+
+export type ReportRow = Record<string, string>;
+export interface ReportGroup {
+  key: string;
+  text: string;
+  kind: IssueKind | 'excluded';
+  remedy: string | null;
+  held: boolean;
+  count: number;
+  columns: string[];
+  rows: ReportRow[];
+}
 export interface DryRunReport {
   asOf: string;
   legacyUsers: number;
+  removedByRules: number;
+  inScope: number;
   held: number;
   importable: number;
+  excluded: ReportGroup[];
   hashFormats: Record<string, number>;
   classification: Record<string, number>;
   membershipStatus: Record<string, number>;
@@ -353,9 +409,28 @@ export interface DryRunReport {
   stripe: { withCustomerId: number; withActiveSubscription: number; activeSubscriptionWithoutCustomer: number; customerWithoutActiveSubscription: number };
   subscriptionsByStatus: Record<string, number>;
   payments: { paid: number; refunded: number; stripe: number; manual: number; ignoredFailedOrPending: number };
-  notes: Record<string, number>;
-  exceptions: Array<{ code: ExceptionCode; text: string; held: boolean; count: number; legacyUserIds: string[] }>;
-  orphans: { paymentUsers: number; subscriptionUsers: number; paymentUserIds: string[]; subscriptionUserIds: string[] };
+  expected: ReportGroup[];
+  review: ReportGroup[];
+}
+
+export const MEMBER_COLUMNS = [
+  'legacy_user_id', 'email', 'first_name', 'last_name', 'registered', 'membership_product', 'membership_status', 'paid_through', 'first_paid_on', 'last_paid_on',
+  'completed_payments', 'subscription_statuses', 'active_subscription_id', 'stripe_customer_id', 'country', 'national_federation', 'idoc_region', 'missing_fields', 'issues', 'notes',
+];
+const ORPHAN_COLUMNS = ['legacy_user_id', 'completed_payments', 'last_paid_on', 'subscription_statuses'];
+const MAX_ROWS = 5000;
+
+function memberRow(member: PlannedMember): ReportRow {
+  const official = member.roles.find((role) => role.roleType !== 'veterinarian');
+  return {
+    legacy_user_id: member.legacyUserId, email: member.email, first_name: member.profile.firstName, last_name: member.profile.lastName,
+    registered: member.registeredAt.slice(0, 10), membership_product: member.classification ?? '', membership_status: member.membership.status,
+    paid_through: member.membership.paidThrough ?? '', first_paid_on: member.membership.firstPaidOn ?? '', last_paid_on: member.membership.lastPaidOn ?? '',
+    completed_payments: String(member.payments.filter((payment) => payment.outcome === 'paid').length), subscription_statuses: member.subscriptionStatuses.join(' > '),
+    active_subscription_id: member.stripe.subscriptionId ?? '', stripe_customer_id: member.stripe.customerId ?? '', country: member.profile.countryCode,
+    national_federation: official?.nationalFederationCountryCode ?? '', idoc_region: official?.idocRegion ?? '', missing_fields: member.missingFields.join('; '),
+    issues: member.exceptions.join('; '), notes: member.notes.join('; '),
+  };
 }
 
 function tally<T>(items: T[], key: (item: T) => string): Record<string, number> {
@@ -364,21 +439,43 @@ function tally<T>(items: T[], key: (item: T) => string): Record<string, number> 
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** Aggregate counts and legacy user IDs only: no names, emails, hashes or payment references. */
+function group(key: string, info: { text: string; kind: IssueKind | 'excluded'; remedy: string | null; held: boolean }, members: PlannedMember[]): ReportGroup {
+  return { key, ...info, count: members.length, columns: MEMBER_COLUMNS, rows: members.slice(0, MAX_ROWS).map(memberRow) };
+}
+
+/** Aggregate figures for the operator, plus one row per person behind every group. No password hashes or payment references. */
 export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
-  const importable = plan.members.filter((member) => !member.held);
-  const exceptionIds = new Map<ExceptionCode, string[]>();
-  for (const member of plan.members) {
-    for (const code of member.exceptions) exceptionIds.set(code, [...(exceptionIds.get(code) ?? []), member.legacyUserId]);
-  }
-  // Held members are not imported, so their payments are not "payments to import".
+  const inScope = plan.members.filter((member) => !member.exclusion);
+  const importable = inScope.filter((member) => !member.held);
   const allPayments = importable.flatMap((member) => member.payments);
+  const issues = (code: ExceptionCode | NoteCode, kind: 'exceptions' | 'notes') => inScope.filter((member) => (kind === 'exceptions' ? member.exceptions : member.notes).includes(code as never));
+
+  const groups: ReportGroup[] = [];
+  for (const [code, info] of Object.entries(ISSUE_INFO) as Array<[ExceptionCode | NoteCode, IssueInfo]>) {
+    const members = [...issues(code, 'exceptions'), ...issues(code, 'notes')];
+    if (members.length > 0) groups.push(group(code, info, members));
+  }
+  if (plan.orphans.length > 0) {
+    groups.push({
+      key: 'no_account_record', text: 'Payments or subscriptions belong to a user with no account record (not imported; check for an active subscription)', kind: 'review', remedy: null, held: false,
+      count: plan.orphans.length, columns: ORPHAN_COLUMNS,
+      rows: plan.orphans.slice(0, MAX_ROWS).map((orphan) => ({
+        legacy_user_id: orphan.legacyUserId, completed_payments: String(orphan.paymentCount), last_paid_on: orphan.lastPaidOn ?? '', subscription_statuses: orphan.subscriptionStatuses.join(' > '),
+      })),
+    });
+  }
+  const bySize = (a: ReportGroup, b: ReportGroup) => Number(b.held) - Number(a.held) || b.count - a.count || a.key.localeCompare(b.key);
+  const excluded = (Object.keys(EXCLUSION_INFO) as ExclusionCode[]).map((code) => group(code, { text: EXCLUSION_INFO[code], kind: 'excluded', remedy: null, held: false }, plan.members.filter((member) => member.exclusion === code)));
+
   return {
     asOf: plan.asOf,
     legacyUsers: plan.members.length,
-    held: plan.members.length - importable.length,
+    removedByRules: plan.members.length - inScope.length,
+    inScope: inScope.length,
+    held: inScope.length - importable.length,
     importable: importable.length,
-    hashFormats: tally(plan.members, (member) => member.hashFormat),
+    excluded,
+    hashFormats: tally(inScope, (member) => member.hashFormat),
     classification: tally(importable, (member) => member.classification ?? 'unknown'),
     membershipStatus: tally(importable, (member) => member.membership.status),
     profile: {
@@ -392,7 +489,7 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
       activeSubscriptionWithoutCustomer: importable.filter((member) => member.stripe.subscriptionId && !member.stripe.customerId).length,
       customerWithoutActiveSubscription: importable.filter((member) => member.stripe.customerId && !member.stripe.subscriptionId).length,
     },
-    subscriptionsByStatus: plan.subscriptionsByStatus,
+    subscriptionsByStatus: tally(importable.flatMap((member) => member.subscriptionStatuses), (status) => status),
     payments: {
       paid: allPayments.filter((payment) => payment.outcome === 'paid').length,
       refunded: allPayments.filter((payment) => payment.outcome === 'refunded').length,
@@ -400,13 +497,7 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
       manual: allPayments.filter((payment) => payment.source === 'manual').length,
       ignoredFailedOrPending: importable.reduce((sum, member) => sum + member.ignoredPayments, 0),
     },
-    notes: tally(importable.flatMap((member) => member.notes), (note) => note),
-    exceptions: [...exceptionIds.entries()].map(([code, ids]) => ({
-      code, text: EXCEPTION_DESCRIPTIONS[code].text, held: EXCEPTION_DESCRIPTIONS[code].held, count: ids.length, legacyUserIds: ids.slice(0, 500),
-    })).sort((a, b) => Number(b.held) - Number(a.held) || b.count - a.count || a.code.localeCompare(b.code)),
-    orphans: {
-      paymentUsers: plan.orphanPaymentUserIds.length, subscriptionUsers: plan.orphanSubscriptionUserIds.length,
-      paymentUserIds: plan.orphanPaymentUserIds.slice(0, 500), subscriptionUserIds: plan.orphanSubscriptionUserIds.slice(0, 500),
-    },
+    expected: groups.filter((item) => item.kind === 'expected').sort(bySize),
+    review: groups.filter((item) => item.kind === 'review').sort(bySize),
   };
 }

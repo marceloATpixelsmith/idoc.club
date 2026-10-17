@@ -1437,7 +1437,7 @@ Design, mapping rules and removal plan: [03 section 12](03-legacy-data-migration
 1. In Vercel, set `LEGACY_IMPORT_ENABLED=true` for the environment you are testing (Preview/staging), then redeploy that environment. Leave it unset or any other value everywhere else; only the exact value `true` enables the page.
 2. Sign in as Super Admin and open **Legacy import (temporary)** under Operations.
 3. Choose the users dump and the MemberPress dump (4 MB in total) and run the dry run; enter your authenticator code when asked.
-4. Read the report. Exceptions list legacy user IDs only; look the people up in the legacy WordPress admin. Nothing was written and the files were not kept.
+4. Read the report. It first shows who the cleanup rules removed (expired a year or more, or never paid), then the figures for everyone who remains, then problems split into **Expected** (already handled) and **Needs a decision**. Use the download icon on any group for a CSV of the people in it. Nothing was written and the files were not kept.
 5. When finished, remove `LEGACY_IMPORT_ENABLED` and redeploy. Do not leave the switch on between runs.
 
 The dry run never calls Stripe and never changes member data. Keep the dump files only in approved, access-controlled migration storage and delete them according to the credential-bearing export retention rules in document 03.
