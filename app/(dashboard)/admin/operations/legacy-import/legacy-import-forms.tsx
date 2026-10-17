@@ -1,17 +1,18 @@
 'use client';
 
 import { Download } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useFreshStepUpAction, type StepUpActionState } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import type { DryRunResult } from '@/lib/legacy-import/dry-run';
+import type { LegacyImportSummary } from '@/lib/legacy-import/import-run';
 import { toCsv } from '@/lib/admin/csv';
 import { isNeededLegacyTable, reduceDumpText } from '@/lib/legacy-import/reduce-dump';
 import type { DryRunReport, ReportGroup } from '@/lib/legacy-import/transform';
 
-export type LegacyImportActionState = StepUpActionState & { error?: string; result?: Omit<DryRunResult, 'plan'> };
+export type LegacyImportActionState = StepUpActionState & { error?: string; result?: Omit<DryRunResult, 'plan'>; imported?: LegacyImportSummary };
 type Action = (state: LegacyImportActionState, formData: FormData) => Promise<LegacyImportActionState>;
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
@@ -154,6 +155,52 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
   );
 }
 
+function ImportPanel({ result, environment, pending }: { result: NonNullable<LegacyImportActionState['result']>; environment: string; pending: boolean }) {
+  const { report } = result;
+  const stripe = report.stripeReconciliation;
+  const decisions = report.review.length + (stripe?.groups.length ?? 0);
+  const stripeOk = stripe?.state === 'ok' && !stripe.partial;
+  const blocked = decisions > 0 || !stripeOk || report.importable === 0;
+  const phrase = `IMPORT ${report.importable} MEMBERS`;
+  return (
+    <section className="space-y-3 rounded-lg border border-border bg-surface/40 p-4" aria-label="Import into this environment">
+      <h3 className="text-base font-semibold text-foreground">Import into this environment ({environment})</h3>
+      {blocked ? (
+        <p className="text-sm text-amber-200" role="status">
+          The import is not available yet: {decisions > 0 ? `${decisions} kind(s) of problem still need your decision. ` : ''}{!stripeOk ? 'The comparison with live Stripe did not complete. ' : ''}{report.importable === 0 ? 'Nobody would be imported. ' : ''}Fix that and run the dry run again.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Creates {report.importable.toLocaleString('en-GB')} members with their memberships, payments and subscriptions in <strong>{environment}</strong>. It sends no email and changes nothing in Stripe. Members already imported are skipped, and it is all-or-nothing. It only imports the files you just reviewed.
+          </p>
+          {result.files.map((file) => <input key={file.sha256} name="reviewedSha" type="hidden" value={file.sha256} />)}
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input className="mt-1" name="backupConfirmed" type="checkbox" />
+            A recent verified backup of this environment exists.
+          </label>
+          <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
+            Type <code>{phrase}</code> to confirm
+            <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="confirmPhrase" type="text" />
+          </label>
+          <Button disabled={pending} name="intent" type="submit" value="import" variant="destructive">{pending ? 'Working…' : 'Import now'}</Button>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ImportedNotice({ summary }: { summary: LegacyImportSummary }) {
+  return (
+    <div className="mt-4 rounded border border-emerald-400/40 bg-emerald-950/20 p-3 text-sm text-emerald-200" role="status">
+      Import complete in {summary.schema}: {summary.imported.toLocaleString('en-GB')} members, {summary.payments.toLocaleString('en-GB')} payments ({summary.refunds} refunds), {summary.subscriptions.toLocaleString('en-GB')} subscriptions and {summary.billingAccounts.toLocaleString('en-GB')} billing accounts created.
+      {summary.alreadyImported > 0 ? ` ${summary.alreadyImported} were already imported and skipped.` : ''}
+      {summary.skippedZeroAmountPayments > 0 ? ` ${summary.skippedZeroAmountPayments} zero-amount payments were not stored.` : ''}
+      {summary.membersWithoutStorableSubscription > 0 ? ` ${summary.membersWithoutStorableSubscription} subscriptions could not be stored.` : ''}
+    </div>
+  );
+}
+
 /** Keeps only the four needed tables of each dump, in the browser, so unneeded data never leaves the computer and the upload stays small. */
 async function trimUpload(formData: FormData): Promise<{ data: FormData; bytes: number }> {
   const data = new FormData();
@@ -170,7 +217,7 @@ async function trimUpload(formData: FormData): Promise<{ data: FormData; bytes: 
   return { data, bytes };
 }
 
-export function DryRunForm({ action }: { action: Action }) {
+export function DryRunForm({ action, environment }: { action: Action; environment: string }) {
   const safeAction = useMemo<Action>(() => async (state, formData) => {
     let bytes = 0;
     try {
@@ -184,6 +231,9 @@ export function DryRunForm({ action }: { action: Action }) {
     }
   }, [action]);
   const [state, run, pending, challenge] = useFreshStepUpAction<LegacyImportActionState>(safeAction, {});
+  // An import response carries no report, so keep showing the one that was reviewed.
+  const [result, setResult] = useState<LegacyImportActionState['result']>();
+  useEffect(() => { if (state.result) setResult(state.result); }, [state.result]);
   return (
     <>
       <form action={run} className="space-y-4">
@@ -196,10 +246,12 @@ export function DryRunForm({ action }: { action: Action }) {
           MemberPress dump (transactions and subscriptions tables)
           <input className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="meprFile" required type="file" />
         </label>
-        <Button disabled={pending} type="submit">{pending ? 'Checking…' : 'Run dry run'}</Button>
+        <Button disabled={pending} name="intent" type="submit" value="dry-run">{pending ? 'Working…' : 'Run dry run'}</Button>
+        {result ? <ImportPanel environment={environment} pending={pending} result={result} /> : null}
       </form>
       {state.error ? <p className="mt-3 text-sm text-red-300" role="alert">{state.error}</p> : null}
-      {state.result ? <div className="mt-6"><DryRunReportView files={state.result.files} report={state.result.report} /></div> : null}
+      {state.imported ? <ImportedNotice summary={state.imported} /> : null}
+      {result ? <div className="mt-6"><DryRunReportView files={result.files} report={result.report} /></div> : null}
       {challenge}
     </>
   );

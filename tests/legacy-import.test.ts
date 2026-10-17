@@ -259,9 +259,9 @@ test('reconcileWithStripe flags differences between the plan and live Stripe, an
   const removed = plan.members.find((member) => member.exclusion && member.stripe.subscriptionId);
   const snapshot = {
     subscriptions: [
-      { id: cancelled.stripe.subscriptionId!, customerId: cancelled.stripe.customerId ?? 'cus_x', status: 'canceled', email: '' },
-      ...(removed ? [{ id: removed.stripe.subscriptionId!, customerId: 'cus_removed', status: 'active', email: 'gone@example.com' }] : []),
-      { id: 'sub_unknown', customerId: 'cus_unknown', status: 'active', email: 'who@example.com' },
+      { id: cancelled.stripe.subscriptionId!, customerId: cancelled.stripe.customerId ?? 'cus_x', status: 'canceled', email: '', priceId: 'price_x', currentPeriodEnd: '2025-01-01', cancelAtPeriodEnd: false },
+      ...(removed ? [{ id: removed.stripe.subscriptionId!, customerId: 'cus_removed', status: 'active', email: 'gone@example.com', priceId: 'price_x', currentPeriodEnd: '2025-01-01', cancelAtPeriodEnd: false }] : []),
+      { id: 'sub_unknown', customerId: 'cus_unknown', status: 'active', email: 'who@example.com', priceId: 'price_x', currentPeriodEnd: '2025-01-01', cancelAtPeriodEnd: false },
     ],
     customerIds: new Set<string>(), chargeRefs: new Set<string>(), truncated: { subscriptions: false, customers: false, charges: false },
   };

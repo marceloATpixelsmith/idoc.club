@@ -130,11 +130,15 @@ export interface PlannedPayment {
   paidOn: string;
   expiresOn: string | null;
   outcome: 'paid' | 'refunded';
+  /** True when MemberPress billed it through a subscription (renewal) rather than as a one-off payment. */
+  recurring: boolean;
 }
 export interface PlannedMember {
   legacyUserId: string;
   held: boolean;
   email: string;
+  /** The email as exported (trimmed, original casing), kept for display. */
+  emailDisplay: string;
   legacyPasswordHash: string;
   hashFormat: 'phpass' | 'wp_bcrypt' | 'unsupported';
   registeredAt: string;
@@ -269,6 +273,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       payments.push({
         legacyTransactionId: text(tx.id), reference, source: manual ? 'manual' : 'stripe', amountCents: Number.isFinite(amount) ? amount : 0,
         paidOn: isoDay(tx.created_at) ?? '', expiresOn: isoDay(tx.expires_at), outcome: status === 'refunded' ? 'refunded' : 'paid',
+        recurring: !['', '0'].includes(text(tx.subscription_id)),
       });
     }
     const paid = payments.filter((payment) => payment.outcome === 'paid');
@@ -349,7 +354,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
 
     const held = exceptions.has('user_flagged_deleted_or_spam') || exceptions.has('invalid_email') || exceptions.has('duplicate_email');
     return {
-      legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
+      legacyUserId, held, email, emailDisplay: text(user.user_email), legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
       membership: { status: membershipStatus, paidThrough, firstPaidOn, lastPaidOn }, exclusion, subscriptionStatuses: userSubs.map((sub) => text(sub.status) || '(blank)'),
       subscriptionRefs: userSubs.map((sub) => text(sub.subscr_id)).filter((ref) => ref.startsWith('sub_')),
       stripe: { customerId, subscriptionId }, payments, ignoredPayments,
