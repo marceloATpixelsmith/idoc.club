@@ -22,7 +22,9 @@ type StripeSnapshot = {
 
 const OPEN_STRIPE_STATUSES = new Set<string>(OPEN_SUBSCRIPTION_STATUSES);
 
-export function computeReconciliationFindings(local: LocalSnapshot, stripe: StripeSnapshot, failureThreshold = 2): ReconciliationFinding[] {
+/** `reportLocalMissingInStripe` (legacy import rehearsal only) also reports local subscriptions that the Stripe list does not contain,
+ * as a status_conflict with Stripe status 'missing'. Off by default so the production scan is unchanged. */
+export function computeReconciliationFindings(local: LocalSnapshot, stripe: StripeSnapshot, failureThreshold = 2, options: { reportLocalMissingInStripe?: boolean } = {}): ReconciliationFinding[] {
   const findings: ReconciliationFinding[] = [];
   const localSubscriptionsById = new Map(local.subscriptions.map((subscription) => [subscription.externalSubscriptionId, subscription]));
   const localCustomerIds = new Set(local.billingAccounts.map((billing) => billing.externalCustomerId));
@@ -40,6 +42,17 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
       findings.push({
         externalCustomerId: stripeSubscription.customer, externalSubscriptionId: stripeSubscription.id,
         kind: 'orphaned_subscription', stripeStatus: stripeSubscription.status,
+      });
+    }
+  }
+
+  if (options.reportLocalMissingInStripe) {
+    const stripeSubscriptionIds = new Set(stripe.subscriptions.map((subscription) => subscription.id));
+    for (const localSubscription of local.subscriptions) {
+      if (stripeSubscriptionIds.has(localSubscription.externalSubscriptionId)) continue;
+      findings.push({
+        externalSubscriptionId: localSubscription.externalSubscriptionId, kind: 'status_conflict',
+        localStatus: localSubscription.status, profileId: localSubscription.profileId, stripeStatus: 'missing',
       });
     }
   }
@@ -73,6 +86,7 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
 export function summarizeFinding(finding: ReconciliationFinding): string {
   switch (finding.kind) {
     case 'status_conflict':
+      if (finding.stripeStatus === 'missing') return `Local subscription ${finding.externalSubscriptionId} (status '${finding.localStatus}') was not found in Stripe.`;
       return `Local status '${finding.localStatus}' but Stripe reports '${finding.stripeStatus}' for subscription ${finding.externalSubscriptionId}.`;
     case 'orphaned_subscription':
       return `Stripe subscription ${finding.externalSubscriptionId} is '${finding.stripeStatus}' but has no matching local record.`;

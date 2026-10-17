@@ -107,6 +107,8 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         schedules: stripeSchedules,
         subscriptions: stripeSubscriptions,
       },
+      undefined,
+      { reportLocalMissingInStripe: Boolean(rehearsal) },
     );
 
     //KEEP A FAILED STRIPE LOOKUP FROM PRODUCING A FALSE ALL-CLEAR RESULT.
@@ -147,7 +149,10 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     }
 
     await db.transaction(async (tx) => {
-      await tx.delete(reconciliationFindings).where(sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+      // Rehearsal skips the seminar checks, so it must also leave the previous seminar findings in place.
+      await tx.delete(reconciliationFindings).where(rehearsal
+        ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`
+        : sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
       if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });
