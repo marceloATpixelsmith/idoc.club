@@ -251,7 +251,7 @@ export function DryRunForm({ action, environment }: { action: Action; environmen
         <Button disabled={pending} name="intent" type="submit" value="dry-run">{pending ? 'Working…' : 'Run dry run'}</Button>
         {result ? <ImportPanel environment={environment} pending={pending} result={result} /> : null}
       </form>
-      {state.error ? <p className="mt-3 text-sm text-red-300" role="alert">{state.error}</p> : null}
+      {state.error ? <p className="mt-3 whitespace-pre-line text-sm text-red-300" role="alert">{state.error}</p> : null}
       {state.imported ? <ImportedNotice summary={state.imported} /> : null}
       {result ? <div className="mt-6"><DryRunReportView files={result.files} report={result.report} /></div> : null}
       {challenge}

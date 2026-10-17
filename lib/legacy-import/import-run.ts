@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/lib/db/drizzle';
 import { getDatabaseSchemaName } from '@/lib/db/schema-name';
@@ -69,6 +69,20 @@ export function assertImportAllowed(report: DryRunReport, environment: Record<st
   if (report.importable === 0) throw new LegacyImportBlockedError('There is nobody to import.');
 }
 
+const LISTED_CLASHES = 20;
+
+/** One line naming a legacy member the way the operator knows them: legacy ID, name and email as exported. */
+function describeLegacyMember(plan: LegacyImportPlan, legacyUserId: string): string {
+  const member = plan.members.find((candidate) => candidate.legacyUserId === legacyUserId);
+  if (!member) return `legacy user ${legacyUserId}`;
+  const name = `${member.profile.firstName} ${member.profile.lastName}`.trim();
+  return `legacy user ${legacyUserId}: ${name || '(no name)'}, ${member.emailDisplay}`;
+}
+
+function listWithOverflow(lines: string[]): string {
+  return lines.slice(0, LISTED_CLASHES).map((line) => `• ${line}`).join('\n') + (lines.length > LISTED_CLASHES ? `\n…and ${lines.length - LISTED_CLASHES} more` : '');
+}
+
 export async function runLegacyImport(input: { plan: LegacyImportPlan; report: DryRunReport; snapshot: StripeSnapshot; actorId: number; fileFingerprints: string[] }): Promise<LegacyImportSummary> {
   assertImportAllowed(input.report);
   const schema = getDatabaseSchemaName();
@@ -81,14 +95,19 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     const rows: ImportMemberRows[] = todo.map((member) => buildMemberRows(member, input.snapshot, forms));
 
     const emails = rows.map((row) => row.user.email);
-    const clashes = new Set<string>();
+    const existingByEmail = new Map<string, string>();
     for (const part of chunks(emails)) {
-      const found = await tx.select({ email: users.email }).from(users).where(inArray(sql`lower(${users.email})`, part));
-      for (const row of found) clashes.add(row.email.toLowerCase());
+      const found = await tx.select({ id: users.id, email: users.email, state: users.accountState, firstName: profiles.firstName, lastName: profiles.lastName })
+        .from(users).leftJoin(profiles, eq(profiles.userId, users.id)).where(inArray(sql`lower(${users.email})`, part));
+      for (const row of found) {
+        const name = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim();
+        existingByEmail.set(row.email.toLowerCase(), `existing account #${row.id}: ${name || 'no profile name'}, ${row.email}, ${row.state}`);
+      }
     }
-    if (clashes.size > 0) {
-      const ids = rows.filter((row) => clashes.has(row.user.email)).map((row) => row.legacyUserId);
-      throw new LegacyImportBlockedError(`${ids.length} member(s) already have an account in this environment with the same email (legacy user IDs: ${ids.slice(0, 20).join(', ')}${ids.length > 20 ? ', …' : ''}). Nothing was imported. Decide what to do with those accounts first.`);
+    if (existingByEmail.size > 0) {
+      const clashing = rows.filter((row) => existingByEmail.has(row.user.email));
+      const lines = clashing.map((row) => `${describeLegacyMember(input.plan, row.legacyUserId)}  ↔  ${existingByEmail.get(row.user.email)}`);
+      throw new LegacyImportBlockedError(`${clashing.length} member(s) already have an account in this environment with the same email. Nothing was imported. Decide what to do with those accounts first.\n${listWithOverflow(lines)}`);
     }
 
     // Stripe IDs are unique in the database. A clash (inside the files, or with data already here) would otherwise be dropped
@@ -105,7 +124,7 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     if (insideFiles.size > 0 || existingIds.size > 0) {
       const clashing = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
         .some((id) => id && (insideFiles.has(id) || existingIds.has(id)))).map((row) => row.legacyUserId);
-      throw new LegacyImportBlockedError(`${clashing.length} member(s) have a Stripe customer, subscription or payment ID that is used twice in the files or already exists in this environment (legacy user IDs: ${clashing.slice(0, 20).join(', ')}${clashing.length > 20 ? ', …' : ''}). Nothing was imported.`);
+      throw new LegacyImportBlockedError(`${clashing.length} member(s) have a Stripe customer, subscription or payment ID that is used twice in the files or already exists in this environment. Nothing was imported.\n${listWithOverflow(clashing.map((legacyUserId) => describeLegacyMember(input.plan, legacyUserId)))}`);
     }
 
     const userIdByLegacy = new Map<string, number>();
