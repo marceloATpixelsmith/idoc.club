@@ -69,6 +69,20 @@ function GroupList({ groups, asOf, empty }: { groups: ReportGroup[]; asOf: strin
   );
 }
 
+/** One banner that says plainly whether anything has to be fixed or decided by hand. Groups of kind 'expected' are handled by the import itself. */
+function ActionSummary({ report }: { report: DryRunReport }) {
+  const groups = [...report.review, ...(report.stripeReconciliation?.groups.filter((group) => group.kind === 'review') ?? [])];
+  const people = new Set(groups.flatMap((group) => group.rows.map((row) => row.legacy_user_id || row.stripe_subscription_id || JSON.stringify(row))));
+  if (groups.length === 0) {
+    return <p className="rounded border border-emerald-400/40 bg-emerald-950/20 p-3 text-sm text-emerald-200" role="status">Nothing needs your decision. Everything below is handled automatically by the import.</p>;
+  }
+  return (
+    <p className="rounded border border-amber-400/50 bg-amber-950/30 p-3 text-sm font-medium text-amber-100" role="status">
+      {fmt(groups.length)} kind{groups.length === 1 ? '' : 's'} of problem need{groups.length === 1 ? 's' : ''} YOUR decision or manual fix, affecting {fmt(people.size)} {people.size === 1 ? 'record' : 'records'} (listed under “Needs a decision from you” below{report.stripeReconciliation?.groups.some((group) => group.kind === 'review') ? ' and in the Stripe comparison' : ''}). Everything under “Expected” needs nothing from you.
+    </p>
+  );
+}
+
 export function DryRunReportView({ report, files }: { report: DryRunReport; files: DryRunResult['files'] }) {
   return (
     <div className="space-y-6" data-testid="legacy-dry-run-report">
@@ -102,6 +116,8 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
           <Counts counts={{ paid: report.payments.paid, refunded: report.payments.refunded, 'Stripe references': report.payments.stripe, 'manual (no Stripe ID)': report.payments.manual, 'ignored (failed or pending)': report.payments.ignoredFailedOrPending }} title="Payments to import" />
         </div>
       </section>
+
+      <ActionSummary report={report} />
 
       <section className="space-y-2">
         <h3 className="text-base font-semibold text-foreground">Expected — already handled, nothing for you to decide</h3>
