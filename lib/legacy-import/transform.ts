@@ -375,8 +375,12 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
   const sameMemberOwners = new Set<string>();
   for (const owners of referenceOwners.values()) {
     if (owners.size < 2) continue;
-    const memberIds = new Set([...owners].map((owner) => owner.split(':')[0]));
-    for (const memberId of memberIds) (memberIds.size > 1 ? crossMemberOwners : sameMemberOwners).add(memberId);
+    const perMember = new Map<string, number>();
+    for (const owner of owners) perMember.set(owner.split(':')[0], (perMember.get(owner.split(':')[0]) ?? 0) + 1);
+    for (const [memberId, count] of perMember) {
+      if (perMember.size > 1) crossMemberOwners.add(memberId);
+      if (count > 1) sameMemberOwners.add(memberId);
+    }
   }
   for (const member of inScope) {
     const extra: ExceptionCode[] = [];

@@ -294,3 +294,20 @@ test('monthWindows covers the range in whole UTC months', async () => {
   assert.equal(windows[3].lt, Date.UTC(2024, 2, 1) / 1000);
   assert.ok(windows.every((window, index) => index === 0 || window.gte === windows[index - 1].lt));
 });
+
+test('a member with a duplicated row and a reference shared with another member is flagged in both duplicate groups', () => {
+  const dump = parseMysqlDump([
+    insert('wp_users', USER_COLUMNS, [[1, 'a', 'x', 'a@example.com', '2020-01-01 00:00:00', 0, 0, 0], [2, 'b', 'x', 'b@example.com', '2020-01-01 00:00:00', 0, 0, 0]]),
+    insert('wp_usermeta', META_COLUMNS, [[1, 1, 'first_name', 'Ada']]),
+    insert('wp_mepr_transactions', TX_COLUMNS, [
+      [1, '10', '10', 1, 2042, 'ch_dup', 'complete', 'payment', 'stripe', 0, '2024-05-01 00:00:00', '2025-05-01 00:00:00'],
+      [2, '10', '10', 1, 2042, 'ch_dup', 'complete', 'payment', 'stripe', 0, '2024-05-01 00:00:00', '2025-05-01 00:00:00'],
+      [3, '10', '10', 2, 2042, 'ch_dup', 'complete', 'payment', 'stripe', 0, '2024-05-01 00:00:00', '2025-05-01 00:00:00'],
+    ]),
+    insert('wp_mepr_subscriptions', SUB_COLUMNS, [[1, 99, 2042, 'sub_x', 'cancelled', '2020-01-01 00:00:00']]),
+  ].join(''), isNeededLegacyTable);
+  const plan = planLegacyImport(dump, { asOf: '2024-06-01' });
+  const codes = (id: string) => plan.members.find((member) => member.legacyUserId === id)!.exceptions;
+  assert.ok(codes('1').includes('duplicate_payment_reference') && codes('1').includes('duplicate_payment_reference_same_member'));
+  assert.ok(codes('2').includes('duplicate_payment_reference') && !codes('2').includes('duplicate_payment_reference_same_member'));
+});
