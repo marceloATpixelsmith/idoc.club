@@ -145,7 +145,7 @@ export interface LegacyImportPlan {
   orphanPaymentUserIds: string[];
   orphanSubscriptionUserIds: string[];
   /** Payments or subscriptions whose user has no account row. */
-  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[]; removedByRules: boolean }>;
+  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[] }>;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
@@ -371,12 +371,10 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const orphanSubs = (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
     const paidThrough = paidRows.map((tx) => isoDay(tx.expires_at)).filter((day): day is string => day !== null).sort().pop() ?? null;
     const hasActiveSubscription = orphanSubs.some((sub) => text(sub.status) === 'active');
-    // The same cleanup rules apply, except that a still-active subscription always needs a human look: it may still be billing someone.
-    const removedByRules = !hasActiveSubscription && (paidRows.length === 0 || (paidThrough !== null && paidThrough <= yearBefore(options.asOf)));
     return {
       legacyUserId, paymentCount: paidRows.length,
       lastPaidOn: paidRows.map((tx) => isoDay(tx.created_at)).filter((day): day is string => day !== null).sort().pop() ?? null,
-      paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'), removedByRules,
+      paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'),
     };
   });
   return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans };
@@ -459,24 +457,27 @@ export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
     const members = [...issues(code, 'exceptions'), ...issues(code, 'notes')];
     if (members.length > 0) groups.push(group(code, info, members));
   }
-  const orphanGroup = (key: string, text: string, kind: ReportGroup['kind'], orphans: LegacyImportPlan['orphans']): ReportGroup => ({
-    key, text, kind, remedy: null, held: false, count: orphans.length, columns: ORPHAN_COLUMNS,
+  const orphanGroup = (key: string, text: string, kind: ReportGroup['kind'], orphans: LegacyImportPlan['orphans'], remedy: string | null): ReportGroup => ({
+    key, text, kind, remedy, held: false, count: orphans.length, columns: ORPHAN_COLUMNS,
     rows: orphans.map((orphan) => ({
       legacy_user_id: orphan.legacyUserId, completed_payments: String(orphan.paymentCount), last_paid_on: orphan.lastPaidOn ?? '', paid_through: orphan.paidThrough ?? '',
       subscription_statuses: orphan.subscriptionStatuses.join(' > '), has_active_subscription: orphan.hasActiveSubscription ? 'yes' : 'no',
     })),
   });
-  const orphansToReview = plan.orphans.filter((orphan) => !orphan.removedByRules);
-  const orphansRemoved = plan.orphans.filter((orphan) => orphan.removedByRules);
-  if (orphansToReview.length > 0) {
-    groups.push(orphanGroup('no_account_record', 'Payments or subscriptions belong to a user with no account record (not imported; check for an active subscription)', 'review', orphansToReview));
+  // A payment or subscription whose user has no account row means the person was deliberately deleted: not a member, nothing is imported.
+  if (plan.orphans.length > 0) {
+    const stillActive = plan.orphans.filter((orphan) => orphan.hasActiveSubscription).length;
+    groups.push(orphanGroup(
+      'no_account_record',
+      'Payment or subscription history for a user with no account record (deleted people, not members)',
+      'expected',
+      plan.orphans,
+      `Nothing is imported; their payment and subscription history is left out.${stillActive > 0 ? ` ${stillActive} still show an active subscription in MemberPress: the download has a column for it, so check those in Stripe.` : ''}`,
+    ));
   }
   const bySize = (a: ReportGroup, b: ReportGroup) => Number(b.held) - Number(a.held) || b.count - a.count || a.key.localeCompare(b.key);
   const excluded = (Object.keys(EXCLUSION_INFO) as ExclusionCode[]).map((code) => group(code, { text: EXCLUSION_INFO[code], kind: 'excluded', remedy: null, held: false }, plan.members.filter((member) => member.exclusion === code)));
 
-  if (orphansRemoved.length > 0) {
-    excluded.push(orphanGroup('no_account_record_removed', 'Payment history for a user with no account record, expired a year or more or never paid: ignored', 'excluded', orphansRemoved));
-  }
   return {
     asOf: plan.asOf,
     legacyUsers: plan.members.length,

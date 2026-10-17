@@ -159,7 +159,7 @@ test('planLegacyImport applies the agreed rules', () => {
 
   assert.deepEqual(plan.orphanPaymentUserIds, ['96', '97', '99']);
   assert.deepEqual(plan.orphanSubscriptionUserIds, ['98']);
-  assert.deepEqual(plan.orphans.map((orphan) => [orphan.legacyUserId, orphan.removedByRules]), [['96', true], ['97', true], ['98', false], ['99', false]]);
+  assert.deepEqual(plan.orphans.map((orphan) => [orphan.legacyUserId, orphan.hasActiveSubscription]), [['96', false], ['97', false], ['98', true], ['99', false]]);
 });
 
 test('summarizePlan leaves removed members out of every figure and separates expected from review', () => {
@@ -169,7 +169,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.equal(report.inScope, 9);
   assert.equal(report.held, 4);
   assert.equal(report.importable, 5);
-  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3], ['no_account_record_removed', 2]]);
+  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3]]);
   assert.deepEqual(report.membershipStatus, { active: 3, expired: 2 });
   assert.equal(report.profile.needsOnboarding, 3);
   assert.equal(report.payments.paid, 5, 'payments of held and removed members are not counted');
@@ -183,8 +183,11 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.ok(expected.get('incomplete_profile')?.remedy);
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
-  assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email') && review.has('no_account_record'));
-  assert.deepEqual(review.get('no_account_record')?.rows.map((row) => row.legacy_user_id), ['98', '99'], 'only orphans who stay in scope, or have an active subscription, need review');
+  assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email'));
+  assert.equal(review.has('no_account_record'), false, 'people with no account are deleted people: handled, not a decision');
+  const orphans = expected.get('no_account_record')!;
+  assert.deepEqual(orphans.rows.map((row) => row.legacy_user_id), ['96', '97', '98', '99']);
+  assert.match(orphans.remedy ?? '', /1 still show an active subscription/);
   assert.equal(review.has('incomplete_profile'), false);
   assert.equal(expected.has('duplicate_email'), false);
 
