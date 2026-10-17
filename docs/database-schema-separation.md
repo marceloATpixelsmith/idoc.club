@@ -27,7 +27,7 @@ The existing `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` launch hold remains fai
 - unsent email/notification/operational queues are dead-lettered and leases are cleared;
 - open membership and seminar Checkout attempts are expired.
 
-Staging also refuses a live Stripe secret when `DB_SCHEMA=idoc_staging`, even if another configuration mistake were to release the general launch hold.
+Staging also refuses a live Stripe secret when `DB_SCHEMA=idoc_staging`, even if another configuration mistake were to release the general launch hold. The only exception is the temporary legacy-import rehearsal mode: a separate restricted read-only live key (`LEGACY_STRIPE_SECRET_KEY`) may be read through an allowlist facade (list, retrieve and search only) by the daily reconciliation scan while the hold is on; it never becomes the application's Stripe client (docs/03 section 12).
 
 ## Backup, restore rehearsal, cutover and rollback
 
