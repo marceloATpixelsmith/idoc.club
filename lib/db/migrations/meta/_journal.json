@@ -526,6 +526,13 @@
       "when": 1791670000000,
       "tag": "0074_maintenance_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792270000000,
+      "tag": "0075_legacy_import_schema",
+      "breakpoints": true
     }
   ]
 }

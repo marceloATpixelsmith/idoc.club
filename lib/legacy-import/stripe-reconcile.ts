@@ -11,7 +11,7 @@ import type { LegacyImportPlan, PlannedMember, ReportGroup, ReportRow } from './
  * TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished.
  */
 export interface StripeSnapshot {
-  subscriptions: Array<{ id: string; customerId: string; status: string; email: string }>;
+  subscriptions: Array<{ id: string; customerId: string; status: string; email: string; priceId: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean }>;
   customerIds: Set<string>;
   chargeRefs: Set<string>;
   /** True when a list was cut short; each list reports its own truncation so only the checks that depend on it are skipped. */
@@ -70,7 +70,12 @@ export async function fetchStripeSnapshot(key: string, since: Date, now: () => n
   const chargeRefs = new Set<string>();
   const subscriptionsTruncated = await collect(stripe.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer'] }), (sub) => {
     const customer = sub.customer;
-    subscriptions.push({ id: sub.id, customerId: typeof customer === 'string' ? customer : customer.id, status: sub.status, email: typeof customer === 'string' || customer.deleted ? '' : (customer.email ?? '') });
+    const item = sub.items.data[0];
+    subscriptions.push({
+      id: sub.id, customerId: typeof customer === 'string' ? customer : customer.id, status: sub.status,
+      email: typeof customer === 'string' || customer.deleted ? '' : (customer.email ?? ''),
+      priceId: item?.price.id ?? '', currentPeriodEnd: item ? new Date(item.current_period_end * 1000).toISOString().slice(0, 10) : '', cancelAtPeriodEnd: sub.cancel_at_period_end,
+    });
   });
   const customersTruncated = await collect(stripe.customers.list({ limit: 100 }), (customer) => { customerIds.add(customer.id); });
   // Charges are the big list: read one month per request stream, several months at a time.
