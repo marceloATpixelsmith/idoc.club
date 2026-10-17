@@ -9,6 +9,7 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { LegacyImportInputError, legacyImportEnabled, runLegacyDryRun } from '@/lib/legacy-import/dry-run';
+import { runStripeReconciliation } from '@/lib/legacy-import/stripe-reconcile';
 
 // TEMPORARY legacy-import tool (docs/03 section 12): delete this folder, lib/legacy-import and its nav entry after launch stabilisation.
 const PATH = '/admin/operations/legacy-import';
@@ -33,10 +34,11 @@ async function dryRunAction(_state: LegacyImportActionState, formData: FormData)
       if (!(file instanceof File) || file.size === 0) return { error: 'Choose both dump files.' };
       files.push({ name: file.name.slice(0, 120), bytes: new Uint8Array(await file.arrayBuffer()) });
     }
-    const result = runLegacyDryRun(files, new Date().toISOString().slice(0, 10));
+    const { plan, ...result } = runLegacyDryRun(files, new Date().toISOString().slice(0, 10));
+    result.report.stripeReconciliation = await runStripeReconciliation(plan.members);
     await db.insert(auditLog).values({
       actorId: actor.id, action: 'admin.legacy_import.dry_run', entityType: 'legacy_import', entityId: result.files.map((file) => file.sha256.slice(0, 12)).join('+'),
-      afterJson: { legacyUsers: result.report.legacyUsers, importable: result.report.importable, held: result.report.held, files: result.files.map(({ bytes, sha256 }) => ({ bytes, sha256 })) },
+      afterJson: { stripeComparison: result.report.stripeReconciliation?.state, legacyUsers: result.report.legacyUsers, importable: result.report.importable, held: result.report.held, files: result.files.map(({ bytes, sha256 }) => ({ bytes, sha256 })) },
     });
     return { result };
   } catch (error) {

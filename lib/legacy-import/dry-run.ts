@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { DumpParseError, parseMysqlDump, type ParsedDump } from './mysql-dump.ts';
 import { isNeededLegacyTable } from './reduce-dump.ts';
-import { planLegacyImport, resolveLegacyTables, summarizePlan, type DryRunReport } from './transform.ts';
+import { planLegacyImport, resolveLegacyTables, summarizePlan, type DryRunReport, type LegacyImportPlan } from './transform.ts';
 
 /** TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished. */
 export const LEGACY_IMPORT_MAX_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -16,6 +16,8 @@ export class LegacyImportInputError extends Error {
 
 export interface DryRunResult {
   report: DryRunReport;
+  /** Server-side only: used for the Stripe comparison and never returned to the browser. */
+  plan: LegacyImportPlan;
   files: Array<{ name: string; bytes: number; sha256: string }>;
 }
 
@@ -44,8 +46,9 @@ export function runLegacyDryRun(files: Array<{ name: string; bytes: Uint8Array }
     const names: Record<string, string> = { users: 'a users table (name ends in "users")', usermeta: 'a user-meta table (name ends in "usermeta")', transactions: 'a MemberPress transactions table (name ends in "_mepr_transactions")', subscriptions: 'a MemberPress subscriptions table (name ends in "_mepr_subscriptions")' };
     throw new LegacyImportInputError(`The files do not contain ${missing.map((role) => names[role]).join(', ')}. Choose the dump files that contain those tables.`);
   }
+  const plan = planLegacyImport(merged, { asOf });
   return {
-    report: summarizePlan(planLegacyImport(merged, { asOf })),
+    report: summarizePlan(plan), plan,
     files: files.map((file) => ({ name: file.name, bytes: file.bytes.byteLength, sha256: createHash('sha256').update(file.bytes).digest('hex') })),
   };
 }

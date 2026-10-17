@@ -249,3 +249,31 @@ test('reduceDumpText ends a one-line CREATE TABLE so later tables are not kept b
   assert.equal(reduced.includes('wp_events'), false);
   assert.equal(reduced.includes('wp_usermeta'), true);
 });
+
+test('reconcileWithStripe flags differences between the plan and live Stripe, and recognises removed people', async () => {
+  const { reconcileWithStripe, runStripeReconciliation } = await import('../lib/legacy-import/stripe-reconcile.ts');
+  const plan = planLegacyImport(buildDump(), { asOf: '2024-06-01' });
+  const linked = plan.members.filter((member) => !member.exclusion && !member.held && member.stripe.subscriptionId);
+  assert.ok(linked.length >= 2);
+  const [gone, cancelled] = linked;
+  const removed = plan.members.find((member) => member.exclusion && member.stripe.subscriptionId);
+  const snapshot = {
+    subscriptions: [
+      { id: cancelled.stripe.subscriptionId!, customerId: cancelled.stripe.customerId ?? 'cus_x', status: 'canceled', email: '' },
+      ...(removed ? [{ id: removed.stripe.subscriptionId!, customerId: 'cus_removed', status: 'active', email: 'gone@example.com' }] : []),
+      { id: 'sub_unknown', customerId: 'cus_unknown', status: 'active', email: 'who@example.com' },
+    ],
+    customerIds: new Set<string>(), chargeRefs: new Set<string>(), partial: false,
+  };
+  const groups = reconcileWithStripe(plan.members, snapshot);
+  const keyed = Object.fromEntries(groups.map((group) => [group.key, group]));
+  assert.ok(keyed.stripe_subscription_missing.rows.some((row) => row.legacy_user_id === gone.legacyUserId));
+  assert.ok(keyed.stripe_cancelled_legacy_active.rows.some((row) => row.legacy_user_id === cancelled.legacyUserId));
+  assert.equal(keyed.stripe_live_unlinked.rows[0].stripe_subscription_id, 'sub_unknown');
+  if (removed) assert.equal(keyed.stripe_live_for_removed_person.kind, 'expected');
+  assert.equal(JSON.stringify(groups).includes('user_pass'), false);
+
+  assert.equal((await runStripeReconciliation(plan.members, {})).state, 'not_configured');
+  assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'sk_test_x' })).state, 'unusable_key');
+  assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'rk_live_x' }, async () => { throw new Error('boom'); })).state, 'error');
+});
