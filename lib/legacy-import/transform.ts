@@ -76,7 +76,7 @@ export type ExceptionCode =
   | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
   | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
   | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
-  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference';
+  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
 
 export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time';
 export type ExclusionCode = 'expired_over_a_year' | 'never_paid';
@@ -109,7 +109,8 @@ export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
   invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', kind: 'review', remedy: null, held: false },
   multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', kind: 'review', remedy: null, held: false },
   active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', kind: 'review', remedy: null, held: false },
-  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on more than one transaction', kind: 'review', remedy: null, held: false },
+  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on transactions of DIFFERENT members', kind: 'review', remedy: null, held: false },
+  duplicate_payment_reference_same_member: { text: 'The same Stripe payment reference appears on more than one transaction of the SAME member (likely a duplicated row)', kind: 'review', remedy: null, held: false },
 };
 
 export interface PlannedRole {
@@ -370,12 +371,18 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       referenceOwners.set(payment.reference, owners);
     }
   }
-  const duplicateOwners = new Set<string>();
+  const crossMemberOwners = new Set<string>();
+  const sameMemberOwners = new Set<string>();
   for (const owners of referenceOwners.values()) {
-    if (owners.size > 1) for (const owner of owners) duplicateOwners.add(owner.split(':')[0]);
+    if (owners.size < 2) continue;
+    const memberIds = new Set([...owners].map((owner) => owner.split(':')[0]));
+    for (const memberId of memberIds) (memberIds.size > 1 ? crossMemberOwners : sameMemberOwners).add(memberId);
   }
   for (const member of inScope) {
-    if (duplicateOwners.has(member.legacyUserId)) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, 'duplicate_payment_reference'])].sort();
+    const extra: ExceptionCode[] = [];
+    if (crossMemberOwners.has(member.legacyUserId)) extra.push('duplicate_payment_reference');
+    if (sameMemberOwners.has(member.legacyUserId)) extra.push('duplicate_payment_reference_same_member');
+    if (extra.length > 0) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, ...extra])].sort();
   }
 
   const orphanPaymentUserIds = [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b));

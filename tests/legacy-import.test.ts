@@ -285,3 +285,12 @@ test('reconcileWithStripe flags differences between the plan and live Stripe, an
   assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'sk_test_x' })).state, 'unusable_key');
   assert.equal((await runStripeReconciliation(plan.members, { LEGACY_STRIPE_SECRET_KEY: 'rk_live_x' }, async () => { throw new Error('boom'); })).state, 'error');
 });
+
+test('monthWindows covers the range in whole UTC months', async () => {
+  const { monthWindows } = await import('../lib/legacy-import/stripe-reconcile.ts');
+  const windows = monthWindows(new Date('2023-11-20T00:00:00Z'), new Date('2024-02-05T00:00:00Z'));
+  assert.equal(windows.length, 4);
+  assert.equal(windows[0].gte, Date.UTC(2023, 10, 1) / 1000);
+  assert.equal(windows[3].lt, Date.UTC(2024, 2, 1) / 1000);
+  assert.ok(windows.every((window, index) => index === 0 || window.gte === windows[index - 1].lt));
+});

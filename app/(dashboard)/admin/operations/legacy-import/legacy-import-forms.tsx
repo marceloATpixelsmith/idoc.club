@@ -117,7 +117,10 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
               <p className="text-sm text-muted-foreground">
                 Read {fmt(report.stripeReconciliation.fetched.subscriptions)} subscriptions, {fmt(report.stripeReconciliation.fetched.customers)} customers and {fmt(report.stripeReconciliation.fetched.charges)} charge references from live Stripe. Nothing was changed in Stripe.
               </p>
-              <GroupList asOf={report.asOf} empty="No differences found between the legacy data and live Stripe." groups={report.stripeReconciliation.groups} />
+              {report.stripeReconciliation.skipped.length > 0 ? (
+                <p className="text-sm text-amber-200">Not checked (Stripe data incomplete): {report.stripeReconciliation.skipped.join('; ')}.</p>
+              ) : null}
+              <GroupList asOf={report.asOf} empty={report.stripeReconciliation.skipped.length > 0 ? 'No differences found in the checks that did run.' : 'No differences found in any of the checks listed in the documentation.'} groups={report.stripeReconciliation.groups} />
             </>
           ) : null}
         </section>
