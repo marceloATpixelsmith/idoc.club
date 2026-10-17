@@ -242,3 +242,10 @@ test('tables are detected by role whatever the prefix, using the largest match',
   assert.equal(resolved.found.some((f) => f.table === 'wp_mepr_events'), false);
   assert.equal(resolved.found.find((f) => f.table === 'old_users')!.used, false);
 });
+
+test('reduceDumpText ends a one-line CREATE TABLE so later tables are not kept by mistake', () => {
+  const sql = ['CREATE TABLE `wp_users` (`ID` int) ENGINE=InnoDB;', 'INSERT INTO `wp_events` (`id`) VALUES', '(1),', '(2);', 'CREATE TABLE `wp_events` (`id` int) ENGINE=InnoDB;', "INSERT INTO `wp_usermeta` (`user_id`) VALUES (1);"].join('\n') + '\n';
+  const reduced = reduceDumpText(sql, isNeededLegacyTable);
+  assert.equal(reduced.includes('wp_events'), false);
+  assert.equal(reduced.includes('wp_usermeta'), true);
+});

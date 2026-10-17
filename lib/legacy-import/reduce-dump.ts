@@ -31,8 +31,8 @@ export function reduceDumpText(text: string, wanted: (table: string) => boolean)
       else if (insert) { mode = 'insert'; keeping = wanted(insert[1]); }
       else continue;
       if (keeping) out.push(line);
-      // A single-line INSERT ends on its own line.
-      if (mode === 'insert' && trimmed.endsWith(';')) mode = null;
+      // A single-line statement (INSERT, or CREATE TABLE written on one line) ends on its own line.
+      if (mode === 'insert' ? trimmed.endsWith(';') : /\)[^`)]*;$/.test(trimmed)) mode = null;
       continue;
     }
     if (keeping) out.push(line);
