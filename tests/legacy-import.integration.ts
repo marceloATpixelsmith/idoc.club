@@ -116,7 +116,13 @@ test('an existing account with the same email stops the whole import and writes 
   const admin = await adminUser();
   await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'x', 'active')`;
   const { plan: reviewedPlan, report } = reviewed();
-  await assert.rejects(runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }), LegacyImportBlockedError);
+  // The message names the people involved, not just an ID: the legacy member's name and email, and the account that already exists.
+  await assert.rejects(runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }), (error: unknown) => {
+    assert.ok(error instanceof LegacyImportBlockedError);
+    assert.match(error.message, /legacy user 2: Bea .*, bea@example\.com/);
+    assert.match(error.message, /existing account #\d+: no profile name, BEA@example\.com, active/);
+    return true;
+  });
   assert.equal((await sql`select count(*)::int as n from idoc.profiles`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
 });
