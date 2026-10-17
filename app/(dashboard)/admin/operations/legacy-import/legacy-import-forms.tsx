@@ -25,6 +25,16 @@ function Counts({ title, counts }: { title: string; counts: Record<string, numbe
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  active: 'active (paid through a future date)',
+  grace: 'grace (paid-through date passed within the last 5 days; still has full access)',
+  expired: 'expired less than a year ago (imported; must pay to renew)',
+  unknown: 'unknown (has a completed payment but no expiry date; see "Needs a decision")',
+};
+function labelled(counts: Record<string, number>, labels: Record<string, string>): Record<string, number> {
+  return Object.fromEntries(Object.entries(counts).map(([key, count]) => [labels[key] ?? key, count]));
+}
+
 function downloadGroup(group: ReportGroup, asOf: string) {
   const blob = new Blob(['\ufeff', toCsv(group.rows, group.columns)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -73,7 +83,7 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
       <section className="space-y-3">
         <h3 className="text-base font-semibold text-foreground">Figures for the {fmt(report.inScope)} members who remain</h3>
         <div className="grid gap-5 md:grid-cols-3">
-          <Counts counts={report.membershipStatus} title="Membership status today (would be imported)" />
+          <Counts counts={labelled(report.membershipStatus, STATUS_LABELS)} title="Membership status today (would be imported)" />
           <Counts counts={report.classification} title="Membership product → roles" />
           <Counts counts={report.hashFormats} title="Password hash formats" />
           <Counts counts={{ complete: report.profile.complete, 'needs onboarding': report.profile.needsOnboarding }} title="Profile completeness (would be imported)" />
