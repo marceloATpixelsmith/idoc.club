@@ -159,7 +159,7 @@ export interface LegacyImportPlan {
   orphanSubscriptionUserIds: string[];
   /** Payments or subscriptions whose user has no account row. */
   sourceTables: ResolvedLegacyTables['found'];
-  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[] }>;
+  orphans: Array<{ legacyUserId: string; paymentCount: number; lastPaidOn: string | null; paidThrough: string | null; hasActiveSubscription: boolean; subscriptionStatuses: string[]; subscriptionRefs: string[] }>;
 }
 
 const text = (value: string | null | undefined) => (value ?? '').trim();
@@ -403,6 +403,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       legacyUserId, paymentCount: paidRows.length,
       lastPaidOn: paidRows.map((tx) => isoDay(tx.created_at)).filter((day): day is string => day !== null).sort().pop() ?? null,
       paidThrough, hasActiveSubscription, subscriptionStatuses: orphanSubs.map((sub) => text(sub.status) || '(blank)'),
+      subscriptionRefs: orphanSubs.map((sub) => text(sub.subscr_id)).filter((ref) => ref.startsWith('sub_')),
     };
   });
   return { asOf: options.asOf, members, orphanPaymentUserIds, orphanSubscriptionUserIds, orphans, sourceTables: resolved.found };

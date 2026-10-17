@@ -133,6 +133,10 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
               <p className="text-sm text-muted-foreground">
                 Read {fmt(report.stripeReconciliation.fetched.subscriptions)} subscriptions, {fmt(report.stripeReconciliation.fetched.customers)} customers and {fmt(report.stripeReconciliation.fetched.charges)} charge references from live Stripe. Nothing was changed in Stripe.
               </p>
+              <p className="text-sm text-muted-foreground">
+                People who are not being imported (deleted users and removed members) with a subscription in the legacy data: {fmt(report.stripeReconciliation.removedPeople.checked)}.{' '}
+                {report.stripeReconciliation.removedPeople.undetermined ? 'Not determined, because the Stripe subscription list was incomplete.' : `Live Stripe says: ${fmt(report.stripeReconciliation.removedPeople.live)} still billing, ${fmt(report.stripeReconciliation.removedPeople.cancelled)} cancelled or ended, ${fmt(report.stripeReconciliation.removedPeople.notFound)} not found in Stripe.`}
+              </p>
               {report.stripeReconciliation.skipped.length > 0 ? (
                 <p className="text-sm text-amber-200">Not checked (Stripe data incomplete): {report.stripeReconciliation.skipped.join('; ')}.</p>
               ) : null}
