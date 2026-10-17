@@ -15,6 +15,8 @@ import { closeHarness, createUser, profileInput, resetIdoc, sql } from './postgr
 // TEMPORARY legacy import (docs/03 section 11): first sign-in with an imported WordPress password, and onboarding for imported
 // profiles that still have blank required fields.
 Object.assign(process.env, {
+  ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ 'test-v1': 'integration-only-key-material-at-least-32-characters' }),
+  ACCOUNT_DELIVERY_KEY_VERSION: 'test-v1',
   AUTH_SECRET: 'legacy-first-login-secret-long-enough',
   BASE_URL: 'http://localhost:3000',
   BREVO_API_KEY: 'integration-only-provider-key',
