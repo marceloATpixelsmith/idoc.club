@@ -1427,3 +1427,17 @@ Every admin drawer or sheet (News, Seminars/Courses, Registrations, Members, Sup
 ### Staging Super Admin email-preview operation
 
 The staging-only **Email Previews** page can send sample transactional messages to its configured test recipient without creating registration, payment, or refund records. Separate previews cover FEI and non-FEI seminar registration confirmations, FEI approval-status changes, cancellation, paid confirmation, and refund confirmation. A preview send now reports acceptance or failure inline; provider acceptance means queued for delivery, not necessarily delivered to the inbox. Each send independently enforces current Super Admin authorization and CSRF validation. The page is unavailable in the Vercel production environment.
+
+## Legacy member import (temporary Super Admin tool)
+
+Design, mapping rules and removal plan: [03 section 12](03-legacy-data-migration-and-reconciliation-plan.md#12-temporary-super-admin-legacy-import-tool).
+
+**Run a dry run (staging first).**
+
+1. In Vercel, set `LEGACY_IMPORT_ENABLED=true` for the environment you are testing (Preview/staging), then redeploy that environment. Leave it unset or any other value everywhere else; only the exact value `true` enables the page.
+2. Sign in as Super Admin and open **Legacy import (temporary)** under Operations.
+3. Choose the users dump and the MemberPress dump (4 MB in total) and run the dry run; enter your authenticator code when asked.
+4. Read the report. Exceptions list legacy user IDs only; look the people up in the legacy WordPress admin. Nothing was written and the files were not kept.
+5. When finished, remove `LEGACY_IMPORT_ENABLED` and redeploy. Do not leave the switch on between runs.
+
+The dry run never calls Stripe and never changes member data. Keep the dump files only in approved, access-controlled migration storage and delete them according to the credential-bearing export retention rules in document 03.

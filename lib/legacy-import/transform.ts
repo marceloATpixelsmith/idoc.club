@@ -1,0 +1,412 @@
+/**
+ * Turns the parsed legacy WordPress/MemberPress tables into an import plan and an aggregate dry-run report, following
+ * docs/03-legacy-data-migration-and-reconciliation-plan.md. Pure functions: no database, no network, no Stripe.
+ *
+ * Rules decided with the operator (2026-10): product -> roles (2042 Judge, 2053 Steward, 2787 Judge & Steward, 3038 Veterinarian);
+ * "National Grand Prix Judge" -> "National Senior Officials / Candidates..."; steward "Level 3" -> "Level 3/4"; blank technical
+ * delegate -> No; blank address country filled from the national federation; the newest active subscription is the live one.
+ * Nothing is invented: anything else becomes a flagged exception for review.
+ *
+ * TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished.
+ */
+import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES, memberProfileSchema, normalizeEmail } from '../membership/validation.ts';
+import type { DumpRow, ParsedDump } from './mysql-dump.ts';
+import { checkedKeysFromPhpArray } from './php-serialized.ts';
+
+export const LEGACY_TABLES = {
+  users: 'psspaceusers',
+  usermeta: 'psspaceusermeta',
+  transactions: 'psspace58_mepr_transactions',
+  subscriptions: 'psspace58_mepr_subscriptions',
+} as const;
+export const REQUIRED_LEGACY_TABLES: ReadonlySet<string> = new Set(Object.values(LEGACY_TABLES));
+
+type Classification = 'judge' | 'steward' | 'judge_steward' | 'veterinarian';
+const PRODUCT_CLASSIFICATION: Record<string, Classification> = {
+  '2042': 'judge', '2053': 'steward', '2787': 'judge_steward', '3038': 'veterinarian',
+};
+
+type JudgeStatus = (typeof JUDGE_STATUSES)[number];
+type StewardStatus = (typeof STEWARD_STATUSES)[number];
+type Region = (typeof IDOC_REGIONS)[number];
+
+const JUDGE_STATUS_MAP: Record<string, JudgeStatus> = {
+  'fei-dressage-judge-1-2': 'FEI Dressage Judge 1/2**',
+  'fei-dressage-judge-2-3': 'FEI Dressage Judge 2/3*',
+  'fei-dressage-judge-3-4': 'FEI Dressage Judge 3/4*',
+  'fei-dressage-judge-4-5': 'FEI Dressage Judge 4/5**',
+  'national-grand-prix-judge': 'National Senior Officials / Candidates from EEFs education system FEI',
+  'fei-para-dressage-judge': 'Para Dressage Judge',
+  'retired-official': 'Retired Official',
+  other: 'Other',
+};
+const STEWARD_STATUS_MAP: Record<string, StewardStatus> = {
+  'fei-dressage-steward-level-1': 'FEI Dressage Steward Level 1',
+  'fei-dressage-steward-level-2': 'FEI Dressage Steward Level 2',
+  'fei-dressage-steward-level-3-4': 'FEI Dressage Steward Level 3/4',
+  'fei-dressage-steward-level-3': 'FEI Dressage Steward Level 3/4',
+  'national-dressage-steward': 'National Dressage Steward',
+  'fei-para-dressage-steward': 'FEI Para Dressage Steward',
+  other: 'Other',
+};
+const REGION_MAP: Record<string, Region> = {
+  'western-europe-africa': 'Western Europe & Africa',
+  'central-eastern-europe': 'Central & Eastern Europe',
+  asia: 'Asia',
+  'north-america': 'North America',
+  'central-latin-america': 'Central & Latin America',
+  pacific: 'Pacific',
+};
+const COUNTRIES: ReadonlySet<string> = new Set(ISO_COUNTRY_CODES);
+const GRACE_DAYS = 5;
+
+export type ExceptionCode =
+  | 'user_flagged_deleted_or_spam' | 'invalid_email' | 'duplicate_email' | 'unsupported_password_hash'
+  | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
+  | 'no_eligible_payment' | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
+  | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
+  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference';
+
+export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time';
+
+export const EXCEPTION_DESCRIPTIONS: Record<ExceptionCode, { text: string; held: boolean }> = {
+  user_flagged_deleted_or_spam: { text: 'WordPress marks the user deleted or spam: not imported', held: true },
+  invalid_email: { text: 'Email address is missing or not valid: not imported', held: true },
+  duplicate_email: { text: 'Same email as another legacy user: held for a merge-or-separate decision', held: true },
+  unsupported_password_hash: { text: 'Password hash is not a supported WordPress format: member uses the one-time activation flow', held: false },
+  no_membership_product: { text: 'No payment or subscription names a membership product, so the roles are unknown', held: false },
+  product_profile_mismatch: { text: 'Membership product disagrees with the judge/steward details on the profile', held: false },
+  unmapped_legacy_value: { text: 'A judge/steward status, region or federation value has no approved mapping', held: false },
+  incomplete_profile: { text: 'Required profile fields are missing: member completes them in onboarding after first sign-in', held: false },
+  no_eligible_payment: { text: 'No completed payment: paid-through date unknown, payment-only after sign-in', held: false },
+  blank_expiry_on_paid_transaction: { text: 'A completed payment has no expiry date (lifetime or blank): needs a decision', held: false },
+  multiple_active_subscriptions: { text: 'More than one active subscription: possible double billing, review in Stripe', held: false },
+  active_subscription_not_newest: { text: 'The active subscription is not the newest one: review', held: false },
+  invalid_subscription_reference: { text: 'Subscription has no valid Stripe subscription ID (sub_...)', held: false },
+  invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', held: false },
+  multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', held: false },
+  active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', held: false },
+  duplicate_payment_reference: { text: 'The same Stripe payment reference appears on more than one transaction', held: false },
+};
+
+export interface PlannedRole {
+  roleType: 'judge' | 'steward' | 'veterinarian';
+  nationalFederationCountryCode?: string;
+  idocRegion?: string;
+  feiId?: string | null;
+  officialStatuses?: string[];
+  isTechnicalDelegate?: boolean;
+}
+export interface PlannedPayment {
+  legacyTransactionId: string;
+  reference: string | null;
+  source: 'stripe' | 'manual';
+  amountCents: number;
+  paidOn: string;
+  expiresOn: string | null;
+  outcome: 'paid' | 'refunded';
+}
+export interface PlannedMember {
+  legacyUserId: string;
+  held: boolean;
+  email: string;
+  legacyPasswordHash: string;
+  hashFormat: 'phpass' | 'wp_bcrypt' | 'unsupported';
+  registeredAt: string;
+  profile: { firstName: string; lastName: string; address1: string; address2: string; city: string; stateProvince: string; postalCode: string; countryCode: string };
+  classification: Classification | null;
+  roles: PlannedRole[];
+  missingFields: string[];
+  membership: { status: 'active' | 'grace' | 'expired' | 'no_eligible_payment'; paidThrough: string | null; firstPaidOn: string | null };
+  stripe: { customerId: string | null; subscriptionId: string | null };
+  payments: PlannedPayment[];
+  ignoredPayments: number;
+  exceptions: ExceptionCode[];
+  notes: NoteCode[];
+}
+export interface LegacyImportPlan {
+  asOf: string;
+  members: PlannedMember[];
+  orphanPaymentUserIds: string[];
+  orphanSubscriptionUserIds: string[];
+  subscriptionsByStatus: Record<string, number>;
+}
+
+const text = (value: string | null | undefined) => (value ?? '').trim();
+/** The application's own canonical email rules; anything it would reject is not importable. Empty string means invalid. */
+function canonicalEmail(value: string | null | undefined): string {
+  try { return normalizeEmail(text(value)); } catch { return ''; }
+}
+const isoDay = (value: string | null | undefined): string | null => {
+  const day = text(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && !day.startsWith('0000') ? day : null;
+};
+function addDays(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const k = key(row);
+    const list = grouped.get(k);
+    if (list) list.push(row); else grouped.set(k, [row]);
+  }
+  return grouped;
+}
+const byCreated = (a: DumpRow, b: DumpRow) => text(a.created_at).localeCompare(text(b.created_at)) || Number(a.id) - Number(b.id);
+
+function hashFormat(hash: string): PlannedMember['hashFormat'] {
+  if (hash.startsWith('$P$')) return 'phpass';
+  if (hash.startsWith('$wp$2y$')) return 'wp_bcrypt';
+  return 'unsupported';
+}
+
+function missingFieldNames(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey> }>, roles: PlannedRole[]): string[] {
+  const names = new Set<string>();
+  for (const issue of issues) {
+    const [head, index, field] = issue.path;
+    if (head === 'roles' && typeof index === 'number' && field !== undefined) names.add(`${roles[index]?.roleType ?? 'role'}.${String(field)}`);
+    else names.add(String(head));
+  }
+  return [...names].sort();
+}
+
+export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): LegacyImportPlan {
+  const users = dump.get(LEGACY_TABLES.users) ?? [];
+  const metaRows = dump.get(LEGACY_TABLES.usermeta) ?? [];
+  const transactions = dump.get(LEGACY_TABLES.transactions) ?? [];
+  const subscriptions = dump.get(LEGACY_TABLES.subscriptions) ?? [];
+
+  const metaByUser = new Map<string, Map<string, string | null>>();
+  const stripeCustomersByUser = new Map<string, string[]>();
+  for (const row of metaRows) {
+    const userId = text(row.user_id);
+    const key = text(row.meta_key);
+    let meta = metaByUser.get(userId);
+    if (!meta) { meta = new Map(); metaByUser.set(userId, meta); }
+    meta.set(key, row.meta_value);
+    if (key.startsWith('_mepr_stripe_customer_id_') && text(row.meta_value)) {
+      const list = stripeCustomersByUser.get(userId) ?? [];
+      list.push(text(row.meta_value));
+      stripeCustomersByUser.set(userId, list);
+    }
+  }
+  const txByUser = groupBy(transactions, (row) => text(row.user_id));
+  const subsByUser = groupBy(subscriptions, (row) => text(row.user_id));
+  const emailCounts = new Map<string, number>();
+  for (const user of users) {
+    const email = canonicalEmail(user.user_email);
+    if (email) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
+  }
+  const userIds = new Set(users.map((user) => text(user.ID)));
+
+  const paymentReferenceUsers = new Map<string, Set<string>>();
+  const members: PlannedMember[] = users.map((user) => {
+    const legacyUserId = text(user.ID);
+    const exceptions = new Set<ExceptionCode>();
+    const notes = new Set<NoteCode>();
+    const meta = metaByUser.get(legacyUserId) ?? new Map<string, string | null>();
+    const metaText = (key: string) => text(meta.get(key));
+
+    const email = canonicalEmail(user.user_email);
+    if (text(user.deleted) !== '0' && text(user.deleted) !== '' || text(user.spam) !== '0' && text(user.spam) !== '') exceptions.add('user_flagged_deleted_or_spam');
+    if (!email) exceptions.add('invalid_email');
+    if (email && (emailCounts.get(email) ?? 0) > 1) exceptions.add('duplicate_email');
+    const legacyPasswordHash = text(user.user_pass);
+    const format = hashFormat(legacyPasswordHash);
+    if (format === 'unsupported') exceptions.add('unsupported_password_hash');
+
+    // Payments: only completed (or refunded) "payment" transactions count; failed and pending ones never extend a date.
+    const userTx = (txByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
+    const payments: PlannedPayment[] = [];
+    let ignoredPayments = 0;
+    for (const tx of userTx) {
+      if (text(tx.txn_type) !== 'payment') continue;
+      const status = text(tx.status);
+      if (status !== 'complete' && status !== 'refunded') { ignoredPayments++; continue; }
+      const reference = text(tx.trans_num) || null;
+      const manual = !reference || reference.startsWith('mp-') || text(tx.gateway) === 'manual';
+      const amount = Math.round(Number(text(tx.total) || text(tx.amount) || '0') * 100);
+      payments.push({
+        legacyTransactionId: text(tx.id), reference, source: manual ? 'manual' : 'stripe', amountCents: Number.isFinite(amount) ? amount : 0,
+        paidOn: isoDay(tx.created_at) ?? '', expiresOn: isoDay(tx.expires_at), outcome: status === 'refunded' ? 'refunded' : 'paid',
+      });
+      if (!manual && reference) {
+        const owners = paymentReferenceUsers.get(reference) ?? new Set<string>();
+        owners.add(`${legacyUserId}:${text(tx.id)}`);
+        paymentReferenceUsers.set(reference, owners);
+      }
+    }
+    const paid = payments.filter((payment) => payment.outcome === 'paid');
+    if (paid.some((payment) => payment.expiresOn === null)) exceptions.add('blank_expiry_on_paid_transaction');
+    const paidThrough = paid.map((payment) => payment.expiresOn).filter((day): day is string => day !== null).sort().pop() ?? null;
+    const firstPaidOn = paid.map((payment) => payment.paidOn).filter(Boolean).sort()[0] ?? null;
+    let membershipStatus: PlannedMember['membership']['status'] = 'no_eligible_payment';
+    if (paidThrough) {
+      membershipStatus = paidThrough >= options.asOf ? 'active' : addDays(paidThrough, GRACE_DAYS) >= options.asOf ? 'grace' : 'expired';
+    } else {
+      exceptions.add('no_eligible_payment');
+    }
+
+    // Subscriptions: the newest active one is the live one; anything else is history.
+    const userSubs = (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
+    const activeSubs = userSubs.filter((sub) => text(sub.status) === 'active');
+    let subscriptionId: string | null = null;
+    if (activeSubs.length > 1) exceptions.add('multiple_active_subscriptions');
+    else if (activeSubs.length === 1) {
+      if (activeSubs[0] !== userSubs[userSubs.length - 1]) exceptions.add('active_subscription_not_newest');
+      const reference = text(activeSubs[0].subscr_id);
+      if (reference.startsWith('sub_')) subscriptionId = reference; else exceptions.add('invalid_subscription_reference');
+    }
+    const customers = [...new Set(stripeCustomersByUser.get(legacyUserId) ?? [])];
+    if (customers.length > 1) exceptions.add('multiple_stripe_customers');
+    const customerId = customers.length === 1 ? customers[0] : null;
+    if (customerId && !customerId.startsWith('cus_')) exceptions.add('invalid_stripe_customer_id');
+    if (activeSubs.length === 1 && !customerId) exceptions.add('active_subscription_without_stripe_customer');
+
+    // Product -> roles. The latest completed payment's product wins; a subscription's product is the fallback.
+    const productSources = [...paid.length ? userTx.filter((tx) => text(tx.txn_type) === 'payment' && text(tx.status) === 'complete') : [], ...userSubs];
+    const products = [...new Set(productSources.map((row) => text(row.product_id)).filter(Boolean))];
+    if (products.length > 1) notes.add('product_changed_over_time');
+    const latestProduct = text((productSources.filter((row) => text(row.product_id)).slice(-1)[0] ?? {}).product_id);
+    const paidTx = userTx.filter((tx) => text(tx.txn_type) === 'payment' && text(tx.status) === 'complete');
+    const productId = text((paidTx[paidTx.length - 1] ?? {}).product_id) || latestProduct;
+    const classification = PRODUCT_CLASSIFICATION[productId] ?? null;
+    if (!classification) exceptions.add('no_membership_product');
+
+    // Profile and role details from usermeta.
+    const federationRaw = metaText('mepr_national_federation').toUpperCase();
+    const federation = COUNTRIES.has(federationRaw) ? federationRaw : '';
+    if (federationRaw && !federation) exceptions.add('unmapped_legacy_value');
+    const regionSlug = metaText('mepr_idoc_region');
+    const region = REGION_MAP[regionSlug];
+    if (regionSlug && !region) exceptions.add('unmapped_legacy_value');
+    const judgeKeys = checkedKeysFromPhpArray(meta.get('mepr_official_status_as_judge')) ?? [];
+    const stewardKeys = checkedKeysFromPhpArray(meta.get('mepr_official_status_as_steward')) ?? [];
+    const judgeStatuses = judgeKeys.map((key) => JUDGE_STATUS_MAP[key]);
+    const stewardStatuses = stewardKeys.map((key) => STEWARD_STATUS_MAP[key]);
+    if (judgeStatuses.some((status) => status === undefined) || stewardStatuses.some((status) => status === undefined)) exceptions.add('unmapped_legacy_value');
+    const knownJudge = judgeStatuses.filter((status): status is JudgeStatus => status !== undefined);
+    const knownSteward = stewardStatuses.filter((status): status is StewardStatus => status !== undefined);
+    const technicalDelegateRaw = metaText('mepr_are_you_a_technical_delegate').toLowerCase();
+    if (!technicalDelegateRaw) notes.add('technical_delegate_defaulted_no');
+    const feiId = metaText('mepr_fei_number') || null;
+
+    const roles: PlannedRole[] = [];
+    const official = { nationalFederationCountryCode: federation, idocRegion: region ?? '', feiId };
+    if (classification === 'judge' || classification === 'judge_steward') {
+      roles.push({ roleType: 'judge', ...official, officialStatuses: knownJudge, isTechnicalDelegate: technicalDelegateRaw === 'yes' });
+    }
+    if (classification === 'steward' || classification === 'judge_steward') roles.push({ roleType: 'steward', ...official, officialStatuses: knownSteward });
+    if (classification === 'veterinarian') roles.push({ roleType: 'veterinarian' });
+    if ((classification === 'judge' && knownSteward.length > 0) || (classification === 'steward' && knownJudge.length > 0)
+      || (classification === 'veterinarian' && (knownJudge.length > 0 || knownSteward.length > 0))) exceptions.add('product_profile_mismatch');
+
+    let countryCode = metaText('mepr-address-country').toUpperCase();
+    if (!COUNTRIES.has(countryCode)) countryCode = '';
+    if (!countryCode && federation) { countryCode = federation; notes.add('country_filled_from_federation'); }
+    const profile = {
+      firstName: metaText('first_name'), lastName: metaText('last_name'), address1: metaText('mepr-address-one'), address2: metaText('mepr-address-two'),
+      city: metaText('mepr-address-city'), stateProvince: metaText('mepr-address-state'), postalCode: metaText('mepr-address-zip'), countryCode,
+    };
+    const check = memberProfileSchema.safeParse({ ...profile, roles });
+    const missingFields = check.success ? [] : missingFieldNames(check.error.issues, roles);
+    if (missingFields.length > 0) exceptions.add('incomplete_profile');
+
+    const held = exceptions.has('user_flagged_deleted_or_spam') || exceptions.has('invalid_email') || exceptions.has('duplicate_email');
+    return {
+      legacyUserId, held, email, legacyPasswordHash, hashFormat: format, registeredAt: text(user.user_registered), profile, classification, roles, missingFields,
+      membership: { status: membershipStatus, paidThrough, firstPaidOn }, stripe: { customerId, subscriptionId }, payments, ignoredPayments,
+      exceptions: [...exceptions].sort(), notes: [...notes].sort(),
+    };
+  });
+
+  // A Stripe payment reference must belong to exactly one transaction; otherwise importing it would violate the unique reference.
+  const duplicateOwners = new Set<string>();
+  for (const owners of paymentReferenceUsers.values()) {
+    if (owners.size > 1) for (const owner of owners) duplicateOwners.add(owner.split(':')[0]);
+  }
+  for (const member of members) {
+    if (duplicateOwners.has(member.legacyUserId)) member.exceptions = [...new Set<ExceptionCode>([...member.exceptions, 'duplicate_payment_reference'])].sort();
+  }
+
+  const subscriptionsByStatus: Record<string, number> = {};
+  for (const sub of subscriptions) subscriptionsByStatus[text(sub.status) || '(blank)'] = (subscriptionsByStatus[text(sub.status) || '(blank)'] ?? 0) + 1;
+  return {
+    asOf: options.asOf, members, subscriptionsByStatus,
+    orphanPaymentUserIds: [...new Set(transactions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
+    orphanSubscriptionUserIds: [...new Set(subscriptions.map((row) => text(row.user_id)).filter((id) => !userIds.has(id)))].sort((a, b) => Number(a) - Number(b)),
+  };
+}
+
+export interface DryRunReport {
+  asOf: string;
+  legacyUsers: number;
+  held: number;
+  importable: number;
+  hashFormats: Record<string, number>;
+  classification: Record<string, number>;
+  membershipStatus: Record<string, number>;
+  profile: { complete: number; needsOnboarding: number; missingFields: Record<string, number> };
+  stripe: { withCustomerId: number; withActiveSubscription: number; activeSubscriptionWithoutCustomer: number; customerWithoutActiveSubscription: number };
+  subscriptionsByStatus: Record<string, number>;
+  payments: { paid: number; refunded: number; stripe: number; manual: number; ignoredFailedOrPending: number };
+  notes: Record<string, number>;
+  exceptions: Array<{ code: ExceptionCode; text: string; held: boolean; count: number; legacyUserIds: string[] }>;
+  orphans: { paymentUsers: number; subscriptionUsers: number; paymentUserIds: string[]; subscriptionUserIds: string[] };
+}
+
+function tally<T>(items: T[], key: (item: T) => string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) counts[key(item)] = (counts[key(item)] ?? 0) + 1;
+  return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Aggregate counts and legacy user IDs only: no names, emails, hashes or payment references. */
+export function summarizePlan(plan: LegacyImportPlan): DryRunReport {
+  const importable = plan.members.filter((member) => !member.held);
+  const exceptionIds = new Map<ExceptionCode, string[]>();
+  for (const member of plan.members) {
+    for (const code of member.exceptions) exceptionIds.set(code, [...(exceptionIds.get(code) ?? []), member.legacyUserId]);
+  }
+  // Held members are not imported, so their payments are not "payments to import".
+  const allPayments = importable.flatMap((member) => member.payments);
+  return {
+    asOf: plan.asOf,
+    legacyUsers: plan.members.length,
+    held: plan.members.length - importable.length,
+    importable: importable.length,
+    hashFormats: tally(plan.members, (member) => member.hashFormat),
+    classification: tally(importable, (member) => member.classification ?? 'unknown'),
+    membershipStatus: tally(importable, (member) => member.membership.status),
+    profile: {
+      complete: importable.filter((member) => member.missingFields.length === 0).length,
+      needsOnboarding: importable.filter((member) => member.missingFields.length > 0).length,
+      missingFields: tally(importable.flatMap((member) => member.missingFields), (field) => field),
+    },
+    stripe: {
+      withCustomerId: importable.filter((member) => member.stripe.customerId).length,
+      withActiveSubscription: importable.filter((member) => member.stripe.subscriptionId).length,
+      activeSubscriptionWithoutCustomer: importable.filter((member) => member.stripe.subscriptionId && !member.stripe.customerId).length,
+      customerWithoutActiveSubscription: importable.filter((member) => member.stripe.customerId && !member.stripe.subscriptionId).length,
+    },
+    subscriptionsByStatus: plan.subscriptionsByStatus,
+    payments: {
+      paid: allPayments.filter((payment) => payment.outcome === 'paid').length,
+      refunded: allPayments.filter((payment) => payment.outcome === 'refunded').length,
+      stripe: allPayments.filter((payment) => payment.source === 'stripe').length,
+      manual: allPayments.filter((payment) => payment.source === 'manual').length,
+      ignoredFailedOrPending: importable.reduce((sum, member) => sum + member.ignoredPayments, 0),
+    },
+    notes: tally(importable.flatMap((member) => member.notes), (note) => note),
+    exceptions: [...exceptionIds.entries()].map(([code, ids]) => ({
+      code, text: EXCEPTION_DESCRIPTIONS[code].text, held: EXCEPTION_DESCRIPTIONS[code].held, count: ids.length, legacyUserIds: ids.slice(0, 500),
+    })).sort((a, b) => Number(b.held) - Number(a.held) || b.count - a.count || a.code.localeCompare(b.code)),
+    orphans: {
+      paymentUsers: plan.orphanPaymentUserIds.length, subscriptionUsers: plan.orphanSubscriptionUserIds.length,
+      paymentUserIds: plan.orphanPaymentUserIds.slice(0, 500), subscriptionUserIds: plan.orphanSubscriptionUserIds.slice(0, 500),
+    },
+  };
+}

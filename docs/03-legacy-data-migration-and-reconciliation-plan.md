@@ -189,3 +189,25 @@ The importer must preserve existing member credentials wherever their WordPress 
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.
+
+# 12. Temporary Super Admin legacy import tool
+
+The repeatable importer is delivered as a **temporary Super Admin tool** at `/admin/operations/legacy-import`, built in stages. It exists so one operator can run the dry run, the staging import, the production import and the final delta import without a developer terminal. Delete `app/(dashboard)/admin/operations/legacy-import`, `lib/legacy-import`, its navigation entry and the `serverActions.bodySizeLimit` setting in `next.config.ts` once the migration has been stable for the agreed period after launch. The stored legacy password hash, supported-hash first-login verification and the onboarding path for incomplete profiles (section 11) are product behavior, not part of this temporary tool, and stay until every migrated member has signed in.
+
+**Source files.** Two MySQL dump files exported from the legacy multisite: the network users tables (`psspaceusers`, `psspaceusermeta`) and the site 58 MemberPress tables (`psspace58_mepr_transactions`, `psspace58_mepr_subscriptions`). The dump files hold credential-bearing data and stay in approved migration storage (see Credential-bearing export retention); the tool reads an uploaded file in memory and never stores it.
+
+**Mapping rules decided with the operator (2026-10).**
+
+- Membership product to roles: 2042 Judge, 2053 Steward, 2787 Judge & Steward, 3038 Veterinarian. All four are one ordinary annual membership; the product only decides which professional roles are created. A product that disagrees with the judge/steward details on the profile is flagged `product_profile_mismatch`, never guessed.
+- Judge statuses map to the canonical list; legacy "National Grand Prix Judge" maps to "National Senior Officials / Candidates from EEFs education system FEI". Steward Level 3 maps to "FEI Dressage Steward Level 3/4". Any other unmapped value is flagged.
+- A blank technical-delegate answer becomes No. A blank address country is filled from the national federation country and noted in the report; street, city and postal code are never invented.
+- IDOC region slugs map one-to-one to the canonical regions; a blank region is a missing required field.
+- Paid-through is the latest expiry date of that member's completed payments; failed and pending payments never count. A completed payment with no expiry date is flagged.
+- The newest `active` subscription is the live one; older cancelled or pending subscriptions are history only and never create a second subscription. Two active subscriptions, or an active one that is not the newest, are flagged for review.
+- Members whose profile is missing required fields are imported and activate into the existing onboarding flow, which requires the missing fields before the account becomes fully active. Users flagged deleted/spam, with an invalid email, or sharing an email with another legacy user are held and not imported. Payment or subscription records for users with no account row are listed and not imported.
+
+**Stage 1 (implemented): dry run.** The page accepts the two files, reads them in memory, applies the rules and shows aggregate counts plus the legacy user IDs behind every exception. It writes only one audit row (file checksums and counts), stores nothing and sends no email. Output never includes names, emails, password hashes or payment references. Controls: Super Admin, CSRF, fresh TOTP step-up, and the server-only switch `LEGACY_IMPORT_ENABLED=true` (off by default).
+
+**Stripe environments.** Staging's Stripe credentials point to the Stripe test-mode sandbox, while the legacy data holds **live-mode** customer and subscription IDs. A sandbox cannot resolve live IDs, so the read-only Stripe reconciliation must run only against live Stripe (Production, with a read-only restricted key) and never from staging. A staging import stores live IDs that the staging sandbox cannot find; before the staging import stage is built, decide whether staging imports omit the Stripe IDs or keep them and tolerate lookup failures. The dry run never calls Stripe, so it is unaffected.
+
+**Later stages (not yet built).** The staging/production import action (one transaction per run, idempotent through `migration_map`, bound to the checksum of the file that was reviewed, requiring a recent verified backup), supported-hash first-login verification, and the read-only Stripe reconciliation (every stored customer and subscription verified or excepted; orphaned or duplicate active Stripe subscriptions reported).

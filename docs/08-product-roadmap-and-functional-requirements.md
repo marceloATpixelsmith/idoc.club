@@ -200,7 +200,7 @@ Release 1 security follow-up: live canonical TOTP enrollment, login challenge, a
 
 16. Export only IDOC users and relevant metadata from the WordPress Multisite network plus IDOC MemberPress memberships, subscriptions and transactions.
 
-17. Import profiles, roles, membership state, manual payments, legacy IDs, Stripe Customer/Subscription IDs, and paid-through dates with deterministic mapping and exception reporting.
+17. Import profiles, roles, membership state, manual payments, legacy IDs, Stripe Customer/Subscription IDs, and paid-through dates with deterministic mapping and exception reporting. Delivered as a temporary Super Admin tool at `/admin/operations/legacy-import` (dry run first; see [03 section 12](03-legacy-data-migration-and-reconciliation-plan.md#12-temporary-super-admin-legacy-import-tool)).
 
 18. Pre-create account identities and preserve every valid supported WordPress password hash so members can use their existing credentials. Use secure activation/password setup only for explicit missing, malformed, or unsupported-hash exceptions; require secure password reset when a supported password is found breached. Do not ask migrated members to register or repay.
 
