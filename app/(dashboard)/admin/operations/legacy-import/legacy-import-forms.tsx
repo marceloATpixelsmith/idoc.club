@@ -8,7 +8,7 @@ import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import type { DryRunResult } from '@/lib/legacy-import/dry-run';
 import { toCsv } from '@/lib/admin/csv';
-import { LEGACY_TABLE_NAMES, reduceDumpText } from '@/lib/legacy-import/reduce-dump';
+import { isNeededLegacyTable, reduceDumpText } from '@/lib/legacy-import/reduce-dump';
 import type { DryRunReport, ReportGroup } from '@/lib/legacy-import/transform';
 
 export type LegacyImportActionState = StepUpActionState & { error?: string; result?: DryRunResult };
@@ -73,6 +73,10 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
   return (
     <div className="space-y-6" data-testid="legacy-dry-run-report">
       <p className="text-sm text-muted-foreground">Dry run only — nothing was written. Counted as of {report.asOf}. Files: {files.map((file) => `${file.name} (${file.sha256.slice(0, 12)}…)`).join(', ')}</p>
+      <p className="text-sm text-muted-foreground">
+        Tables read: {report.sourceTables.filter((item) => item.used).map((item) => `${item.table} (${fmt(item.rows)} rows)`).join(', ')}.
+        {report.sourceTables.some((item) => !item.used) ? ` Also found but not used (smaller): ${report.sourceTables.filter((item) => !item.used).map((item) => `${item.table} (${fmt(item.rows)} rows)`).join(', ')}.` : ''}
+      </p>
       <p className="text-base text-foreground">
         {fmt(report.legacyUsers)} legacy users in the files → {fmt(report.removedByRules)} removed by the cleanup rules → {fmt(report.inScope)} remain, of which {fmt(report.held)} are held for review and {fmt(report.importable)} would be imported.
       </p>
@@ -112,15 +116,13 @@ export function DryRunReportView({ report, files }: { report: DryRunReport; file
   );
 }
 
-const NEEDED_TABLES: ReadonlySet<string> = new Set(Object.values(LEGACY_TABLE_NAMES));
-
 /** Keeps only the four needed tables of each dump, in the browser, so unneeded data never leaves the computer and the upload stays small. */
 async function trimUpload(formData: FormData): Promise<{ data: FormData; bytes: number }> {
   const data = new FormData();
   let bytes = 0;
   for (const [key, value] of formData.entries()) {
     if ((key === 'usersFile' || key === 'meprFile') && value instanceof File) {
-      const trimmed = new File([reduceDumpText(await value.text(), NEEDED_TABLES)], value.name, { type: 'text/plain' });
+      const trimmed = new File([reduceDumpText(await value.text(), isNeededLegacyTable)], value.name, { type: 'text/plain' });
       bytes += trimmed.size;
       data.append(key, trimmed);
     } else {
@@ -150,11 +152,11 @@ export function DryRunForm({ action }: { action: Action }) {
         <CsrfField />
         <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
           Users dump (WordPress users and usermeta tables)
-          <input accept=".sql,text/plain" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="usersFile" required type="file" />
+          <input className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="usersFile" required type="file" />
         </label>
         <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
           MemberPress dump (transactions and subscriptions tables)
-          <input accept=".sql,text/plain" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="meprFile" required type="file" />
+          <input className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="meprFile" required type="file" />
         </label>
         <Button disabled={pending} type="submit">{pending ? 'Checking…' : 'Run dry run'}</Button>
       </form>

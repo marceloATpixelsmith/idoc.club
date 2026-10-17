@@ -6,14 +6,19 @@
  *
  * TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished.
  */
-export const LEGACY_TABLE_NAMES = {
-  users: 'psspaceusers',
-  usermeta: 'psspaceusermeta',
-  transactions: 'psspace58_mepr_transactions',
-  subscriptions: 'psspace58_mepr_subscriptions',
-} as const;
+export type LegacyTableRole = 'users' | 'usermeta' | 'transactions' | 'subscriptions';
 
-export function reduceDumpText(text: string, tables: ReadonlySet<string>): string {
+/** Finds the tables by what they are, whatever prefix the WordPress install uses (for example `psspaceusers`, `wp_users`, `wp_2_mepr_transactions`). */
+export function legacyTableRole(name: string): LegacyTableRole | null {
+  if (/usermeta$/i.test(name)) return 'usermeta';
+  if (/users$/i.test(name)) return 'users';
+  if (/_mepr_transactions$/i.test(name)) return 'transactions';
+  if (/_mepr_subscriptions$/i.test(name)) return 'subscriptions';
+  return null;
+}
+export const isNeededLegacyTable = (name: string): boolean => legacyTableRole(name) !== null;
+
+export function reduceDumpText(text: string, wanted: (table: string) => boolean): string {
   const out: string[] = [];
   let mode: 'create' | 'insert' | null = null;
   let keeping = false;
@@ -22,8 +27,8 @@ export function reduceDumpText(text: string, tables: ReadonlySet<string>): strin
     if (mode === null) {
       const create = /^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/.exec(line);
       const insert = create ? null : /^INSERT INTO `([^`]+)`/.exec(line);
-      if (create) { mode = 'create'; keeping = tables.has(create[1]); }
-      else if (insert) { mode = 'insert'; keeping = tables.has(insert[1]); }
+      if (create) { mode = 'create'; keeping = wanted(create[1]); }
+      else if (insert) { mode = 'insert'; keeping = wanted(insert[1]); }
       else continue;
       if (keeping) out.push(line);
       // A single-line INSERT ends on its own line.

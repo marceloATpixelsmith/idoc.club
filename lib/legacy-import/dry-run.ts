@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
 import { DumpParseError, parseMysqlDump, type ParsedDump } from './mysql-dump.ts';
-import { LEGACY_TABLES, REQUIRED_LEGACY_TABLES, planLegacyImport, summarizePlan, type DryRunReport } from './transform.ts';
+import { isNeededLegacyTable } from './reduce-dump.ts';
+import { planLegacyImport, resolveLegacyTables, summarizePlan, type DryRunReport } from './transform.ts';
 
 /** TEMPORARY legacy-import support code: delete with the rest of lib/legacy-import once the migration is finished. */
 export const LEGACY_IMPORT_MAX_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -31,15 +32,17 @@ export function runLegacyDryRun(files: Array<{ name: string; bytes: Uint8Array }
   const merged: ParsedDump = new Map();
   try {
     for (const file of files) {
-      const parsed = parseMysqlDump(new TextDecoder('utf-8').decode(file.bytes), REQUIRED_LEGACY_TABLES);
+      const parsed = parseMysqlDump(new TextDecoder('utf-8').decode(file.bytes), isNeededLegacyTable);
       for (const [table, rows] of parsed) merged.set(table, [...(merged.get(table) ?? []), ...rows]);
     }
   } catch (error) {
     if (error instanceof DumpParseError) throw new LegacyImportInputError(`A file could not be read as a MySQL dump (${error.message}).`);
     throw error;
   }
-  for (const table of Object.values(LEGACY_TABLES)) {
-    if (!merged.has(table)) throw new LegacyImportInputError(`The files do not contain any rows for ${table}.`);
+  const { missing } = resolveLegacyTables(merged);
+  if (missing.length > 0) {
+    const names: Record<string, string> = { users: 'a users table (name ends in "users")', usermeta: 'a user-meta table (name ends in "usermeta")', transactions: 'a MemberPress transactions table (name ends in "_mepr_transactions")', subscriptions: 'a MemberPress subscriptions table (name ends in "_mepr_subscriptions")' };
+    throw new LegacyImportInputError(`The files do not contain ${missing.map((role) => names[role]).join(', ')}. Choose the dump files that contain those tables.`);
   }
   return {
     report: summarizePlan(planLegacyImport(merged, { asOf })),
