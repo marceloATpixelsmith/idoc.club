@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { signIn } from '../app/(login)/actions.ts';
+import { verifyLoginOtp } from '../app/(login)/sign-in/actions.ts';
 import { startPendingLogin } from '../lib/auth/pending-login.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { comparePasswords, passwordHashNeedsUpgrade } from '../lib/auth/session.ts';
@@ -112,8 +113,8 @@ test('a WordPress password found in the breach corpus never signs in; an activat
 test('activation moves a complete profile to active and an incomplete one to onboarding', async () => {
   const complete = await importedMember(true, 11);
   const incomplete = await importedMember(false, 12);
-  assert.deepEqual(await finalizeMigratedAccountAfterVerifiedPassword(complete.id), { status: 'success' });
-  assert.deepEqual(await finalizeMigratedAccountAfterVerifiedPassword(incomplete.id), { status: 'success' });
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(complete.id)).status, 'success');
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(incomplete.id)).status, 'success');
   const states = await sql`select id, account_state from idoc.users where id in (${complete.id}, ${incomplete.id}) order by id`;
   assert.deepEqual(states.map((row) => row.account_state), ['active', 'onboarding']);
 });
@@ -133,4 +134,22 @@ test('onboarding completes the imported profile in place and keeps what the impo
   assert.equal((await sql`select 1 from idoc.onboarding_consents where profile_id = (select id from idoc.profiles where user_id = ${user.id})`).length, 1);
   // A second completion is refused: the account is no longer in onboarding.
   await assert.rejects(withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => createOwnMemberProfile(profileInput())));
+});
+
+test('the whole first sign-in works end to end: WordPress password, email code, then a session (no "session expired")', async () => {
+  globalThis.fetch = (async () => new Response('0000000000000000000000000000000000A:1', { status: 200 })) as typeof fetch;
+  const user = await importedMember(true, 31);
+  const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
+  await withTestRequestCookies(cookies, async () => {
+    await startPendingLogin(user.email);
+    await redirected(() => signIn({}, form({ csrf_token, email: user.email, password: PASSWORD })));
+    // Replace the emailed code with a known one, as the existing OTP tests do.
+    const code = '123456';
+    await sql`update idoc.email_otp_codes set code_hash=${createHash('sha256').update(code).digest('hex')} where user_id=${user.id} and purpose='login_verification'`;
+    const result = await verifyLoginOtp({}, form({ code, csrf_token })).catch((error: unknown) => (String(error).includes('NEXT_REDIRECT') ? 'redirect' : Promise.reject(error)));
+    assert.equal(result, 'redirect', 'a correct code must sign the member in, not report an expired sign-in');
+  });
+  assert.equal((await sql`select account_state from idoc.users where id=${user.id}`)[0].account_state, 'active');
+  assert.equal((await sql`select count(*)::int as n from idoc.auth_sessions where user_id=${user.id} and revoked_at is null`)[0].n, 1);
 });

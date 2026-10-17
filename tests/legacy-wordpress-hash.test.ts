@@ -26,6 +26,9 @@ test('WordPress bcrypt hashes use the HMAC-SHA384 prehash and the $wp prefix', a
   assert.match(stored, /^\$wp\$2y\$04\$/);
   assert.equal(await verifyWordPressBcrypt('Correct horse 42!', stored), true);
   assert.equal(await verifyWordPressBcrypt('Correct horse 43!', stored), false);
+  // Exact comparison only: surrounding whitespace is a different password.
+  assert.equal(await verifyWordPressBcrypt(' Correct horse 42! ', stored), false);
+  assert.equal(await verifyWordPressBcrypt('x'.repeat(4097), stored), false);
   // A plain bcrypt hash of the raw password (no prehash, no prefix) is not a WordPress bcrypt hash.
   assert.equal(await verifyWordPressBcrypt('Correct horse 42!', await hashBcrypt('Correct horse 42!', 4)), false);
 });

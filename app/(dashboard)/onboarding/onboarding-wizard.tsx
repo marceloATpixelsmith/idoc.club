@@ -65,9 +65,9 @@ export function OnboardingWizard({ initialClassification = null, prefill = null 
   const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState(prefill?.countryCode ?? '');
   const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState(prefill?.nationalFederationCountryCode ?? '');
-  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
+  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(Boolean(prefill?.nationalFederationCountryCode));
   const [idocRegion, setIdocRegion] = useState(prefill?.idocRegion ?? '');
-  const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(false);
+  const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(Boolean(prefill?.idocRegion));
   const [address1, setAddress1] = useState(prefill?.address1 ?? '');
   const [address2, setAddress2] = useState(prefill?.address2 ?? '');
   const [address2WasManuallyEdited, setAddress2WasManuallyEdited] = useState(false);

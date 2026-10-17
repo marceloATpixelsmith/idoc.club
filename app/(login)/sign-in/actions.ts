@@ -74,12 +74,15 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   }
 
   const migrated = user.accountState === 'migrated_pending';
+  // Activation increments the session version itself, so the guarded re-read below expects exactly that value.
+  let expectedSessionVersion = pending.sessionVersion;
   if (migrated) {
     const activation = await finalizeMigratedAccountAfterVerifiedPassword(user.id);
     if (activation.status !== 'success') {
       await clearPendingLogin();
       return { error: `We could not finish signing you in automatically. Contact ${supportEmailForServer()} for help.` };
     }
+    expectedSessionVersion = activation.sessionVersion;
   } else {
     const now = new Date();
     await db.update(users).set({
@@ -96,7 +99,7 @@ export const verifyLoginOtp = validatedAction(verifyOtpSchema, async ({ code, re
   const [verifiedUser] = await db.select().from(users).where(and(
     eq(users.id, user.id),
     eq(users.email, pending.email),
-    eq(users.sessionVersion, pending.sessionVersion),
+    eq(users.sessionVersion, expectedSessionVersion),
   )).limit(1);
   if (!verifiedUser || !verifiedUser.emailVerifiedAt || !['active', 'onboarding'].includes(verifiedUser.accountState)) {
     return { error: 'Your sign-in session expired. Start again.' };

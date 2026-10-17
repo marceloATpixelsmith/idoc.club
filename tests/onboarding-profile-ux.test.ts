@@ -93,7 +93,7 @@ test('country selectors display names while preserving ISO alpha-2 values', () =
 
 test('national federation defaults from address country without overwriting an explicit federation', () => {
   assert.match(source, /const \[nationalFederationCountryCode, setNationalFederationCountryCode\] = useState\(prefill\?\.nationalFederationCountryCode \?\? ''\)/);
-  assert.match(source, /const \[federationWasManuallyEdited, setFederationWasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /const \[federationWasManuallyEdited, setFederationWasManuallyEdited\] = useState\(Boolean\(prefill\?\.nationalFederationCountryCode\)\)/);
   assert.match(source, /if \(!nationalFederationCountryCode \|\| !federationWasManuallyEdited\)/);
   assert.match(source, /setNationalFederationCountryCode\(nextCountryCode\)/);
   assert.match(source, /function handleFederationChange/);
@@ -146,7 +146,7 @@ test('changing address country clears stale structured address values', () => {
 test('IDOC Region defaults from address country without overwriting an explicit manual selection', () => {
   assert.match(source, /import \{ IDOC_REGION_BY_COUNTRY \} from '@\/lib\/membership\/idoc-regions-by-country'/);
   assert.match(source, /const \[idocRegion, setIdocRegion\] = useState\(prefill\?\.idocRegion \?\? ''\)/);
-  assert.match(source, /const \[regionWasManuallyEdited, setRegionWasManuallyEdited\] = useState\(false\)/);
+  assert.match(source, /const \[regionWasManuallyEdited, setRegionWasManuallyEdited\] = useState\(Boolean\(prefill\?\.idocRegion\)\)/);
   assert.match(source, /if \(!regionWasManuallyEdited\)/);
   assert.match(source, /setIdocRegion\(nextCountryCode \? IDOC_REGION_BY_COUNTRY\[nextCountryCode\] \?\? '' : ''\)/);
   assert.match(source, /function handleRegionChange/);

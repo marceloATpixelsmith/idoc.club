@@ -321,3 +321,18 @@ test('duplicate payment references: identical rows on one member are dropped as 
   assert.ok(report.expected.some((group) => group.key === 'duplicate_payment_row_removed'));
   assert.ok(report.review.some((group) => group.key === 'duplicate_payment_reference_same_member'));
 });
+
+test('both portable phpass prefixes are kept as supported hashes', () => {
+  const dump = parseMysqlDump([
+    insert('wp_users', USER_COLUMNS, [
+      [1, 'a', '$P$9IQRaTwmfeRo7ud9Fh4E2PdI0S3r.L0', 'a@example.com', '2020-01-01 00:00:00', 0, 0, 0],
+      [2, 'b', '$H$9IQRaTwmfeRo7ud9Fh4E2PdI0S3r.L0', 'b@example.com', '2020-01-01 00:00:00', 0, 0, 0],
+      [3, 'c', 'md5-or-something', 'c@example.com', '2020-01-01 00:00:00', 0, 0, 0],
+    ]),
+    insert('wp_usermeta', META_COLUMNS, [[1, 1, 'first_name', 'A']]),
+    insert('wp_mepr_transactions', TX_COLUMNS, [[1, '80', '80', 1, 2042, 'mp-1', 'complete', 'payment', 'manual', 0, '2026-01-01 00:00:00', '2027-01-01 00:00:00']]),
+    insert('wp_mepr_subscriptions', SUB_COLUMNS, [[1, 99, 2042, 'sub_x', 'cancelled', '2020-01-01 00:00:00']]),
+  ].join(''), isNeededLegacyTable);
+  const formats = Object.fromEntries(planLegacyImport(dump, { asOf: '2026-06-01' }).members.map((member) => [member.legacyUserId, member.hashFormat]));
+  assert.deepEqual(formats, { '1': 'phpass', '2': 'phpass', '3': 'unsupported' });
+});

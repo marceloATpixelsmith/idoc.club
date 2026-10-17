@@ -9,6 +9,8 @@ import { compare as compareBcrypt } from 'bcryptjs';
  *
  * TEMPORARY legacy-import support code: delete once every migrated member has signed in or reset their password.
  */
+/** WordPress refuses passwords longer than this when hashing and checking. */
+const MAX_PASSWORD_LENGTH = 4096;
 const ITOA64 = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 function encode64(input: Buffer, count: number): string {
@@ -35,7 +37,7 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 export function verifyPhpassPortable(password: string, storedHash: string): boolean {
-  if (storedHash.length !== 34 || !(storedHash.startsWith('$P$') || storedHash.startsWith('$H$'))) return false;
+  if (password.length > MAX_PASSWORD_LENGTH || storedHash.length !== 34 || !(storedHash.startsWith('$P$') || storedHash.startsWith('$H$'))) return false;
   const countLog2 = ITOA64.indexOf(storedHash[3]);
   if (countLog2 < 7 || countLog2 > 30) return false;
   const salt = storedHash.slice(4, 12);
@@ -47,13 +49,10 @@ export function verifyPhpassPortable(password: string, storedHash: string): bool
 }
 
 export async function verifyWordPressBcrypt(password: string, storedHash: string): Promise<boolean> {
-  if (!storedHash.startsWith('$wp$2')) return false;
-  const bcryptHash = storedHash.slice(3);
-  const prehash = (value: string) => createHmac('sha384', 'wp-sha384').update(value, 'utf8').digest('base64');
-  if (await compareBcrypt(prehash(password), bcryptHash)) return true;
-  // WordPress trims the password before hashing it at creation time.
-  const trimmed = password.trim();
-  return trimmed !== password && (await compareBcrypt(prehash(trimmed), bcryptHash));
+  if (!storedHash.startsWith('$wp$2') || password.length > MAX_PASSWORD_LENGTH) return false;
+  const prehash = createHmac('sha384', 'wp-sha384').update(password, 'utf8').digest('base64');
+  // WordPress compares the exact string supplied; no trimming or other retry, so a different password can never match.
+  return compareBcrypt(prehash, storedHash.slice(3));
 }
 
 export type LegacyPasswordFormat = 'phpass' | 'wp_bcrypt';
