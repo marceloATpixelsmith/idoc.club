@@ -55,3 +55,7 @@ postgres_data/
 !.claude/agents
 !.claude/agents/ci-guard.md
 !.claude/settings.json
+
+# python bytecode
+__pycache__/
+*.pyc

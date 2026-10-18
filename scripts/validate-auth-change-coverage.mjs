@@ -16,7 +16,8 @@ const sensitive = changed.filter((p) =>
   p.startsWith("app/(dashboard)/admin/security/") ||
   p.startsWith("app/(dashboard)/onboarding/") ||
   p.startsWith("app/(dashboard)/account/") ||
-  p.startsWith("app/(dashboard)/admin/members/") ||
+  p.startsWith("app/(dashboard)/admin/") ||
+  p.startsWith("app/api/admin/") ||
   p === "app/(dashboard)/layout.tsx" ||
   p === "app/(dashboard)/dashboard/layout.tsx" ||
   p.startsWith("app/api/user/") ||
