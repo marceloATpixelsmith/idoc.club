@@ -8,10 +8,9 @@ async function authoredRecordsMessage(sql: Sql, authored: { user_id: number; sou
   for (const row of authored) byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row.source]);
   const ids = [...byUser.keys()];
   const accounts = await sql<{ id: number; email: string; account_state: string }[]>`select id,email,account_state from users where id in ${sql(ids)}`;
-  const lines = accounts.slice(0, 10).map((account) => `• ${account.email} (${account.account_state === 'deleted' ? 'already archived' : 'not archived'}): ${byUser.get(account.id)!.join(', ')}`);
-  const more = accounts.length > 10 ? `\n…and ${accounts.length - 10} more` : '';
+  const lines = accounts.map((account) => `• ${account.email} (${account.account_state === 'deleted' ? 'already archived' : 'not archived'}): ${byUser.get(account.id)!.join(', ')}`);
   const allArchived = accounts.every((account) => account.account_state === 'deleted');
-  return `${accounts.length === 1 ? 'This account' : `${accounts.length} of the selected accounts`} cannot be permanently deleted because ${accounts.length === 1 ? 'it' : 'they'} created content that must keep an author:\n${lines.join('\n')}${more}\n` +
+  return `${accounts.length === 1 ? 'This account' : `${accounts.length} of the selected accounts`} cannot be permanently deleted because ${accounts.length === 1 ? 'it' : 'they'} created or edited content that must keep its author:\n${lines.join('\n')}\n` +
     (allArchived
       ? 'They are already archived, which is the right final state: they cannot sign in and stay on record. Select only the other members to delete.'
       : 'Archive the ones that are not archived yet instead of deleting them, and select only members without created content to delete.');

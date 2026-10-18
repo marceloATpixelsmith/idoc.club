@@ -123,6 +123,7 @@ test('permanent deletion explains which accounts created content and that archiv
     const message = (error as Error).message;
     assert.match(message, new RegExp(`${author.email.replace(/[.+]/g, '\\$&')} \\(already archived\\): invitations sent`));
     assert.doesNotMatch(message, new RegExp(plain.email.replace(/[.+]/g, '\\$&')));
+    assert.match(message, /created or edited content/);
     assert.match(message, /already archived, which is the right final state/);
     assert.doesNotMatch(message, /Archive the ones/);
     return true;
@@ -133,4 +134,21 @@ test('permanent deletion explains which accounts created content and that archiv
   // A not-yet-archived author is told to archive it.
   await sql`update idoc.users set account_state='active' where id=${author.id}`;
   await assert.rejects(deleteMembers([String(author.id)], actor.id), /\(not archived\): invitations sent[\s\S]*Archive the ones that are not archived yet/);
+});
+
+test('permanent deletion names every blocked account, however many are selected', async () => {
+  const actor = await createUser();
+  const [team] = await sql<{ id: number }[]>`insert into idoc.teams(name) values('Many authors fixture') returning id`;
+  const authors: Awaited<ReturnType<typeof createUser>>[] = [];
+  for (let index = 0; index < 13; index += 1) {
+    const author = await createUser();
+    authors.push(author);
+    await sql`insert into idoc.invitations(team_id,email,role,invited_by) values(${team.id},${`invitee-${index}@example.test`},'member',${author.id})`;
+  }
+  await assert.rejects(deleteMembers(authors.map((author) => String(author.id)), actor.id), (error: unknown) => {
+    const message = (error as Error).message;
+    for (const author of authors) assert.ok(message.includes(author.email), `missing ${author.email}`);
+    assert.doesNotMatch(message, /…and \d+ more/);
+    return true;
+  });
 });
