@@ -40,6 +40,12 @@ This guide records how administrator tables, drawers and forms look and behave a
 - Seminar registrations offer the same three sources as the member form -- Cash, Bank Transfer, Stripe -- with the same labels (**Receipt ID**, **Bank Transfer Reference**, **Stripe Payment ID**), via `lib/seminars/payment-reference.ts`. The same rule applies to membership payments and to seminar registrations, whether the payment is recorded after the fact ("Record payment received" in the registration drawer) or when the registration is created as Paid.
 - The evidence field is cleared when the payment source or method changes, so evidence typed for one source cannot be submitted as another. Online (Stripe Checkout) seminar payments are recorded by the webhook and never go through this form.
 
+## 5a. Dialogs instead of browser pop-ups
+
+- No browser `alert()`, `confirm()` or `prompt()` is used anywhere; a test fails if one appears. Use `useBrandedDialogs()` (`components/ui/branded-dialogs.tsx`): `alert(message, title?)` for notices and `await confirm({ message, confirmLabel, destructive })` for confirmations. They use the same dialog look as the authenticator prompt and keep line breaks in long messages. Render the returned `dialogs` once in the component.
+- Every dialog can be left. Notices have OK; confirmations have Cancel and also close on Escape or a click away (counted as "no"); the authenticator prompt has Cancel and Escape cancels it. A dialog never traps someone behind a disabled button.
+- Archiving never asks for an authenticator code; permanent deletion does.
+
 ## 6. Where this is enforced
 
 Source-level tests pin the shared drawer hook, the per-record keys, the half-width pairs, the evidence labels and the close behavior (`tests/admin-drawer-refresh.test.ts`, `tests/admin-form-success-behavior.test.ts`, `tests/admin-member-experience.test.ts`, `tests/seminars.test.ts`).

@@ -56,6 +56,7 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   const [resuming, startResume] = useTransition();
   const resumeStarted = useRef(false);
   const cancellationHandled = useRef(false);
+  const cancelForm = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -87,7 +88,9 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   }, [cancelState.cancelled, onOpenChange, onResult]);
 
   const busy = verifying || resuming || cancelling;
-  return <Dialog open={open}>
+  // Escape (or clicking away) cancels exactly like the Cancel button, so the dialog can never trap anyone; it is ignored only while a
+  // verification or the resumed action is already in flight.
+  return <Dialog onOpenChange={(next) => { if (!next && !busy) cancelForm.current?.requestSubmit(); }} open={open}>
     <DialogContent aria-describedby="fresh-step-up-description" showCloseButton={false}>
       <DialogHeader>
         <DialogTitle>Authenticator verification required</DialogTitle>
@@ -104,7 +107,7 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
         {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
         <Button className="w-full" disabled={busy} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
       </form>
-      <form action={cancel}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
+      <form action={cancel} ref={cancelForm}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
     </DialogContent>
   </Dialog>;
 }

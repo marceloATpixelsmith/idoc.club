@@ -149,8 +149,7 @@ export async function bulkArchiveMembers(_state: BulkDeleteState, formData: Form
     requireAdministrator(actor);
     const { table, ids } = parseIds(formData);
     if (table !== 'members') throw new Error('Only member records can be archived.');
-    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', '/admin/members');
-    if (stepUp.required) return { stepUpRequired: true };
+    // Archiving is reversible and keeps every record, so it needs no authenticator code; permanent deletion (bulkDeleteAdminRows) does.
     const archived = await archiveMembers(ids, actor.id);
     revalidatePath('/admin/members');
     return { success: String(archived) + ' selected member' + (archived === 1 ? '' : 's') + ' archived.' };
