@@ -3,7 +3,8 @@ import 'server-only';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, reconciliationFindings, stripeEvents } from '@/lib/db/schema';
+import { auditLog, billingAccounts, payments, reconciliationFindings, stripeEvents } from '@/lib/db/schema';
+import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { REPLAYABLE_EVENT_TYPES, processStripeEvent, type WebhookStripeClient } from './webhook-handlers';
 import {
@@ -53,6 +54,19 @@ async function statusOf(events: Stripe.Event[]): Promise<Map<string, ReplayEvent
     for (const row of findings) blocked.add(row.eventId);
   }
   const statuses = new Map(events.map((event) => [event.id, classifyReplayEvent(event.id, received, blocked)]));
+  // A membership payment event that reached this site before the member existed (for example the webhook was enabled before the legacy import) is recorded as received
+  // but its handler found no profile and applied nothing. It still has to be replayed: when the member exists now and no payment is recorded for the invoice, treat it as
+  // consumed-but-not-applied. A payment is unique by invoice, so replaying one that was in fact applied does nothing.
+  const unapplied = events.filter((event) => event.type === 'invoice.paid' && statuses.get(event.id) === 'already_processed').flatMap((event) => {
+    const { amountCents, currency, customerId, objectId } = describeReplayEvent(event);
+    return amountCents === MEMBERSHIP_FEE_CENTS && currency?.toLowerCase() === MEMBERSHIP_CURRENCY && customerId && objectId ? [{ customerId, id: event.id, invoiceId: objectId }] : [];
+  });
+  for (let index = 0; index < unapplied.length; index += CHUNK) {
+    const chunk = unapplied.slice(index, index + CHUNK);
+    const paid = new Set((await db.select({ id: payments.externalPaymentId }).from(payments).where(inArray(payments.externalPaymentId, chunk.map((item) => item.invoiceId)))).map((row) => row.id));
+    const members = new Set((await db.select({ id: billingAccounts.externalCustomerId }).from(billingAccounts).where(inArray(billingAccounts.externalCustomerId, chunk.map((item) => item.customerId)))).map((row) => row.id));
+    for (const item of chunk) if (!paid.has(item.invoiceId) && members.has(item.customerId)) statuses.set(item.id, 'blocked_earlier');
+  }
   const superseded = supersededEventIds(events.map((event) => ({ created: event.created, customerId: describeReplayEvent(event).customerId, id: event.id, status: statuses.get(event.id) ?? 'new', type: event.type })));
   for (const id of superseded) statuses.set(id, 'superseded');
   return statuses;

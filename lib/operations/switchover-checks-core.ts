@@ -41,11 +41,13 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
   // timestamp (not a row count) is the identity that matters. The production ledger must also match staging's newest (docs/07 production migration rules).
   const ledgerState = input.ledgerNewest === null ? 'unreadable' : input.ledgerNewest < input.journalNewest ? 'behind' : input.ledgerNewest > input.journalNewest ? 'ahead' : 'current';
   const stagingDiffers = input.stagingNewest !== undefined && input.stagingNewest !== null && input.ledgerNewest !== null && input.stagingNewest !== input.ledgerNewest;
-  add('migrations', 'Database migrations', ledgerState === 'current' && !stagingDiffers ? 'ok' : ledgerState === 'behind' || stagingDiffers ? 'todo' : 'warn',
+  const stagingUnreadable = input.stagingNewest === null;
+  add('migrations', 'Database migrations', ledgerState === 'current' && !stagingDiffers && !stagingUnreadable ? 'ok' : ledgerState === 'behind' || stagingDiffers ? 'todo' : 'warn',
     ledgerState === 'unreadable' ? 'The migration ledger could not be read.'
       : ledgerState === 'behind' ? 'The newest applied migration is older than the newest in the code. Approve the Auto-migrate Production Schema run in GitHub.'
         : ledgerState === 'ahead' ? 'The ledger is ahead of this deployment\'s code. Deploy the matching code before continuing.'
           : stagingDiffers ? 'The newest migration here differs from the staging schema\'s. Production must match staging before the switchover.'
+            : stagingUnreadable ? 'The code and this ledger agree, but the staging schema\'s ledger could not be read, so the match with staging is unverified. Check it in the migration workflow.'
             : 'The newest applied migration matches the code' + (input.stagingNewest === undefined ? '.' : ' and the staging schema.'));
 
   const { users, profiles, subscriptions, legacyImports } = input.counts;
