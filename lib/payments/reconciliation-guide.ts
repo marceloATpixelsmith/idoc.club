@@ -164,17 +164,6 @@ export const FINDING_GUIDE: FindingGuide[] = [
     resolve: ['Update the registration so it shows the refund (so money and records agree).', 'If the refund was a mistake, contact the registrant and take the appropriate step in Stripe.'],
   },
   {
-    kind: 'missing_refund',
-    lifecycle: 'kept',
-    label: 'Missing refund',
-    area: 'Seminar',
-    severity: 'check',
-    plain: 'IDOC expected a refund that Stripe does not show.',
-    why: ['This type is reserved; the system does not currently raise it, so you should not normally see it.'],
-    investigate: ['Open the registration and the matching Stripe payment and compare refund status.'],
-    resolve: ['If the refund is genuinely missing, issue it in Stripe, then correct the registration.'],
-  },
-  {
     kind: 'dispute',
     lifecycle: 'kept',
     label: 'Payment dispute',

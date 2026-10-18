@@ -22,7 +22,7 @@ export function ignoreSubjectKey(finding: Pick<FindingRow, 'details' | 'external
 /** Notices raised by Stripe notifications that stay until someone closes them: nothing is re-detected by the scan, so closing them is simply deleting them. */
 export function isClosableNotice(finding: Pick<FindingRow, 'details' | 'kind'>): boolean {
   const details = finding.details && typeof finding.details === 'object' ? finding.details as Record<string, unknown> : {};
-  if (['refund_conflict', 'dispute', 'chargeback', 'missing_refund'].includes(finding.kind)) return true;
+  if (['refund_conflict', 'dispute', 'chargeback'].includes(finding.kind)) return true;
   if (['status_conflict', 'pending_schedule_conflict'].includes(finding.kind)) return details.kind === undefined;
   if (finding.kind === 'seminar_payment_conflict') return details.source !== 'daily_seminar_scan';
   return false;

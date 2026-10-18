@@ -6,7 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { auditLog, notificationOutbox, profiles, reconciliationFindings, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireAdministrator } from '@/lib/membership/authorization';
-import { manualReviewReason, RECONCILIATION_KIND_LABELS, stripeContactDetails } from '@/lib/payments/reconciliation-report';
+import { failureFollowUp, findingTypeLabel, manualReviewReason, stripeContactDetails } from '@/lib/payments/reconciliation-report';
 import { stripeIdForFinding } from '@/lib/payments/reconciliation-guide';
 
 export async function GET(request: Request) {
@@ -68,9 +68,11 @@ export async function GET(request: Request) {
         reasonForManualReview: manualReviewReason(row),
         stripeId: stripeIdForFinding(row),
         summary: row.summary,
-        type: RECONCILIATION_KIND_LABELS[row.kind] ?? row.kind,
+        lastDeclineReason: failureFollowUp(row.details).lastDecline,
+        nextRetry: failureFollowUp(row.details).nextRetry,
+        type: findingTypeLabel(row),
         };
-      }), ['type', 'memberFirstName', 'memberLastName', 'memberEmail', 'stripeId', 'summary', 'reasonForManualReview', 'note', 'detected']);
+      }), ['type', 'memberFirstName', 'memberLastName', 'memberEmail', 'stripeId', 'summary', 'lastDeclineReason', 'nextRetry', 'reasonForManualReview', 'note', 'detected']);
       }
     await db.insert(auditLog).values({
       action: 'admin.selected_report.exported', actorId: actor.id,

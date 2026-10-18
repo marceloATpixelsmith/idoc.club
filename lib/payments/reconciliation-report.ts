@@ -9,7 +9,6 @@ export const RECONCILIATION_KIND_LABELS: Record<string, string> = {
   pending_schedule_conflict: 'Pending renewal schedule conflict',
   seminar_payment_conflict: 'Seminar payment conflict',
   refund_conflict: 'Refund conflict',
-  missing_refund: 'Missing refund',
   dispute: 'Payment dispute',
   chargeback: 'Chargeback',
 };
@@ -32,7 +31,7 @@ export function manualReviewReason(finding: FindingLike): string {
       return 'Stripe has a customer that IDOC does not know about, and the scan did not delete it: it is less than a day old, has a live subscription, an open invoice or a recent charge, or the scan paused because it looks like the wrong database or Stripe account. It may be a real payer who has not been imported.';
     case 'status_conflict':
       if (raisedByNotification) return 'A Stripe notification could not be applied to a membership automatically (for example a payment for a suspended or cancelled member, or one held back by the billing hold). It needs a decision: reinstate the member or refund the payment.';
-      if (details.stripeStatus === 'missing') return 'IDOC has this subscription open but the Stripe account being checked does not have it, and the scan did not mark it cancelled because so many were missing that it looks like the wrong Stripe account. Check the environment and the imported Stripe ID.';
+      if (details.stripeStatus === 'missing') return 'IDOC has this subscription open but the connected Stripe account has no subscription with that ID, and the scan did not mark it cancelled because so many were missing at once that it looks like the wrong Stripe account or an incomplete import. Check the environment and the Stripe ID that was imported for this member.';
       return `IDOC says '${String(details.localStatus ?? 'unknown')}' and Stripe says '${String(details.stripeStatus ?? 'unknown')}'. The scan copies Stripe's status itself, so this one is a status IDOC cannot store, changed while the scan ran, or failed to update. A developer should check why.`;
     case 'pending_schedule_conflict':
       if (raisedByNotification) return 'A Stripe notification about a member\'s pending renewal change could not be applied automatically. Check the schedule in Stripe and the member\'s renewal preference before changing anything.';
@@ -45,8 +44,6 @@ export function manualReviewReason(finding: FindingLike): string {
     }
     case 'refund_conflict':
       return 'Stripe issued a refund for a seminar payment that IDOC did not initiate, or a partial refund outside IDOC policy. The registration may need to be cancelled or corrected, and the member may need to be told.';
-    case 'missing_refund':
-      return 'A seminar registration was cancelled but no matching refund was found in Stripe. Check whether the member is owed a refund.';
     case 'dispute':
       return 'A member disputed a seminar payment with their bank. Evidence may be due in Stripe by a deadline, so someone needs to respond.';
     case 'chargeback':
@@ -60,4 +57,16 @@ export function manualReviewReason(finding: FindingLike): string {
 export function stripeContactDetails(details: unknown): { email: string; name: string } {
   const record = asRecord(details);
   return { email: typeof record.customerEmail === 'string' ? record.customerEmail : '', name: typeof record.customerName === 'string' ? record.customerName : '' };
+}
+
+/** The Type shown for a finding. A subscription IDOC has open that Stripe does not have is its own Type, so it can be filtered apart from a plain status mismatch. */
+export function findingTypeLabel(finding: { details: unknown; kind: string }): string {
+  if (finding.kind === 'status_conflict' && asRecord(finding.details).stripeStatus === 'missing') return 'Subscription missing from Stripe';
+  return RECONCILIATION_KIND_LABELS[finding.kind] ?? finding.kind;
+}
+
+/** Why the last payment was declined and when Stripe will try again, for repeated payment failures. */
+export function failureFollowUp(details: unknown): { lastDecline: string; nextRetry: string } {
+  const record = asRecord(details);
+  return { lastDecline: typeof record.declineReason === 'string' ? record.declineReason : '', nextRetry: typeof record.nextRetryAt === 'string' ? record.nextRetryAt.slice(0, 10) : '' };
 }

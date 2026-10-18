@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { manualReviewReason, RECONCILIATION_KIND_LABELS, stripeContactDetails } from '../lib/payments/reconciliation-report.ts';
+import { failureFollowUp, findingTypeLabel, manualReviewReason, RECONCILIATION_KIND_LABELS, stripeContactDetails } from '../lib/payments/reconciliation-report.ts';
 import { checkoutBelongsToRegistration, computeReconciliationFindings, ratioBreakerTripped, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
@@ -130,7 +130,9 @@ test('open local subscriptions missing from Stripe are reported only when the op
   assert.deepEqual(computeReconciliationFindings(local, stripe), []);
   const findings = computeReconciliationFindings(local, stripe, 2, { reportLocalMissingInStripe: true });
   assert.deepEqual(findings, [{ externalSubscriptionId: 'sub_gone', kind: 'status_conflict', localStatus: 'active', profileId: 1, stripeStatus: 'missing' }]);
-  assert.match(summarizeFinding(findings[0]), /was not found in Stripe/);
+  assert.match(summarizeFinding(findings[0]), /has no subscription with that ID/);
+  assert.equal(findingTypeLabel({ details: findings[0], kind: 'status_conflict' }), 'Subscription missing from Stripe');
+  assert.equal(findingTypeLabel({ details: { kind: 'status_conflict', stripeStatus: 'paused' }, kind: 'status_conflict' }), 'Subscription status conflict');
 });
 
 test('the wrong-database guard trips only when many items are a large share of everything compared', () => {
@@ -190,4 +192,32 @@ test('a repeated failure on a subscription IDOC does not know keeps the contact 
   assert.deepEqual(stripeContactDetails(findings[0]), { email: 'legacy@example.test', name: 'Legacy Member' });
   assert.deepEqual(stripeContactDetails(findings[1]), { email: '', name: '' });
   assert.match(manualReviewReason({ details: findings[0], kind: 'repeated_failure' }), /no record of/);
+});
+
+test('orphaned subscriptions and unlinked customers keep the contact details Stripe holds, and repeated failures say why and when Stripe retries', () => {
+  const findings = computeReconciliationFindings(
+    { billingAccounts: [], subscriptions: [] },
+    {
+      customers: [{ email: 'orphan@example.test', id: 'cus_orphan', name: 'Orphan Holder' }, { id: 'cus_bare' }],
+      openInvoices: [{ attemptCount: 3, nextPaymentAttempt: Date.UTC(2026, 10, 3) / 1000, subscription: 'sub_late' }],
+      subscriptions: [{ customer: 'cus_orphan', id: 'sub_orphan', status: 'active' }],
+    },
+  );
+  assert.deepEqual(findings.find((finding) => finding.kind === 'orphaned_subscription'), { customerEmail: 'orphan@example.test', customerName: 'Orphan Holder', externalCustomerId: 'cus_orphan', externalSubscriptionId: 'sub_orphan', kind: 'orphaned_subscription', stripeStatus: 'active' });
+  assert.deepEqual(findings.filter((finding) => finding.kind === 'unlinked_customer'), [
+    { customerEmail: 'orphan@example.test', customerName: 'Orphan Holder', externalCustomerId: 'cus_orphan', kind: 'unlinked_customer' },
+    { externalCustomerId: 'cus_bare', kind: 'unlinked_customer' },
+  ]);
+  const failure = findings.find((finding) => finding.kind === 'repeated_failure');
+  assert.ok(failure && failure.kind === 'repeated_failure');
+  assert.equal(failure.nextRetryAt, '2026-11-03T00:00:00.000Z');
+  const declined = { ...failure, declineReason: 'Your card has insufficient funds.' };
+  assert.equal(summarizeFinding(declined), 'Subscription sub_late has an open invoice with 3 failed payment attempts. Last decline: Your card has insufficient funds. Next retry: 2026-11-03.');
+  assert.match(summarizeFinding({ ...failure, nextRetryAt: undefined }), /no further retry scheduled/);
+  assert.deepEqual(failureFollowUp(declined), { lastDecline: 'Your card has insufficient funds.', nextRetry: '2026-11-03' });
+  assert.deepEqual(failureFollowUp({}), { lastDecline: '', nextRetry: '' });
+});
+
+test('the missing-refund type is gone from the labels', () => {
+  assert.equal('missing_refund' in RECONCILIATION_KIND_LABELS, false);
 });

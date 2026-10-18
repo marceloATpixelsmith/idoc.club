@@ -8,7 +8,7 @@ import { getLastReconciliationRun, listReconciliationFindings, requireAccountAcc
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 import { ignoreFindings, isIgnorableFinding, restoreIgnoredIssue } from '@/lib/payments/reconciliation-remediation';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
-import { RECONCILIATION_KIND_LABELS } from '@/lib/payments/reconciliation-report';
+import { findingTypeLabel, RECONCILIATION_KIND_LABELS } from '@/lib/payments/reconciliation-report';
 import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
 import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -129,7 +129,7 @@ export default async function AdminReconciliationPage({ searchParams }: { search
           <ReconciliationFindingsTable
             ignoreAction={ignoreSelected}
             rows={findings.map((finding) => ({
-              id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
+              id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: findingTypeLabel(finding),
               summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
               link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
               detected: finding.createdAt.toISOString(), ignorable: isIgnorableFinding(finding) ? 'yes' : 'no',

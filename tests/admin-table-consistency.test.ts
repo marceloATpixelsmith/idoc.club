@@ -130,6 +130,8 @@ test('read-only report tables show the loading skeleton when a filter, search or
   const exportRoute = readFileSync('app/api/admin/export/selected-reports/route.ts', 'utf8');
   for (const column of ['memberFirstName', 'memberLastName', 'memberEmail', 'reasonForManualReview']) assert.match(exportRoute, new RegExp(column));
   const cron = readFileSync('app/api/cron/reconciliation-scan/route.ts', 'utf8');
+  const panelSource = readFileSync('app/(dashboard)/admin/reconciliation/resolution-panel.tsx', 'utf8');
+  assert.match(panelSource, /simulatedBecause === 'safeguard'/);
   assert.match(cron, /notifySuperAdminsOfScan\(\{ ok: true \}\)/);
   assert.match(cron, /notifySuperAdminsOfScan\(\{ error/);
 });
