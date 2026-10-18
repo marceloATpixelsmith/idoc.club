@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
@@ -15,7 +14,7 @@ import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { ReconciliationTabs } from './reconciliation-tabs';
 import { CleanupCustomersForm, type CleanupCustomersState } from './cleanup-customers-form';
-import { DeleteSelectedCustomers } from './delete-selected-customers';
+import { ReconciliationFindingsTable } from './reconciliation-findings-table';
 import { RunScanForm, type RunScanState } from './run-scan-form';
 
 const PATH = '/admin/reconciliation';
@@ -138,21 +137,14 @@ export default async function AdminReconciliationPage() {
     <section className="mt-8">
       <ReconciliationTabs
         findingsTable={
-          <AdminReadOnlyTable
-            bulkActions={cleanupAvailable ? ({ clearSelection, selected }) => <DeleteSelectedCustomers action={cleanupCustomers} clearSelection={clearSelection} selected={selected} /> : undefined}
-            columns={[{ id: 'category', label: 'Category' }, { id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'stripeId', label: 'Stripe ID' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
-            dateColumn="detected"
-            empty="No findings from the last run."
-            filterColumns={['kind']}
+          <ReconciliationFindingsTable
+            cleanupAction={cleanupAvailable ? cleanupCustomers : undefined}
             rows={findings.map((finding) => ({
               id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
               summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
               link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
               detected: finding.createdAt.toISOString(),
             }))}
-            searchLabel="Search reconciliation findings"
-            statusColumn="category"
-            tableType="reconciliation"
           />
         }
         scanState={!lastRun ? 'never' : lastRun.status === 'completed' ? 'ok' : 'failed'}

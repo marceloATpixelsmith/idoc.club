@@ -9,6 +9,16 @@ import { ActionBarItem } from '@/components/ui/action-bar';
 import { useBrandedDialogs } from '@/components/ui/branded-dialogs';
 import type { CleanupCustomersState } from './cleanup-customers-form';
 
+/** Hands the processed-customer report to the browser as a file, so the per-customer outcomes are never lost with the selection bar. */
+function downloadCsv(csv: string) {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'stripe-customer-cleanup.csv';
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const UNLINKED_CUSTOMER_LABEL = 'Unlinked Stripe Customer';
 type Action = (state: CleanupCustomersState, formData: FormData) => Promise<CleanupCustomersState>;
 
@@ -25,13 +35,20 @@ export function DeleteSelectedCustomers({ action, clearSelection, selected }: { 
   const customerIds = matching.map((row) => row.stripeId as string);
 
   useEffect(() => {
-    if (state.success) { alert(state.success); clearSelection(); router.refresh(); }
+    if (state.success) {
+      if (state.csv) downloadCsv(state.csv);
+      alert(state.success);
+      clearSelection();
+      router.refresh();
+    }
     else if (state.error) alert(state.error, 'Could not delete');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   if (customerIds.length === 0) return null;
-  const onSelect = async () => {
+  const onSelect = async (event: Event) => {
+    // Keep the selection bar (and this component's dialogs) mounted while the confirmation is open.
+    event.preventDefault();
     if (pending || mixedSelection || !formRef.current) return;
     const accepted = await confirm({
       confirmLabel: 'Delete customers', destructive: true, title: 'Delete selected Stripe customers?',

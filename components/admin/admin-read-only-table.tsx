@@ -79,7 +79,7 @@ export function AdminReadOnlyTable({
               }
             : undefined,
         header: ({ column }) => <DataTableColumnHeader column={column} label={label} />,
-        meta: filterIds.includes(id) ? { label, options: optionsById[id], variant: 'select' } : { label },
+        meta: filterIds.includes(id) ? { label, options: optionsById[id], variant: 'multiSelect' } : { label },
         cell: ({ row }) => id === 'member' && row.original.link
           ? <Link className="underline" href={row.original.link}>{row.original[id] ?? 'View member'}</Link>
           : formatReadOnlyCell(row.original[id]),
