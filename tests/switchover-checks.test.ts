@@ -42,3 +42,31 @@ test('hostOf reads a hostname and tolerates bad input', () => {
   assert.equal(hostOf('not a url'), null);
   assert.equal(hostOf(undefined), null);
 });
+
+import { evaluateFinal, type FinalInputs } from '../lib/operations/switchover-checks-core.ts';
+
+const done: FinalInputs = {
+  deadLetteredOther: 0, heldEventsPending: 0, hold: false, importRun: { at: '2026-10-22T10:00:00Z', imported: 1500, payments: 6000, subscriptions: 900 }, keyMode: 'live', legacyImportEnabled: false,
+  legacyKeyPresent: false, liveActionsEnabled: false, members: { payments: 6000, profiles: 1500, subscriptionsByStatus: { active: 900 }, users: 1500 }, openFindings: {}, outboxPending: 0,
+  replayRun: { at: '2026-10-22T11:00:00Z', failed: 0, processed: 3 }, scanAt: '2026-10-22T11:30:00Z', webhook: 'ok', webhookEventsLast24h: 5,
+};
+const finalStatus = (input: FinalInputs, id: string) => evaluateFinal(input).find((check) => check.id === id)?.status;
+
+test('a finished switchover verifies clean', () => {
+  assert.deepEqual(evaluateFinal(done).filter((check) => check.status !== 'ok'), []);
+});
+
+test('final verification reports every unfinished or risky item', () => {
+  assert.equal(finalStatus({ ...done, importRun: null }, 'final-import'), 'todo');
+  assert.equal(finalStatus({ ...done, legacyKeyPresent: true }, 'final-import-off'), 'todo');
+  assert.equal(finalStatus({ ...done, hold: true }, 'final-hold'), 'todo');
+  assert.equal(finalStatus({ ...done, heldEventsPending: 4 }, 'final-held-events'), 'todo');
+  assert.equal(finalStatus({ ...done, replayRun: { at: 'x', failed: 2, processed: 1 } }, 'final-replay'), 'warn');
+  assert.equal(finalStatus({ ...done, scanAt: null }, 'final-scan'), 'todo');
+  assert.equal(finalStatus({ ...done, openFindings: { orphaned_subscription: 3 } }, 'final-findings'), 'warn');
+  assert.equal(finalStatus({ ...done, liveActionsEnabled: true }, 'final-safeguard'), 'warn');
+  assert.equal(finalStatus({ ...done, deadLetteredOther: 1 }, 'final-queues'), 'warn');
+  assert.equal(finalStatus({ ...done, keyMode: 'test' }, 'final-stripe'), 'todo');
+  assert.equal(finalStatus({ ...done, webhookEventsLast24h: 0 }, 'final-stripe'), 'warn');
+  assert.match(evaluateFinal({ ...done, openFindings: { orphaned_subscription: 3, refund_conflict: 1 } }).find((check) => check.id === 'final-findings')?.detail ?? '', /3 orphaned subscription, 1 refund conflict/);
+});

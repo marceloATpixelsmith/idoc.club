@@ -79,3 +79,55 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
       : 'Off (default): reconciliation only simulates Stripe changes.');
   return checks;
 }
+
+// ---- Final verification: run after the import, replay and first scan (docs/30 step B12). Reports the end state of everything the switchover touched. ----
+
+export type FinalInputs = {
+  deadLetteredOther: number;
+  heldEventsPending: number;
+  hold: SwitchoverInputs['holdOn'];
+  importRun: { at: string; imported: number; payments: number; subscriptions: number } | null;
+  keyMode: SwitchoverInputs['stripeKeyMode'];
+  legacyImportEnabled: boolean;
+  legacyKeyPresent: boolean;
+  liveActionsEnabled: boolean;
+  members: { payments: number; profiles: number; subscriptionsByStatus: Record<string, number>; users: number };
+  openFindings: Record<string, number>;
+  outboxPending: number;
+  replayRun: { at: string; failed: number; processed: number } | null;
+  scanAt: string | null;
+  webhook: SwitchoverInputs['webhook']['state'];
+  webhookEventsLast24h: number;
+};
+
+export function evaluateFinal(input: FinalInputs): SwitchoverCheck[] {
+  const checks: SwitchoverCheck[] = [];
+  const add = (id: string, label: string, status: SwitchoverCheck['status'], detail: string) => checks.push({ detail, id, label, status });
+  const statusText = Object.entries(input.members.subscriptionsByStatus).map(([name, n]) => `${n} ${name}`).join(', ') || 'none';
+
+  add('final-import', 'Legacy import ran', input.importRun ? 'ok' : 'todo',
+    input.importRun ? `Imported ${input.importRun.imported} members, ${input.importRun.payments} payments and ${input.importRun.subscriptions} subscriptions on ${input.importRun.at.slice(0, 16).replace('T', ' ')} UTC.` : 'No legacy import is recorded in this environment.');
+  add('final-members', 'Members now in the database', input.members.users > 0 ? 'ok' : 'todo',
+    `${input.members.users} users, ${input.members.profiles} profiles, ${input.members.payments} payments; subscriptions: ${statusText}. Compare these with the import dry run.`);
+  add('final-import-off', 'Import switched off and key removed', !input.legacyImportEnabled && !input.legacyKeyPresent ? 'ok' : 'todo',
+    !input.legacyImportEnabled && !input.legacyKeyPresent ? 'LEGACY_IMPORT_ENABLED and LEGACY_STRIPE_SECRET_KEY are gone. Also confirm the restricted key is revoked in Stripe (this page cannot see that).'
+      : 'LEGACY_IMPORT_ENABLED or LEGACY_STRIPE_SECRET_KEY is still set. Remove them, redeploy and revoke the key in Stripe.');
+  add('final-hold', 'Launch hold released', input.hold ? 'todo' : 'ok', input.hold ? 'The hold is still on, so no email or live billing is active yet (docs/30 step B8).' : 'The hold is off: member emails and live billing are active.');
+  add('final-stripe', 'Stripe live and receiving', input.keyMode === 'live' && input.webhook === 'ok' ? (input.webhookEventsLast24h > 0 || input.hold ? 'ok' : 'warn') : 'todo',
+    input.keyMode !== 'live' ? 'The Stripe key is not a live-mode key.' : input.webhook !== 'ok' ? 'The webhook endpoint is not enabled for this site with every handled event type.'
+      : input.hold ? 'Live key and webhook endpoint are in place. Events received while the hold is on are recorded, not applied.'
+        : input.webhookEventsLast24h > 0 ? `${input.webhookEventsLast24h} Stripe events received in the last 24 hours.` : 'No Stripe events were received in the last 24 hours. That may be normal on a quiet day; if a payment just happened, check the endpoint\'s delivery log in Stripe.');
+  add('final-held-events', 'Events consumed by the hold', input.heldEventsPending === 0 ? 'ok' : 'todo',
+    input.heldEventsPending === 0 ? 'No event is waiting to be replayed.' : `${input.heldEventsPending} events were recorded but not applied because the hold was on. Replay them (docs/30 step B9).`);
+  add('final-replay', 'Missed events replayed', input.replayRun ? (input.replayRun.failed > 0 ? 'warn' : 'ok') : 'todo',
+    input.replayRun ? `Replay on ${input.replayRun.at.slice(0, 16).replace('T', ' ')} UTC applied ${input.replayRun.processed} events${input.replayRun.failed > 0 ? `; ${input.replayRun.failed} FAILED. Preview again to retry them` : ''}.` : 'No replay is recorded. Run a preview on the replay page; if it shows nothing to replay, this is fine.');
+  const open = Object.entries(input.openFindings).filter(([, n]) => n > 0);
+  add('final-scan', 'Reconciliation scan run', input.scanAt ? 'ok' : 'todo', input.scanAt ? `Last scan ${input.scanAt.slice(0, 16).replace('T', ' ')} UTC.` : 'No scan has run. Run one on the reconciliation page.');
+  add('final-findings', 'Open reconciliation findings', open.length === 0 ? 'ok' : 'warn',
+    open.length === 0 ? 'No open findings.' : `Open: ${open.map(([kind, n]) => `${n} ${kind.replace(/_/g, ' ')}`).join(', ')}. Review each on the reconciliation page.`);
+  add('final-safeguard', 'Live Stripe actions switch', input.liveActionsEnabled ? 'warn' : 'ok',
+    input.liveActionsEnabled ? 'ON: scans can cancel subscriptions and delete customers in Stripe. Leave it on only after the findings above are reviewed.' : 'Off: scans only simulate Stripe changes. Turn it on (RECONCILIATION_LIVE_STRIPE_ACTIONS=enabled) only when you want orphaned subscriptions and unlinked customers cleaned up in Stripe.');
+  add('final-queues', 'Email and job queues', input.deadLetteredOther > 0 ? 'warn' : 'ok',
+    `${input.outboxPending} jobs pending${input.hold ? ' (held while the hold is on)' : ''}; ${input.deadLetteredOther} failed permanently for a reason other than the hold.`);
+  return checks;
+}
