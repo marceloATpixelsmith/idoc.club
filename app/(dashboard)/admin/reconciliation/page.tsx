@@ -1,7 +1,17 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
+import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
+import { db } from '@/lib/db/drizzle';
+import { auditLog } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
-import { requireAdministrator } from '@/lib/membership/authorization';
+import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
+import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
+import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
+import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
+import { requireCsrfToken } from '@/lib/security/csrf';
+import { ReconciliationTabs } from './reconciliation-tabs';
+import { RunScanForm, type RunScanState } from './run-scan-form';
 
 const KIND_LABELS: Record<string, string> = {
   orphaned_subscription: 'Orphaned active Stripe subscription',
@@ -16,10 +26,36 @@ const KIND_LABELS: Record<string, string> = {
   chargeback: 'Chargeback',
 };
 
+function formatUtc(date: Date) {
+  const iso = date.toISOString();
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} ${iso.slice(11, 16)} UTC`;
+}
+
+async function runScanNow(_state: RunScanState, formData: FormData): Promise<RunScanState> {
+  'use server';
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireSuperAdmin(actor);
+    await db.insert(auditLog).values({ actorId: actor.id, action: 'admin.reconciliation.scan_requested', entityType: 'reconciliation', entityId: 'manual' });
+    const { findingsCount } = await runReconciliationScan();
+    revalidatePath('/admin/reconciliation');
+    return { success: `The scan finished and found ${findingsCount.toLocaleString('en-GB')} item(s).` };
+  } catch (error) {
+    if (error instanceof AuthorizationError || (error instanceof Error && error.name === 'CsrfError')) return { error: error.message };
+    revalidatePath('/admin/reconciliation');
+    return { error: 'The scan could not be completed. The Last run box above shows the error that was recorded.' };
+  }
+}
+
 export default async function AdminReconciliationPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const [lastRun, findings] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings()]);
+  let isSuperAdmin = true;
+  try { requireSuperAdmin(actor); } catch { isSuperAdmin = false; }
+  let rehearsal = false;
+  try { rehearsal = rehearsalReadStatus().active; } catch { rehearsal = false; }
 
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-3xl font-semibold text-gold">Stripe Reconciliation</h1>
@@ -32,7 +68,7 @@ export default async function AdminReconciliationPage() {
       <h2 className="font-medium text-foreground">Last run</h2>
       {lastRun ? (
         <>
-          <p className="mt-2 text-sm text-foreground">Ran at: {lastRun.ranAt.toISOString()}</p>
+          <p className="mt-2 text-sm text-foreground">Ran at: {formatUtc(lastRun.ranAt)}</p>
           <p className="mt-1 text-sm text-foreground">Status: {lastRun.status === 'completed' ? 'Completed' : 'Failed'}</p>
           {lastRun.status === 'failed' && <p className="mt-1 text-sm text-red-400">Error: {lastRun.errorMessage}</p>}
           <p className="mt-1 text-sm text-foreground">Findings on that run: {lastRun.findingsCount}</p>
@@ -40,23 +76,37 @@ export default async function AdminReconciliationPage() {
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">No reconciliation run has completed yet.</p>
       )}
+      <p className="mt-2 text-xs text-muted-foreground">The scan runs automatically every day at 07:00 UTC. The findings below are from the last run, so anything changed since (an import, a fix) shows up after the next one.</p>
+      {isSuperAdmin ? <RunScanForm action={runScanNow} /> : null}
     </section>
 
+    {rehearsal ? (
+      <p className="mt-4 max-w-3xl rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="note">
+        Rehearsal mode is on in this environment: the scan compares your real, live Stripe account with the data in this environment. Live customers and subscriptions that have not been imported here show up as findings, so a long list before the legacy import is expected, and it shrinks once the import is done and the scan runs again. Items from the sandbox test members appear as "not found in Stripe". Seminar checks are skipped in this mode.
+      </p>
+    ) : null}
+
     <section className="mt-8">
-      <h2 className="font-medium text-foreground">Current findings</h2>
-      <AdminReadOnlyTable
-        columns={[{ id: 'category', label: 'Category' }, { id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
-        dateColumn="detected"
-        empty="No findings from the last run."
-        rows={findings.map((finding) => ({
-          id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
-          summary: finding.summary, member: finding.profileId ? 'View member' : '—',
-          link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
-          detected: finding.createdAt.toISOString(),
-        }))}
-        searchLabel="Search reconciliation findings"
-        statusColumn="category"
-        tableType="reconciliation"
+      <ReconciliationTabs
+        findingsTable={
+          <AdminReadOnlyTable
+            columns={[{ id: 'category', label: 'Category' }, { id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'stripeId', label: 'Stripe ID' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
+            dateColumn="detected"
+            empty="No findings from the last run."
+            rows={findings.map((finding) => ({
+              id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
+              summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
+              link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
+              detected: finding.createdAt.toISOString(),
+            }))}
+            searchLabel="Search reconciliation findings"
+            statusColumn="category"
+            tableType="reconciliation"
+          />
+        }
+        scanState={!lastRun ? 'never' : lastRun.status === 'completed' ? 'ok' : 'failed'}
+        summary={summarizeFindings(findings)}
+        total={findings.length}
       />
     </section>
   </main>;
