@@ -7,7 +7,7 @@ import { auditLog } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
-import { summarizeFindings } from '@/lib/payments/reconciliation-guide';
+import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
 import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { ReconciliationTabs } from './reconciliation-tabs';
@@ -95,7 +95,7 @@ export default async function AdminReconciliationPage() {
             empty="No findings from the last run."
             rows={findings.map((finding) => ({
               id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
-              summary: finding.summary, stripeId: finding.externalSubscriptionId ?? finding.externalCustomerId ?? '—', member: finding.profileId ? 'View member' : '—',
+              summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
               link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
               detected: finding.createdAt.toISOString(),
             }))}
@@ -104,6 +104,7 @@ export default async function AdminReconciliationPage() {
             tableType="reconciliation"
           />
         }
+        scanState={!lastRun ? 'never' : lastRun.status === 'completed' ? 'ok' : 'failed'}
         summary={summarizeFindings(findings)}
         total={findings.length}
       />

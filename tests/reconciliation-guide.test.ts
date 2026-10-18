@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { FINDING_GUIDE, guideForKind, summarizeFindings } from '../lib/payments/reconciliation-guide.ts';
+import { FINDING_GUIDE, guideForKind, stripeIdForFinding, summarizeFindings } from '../lib/payments/reconciliation-guide.ts';
 
 test('every finding kind the database allows has a plain-language guide with steps', () => {
   const schema = readFileSync(new URL('../lib/db/schema.ts', import.meta.url), 'utf8');
@@ -27,4 +27,23 @@ test('the summary counts each type and lists the ones needing action first', () 
   ]);
   assert.match(rows[3].plain, /no explanation yet/);
   assert.deepEqual(summarizeFindings([]), []);
+});
+
+test('findings kept after a fix are labelled so, and the scan-owned ones are not', () => {
+  assert.equal(guideForKind('dispute')?.lifecycle, 'kept');
+  assert.equal(guideForKind('refund_conflict')?.lifecycle, 'kept');
+  assert.equal(guideForKind('chargeback')?.lifecycle, 'kept');
+  assert.equal(guideForKind('seminar_payment_conflict')?.lifecycle, 'mixed');
+  assert.equal(guideForKind('orphaned_subscription')?.lifecycle, 'replaced');
+  assert.equal(guideForKind('unlinked_customer')?.lifecycle, 'replaced');
+});
+
+test('the Stripe ID column falls back from subscription and customer to the references kept in details', () => {
+  assert.equal(stripeIdForFinding({ externalSubscriptionId: 'sub_1', externalCustomerId: 'cus_1' }), 'sub_1');
+  assert.equal(stripeIdForFinding({ externalCustomerId: 'cus_1' }), 'cus_1');
+  assert.equal(stripeIdForFinding({ details: { disputeId: 'dp_1', paymentIntentId: 'pi_1' } }), 'pi_1');
+  assert.equal(stripeIdForFinding({ details: { refundId: 're_1' } }), 're_1');
+  assert.equal(stripeIdForFinding({ details: { sessionId: 'cs_1', paymentIntentId: null } }), 'cs_1');
+  assert.equal(stripeIdForFinding({ details: { notificationOutboxId: 7 } }), '—');
+  assert.equal(stripeIdForFinding({ details: null }), '—');
 });

@@ -2,13 +2,13 @@
 
 import { useState, type ReactNode } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FINDING_GUIDE, type FindingSummaryRow } from '@/lib/payments/reconciliation-guide';
+import { FINDING_GUIDE, LIFECYCLE_NOTE, type FindingSummaryRow } from '@/lib/payments/reconciliation-guide';
 
 const SEVERITY_LABEL = { act: 'Needs action', check: 'Worth checking' } as const;
 const SEVERITY_CLASS = { act: 'border-red-400/50 bg-red-950/30 text-red-200', check: 'border-amber-400/50 bg-amber-950/20 text-amber-200' } as const;
 
 /** Three views of the same findings: a summary by type, the full table, and a plain-language guide to each type. */
-export function ReconciliationTabs({ summary, total, findingsTable }: { summary: FindingSummaryRow[]; total: number; findingsTable: ReactNode }) {
+export function ReconciliationTabs({ summary, total, findingsTable, scanState }: { summary: FindingSummaryRow[]; total: number; findingsTable: ReactNode; scanState: 'ok' | 'failed' | 'never' }) {
   const [tab, setTab] = useState('summary');
   const [guideKind, setGuideKind] = useState<string | null>(null);
   const needAction = summary.filter((row) => row.severity === 'act').reduce((sum, row) => sum + row.count, 0);
@@ -31,8 +31,16 @@ export function ReconciliationTabs({ summary, total, findingsTable }: { summary:
       </TabsList>
 
       <TabsContent value="summary">
+        {scanState === 'failed' ? (
+          <p className="mb-4 rounded-lg border border-red-400/50 bg-red-950/30 p-4 text-sm text-red-200" role="alert">The last scan failed, so {total === 0 ? 'an empty list does not mean everything is fine' : 'these findings come from an earlier scan and may be out of date'}. See the error in the Last run box.</p>
+        ) : null}
+        {scanState === 'never' ? (
+          <p className="mb-4 rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">No scan has completed yet{total === 0 ? ', so there is nothing to show' : '; these findings were raised by Stripe notifications'}. The first scan runs at 07:00 UTC{' '}(a Super Admin can press Run scan now).</p>
+        ) : null}
         {total === 0 ? (
-          <p className="rounded-lg border border-emerald-400/40 bg-emerald-950/20 p-4 text-sm text-emerald-200" role="status">Nothing to review: IDOC and Stripe agree as of the last run.</p>
+          scanState === 'ok'
+            ? <p className="rounded-lg border border-emerald-400/40 bg-emerald-950/20 p-4 text-sm text-emerald-200" role="status">Nothing to review: IDOC and Stripe agree as of the last run.</p>
+            : null
         ) : (
           <div className="space-y-6">
             <div className="grid gap-3 sm:grid-cols-3">
@@ -66,7 +74,7 @@ export function ReconciliationTabs({ summary, total, findingsTable }: { summary:
 
       <TabsContent value="guide">
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">Every finding is a place where IDOC's records and Stripe's records disagree. The scan only reads Stripe; it never changes anything in Stripe or in member records. Each finding is replaced by the next daily scan, so one that you have fixed disappears by itself.</p>
+          <p className="text-sm text-muted-foreground">Every finding is a place where IDOC's records and Stripe's records disagree. The scan only reads Stripe; it never changes anything in Stripe or in member records. How long a finding stays depends on where it came from; each type below says.</p>
           {FINDING_GUIDE.map((entry) => (
             <section className={`rounded-lg border p-4 ${guideKind === entry.kind ? 'border-primary' : 'border-border'}`} id={`guide-${entry.kind}`} key={entry.kind}>
               <div className="flex flex-wrap items-center gap-2">
@@ -78,6 +86,7 @@ export function ReconciliationTabs({ summary, total, findingsTable }: { summary:
               <GuideList items={entry.why} title="Why it happens" />
               <GuideList items={entry.investigate} title="How to look into it" />
               <GuideList items={entry.resolve} title="What to do" />
+              <p className="mt-3 text-xs text-muted-foreground">{LIFECYCLE_NOTE[entry.lifecycle]}</p>
             </section>
           ))}
         </div>

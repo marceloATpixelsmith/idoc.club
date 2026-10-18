@@ -15,11 +15,20 @@ export interface FindingGuide {
   why: string[];
   investigate: string[];
   resolve: string[];
+  /** Whether the next daily scan removes this finding by itself once the problem is gone. */
+  lifecycle: 'replaced' | 'kept' | 'mixed';
 }
+
+export const LIFECYCLE_NOTE: Record<FindingGuide['lifecycle'], string> = {
+  replaced: 'The next daily scan replaces this list, so it disappears by itself once the problem is fixed.',
+  kept: 'Raised by a Stripe notification and kept after you fix it: the daily scan does not remove it and there is no close button yet. Note what you did and treat it as handled; a developer can clear it.',
+  mixed: 'Some of these come from the daily check and disappear once fixed; the ones raised by Stripe notifications are kept after you fix them (no close button yet), so treat those as handled once dealt with.',
+};
 
 export const FINDING_GUIDE: FindingGuide[] = [
   {
     kind: 'orphaned_subscription',
+    lifecycle: 'replaced',
     label: 'Orphaned active Stripe subscription',
     area: 'Membership',
     severity: 'act',
@@ -41,6 +50,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'repeated_failure',
+    lifecycle: 'replaced',
     label: 'Repeated payment failures',
     area: 'Membership',
     severity: 'act',
@@ -57,6 +67,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'status_conflict',
+    lifecycle: 'replaced',
     label: 'Subscription status conflict',
     area: 'Membership',
     severity: 'check',
@@ -78,6 +89,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'unlinked_customer',
+    lifecycle: 'replaced',
     label: 'Unlinked Stripe Customer',
     area: 'Membership',
     severity: 'check',
@@ -99,6 +111,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'pending_schedule_conflict',
+    lifecycle: 'replaced',
     label: 'Pending renewal schedule conflict',
     area: 'Membership',
     severity: 'check',
@@ -115,6 +128,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'seminar_payment_conflict',
+    lifecycle: 'mixed',
     label: 'Seminar payment conflict',
     area: 'Seminar',
     severity: 'act',
@@ -136,6 +150,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'refund_conflict',
+    lifecycle: 'kept',
     label: 'Refund conflict',
     area: 'Seminar',
     severity: 'act',
@@ -146,6 +161,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'missing_refund',
+    lifecycle: 'kept',
     label: 'Missing refund',
     area: 'Seminar',
     severity: 'check',
@@ -156,6 +172,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'dispute',
+    lifecycle: 'kept',
     label: 'Payment dispute',
     area: 'Seminar',
     severity: 'act',
@@ -166,6 +183,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'chargeback',
+    lifecycle: 'kept',
     label: 'Chargeback',
     area: 'Seminar',
     severity: 'act',
@@ -206,4 +224,17 @@ export function summarizeFindings(findings: Array<{ kind: string }>): FindingSum
     };
   });
   return rows.sort((a, b) => (a.severity === b.severity ? b.count - a.count : a.severity === 'act' ? -1 : 1));
+}
+
+/** The Stripe ID an administrator would search for in Stripe: the subscription or customer if recorded, otherwise the payment, refund,
+ * dispute or checkout reference that webhook and seminar findings keep in `details`. */
+export function stripeIdForFinding(finding: { externalSubscriptionId?: string | null; externalCustomerId?: string | null; details?: unknown }): string {
+  if (finding.externalSubscriptionId) return finding.externalSubscriptionId;
+  if (finding.externalCustomerId) return finding.externalCustomerId;
+  const details = finding.details && typeof finding.details === 'object' ? finding.details as Record<string, unknown> : {};
+  for (const key of ['paymentIntentId', 'disputeId', 'refundId', 'sessionId', 'checkoutSessionId', 'setupIntentId', 'invoiceId']) {
+    const value = details[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return '—';
 }
