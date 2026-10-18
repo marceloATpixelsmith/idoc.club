@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import type Stripe from 'stripe';
 import { applyReplay, previewReplay, ReplayBlockedError } from '../lib/payments/stripe-event-replay.ts';
-import { adminUser, closeHarness, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, closeHarness, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -75,4 +75,17 @@ test('a missed state event that a newer, already applied event for the same cust
     assert.equal(result.ignored, 1);
   });
   assert.equal((await sql`select 1 from idoc.stripe_events where external_event_id='evt_failed_old'`).length, 0, 'the overtaken event was not applied');
+});
+
+test('a membership payment received before the member existed is replayable; one that was applied, whose customer is not a member, or that is not a membership invoice is not', async () => {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await sql`insert into idoc.billing_accounts(profile_id,external_customer_id) values(${profile.id},'cus_member')`;
+  await sql`insert into idoc.stripe_events(external_event_id,event_type,processed_at) values ('evt_early','invoice.paid',now()),('evt_applied','invoice.paid',now()),('evt_stranger','invoice.paid',now()),('evt_unrelated','invoice.paid',now())`;
+  await sql`insert into idoc.payments(profile_id,source,external_payment_id,amount_cents,currency,paid_at) values (${profile.id},'stripe_recurring','in_applied',8000,'EUR',now())`;
+  const paid = (id: string, invoice: string, customer: string, hoursAgo: number, product = 'prod_membership') => ({ created: at(hoursAgo), data: { object: { amount_paid: 8000, currency: 'eur', customer, id: invoice, lines: { data: [{ pricing: { price_details: { price: 'price_x', product } } }] } } }, id, livemode: false, object: 'event', type: 'invoice.paid' }) as unknown as Stripe.Event;
+  process.env.STRIPE_MEMBERSHIP_PRODUCT_ID = 'prod_membership';
+  const preview = await previewReplay(fakeStripe([paid('evt_early', 'in_early', 'cus_member', 40), paid('evt_applied', 'in_applied', 'cus_member', 30), paid('evt_stranger', 'in_stranger', 'cus_nobody', 20), paid('evt_unrelated', 'in_unrelated', 'cus_member', 10, 'prod_other')]), SINCE, NOW);
+  assert.deepEqual(preview.events.map((event) => [event.id, event.status]), [['evt_early', 'blocked_earlier']]);
+  assert.equal(preview.replayable, 1);
 });
