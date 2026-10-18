@@ -7,25 +7,28 @@ import { getStripeServerClient } from './stripe-client';
 import { getRehearsalReadClient } from './rehearsal-read-client';
 import { checkoutBelongsToRegistration, computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
 import { markMissingSubscriptionsCanceled, newResolutionLog, summarizeResolution, recordPaidSeminarRegistration, resolveOrphanedSubscriptions, resolveRenewalSchedules, resolveUnlinkedCustomers, syncSubscriptionStatuses, type ResolverStripeClient, type StripeMode, type StripeSubscriptionDetails } from './reconciliation-resolver';
-import { remediationAllowed } from './remediation-gate';
+import { stripeActionStatus } from './remediation-gate';
 
 // Only the calls this module makes, and only the fields it actually reads back, so tests can
 // inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
 // lib/payments/stripe.ts's PortalStripeClient/CancellationStripeClient).
 export type ReconciliationStripeClient = {
-  customers: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ created?: number; id: string }>; has_more: boolean }> };
+  customers: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ created?: number; email?: string | null; id: string; name?: string | null }>; has_more: boolean }> };
   // Stripe API version 2025-04-30.basil moved an invoice's subscription off the top-level
   // `subscription` field onto `parent.subscription_details.subscription` — this narrows the type
   // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
   // regress this back to reading a field that no longer exists.
-  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; customer_email?: string | null; customer_name?: string | null; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
+  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; customer?: string | null; customer_email?: string | null; customer_name?: string | null; id: string; next_payment_attempt?: number | null; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<StripeSubscriptionDetails & { created?: number; customer: string }>; has_more: boolean }> };
+  /** Used only to read why the latest payment for a repeated failure was declined. */
+  charges?: { list: (params: { customer: string; limit: number }) => Promise<{ data: Array<{ failure_code?: string | null; failure_message?: string | null; outcome?: { seller_message?: string | null } | null }> }> };
   checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; metadata?: Record<string, string> | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
 };
 
 const PAGE_SIZE = 100;
+const DECLINE_LOOKUP_LIMIT = 300;
 
 async function paginate<T extends { id: string }>(list: (params: { limit: number; starting_after?: string }) => Promise<{ data: T[]; has_more: boolean }>): Promise<T[]> {
   const results: T[] = [];
@@ -113,7 +116,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       { billingAccounts: localBillingAccounts, renewalPreferences: localPreferences, subscriptions: localSubscriptions },
       {
         customers: stripeCustomers,
-        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, customerEmail: invoice.customer_email, customerName: invoice.customer_name, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
+        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, customerEmail: invoice.customer_email, customerName: invoice.customer_name, nextPaymentAttempt: invoice.next_payment_attempt, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
         schedules: stripeSchedules,
         subscriptions: stripeSubscriptions,
       },
@@ -121,16 +124,30 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       { reportLocalMissingInStripe: true },
     );
     const subjectOf = (finding: ReconciliationFinding): string | null => ('externalSubscriptionId' in finding ? finding.externalSubscriptionId : 'externalCustomerId' in finding ? finding.externalCustomerId : null);
+    // A repeated failure is for a person to follow up, so record why the card was declined. Best effort and bounded: one lookup per failing customer.
+    const customerBySubscription = new Map(stripeOpenInvoices.flatMap((invoice) => (invoice.parent?.subscription_details?.subscription && invoice.customer ? [[invoice.parent.subscription_details.subscription, invoice.customer] as const] : [])));
+    let declineLookups = 0;
+    for (const finding of rawFindings) {
+      const customerId = finding.kind === 'repeated_failure' ? customerBySubscription.get(finding.externalSubscriptionId) : undefined;
+      if (!customerId || !stripe.charges || declineLookups >= DECLINE_LOOKUP_LIMIT) continue;
+      declineLookups += 1;
+      try {
+        const charge = (await stripe.charges.list({ customer: customerId, limit: 5 })).data.find((candidate) => candidate.failure_message || candidate.outcome?.seller_message || candidate.failure_code);
+        const reason = charge?.failure_message ?? charge?.outcome?.seller_message ?? charge?.failure_code;
+        if (reason) (finding as { declineReason?: string }).declineReason = reason.slice(0, 200);
+      } catch { /* the reason is a convenience; the finding stands without it */ }
+    }
     for (const finding of rawFindings) { const subject = subjectOf(finding); if (subject) presentKeys.add(`${finding.kind}:${subject}`); }
     const findings = rawFindings.filter((finding) => { const subject = subjectOf(finding); return !(subject && ignoredKeys.has(`${finding.kind}:${subject}`)); });
 
     // Resolve everything with a known answer BEFORE anything is recorded, so the report lists only what needs a person and nobody has to rescan.
     // Changes to IDOC's own database always happen; changes to Stripe happen only where this deployment may write to it and are otherwise
     // SIMULATED (same checks, same effect on the report), so a staging scan shows what a production scan will do.
+    const actionStatus = testOptions ? null : stripeActionStatus();
     const stripeMode: StripeMode = testOptions
       ? (testOptions.stripeMode ?? (testOptions.remediationClient ? 'apply' : 'simulate'))
-      : (!rehearsal && remediationAllowed() ? 'apply' : 'simulate');
-    const log = newResolutionLog(stripeMode);
+      : (!rehearsal && actionStatus?.apply ? 'apply' : 'simulate');
+    const log = newResolutionLog(stripeMode, !rehearsal && actionStatus?.reason === 'safeguard' ? 'safeguard' : undefined);
     const actionClient = (testOptions?.remediationClient ?? stripe) as unknown as ResolverStripeClient;
     const nowSeconds = Math.floor((testOptions?.now ?? new Date()).getTime() / 1000);
     const resolvedSubscriptions = new Set<string>();
@@ -205,8 +222,8 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     await db.transaction(async (tx) => {
       // Rehearsal skips the seminar checks, so it must also leave the previous seminar findings in place.
       await tx.delete(reconciliationFindings).where(rehearsal
-        ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)`
-        : sql`(kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)) or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+        ? sql`kind not in ('refund_conflict','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)`
+        : sql`(kind not in ('refund_conflict','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)) or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
       // Findings raised by Stripe notifications (no `kind` inside details) stay until a person closes them; the scan replaces only its own.
       // Refunds and disputes are kept as seminar evidence only when they belong to a real seminar registration. Earlier versions also
       // recorded refunds Stripe sent for unrelated payments (for example the legacy site) as "Seminar" conflicts; remove those.

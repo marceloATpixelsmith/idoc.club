@@ -848,7 +848,7 @@ export const reconciliationFindings = idocSchema.table('reconciliation_findings'
   details: jsonb('details'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
+  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
 ]);
 
 /** Issues an administrator chose to stop seeing ("ignore") -- for example a member who has been contacted about repeated payment failures and will not or cannot update their

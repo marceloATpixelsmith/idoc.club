@@ -21,12 +21,12 @@ beforeEach(async () => {
 after(closeHarness);
 
 function fakeStripeClient(data: {
-  customers?: Array<{ created?: number; id: string }>;
+  customers?: Array<{ created?: number; email?: string | null; id: string; name?: string | null }>;
   // Deliberately shaped exactly like the real Stripe Invoice under API version 2025-04-30.basil —
   // subscription lives at invoice.parent.subscription_details.subscription, not a top-level field —
   // so this fixture exercises the same nested-field read runReconciliationScan performs, catching
   // any regression back to a flat (wrong) shape.
-  invoices?: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>;
+  invoices?: Array<{ attempt_count: number; customer?: string | null; customer_email?: string | null; customer_name?: string | null; id: string; next_payment_attempt?: number | null; parent: { subscription_details: { subscription: string } | null } | null }>;
   subscriptions?: Array<{ cancel_at_period_end?: boolean; created?: number; customer: string; id: string; items?: { data: Array<{ current_period_end?: number; price?: { id: string } }> }; status: string }>;
 }): ReconciliationStripeClient {
   return {
@@ -593,4 +593,33 @@ test('Super Admins are emailed a counts-only summary after a scheduled scan, and
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+test('a repeated failure records why the card was declined and when Stripe retries, and an unlinked customer keeps its Stripe contact details', async () => {
+  const stripe = {
+    ...fakeStripeClient({
+      customers: [{ created: 1, email: 'legacy@example.test', id: 'cus_legacy', name: 'Legacy Member' }],
+      invoices: [{ ...invoiceFixture('in_declined', 5, 'sub_legacy'), customer: 'cus_legacy', customer_email: 'legacy@example.test', customer_name: 'Legacy Member', next_payment_attempt: Math.floor(Date.UTC(2099, 0, 5) / 1000) }],
+    }),
+    charges: { list: async () => ({ data: [{ failure_code: null, failure_message: null, outcome: null }, { failure_code: 'card_declined', failure_message: 'Your card was declined.', outcome: null }] }) },
+  } as unknown as ReconciliationStripeClient;
+  await runReconciliationScan(stripe, { now: new Date('2026-01-01T00:00:00Z'), stripeMode: 'simulate' });
+  const [failure] = await sql<{ details: Record<string, unknown>; summary: string }[]>`select details, summary from idoc.reconciliation_findings where kind='repeated_failure'`;
+  assert.equal(failure.details.declineReason, 'Your card was declined.');
+  assert.equal(failure.details.nextRetryAt, '2099-01-05T00:00:00.000Z');
+  assert.match(failure.summary, /Last decline: Your card was declined\. Next retry: 2099-01-05\./);
+  // The customer is only a day old at most in this fixture's clock, so it stays listed with its contact details.
+  const [customer] = await sql<{ details: Record<string, unknown> }[]>`select details from idoc.reconciliation_findings where kind='unlinked_customer'`;
+  assert.equal(customer?.details.customerEmail, 'legacy@example.test');
+});
+
+test('a failing decline lookup never stops the scan', async () => {
+  const stripe = {
+    ...fakeStripeClient({ invoices: [invoiceFixture('in_x', 3, 'sub_x')].map((invoice) => ({ ...invoice, customer: 'cus_x' })) }),
+    charges: { list: async () => { throw new Error('stripe unavailable'); } },
+  } as unknown as ReconciliationStripeClient;
+  const result = await runReconciliationScan(stripe, { stripeMode: 'simulate' });
+  assert.equal(result.findingsCount, 1);
+  const [failure] = await sql<{ details: Record<string, unknown> }[]>`select details from idoc.reconciliation_findings where kind='repeated_failure'`;
+  assert.equal(failure.details.declineReason, undefined);
 });

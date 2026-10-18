@@ -23,10 +23,11 @@ export type ActionKind = 'subscription_status_synced' | 'subscription_marked_can
 export type ActionOutcome = 'applied' | 'simulated' | 'failed';
 export type ResolutionAction = { id: string; kind: ActionKind; outcome: ActionOutcome; summary: string };
 export type PausedResolution = { count: number; kind: ActionKind; reason: string };
-export type ResolutionLog = { actions: ResolutionAction[]; paused: PausedResolution[]; stripeMode: StripeMode };
+/** `simulatedBecause` is only set when Stripe changes were simulated on a deployment that would otherwise apply them (the import-verified safeguard is off). */
+export type ResolutionLog = { actions: ResolutionAction[]; paused: PausedResolution[]; simulatedBecause?: 'safeguard'; stripeMode: StripeMode };
 
-export function newResolutionLog(stripeMode: StripeMode): ResolutionLog {
-  return { actions: [], paused: [], stripeMode };
+export function newResolutionLog(stripeMode: StripeMode, simulatedBecause?: 'safeguard'): ResolutionLog {
+  return { actions: [], paused: [], ...(simulatedBecause ? { simulatedBecause } : {}), stripeMode };
 }
 
 /** Statuses the local `subscriptions` table can hold; Stripe's `paused` and anything newer is left as a finding. */
@@ -308,5 +309,5 @@ const SUMMARY_ACTION_CAP = 300;
 export function summarizeResolution(log: ResolutionLog) {
   const counts: Record<string, number> = {};
   for (const action of log.actions) counts[`${action.kind}:${action.outcome}`] = (counts[`${action.kind}:${action.outcome}`] ?? 0) + 1;
-  return { actions: log.actions.slice(0, SUMMARY_ACTION_CAP), counts, paused: log.paused, stripeMode: log.stripeMode, truncated: log.actions.length > SUMMARY_ACTION_CAP };
+  return { actions: log.actions.slice(0, SUMMARY_ACTION_CAP), counts, paused: log.paused, ...(log.simulatedBecause ? { simulatedBecause: log.simulatedBecause } : {}), stripeMode: log.stripeMode, truncated: log.actions.length > SUMMARY_ACTION_CAP };
 }

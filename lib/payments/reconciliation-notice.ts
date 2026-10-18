@@ -64,14 +64,14 @@ export async function notifySuperAdminsOfScan(outcome: { error?: string; ok: boo
       const counts = await db.select({ kind: reconciliationFindings.kind, total: sql<number>`count(*)::int` }).from(reconciliationFindings).groupBy(reconciliationFindings.kind);
       const total = counts.reduce((sum, row) => sum + row.total, 0);
       const [resolution] = await db.select({ afterJson: auditLog.afterJson }).from(auditLog).where(eq(auditLog.action, 'reconciliation.scan_resolution_summary')).orderBy(desc(auditLog.createdAt)).limit(1);
-      const resolved = (resolution?.afterJson ?? {}) as { counts?: Record<string, number>; stripeMode?: string };
+      const resolved = (resolution?.afterJson ?? {}) as { counts?: Record<string, number>; simulatedBecause?: string; stripeMode?: string };
       const resolvedRows = Object.entries(resolved.counts ?? {}).filter(([key]) => key.endsWith(':done') || key.endsWith(':simulated'));
       const resolvedTotal = resolvedRows.reduce((sum, [, value]) => sum + value, 0);
       subject = total === 0 ? `IDOC ${environment}: reconciliation scan finished, nothing needs follow-up` : `IDOC ${environment}: reconciliation scan finished, ${total.toLocaleString('en-GB')} item(s) need follow-up`;
       const waiting = total === 0 ? '<p>Nothing needs a person this time.</p>'
         : `<ul>${counts.sort((a, b) => b.total - a.total).map((row) => `<li>${escapeHtml(RECONCILIATION_KIND_LABELS[row.kind] ?? row.kind)}: <b>${row.total.toLocaleString('en-GB')}</b></li>`).join('')}</ul><p>Select the rows on the page and use Export selected CSV for member names, emails and the reason each needs a look.</p>`;
       const done = resolvedTotal === 0 ? '<p>The scan did not need to change anything by itself.</p>'
-        : `<ul>${resolvedRows.map(([key, value]) => `<li>${escapeHtml(ACTION_LABELS[key.split(':')[0] ?? ''] ?? key)}${key.endsWith(':simulated') ? ' (simulated)' : ''}: <b>${value.toLocaleString('en-GB')}</b></li>`).join('')}</ul>${resolved.stripeMode === 'simulate' ? '<p>Changes to Stripe were only simulated in this environment.</p>' : ''}`;
+        : `<ul>${resolvedRows.map(([key, value]) => `<li>${escapeHtml(ACTION_LABELS[key.split(':')[0] ?? ''] ?? key)}${key.endsWith(':simulated') ? ' (simulated)' : ''}: <b>${value.toLocaleString('en-GB')}</b></li>`).join('')}</ul>${resolved.simulatedBecause === 'safeguard' ? '<p>Changes to Stripe are switched off until the import-verified safeguard (RECONCILIATION_LIVE_STRIPE_ACTIONS) is enabled, so they were only simulated.</p>' : resolved.stripeMode === 'simulate' ? '<p>Changes to Stripe were only simulated in this environment.</p>' : ''}`;
       bodyHtml = `<p>The scheduled Stripe reconciliation scan has finished for <b>${escapeHtml(environment)}</b>.</p>${emailNoticeCard('Needs follow-up', waiting)}${emailNoticeCard('Resolved by the scan', done)}${emailButton(link, 'Open reconciliation')}`;
     }
     const html = renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC reconciliation monitoring. Sent to Super Admins after each scheduled scan; contains counts only.', heading: 'Stripe reconciliation' });

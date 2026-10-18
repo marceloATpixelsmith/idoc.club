@@ -8,7 +8,7 @@ test('every finding kind the database allows has a plain-language guide with ste
   const line = schema.split('\n').find((candidate) => candidate.includes('reconciliation_findings_kind_check')) ?? '';
   const clause = line.slice(line.indexOf(' in ('));
   const kinds = [...clause.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
-  assert.ok(kinds.length >= 10, 'could not read the allowed kinds from the schema');
+  assert.ok(kinds.length >= 9, 'could not read the allowed kinds from the schema');
   for (const kind of kinds) {
     const guide = guideForKind(kind);
     assert.ok(guide, `missing guide for ${kind}`);

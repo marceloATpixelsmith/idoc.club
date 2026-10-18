@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { remediationAllowed } from '../lib/payments/remediation-gate.ts';
+import { remediationAllowed, stripeActionStatus } from '../lib/payments/remediation-gate.ts';
 
 const live = {
   BASE_URL: 'https://idoc.club',
   DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false',
+  RECONCILIATION_LIVE_STRIPE_ACTIONS: 'enabled',
   STRIPE_SECRET_KEY: `sk_live_${'a'.repeat(24)}`,
   VERCEL_ENV: 'production',
 };
@@ -32,3 +33,17 @@ for (const [name, environment, schema] of [
     assert.equal(remediationAllowed(environment, schema), false);
   });
 }
+
+test('real Stripe changes against a live key also need the import-verified safeguard switched on', () => {
+  for (const value of [undefined, '', 'true', 'ENABLED', 'enable']) {
+    const off = { ...live, RECONCILIATION_LIVE_STRIPE_ACTIONS: value };
+    assert.equal(remediationAllowed(off, 'idoc_production'), false, String(value));
+    assert.deepEqual(stripeActionStatus(off, 'idoc_production'), { apply: false, reason: 'safeguard' });
+  }
+  assert.deepEqual(stripeActionStatus(live, 'idoc_production'), { apply: true, reason: 'allowed' });
+  assert.deepEqual(stripeActionStatus(live, 'idoc_staging'), { apply: false, reason: 'environment' });
+  // The switch is irrelevant while billing is still held (the hold is reported first) and for the Stripe sandbox.
+  assert.deepEqual(stripeActionStatus({ ...live, DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'true', RECONCILIATION_LIVE_STRIPE_ACTIONS: undefined }, 'idoc_production'), { apply: false, reason: 'environment' });
+  const sandbox = { ...live, BASE_URL: 'https://redesign.idoc.club', RECONCILIATION_LIVE_STRIPE_ACTIONS: undefined, STRIPE_SECRET_KEY: `sk_test_${'a'.repeat(24)}` };
+  assert.deepEqual(stripeActionStatus(sandbox, 'idoc_production'), { apply: true, reason: 'allowed' });
+});

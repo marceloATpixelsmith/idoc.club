@@ -1,9 +1,9 @@
 import { OPEN_SUBSCRIPTION_STATUSES } from './pricing.ts';
 
 export type ReconciliationFinding =
-  | { attemptCount: number; customerEmail?: string; customerName?: string; externalSubscriptionId: string; kind: 'repeated_failure'; profileId: number | null }
-  | { externalCustomerId: string; externalSubscriptionId: string; kind: 'orphaned_subscription'; stripeStatus: string }
-  | { externalCustomerId: string; kind: 'unlinked_customer' }
+  | { attemptCount: number; customerEmail?: string; customerName?: string; declineReason?: string; externalSubscriptionId: string; kind: 'repeated_failure'; nextRetryAt?: string; profileId: number | null }
+  | { customerEmail?: string; customerName?: string; externalCustomerId: string; externalSubscriptionId: string; kind: 'orphaned_subscription'; stripeStatus: string }
+  | { customerEmail?: string; customerName?: string; externalCustomerId: string; kind: 'unlinked_customer' }
   | { externalSubscriptionId: string; kind: 'pending_schedule_conflict'; profileId: number; stripeStatus: string }
   | { externalSubscriptionId: string; kind: 'status_conflict'; localStatus: string; profileId: number; stripeStatus: string };
 
@@ -14,14 +14,19 @@ type LocalSnapshot = {
 };
 
 type StripeSnapshot = {
-  customers: Array<{ id: string }>;
+  customers: Array<{ email?: string | null; id: string; name?: string | null }>;
   /** `customerEmail`/`customerName` are the contact details Stripe holds on the invoice, kept so a failure for a subscription IDOC does not know can still be followed up. */
-  openInvoices: Array<{ attemptCount: number; customerEmail?: string | null; customerName?: string | null; subscription: string | null }>;
+  openInvoices: Array<{ attemptCount: number; customerEmail?: string | null; customerName?: string | null; nextPaymentAttempt?: number | null; subscription: string | null }>;
   subscriptions: Array<{ customer: string; id: string; status: string }>;
   schedules?: Array<{ id: string; status: string }>;
 };
 
 const OPEN_STRIPE_STATUSES = new Set<string>(OPEN_SUBSCRIPTION_STATUSES);
+
+/** The contact details Stripe holds for a customer, kept on a finding so someone can follow up when IDOC has no member for it. */
+function contactOf(customer: { email?: string | null; name?: string | null } | undefined): { customerEmail?: string; customerName?: string } {
+  return { ...(customer?.email ? { customerEmail: customer.email } : {}), ...(customer?.name ? { customerName: customer.name } : {}) };
+}
 
 /** `reportLocalMissingInStripe` also reports open local subscriptions that the Stripe list does not contain, as a status_conflict with Stripe
  * status 'missing'. */
@@ -29,6 +34,7 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
   const findings: ReconciliationFinding[] = [];
   const localSubscriptionsById = new Map(local.subscriptions.map((subscription) => [subscription.externalSubscriptionId, subscription]));
   const localCustomerIds = new Set(local.billingAccounts.map((billing) => billing.externalCustomerId));
+  const customersById = new Map(stripe.customers.map((customer) => [customer.id, customer]));
 
   for (const stripeSubscription of stripe.subscriptions) {
     const localSubscription = localSubscriptionsById.get(stripeSubscription.id);
@@ -41,6 +47,7 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
       }
     } else if (OPEN_STRIPE_STATUSES.has(stripeSubscription.status)) {
       findings.push({
+        ...contactOf(customersById.get(stripeSubscription.customer)),
         externalCustomerId: stripeSubscription.customer, externalSubscriptionId: stripeSubscription.id,
         kind: 'orphaned_subscription', stripeStatus: stripeSubscription.status,
       });
@@ -59,14 +66,14 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
   }
 
   for (const customer of stripe.customers) {
-    if (!localCustomerIds.has(customer.id)) findings.push({ externalCustomerId: customer.id, kind: 'unlinked_customer' });
+    if (!localCustomerIds.has(customer.id)) findings.push({ ...contactOf(customer), externalCustomerId: customer.id, kind: 'unlinked_customer' });
   }
 
   for (const invoice of stripe.openInvoices) {
     if (!invoice.subscription || invoice.attemptCount < failureThreshold) continue;
     const localSubscription = localSubscriptionsById.get(invoice.subscription);
     findings.push({
-      attemptCount: invoice.attemptCount, ...(invoice.customerEmail ? { customerEmail: invoice.customerEmail } : {}), ...(invoice.customerName ? { customerName: invoice.customerName } : {}),
+      attemptCount: invoice.attemptCount, ...(invoice.nextPaymentAttempt ? { nextRetryAt: new Date(invoice.nextPaymentAttempt * 1000).toISOString() } : {}), ...(invoice.customerEmail ? { customerEmail: invoice.customerEmail } : {}), ...(invoice.customerName ? { customerName: invoice.customerName } : {}),
       externalSubscriptionId: invoice.subscription, kind: 'repeated_failure', profileId: localSubscription?.profileId ?? null,
     });
   }
@@ -87,12 +94,12 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
 export function summarizeFinding(finding: ReconciliationFinding): string {
   switch (finding.kind) {
     case 'status_conflict':
-      if (finding.stripeStatus === 'missing') return `Local subscription ${finding.externalSubscriptionId} (status '${finding.localStatus}') was not found in Stripe.`;
+      if (finding.stripeStatus === 'missing') return `IDOC has subscription ${finding.externalSubscriptionId} as '${finding.localStatus}', but the connected Stripe account has no subscription with that ID, so IDOC cannot confirm it is still billing. The scan left it open instead of marking it cancelled.`;
       return `Local status '${finding.localStatus}' but Stripe reports '${finding.stripeStatus}' for subscription ${finding.externalSubscriptionId}.`;
     case 'orphaned_subscription':
       return `Stripe subscription ${finding.externalSubscriptionId} is '${finding.stripeStatus}' but has no matching local record.`;
     case 'repeated_failure':
-      return `Subscription ${finding.externalSubscriptionId} has an open invoice with ${finding.attemptCount} failed payment attempts.`;
+      return `Subscription ${finding.externalSubscriptionId} has an open invoice with ${finding.attemptCount} failed payment attempts.${finding.declineReason ? ` Last decline: ${finding.declineReason.replace(/[.\s]+$/, "")}.` : ''}${finding.nextRetryAt ? ` Next retry: ${finding.nextRetryAt.slice(0, 10)}.` : ' Stripe has no further retry scheduled.'}`;
     case 'unlinked_customer':
       return `Stripe Customer ${finding.externalCustomerId} has no matching local billing account.`;
     case 'pending_schedule_conflict':

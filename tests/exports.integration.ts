@@ -168,7 +168,7 @@ test('selected report export re-fetches rows, enforces administration, and audit
   const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(url)));
   assert.equal(response.status, 200);
   const body = await response.text();
-  assert.match(body, /^type,memberFirstName,memberLastName,memberEmail,stripeId,summary,reasonForManualReview,note,detected\r?\n/);
+  assert.match(body, /^type,memberFirstName,memberLastName,memberEmail,stripeId,summary,lastDeclineReason,nextRetry,reasonForManualReview,note,detected\r?\n/);
   assert.match(body, /Subscription status conflict/);
   assert.match(body, new RegExp(`Test,Member,${member.email}`), 'names the involved member');
   assert.match(body, /Example mismatch/);
@@ -188,6 +188,22 @@ test('a repeated payment failure with no IDOC member exports the contact details
   assert.match(body, /Repeated payment failures,Legacy Member,,legacy@example\.test,sub_legacy/);
   assert.match(body, /Not an IDOC member/);
   assert.match(body, /no record of/);
+});
+
+test('exports show the decline reason and next retry, the contact details of an orphaned subscription, and the separate Type for a subscription missing from Stripe', async () => {
+  const admin = await adminUser();
+  const rows = await sql<{ id: number }[]>`insert into idoc.reconciliation_findings (kind,external_subscription_id,summary,details) values
+    ('repeated_failure','sub_declined','Subscription sub_declined has an open invoice with 4 failed payment attempts.',${JSON.stringify({ attemptCount: 4, declineReason: 'Your card has expired.', nextRetryAt: '2099-01-05T00:00:00.000Z', kind: 'repeated_failure', profileId: null })}::jsonb),
+    ('orphaned_subscription','sub_orphan','Stripe subscription sub_orphan is active but has no matching local record.',${JSON.stringify({ customerEmail: 'orphan@example.test', customerName: 'Orphan Holder', kind: 'orphaned_subscription' })}::jsonb),
+    ('status_conflict','sub_gone','IDOC has subscription sub_gone as active, but the connected Stripe account has no subscription with that ID.',${JSON.stringify({ kind: 'status_conflict', localStatus: 'active', stripeStatus: 'missing' })}::jsonb)
+    returning id`;
+  const query = rows.map((row) => `id=${row.id}`).join('&');
+  const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(`https://idoc.club/api/admin/export/selected-reports?table=reconciliation&${query}`)));
+  const body = await response.text();
+  assert.match(body, /summary,lastDeclineReason,nextRetry,reasonForManualReview/);
+  assert.match(body, /Your card has expired\.,2099-01-05/);
+  assert.match(body, /Orphaned active Stripe subscription,Orphan Holder,,orphan@example\.test/);
+  assert.match(body, /Subscription missing from Stripe,/);
 });
 
 test('the payments export route succeeds for an Administrator', async () => {

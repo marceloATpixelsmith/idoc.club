@@ -1,7 +1,7 @@
 import type { ActionKind, ActionOutcome, PausedResolution, ResolutionAction, StripeMode } from '@/lib/payments/reconciliation-resolver';
 
 export type ResolutionSummary = {
-  actions?: ResolutionAction[]; counts?: Record<string, number>; paused?: PausedResolution[]; stripeMode?: StripeMode; truncated?: boolean;
+  actions?: ResolutionAction[]; counts?: Record<string, number>; paused?: PausedResolution[]; simulatedBecause?: 'safeguard'; stripeMode?: StripeMode; truncated?: boolean;
 };
 
 const LABEL: Record<ActionKind, { stripe: boolean; text: string }> = {
@@ -29,7 +29,9 @@ export function ResolutionPanel({ summary }: { summary: ResolutionSummary }) {
     <div className="mt-3 border-t pt-3">
       <h3 className="text-sm font-medium text-foreground">Resolved automatically before reporting</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        {simulated
+        {simulated && summary.simulatedBecause === 'safeguard'
+          ? 'Changes to the website database were made. Changes to Stripe are switched off for now: the import-verified safeguard (RECONCILIATION_LIVE_STRIPE_ACTIONS) is not enabled, so they are listed as if done and removed from the findings below, but nothing was changed in Stripe. Enable the safeguard once the legacy import has been checked.'
+          : simulated
           ? 'Changes to the website database were made. Changes to Stripe are only simulated in this environment: they are listed as if done, and removed from the findings below, but nothing was changed in Stripe. A production scan makes the same changes for real.'
           : 'Changes to the website database and to Stripe were made. Items resolved this way will not appear again.'}
       </p>
