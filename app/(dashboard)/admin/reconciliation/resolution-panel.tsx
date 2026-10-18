@@ -18,7 +18,9 @@ const OUTCOME_WORD: Record<ActionOutcome, string> = { applied: 'done', failed: '
 /** What the last scan resolved by itself, so the findings below can be read as "only what needs a person". Stripe changes are simulated outside production. */
 export function ResolutionPanel({ summary }: { summary: ResolutionSummary }) {
   const actions = summary.actions ?? [];
-  const kinds = [...new Set(actions.map((action) => action.kind))];
+  const counts = summary.counts ?? {};
+  // Totals come from the exact counts; the capped action list only feeds the expandable detail.
+  const kinds = (Object.keys(LABEL) as ActionKind[]).filter((kind) => (['applied', 'simulated', 'failed'] as ActionOutcome[]).some((outcome) => (counts[`${kind}:${outcome}`] ?? 0) > 0));
   const simulated = summary.stripeMode === 'simulate';
   if (kinds.length === 0 && !(summary.paused?.length)) {
     return <p className="mt-1 text-sm text-muted-foreground">Nothing needed resolving automatically on that run.</p>;
@@ -35,17 +37,19 @@ export function ResolutionPanel({ summary }: { summary: ResolutionSummary }) {
         {kinds.map((kind) => {
           const mine = actions.filter((action) => action.kind === kind);
           const label = LABEL[kind];
-          const done = mine.filter((action) => action.outcome !== 'failed').length;
+          const done = (counts[`${kind}:applied`] ?? 0) + (counts[`${kind}:simulated`] ?? 0);
+          const failed = counts[`${kind}:failed`] ?? 0;
+          const total = done + failed;
           return (
             <li key={kind}>
               <details>
                 <summary className="cursor-pointer text-sm text-foreground">
                   {label.text}: {done.toLocaleString('en-GB')}{label.stripe && simulated ? ' (simulated)' : ''}
-                  {mine.some((action) => action.outcome === 'failed') ? `, ${mine.filter((action) => action.outcome === 'failed').length} failed` : ''}
+                  {failed > 0 ? `, ${failed.toLocaleString('en-GB')} failed` : ''}
                 </summary>
                 <ul className="mt-1 max-h-56 list-disc space-y-1 overflow-auto pl-5 text-xs text-muted-foreground">
                   {mine.slice(0, 100).map((action) => <li key={`${action.kind}-${action.id}`}><span className="font-mono">{action.id}</span> — {action.summary} ({OUTCOME_WORD[action.outcome]})</li>)}
-                  {mine.length > 100 ? <li>…and {(mine.length - 100).toLocaleString('en-GB')} more</li> : null}
+                  {total > Math.min(mine.length, 100) ? <li>…and {(total - Math.min(mine.length, 100)).toLocaleString('en-GB')} more not listed here{summary.truncated ? ' (the stored detail is capped)' : ''}</li> : null}
                 </ul>
               </details>
             </li>

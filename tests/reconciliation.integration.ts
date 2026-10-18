@@ -530,3 +530,25 @@ test('ignore closes notification-raised notices, refuses what it cannot ignore, 
   assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.finding_closed'`).length, 2);
   assert.equal((await sql`select 1 from idoc.reconciliation_ignores`).length, 0);
 });
+
+test('a customer that becomes linked while its Stripe checks run is never deleted', async () => {
+  for (let index = 0; index < 30; index += 1) {
+    const profile = await createProfile((await createUser()).id);
+    await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values (${profile.id}, ${`cus_known_${index}`})`;
+  }
+  const known = Array.from({ length: 30 }, (_, index) => ({ created: hoursBefore(2000), id: `cus_known_${index}` }));
+  const racer = await createProfile((await createUser()).id);
+  const deleted: string[] = [];
+  const client = {
+    charges: { list: async (params: { customer: string }) => {
+      // The notification that links the customer lands after the checks began and before the deletion.
+      if (params.customer === 'cus_racing') await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values (${racer.id}, 'cus_racing')`;
+      return { data: [] };
+    } },
+    customers: { del: async (id: string) => { deleted.push(id); return {}; } },
+    invoices: { list: async () => ({ data: [] }) },
+    subscriptions: { cancel: async () => ({}), list: async () => ({ data: [], has_more: false }), retrieve: async (id: string) => ({ id, status: 'active' }) },
+  };
+  await runReconciliationScan(fakeStripeClient({ customers: [...known, { created: hoursBefore(300), id: 'cus_racing' }] }), { now: NOW, remediationClient: client });
+  assert.deepEqual(deleted, []);
+});

@@ -116,4 +116,9 @@ test('the one selection-bar action is Ignore: offered only for ignorable rows of
   assert.match(page, /ignoreAction=\{ignoreSelected\}/);
   assert.match(page, /ignorable: isIgnorableFinding\(finding\)/);
   assert.match(page, /Ignored issues/);
+  assert.match(page, /ignoredTotal/);
+  assert.match(page, /ignoredPage/);
+  assert.doesNotMatch(page, /\.limit\(200\)/, 'every ignored issue must stay restorable');
+  const panel = readFileSync('app/(dashboard)/admin/reconciliation/resolution-panel.tsx', 'utf8');
+  assert.match(panel, /counts\[`\$\{kind\}:applied`\]/, 'totals come from the exact counts, not the capped action list');
 });

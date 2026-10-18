@@ -181,6 +181,8 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       }
       if (!mismatches.length) continue;
       presentKeys.add(`seminar_payment_conflict:registration:${registration.id}`);
+      // An ignored issue is left alone entirely: not reported and not resolved automatically.
+      if (ignoredKeys.has(`seminar_payment_conflict:registration:${registration.id}`)) continue;
       // The one fully predictable case: Stripe confirms this registration's own Checkout was paid in full, in the expected amount and currency, and
       // nothing else is wrong. Record it (as the checkout notification would have) instead of reporting it.
       const settled = intent?.amount_received ?? session?.amount_total;
@@ -192,7 +194,6 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
             deliveryOwner: session?.metadata?.deliveryOwner, paymentIntentId: intentId, registrationId: registration.id }, log)) continue;
         } catch { /* fall through: report it for a person */ }
       }
-      if (ignoredKeys.has(`seminar_payment_conflict:registration:${registration.id}`)) continue;
       seminarFindings.push({
         kind: 'seminar_payment_conflict',
         profileId: registration.profileId,

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
-import { desc, eq } from 'drizzle-orm';
+import { count, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, reconciliationIgnores } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
@@ -83,11 +83,17 @@ async function restoreIgnored(formData: FormData): Promise<void> {
   revalidatePath(PATH);
 }
 
-export default async function AdminReconciliationPage() {
+const IGNORED_PAGE_SIZE = 100;
+
+export default async function AdminReconciliationPage({ searchParams }: { searchParams?: Promise<{ ignoredPage?: string }> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const [lastRun, findings, ignored] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings(),
-    db.select().from(reconciliationIgnores).orderBy(desc(reconciliationIgnores.ignoredAt)).limit(200)]);
+  const requestedPage = Number((await searchParams)?.ignoredPage);
+  const ignoredPage = Number.isInteger(requestedPage) && requestedPage > 1 ? requestedPage : 1;
+  const [lastRun, findings, ignored, [{ total: ignoredTotal }]] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings(),
+    db.select().from(reconciliationIgnores).orderBy(desc(reconciliationIgnores.ignoredAt), desc(reconciliationIgnores.id)).limit(IGNORED_PAGE_SIZE).offset((ignoredPage - 1) * IGNORED_PAGE_SIZE),
+    db.select({ total: count() }).from(reconciliationIgnores)]);
+  const ignoredPages = Math.max(1, Math.ceil(ignoredTotal / IGNORED_PAGE_SIZE));
   // What the last scan resolved by itself before reporting (the summary is written in the same transaction as the run row).
   const [resolution] = lastRun ? await db.select({ afterJson: auditLog.afterJson, createdAt: auditLog.createdAt }).from(auditLog)
     .where(eq(auditLog.action, 'reconciliation.scan_resolution_summary')).orderBy(desc(auditLog.createdAt)).limit(1) : [];
@@ -146,10 +152,10 @@ export default async function AdminReconciliationPage() {
       />
     </section>
 
-    {ignored.length > 0 ? (
+    {ignoredTotal > 0 ? (
       <section className="mt-8 max-w-3xl rounded-lg border p-4">
         <details>
-          <summary className="cursor-pointer font-medium text-foreground">Ignored issues ({ignored.length.toLocaleString('en-GB')})</summary>
+          <summary className="cursor-pointer font-medium text-foreground">Ignored issues ({ignoredTotal.toLocaleString('en-GB')})</summary>
           <p className="mt-2 text-xs text-muted-foreground">These are left out of the report and out of the scan's automatic actions. An ignored issue is forgotten once it no longer exists, so a later recurrence is reported afresh. Restore one to see it again on the next scan.</p>
           <ul className="mt-2 space-y-2">
             {ignored.map((item) => (
@@ -165,6 +171,13 @@ export default async function AdminReconciliationPage() {
               </li>
             ))}
           </ul>
+          {ignoredPages > 1 ? (
+            <nav aria-label="Ignored issues pages" className="mt-3 flex items-center gap-3 text-sm">
+              {ignoredPage > 1 ? <Link className="text-primary underline underline-offset-4" href={`${PATH}?ignoredPage=${ignoredPage - 1}`}>Previous</Link> : null}
+              <span className="text-muted-foreground">Page {ignoredPage} of {ignoredPages}</span>
+              {ignoredPage < ignoredPages ? <Link className="text-primary underline underline-offset-4" href={`${PATH}?ignoredPage=${ignoredPage + 1}`}>Next</Link> : null}
+            </nav>
+          ) : null}
         </details>
       </section>
     ) : null}

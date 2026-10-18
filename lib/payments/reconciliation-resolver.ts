@@ -282,6 +282,9 @@ export async function resolveUnlinkedCustomers(findings: ReconciliationFinding[]
       if (live.some((subscription) => subscription.status !== 'canceled' && subscription.status !== 'incomplete_expired')) return;
       const [invoices, charges] = await Promise.all([client.invoices!.list({ customer: id, limit: 1, status: 'open' }), client.charges!.list({ created: { gte: since }, customer: id, limit: 1 })]);
       if (invoices.data.length || charges.data.length) return;
+      // The last check before the irreversible call: a checkout recovery, notification or import may have linked the customer during the Stripe reads above.
+      const [linkedNow] = await db.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.externalCustomerId, id)).limit(1);
+      if (linkedNow) return;
       if (log.stripeMode === 'apply') {
         if (!client.customers?.del) return;
         await client.customers.del(id);
