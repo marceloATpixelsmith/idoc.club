@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useFreshStepUpAction, type StepUpActionState } from '@/components/auth/fresh-step-up-action';
+import { AdminFormSection } from '@/components/admin/admin-form-section';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 import type { ReplayPreview, ReplayResult } from '@/lib/payments/stripe-event-replay';
@@ -29,13 +30,16 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
     <>
       <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(new FormData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter)); }}>
         <CsrfField />
+        <AdminFormSection description="Choose where to start, preview what Stripe has that this site does not, then confirm." title="Replay window">
         <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
-          Replay events created since (UTC date and time, for example 2026-10-22T09:30)
+          Replay events created since (UTC, format YYYY-MM-DDTHH:MM, within the last 29 days; use the moment the WordPress export was taken)
           <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="since" required type="text" />
         </label>
         <Button disabled={pending} name="intent" type="submit" value="preview">{pending ? 'Working…' : 'Preview (changes nothing)'}</Button>
+        </AdminFormSection>
         {shown ? (
-          <section className="space-y-3 rounded-lg border border-border p-4 text-sm" data-testid="event-replay-preview">
+          <AdminFormSection title="Preview result">
+          <div className="space-y-3 text-sm" data-testid="event-replay-preview">
             <p className="text-foreground">
               Since {shown.since}: {shown.total} handled events in Stripe → <strong>{shown.replayable} to replay</strong> ({shown.counts.new} never received, {shown.counts.blocked_earlier} blocked by the launch hold), {shown.counts.already_processed} already applied, {shown.counts.superseded} skipped as out of date.
             </p>
@@ -56,7 +60,8 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
                 <Button disabled={pending} name="intent" type="submit" value="apply" variant="destructive">{pending ? 'Working…' : 'Replay events now'}</Button>
               </>
             ) : null}
-          </section>
+          </div>
+          </AdminFormSection>
         ) : null}
       </form>
       {state.error ? <p className="mt-3 whitespace-pre-line text-sm text-red-300" role="alert">{state.error}</p> : null}
