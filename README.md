@@ -1,20 +1,8 @@
-# Next.js SaaS Starter
+# IDOC Club
 
-This is a starter template for building a SaaS application using **Next.js** with support for authentication, Stripe integration for payments, and a dashboard for logged-in users.
+Membership, seminars, news, and administration platform for IDOC (`idoc.club`), built with Next.js, Postgres, Drizzle, and Stripe.
 
-**Demo: [https://next-saas-start.vercel.app/](https://next-saas-start.vercel.app/)**
-
-## Features
-
-- Marketing landing page (`/`) with animated Terminal element
-- Pricing page (`/pricing`) which connects to Stripe Checkout
-- Dashboard pages with CRUD operations on users/teams
-- Basic RBAC with Owner and Member roles
-- Subscription management with Stripe Customer Portal
-- Email/password authentication with JWTs stored to cookies
-- Global middleware to protect logged-in routes
-- Local middleware to protect Server Actions or validate Zod schemas
-- Activity logging system for any user events
+The Markdown files in [`docs/`](docs/README.md) are the authoritative project documentation, including the architecture, security requirements, operations runbook, and CI policy.
 
 ## Tech Stack
 
@@ -27,8 +15,8 @@ This is a starter template for building a SaaS application using **Next.js** wit
 ## Getting Started
 
 ```bash
-git clone https://github.com/nextjs/saas-starter
-cd saas-starter
+git clone https://github.com/marceloATpixelsmith/idoc.club
+cd idoc.club
 pnpm install
 ```
 
@@ -81,7 +69,7 @@ To test Stripe payments, use the following test card details:
 
 ## Going to Production
 
-When you're ready to deploy your SaaS application to production, follow these steps:
+Follow the branch, environment, and deployment workflow in [`docs/07-administrator-and-operations-runbook.md`](docs/07-administrator-and-operations-runbook.md). The summary below is not a substitute for it.
 
 ### Set up a production Stripe webhook
 
@@ -106,16 +94,6 @@ In your Vercel project settings (or during deployment), add all the necessary en
 3. `STRIPE_WEBHOOK_SECRET`: Use the webhook secret from the production webhook you created in step 1.
 4. `POSTGRES_URL`: Set this to your production database URL.
 5. `AUTH_SECRET`: Set this to a random string. `openssl rand -base64 32` will generate one.
-
-## Other Templates
-
-While this template is intentionally minimal and to be used as a learning resource, there are other paid versions in the community which are more full-featured:
-
-- https://achromatic.dev
-- https://shipfa.st
-- https://makerkit.dev
-- https://zerotoshipped.com
-- https://turbostarter.dev
 
 ## Release 1 verification
 
