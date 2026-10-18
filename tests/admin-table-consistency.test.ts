@@ -102,30 +102,18 @@ test('the read-only report table supports extra value filters and the reconcilia
   assert.match(findingsTable, /statusColumn="category"/);
 });
 
-test('unlinked Stripe customers can be deleted from the table selection bar and the page explains when it cannot', () => {
-  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
-  assert.match(table, /bulkActions\?\.\(/);
+test('the one selection-bar action is Ignore: offered only for ignorable rows of a single Type, with a server-set flag', () => {
+  const ignore = readFileSync('app/(dashboard)/admin/reconciliation/ignore-findings.tsx', 'utf8');
+  assert.match(ignore, /row\.ignorable === 'yes'/);
+  assert.match(ignore, /types\.size > 1/);
+  assert.match(ignore, /event\.preventDefault\(\)/);
+  assert.match(ignore, /confirm\(/);
+  const findingsTable = readFileSync('app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'utf8');
+  assert.match(findingsTable, /^'use client'/);
+  assert.match(findingsTable, /IgnoreFindings/);
   const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
   assert.doesNotMatch(page, /bulkActions=/, 'a render callback cannot cross the server/client boundary');
-  assert.match(page, /cleanupAction=\{cleanupAvailable/);
-  assert.match(readFileSync('app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'utf8'), /^'use client'/);
-  assert.match(page, /formData\.getAll\('customerId'\)/);
-  assert.match(page, /only in the live production deployment/);
-  const bulk = readFileSync('app/(dashboard)/admin/reconciliation/delete-selected-customers.tsx', 'utf8');
-  assert.match(bulk, /useFreshStepUpAction/);
-  assert.match(bulk, /confirm\(/);
-  assert.match(bulk, /mixedSelection/);
-  assert.match(bulk, /event\.preventDefault\(\)/);
-  assert.match(bulk, /downloadCsv\(state\.csv\)/);
-  assert.match(bulk, /disabled=\{pending \|\| mixedSelection\}/);
-});
-
-test('notification-raised notices can be closed from the selection bar only when the server marks them closable', () => {
-  const handled = readFileSync('app/(dashboard)/admin/reconciliation/mark-findings-handled.tsx', 'utf8');
-  assert.match(handled, /row\.closable === 'yes'/);
-  assert.match(handled, /event\.preventDefault\(\)/);
-  assert.match(handled, /mixedSelection/);
-  const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
-  assert.match(page, /closable: isClosableFinding\(finding\)/);
-  assert.match(page, /handledAction=\{markHandled\}/);
+  assert.match(page, /ignoreAction=\{ignoreSelected\}/);
+  assert.match(page, /ignorable: isIgnorableFinding\(finding\)/);
+  assert.match(page, /Ignored issues/);
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkoutBelongsToRegistration, computeReconciliationFindings, planOrphanCancellations, summarizeFinding } from '../lib/payments/reconciliation.ts';
+import { checkoutBelongsToRegistration, computeReconciliationFindings, ratioBreakerTripped, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
   const findings = computeReconciliationFindings(
@@ -123,8 +123,8 @@ test('a missing or canceled pending Subscription Schedule is actionable and neve
   assert.match(summarizeFinding(missing[0]), /inspect before changing local billing state/);
 });
 
-test('local subscriptions missing from Stripe are reported only when the rehearsal option is on', () => {
-  const local = { billingAccounts: [{ externalCustomerId: 'cus_1', profileId: 1 }], subscriptions: [{ externalSubscriptionId: 'sub_gone', profileId: 1, status: 'active' }, { externalSubscriptionId: 'sub_here', profileId: 2, status: 'active' }] };
+test('open local subscriptions missing from Stripe are reported only when the option is on', () => {
+  const local = { billingAccounts: [{ externalCustomerId: 'cus_1', profileId: 1 }], subscriptions: [{ externalSubscriptionId: 'sub_gone', profileId: 1, status: 'active' }, { externalSubscriptionId: 'sub_here', profileId: 2, status: 'active' }, { externalSubscriptionId: 'sub_old', profileId: 3, status: 'canceled' }] };
   const stripe = { customers: [{ id: 'cus_1' }], openInvoices: [], subscriptions: [{ customer: 'cus_2', id: 'sub_here', status: 'active' }] };
   assert.deepEqual(computeReconciliationFindings(local, stripe), []);
   const findings = computeReconciliationFindings(local, stripe, 2, { reportLocalMissingInStripe: true });
@@ -132,50 +132,13 @@ test('local subscriptions missing from Stripe are reported only when the rehears
   assert.match(summarizeFinding(findings[0]), /was not found in Stripe/);
 });
 
-const NOW = new Date('2026-10-20T12:00:00Z');
-const orphan = (id: string, ageHours: number | null, status = 'active') => ({ createdSeconds: ageHours === null ? null : NOW.getTime() / 1000 - ageHours * 3600, customer: 'cus_1', id, status });
-const flaggedHoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3600 * 1000);
-
-test('an orphan older than a day that the previous snapshot already flagged is cancelled', () => {
-  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map([['sub_old', flaggedHoursAgo(24)]]), NOW);
-  assert.deepEqual(plan.cancel.map((entry) => entry.id), ['sub_old']);
-  assert.equal(plan.tripped, false);
-});
-
-test('a first-time orphan is deferred, however old: it must be seen in two snapshots', () => {
-  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map(), NOW);
-  assert.deepEqual(plan.cancel, []);
-  assert.deepEqual(plan.deferred.map((entry) => entry.id), ['sub_old']);
-});
-
-test('an orphan flagged only minutes ago (back-to-back manual scans) is deferred', () => {
-  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map([['sub_old', flaggedHoursAgo(0.2)]]), NOW);
-  assert.deepEqual(plan.cancel, []);
-});
-
-test('a subscription younger than 24 hours is never cancelled, even if flagged before', () => {
-  const plan = planOrphanCancellations([orphan('sub_new', 3)], new Map([['sub_new', flaggedHoursAgo(24)]]), NOW);
-  assert.deepEqual(plan.cancel, []);
-});
-
-test('an orphan with no known creation time is not cancelled', () => {
-  const plan = planOrphanCancellations([orphan('sub_unknown', null)], new Map([['sub_unknown', flaggedHoursAgo(24)]]), NOW);
-  assert.deepEqual(plan.cancel, []);
-});
-
-test('more than five orphans in one run trips the circuit breaker and cancels none', () => {
-  const orphans = Array.from({ length: 6 }, (_, index) => orphan(`sub_${index}`, 72));
-  const plan = planOrphanCancellations(orphans, new Map(orphans.map((entry) => [entry.id, flaggedHoursAgo(24)])), NOW);
-  assert.equal(plan.tripped, true);
-  assert.deepEqual(plan.cancel, []);
-  assert.equal(plan.deferred.length, 6);
-});
-
-test('exactly five qualifying orphans are still cancelled', () => {
-  const orphans = Array.from({ length: 5 }, (_, index) => orphan(`sub_${index}`, 72));
-  const plan = planOrphanCancellations(orphans, new Map(orphans.map((entry) => [entry.id, flaggedHoursAgo(24)])), NOW);
-  assert.equal(plan.tripped, false);
-  assert.equal(plan.cancel.length, 5);
+test('the wrong-database guard trips only when many items are a large share of everything compared', () => {
+  assert.equal(ratioBreakerTripped(5, 6), false, 'five or fewer is always a normal exception');
+  assert.equal(ratioBreakerTripped(11, 13), true, 'eleven against an almost empty database trips');
+  assert.equal(ratioBreakerTripped(11, 11 + 5000), false, 'eleven against a populated database is a normal exception');
+  assert.equal(ratioBreakerTripped(6, 6 + 24), false, 'exactly 20 percent does not trip');
+  assert.equal(ratioBreakerTripped(7, 7 + 20), true);
+  assert.equal(ratioBreakerTripped(10, 0), false, 'an empty population never divides by zero');
 });
 
 const ownedSession = { amount_total: 4500, currency: 'eur', customer: null, id: 'cs_1', metadata: { amountCents: '4500', currency: 'EUR', profileId: '7', registrationId: '3', seminarId: '9' }, payment_intent: 'pi_1', payment_status: 'paid' };

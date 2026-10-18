@@ -5,6 +5,9 @@ import { handleAccountDeliveryCron } from '@/lib/notifications/account-delivery-
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { logError } from '@/lib/observability/logger';
 
+// Resolving a large first scan checks each unlinked customer against Stripe, which can take a few minutes.
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: runReconciliationScan,

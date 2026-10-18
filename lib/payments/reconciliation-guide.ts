@@ -21,8 +21,8 @@ export interface FindingGuide {
 
 export const LIFECYCLE_NOTE: Record<FindingGuide['lifecycle'], string> = {
   replaced: 'The next daily scan replaces this list, so it disappears by itself once the problem is fixed.',
-  kept: 'Raised by a Stripe notification and kept until someone closes it: the daily scan does not remove it. IDOC has already updated the registration, so after looking, select the row and use Mark handled in the table\'s selection bar.',
-  mixed: 'Some of these come from the daily check and disappear once fixed; the ones raised by Stripe notifications are kept until someone closes them.',
+  kept: 'Raised by a Stripe notification and kept until someone closes it: the daily scan does not remove it. After looking, select the row and use Ignore in the table\'s selection bar.',
+  mixed: 'Some of these come from the daily check and disappear once fixed; the ones raised by Stripe notifications are kept until someone closes them with Ignore.',
 };
 
 export const FINDING_GUIDE: FindingGuide[] = [
@@ -32,21 +32,19 @@ export const FINDING_GUIDE: FindingGuide[] = [
     label: 'Orphaned active Stripe subscription',
     area: 'Membership',
     severity: 'act',
-    plain: 'Stripe is set to keep charging someone, but IDOC has no record of that subscription.',
+    plain: 'Stripe is set to keep charging someone, but IDOC has no record of that subscription. The scan cancels these itself; one left here was deliberately not cancelled.',
     why: [
-      'A member signed up or was billed outside IDOC (for example a subscription carried over from the old WordPress site that has not been imported).',
-      'The subscription belongs to someone who was removed or deleted here but never cancelled in Stripe.',
-      'The link between the member and the subscription was never saved here.',
+      'The scan cancels an open Stripe subscription that IDOC has no record of, so it cannot charge someone who was removed. On production this is a real cancellation in Stripe; on staging it is only simulated (the report shows it as done, Stripe is untouched). Cancelled ones never appear here.',
+      'Still listed: it is less than a day old (a checkout may not have reached IDOC yet), it could not be verified, the cancellation failed (retried next scan), or the scan paused because so many were unknown to IDOC compared with IDOC\'s own records that it looks like an unpopulated database or the wrong Stripe account. The Last run box says which.',
     ],
     investigate: [
       'In the Stripe Dashboard, open Subscriptions and search for the subscription ID in the finding. Note the customer and their email.',
       'Search that email on the Members page. Is there a member, and is their membership active?',
     ],
     resolve: [
-      'Production cancels these automatically: an open Stripe subscription that IDOC has no record of is cancelled once it is more than a day old and has appeared on two scans in a row, and each cancellation is recorded in the audit log. Nothing needs doing for those.',
-      'If more than five turn up in one scan, nothing is cancelled and an alert is raised, because that usually means the wrong database or Stripe account is being compared. Check the environment before doing anything else.',
-      'They should still be a member: make sure the member exists and has the right paid-through date (Members page, correct entitlement), and ask a developer to link the subscription ID before the next scans, or it will be cancelled.',
-      'On staging nothing is cancelled; the finding is for information only.',
+      'If the Last run box says the scan paused, check the environment first (is this the right Stripe account, and has the legacy import been done?).',
+      'They should still be a member: import or create the member and link the subscription (a developer can link it; there is no admin screen), or it will be cancelled once it is a day old.',
+      'They should not be billed any more: it will be cancelled by the scan; you can also cancel it in Stripe yourself.',
     ],
   },
   {
@@ -55,15 +53,15 @@ export const FINDING_GUIDE: FindingGuide[] = [
     label: 'Repeated payment failures',
     area: 'Membership',
     severity: 'act',
-    plain: "A renewal invoice has failed two or more times, usually because the member's card is declining.",
+    plain: "A renewal invoice has failed two or more times, usually because the member's card is declining. Stripe is still retrying; this is for someone to reach out to the member.",
     why: ['An expired, replaced or cancelled card, insufficient funds, or the bank blocking the charge.'],
     investigate: [
       'In Stripe, open the invoice for the subscription ID in the finding and read the decline reason.',
       'Open the member on the Members page and check their paid-through date, so you know how long they have.',
     ],
     resolve: [
-      'Contact the member and ask them to update their card (they can use Manage payment method on their own membership page).',
-      'Stripe keeps retrying automatically. If it never succeeds the subscription ends and the membership simply expires on its paid-through date; nothing else needs fixing.',
+      'Contact the member and ask them to update their card (they can use Manage payment method on their own membership page). It clears by itself once the invoice is paid.',
+      'If you have spoken to them and they cannot or will not update their payment, select the row and use Ignore: it stops appearing and the scan leaves it alone. Stripe keeps retrying, and if it never succeeds the subscription ends and the membership simply expires on its paid-through date. It comes back only if you restore it, or if the failures clear and happen again later.',
     ],
   },
   {
@@ -78,7 +76,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
       'Still listed: Stripe uses a status IDOC cannot store, or the subscription changed while the scan was running, or the update failed. Look at the summary: it names the IDOC status and the Stripe status.',
       'A payment arrived for a membership that an administrator suspended or the member cancelled. The payment is recorded but access is deliberately not restored. This needs a decision.',
       'A Stripe notification was held back by the member communications and billing hold and never replayed. This needs a manual check.',
-      '"Not found in Stripe" (staging rehearsal only): the subscription ID stored here does not exist in the Stripe account being checked.',
+      '"Not found in Stripe": IDOC has the subscription open but the Stripe account being checked does not have it. The scan marks it cancelled in IDOC unless so many are missing that it looks like the wrong Stripe account, in which case it pauses and lists them here (on staging, test members created in the Stripe sandbox legitimately appear this way).',
     ],
     investigate: [
       'Open the member (View member) and look at their Payment tab: the subscription ID, status and paid-through date.',
@@ -97,20 +95,19 @@ export const FINDING_GUIDE: FindingGuide[] = [
     label: 'Unlinked Stripe Customer',
     area: 'Membership',
     severity: 'check',
-    plain: 'Stripe has a customer record that IDOC does not know about. Often harmless on its own.',
+    plain: 'Stripe has a customer record that IDOC does not know about. The scan deletes the harmless ones itself; what is left here has something that needs a look.',
     why: [
-      'Someone who paid or enquired through the old site or the Stripe Dashboard and is not (yet) a member here.',
-      'On staging in rehearsal mode: every real customer in live Stripe who has not been imported shows up here, so a long list is normal before the import.',
-      'A member whose billing link was never saved (or whose email update in Stripe failed).',
+      'The scan deletes a Stripe customer that IDOC has no record of when it is more than a day old, has no subscription that is not cancelled, no open invoice and no charge in the last 90 days. On production that is a real deletion in Stripe; on staging it is only simulated.',
+      'Still listed: it is less than a day old, or it has a live subscription, an open invoice or a recent charge (so it may be a real payer who has not been imported), or the scan paused because so many were unknown to IDOC that it looks like an unpopulated database or the wrong Stripe account.',
     ],
     investigate: [
-      'In Stripe, open Customers and search for the customer ID. Look at the email and whether they have an active subscription.',
+      'In Stripe, open Customers and search for the customer ID. Look at the email, their subscriptions and recent payments.',
       'Search the email on the Members page.',
     ],
     resolve: [
-      'In production a Super Admin can delete them all with the Delete unlinked customers button on this page. Customers with a live subscription, an open invoice or a charge in the last 90 days are skipped automatically, every deletion is logged, and a CSV of what was processed can be downloaded.',
-      'Active subscription: it will also appear as an orphaned subscription; handle it there.',
-      'They are a member here but the link is missing: ask a developer to link the customer before deleting anything; there is no admin screen for that.',
+      'A real member who has not been imported: import or link them first; do not delete.',
+      'Not a member and nothing recent in Stripe: the scan removes it on a later run, or a Super Admin can select it here and delete it.',
+      'Paused by the safety check: confirm the environment and the import before anything else.',
     ],
   },
   {
@@ -121,8 +118,8 @@ export const FINDING_GUIDE: FindingGuide[] = [
     severity: 'check',
     plain: "A member's chosen change for their next renewal (such as switching to automatic renewal) is not set up correctly in Stripe, so it may not happen.",
     why: [
-      "A schedule that finished running is recorded as done by the scan itself, so those never appear here.",
-      "Still listed: the schedule was cancelled or cannot be found in Stripe, so the change will not happen; or setting up the schedule failed; or the member's paid-through date changed while they were setting it up.",
+      "The scan resolves the clear cases itself, so they never appear here: a schedule that finished running is recorded as done, and one that was cancelled or no longer exists has its waiting change dropped, leaving the member's current renewal option in place (the member is not notified).",
+      "Still listed: setting up the schedule failed, the member's paid-through date changed while they were setting it up, or Stripe reports a schedule state the scan does not recognise.",
     ],
     investigate: [
       'Open the member and check what renewal option they chose.',

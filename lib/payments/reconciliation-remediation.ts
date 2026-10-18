@@ -1,151 +1,26 @@
 import 'server-only';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, billingAccounts, reconciliationFindings, subscriptions } from '@/lib/db/schema';
-import { logError } from '@/lib/observability/logger';
-import { planOrphanCancellations, type OrphanCancellationPlan, type OrphanSubscription } from './reconciliation';
-import { remediationAllowed } from './remediation-gate';
-import { getStripeServerClient } from './stripe-client';
+import { auditLog, reconciliationFindings, reconciliationIgnores } from '@/lib/db/schema';
 
-// The only code that writes to Stripe on behalf of the reconciliation report. IDOC's database is the system of record, so a
-// Stripe object IDOC has no record of may be removed -- but only in the production deployment against live Stripe, never from
-// staging, a rehearsal read key or a test key, and never while the launch hold is on.
+// The administrator's one manual control over the reconciliation report: IGNORE a specific issue so it stops appearing. The scan itself resolves everything with a
+// known answer (reconciliation-resolver.ts); what is left needs a person, and when a person has dealt with it as far as they can (a member was contacted about
+// repeated payment failures and will not or cannot update their card, say) there is no reason to keep seeing it.
 
-export type RemediationStripeClient = {
-  charges?: { list: (params: { created?: { gte: number }; customer: string; limit: number }) => Promise<{ data: Array<{ id: string }> }> };
-  customers: {
-    del: (id: string) => Promise<unknown>;
-    retrieve: (id: string) => Promise<{ created?: number; deleted?: boolean; email?: string | null; id: string; name?: string | null }>;
-  };
-  invoices?: { list: (params: { customer: string; limit: number; status: 'open' }) => Promise<{ data: Array<{ id: string }> }> };
-  subscriptions: {
-    cancel: (id: string, params?: Record<string, never>, options?: { idempotencyKey: string }) => Promise<unknown>;
-    list?: (params: { customer: string; limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ id: string; status: string }>; has_more?: boolean }>;
-    retrieve: (id: string) => Promise<{ id: string; status: string }>;
-  };
-};
+type FindingRow = { details: unknown; externalCustomerId: string | null; externalSubscriptionId: string | null; id: number; kind: string; summary: string };
 
-const OPEN = new Set(['active', 'trialing', 'past_due', 'incomplete', 'unpaid', 'paused']);
-export const CUSTOMER_RECENT_CHARGE_DAYS = 90;
-
-export type OrphanCancellationOutcome = { cancelled: string[]; failed: string[]; plan: OrphanCancellationPlan };
-
-/** Cancels the orphaned subscriptions the plan allows. Every cancellation re-checks the local table and Stripe immediately beforehand and is audit-logged. */
-export async function cancelOrphanedSubscriptions(stripe: RemediationStripeClient, orphans: OrphanSubscription[], now: Date = new Date()): Promise<OrphanCancellationOutcome> {
-  const previous = await db.select({ createdAt: reconciliationFindings.createdAt, id: reconciliationFindings.externalSubscriptionId })
-    .from(reconciliationFindings).where(eq(reconciliationFindings.kind, 'orphaned_subscription'));
-  const previouslyFlagged = new Map(previous.flatMap((row) => (row.id ? [[row.id, row.createdAt] as const] : [])));
-  const plan = planOrphanCancellations(orphans, previouslyFlagged, now);
-  const cancelled: string[] = [];
-  const failed: string[] = [];
-  if (plan.tripped) {
-    logError('reconciliation_orphan_cancel_paused');
-    await db.insert(auditLog).values({ action: 'reconciliation.orphan_cancel_paused', entityType: 'reconciliation', entityId: 'orphaned_subscription',
-      afterJson: { orphanCount: orphans.length }, reason: 'More orphaned subscriptions than the safety limit in one run; none were cancelled.' });
-    return { cancelled, failed, plan };
-  }
-  for (const orphan of plan.cancel) {
-    try {
-      const [local] = await db.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.externalSubscriptionId, orphan.id)).limit(1);
-      if (local) continue;
-      const live = await stripe.subscriptions.retrieve(orphan.id);
-      if (!OPEN.has(live.status)) continue;
-      await stripe.subscriptions.cancel(orphan.id, {}, { idempotencyKey: `idoc-orphan-subscription-cancel-${orphan.id}` });
-      await db.insert(auditLog).values({ action: 'reconciliation.orphan_subscription_canceled', entityType: 'stripe_subscription', entityId: orphan.id,
-        beforeJson: { customer: orphan.customer, status: live.status }, reason: 'No matching IDOC subscription; IDOC records are authoritative.' });
-      cancelled.push(orphan.id);
-    } catch {
-      failed.push(orphan.id);
-    }
-  }
-  if (failed.length) logError('reconciliation_scan_failed');
-  return { cancelled, failed, plan };
+/** The stable identity of a scan-raised issue within its kind, or null for a notice raised by a Stripe notification (those are closed, not ignored). */
+export function ignoreSubjectKey(finding: Pick<FindingRow, 'details' | 'externalCustomerId' | 'externalSubscriptionId' | 'kind'>): string | null {
+  const details = finding.details && typeof finding.details === 'object' ? finding.details as Record<string, unknown> : {};
+  if (finding.kind === 'seminar_payment_conflict') return details.source === 'daily_seminar_scan' && details.registrationId !== undefined ? `registration:${String(details.registrationId)}` : null;
+  // Scan-raised status, schedule and Stripe-object findings carry their own `kind` inside details; notification-raised ones do not.
+  if (details.kind === undefined) return null;
+  return finding.externalSubscriptionId ?? finding.externalCustomerId ?? null;
 }
 
-export type CustomerCleanupResult = {
-  csv: string;
-  deleted: string[];
-  failed: string[];
-  skipped: Array<{ id: string; reason: string }>;
-};
-
-async function isLinked(customerId: string) {
-  const [row] = await db.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.externalCustomerId, customerId)).limit(1);
-  return Boolean(row);
-}
-
-/** Every subscription of the customer, following Stripe's pagination, so a live one on a later page can never be missed. */
-async function allSubscriptions(stripe: RemediationStripeClient, customer: string) {
-  const all: Array<{ id: string; status: string }> = [];
-  let cursor: string | undefined;
-  for (;;) {
-    const page = await stripe.subscriptions.list!({ customer, limit: 100, status: 'all', ...(cursor ? { starting_after: cursor } : {}) });
-    all.push(...page.data);
-    cursor = page.data.at(-1)?.id;
-    if (!page.has_more || !cursor) return all;
-  }
-}
-
-function csvCell(value: string | number | null | undefined) {
-  const text = value === null || value === undefined ? '' : String(value);
-  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-/** Deletes Stripe customers the last scan reported as having no IDOC billing account, after re-checking each one. */
-export async function deleteUnlinkedCustomers(actorId: number, stripe: RemediationStripeClient = getStripeServerClient() as unknown as RemediationStripeClient, now: Date = new Date(), testBypassGate = false, onlyIds?: string[]): Promise<CustomerCleanupResult> {
-  if (testBypassGate && process.env.NODE_ENV !== 'test') throw new Error('Gate overrides are test-only.');
-  if (!testBypassGate && !remediationAllowed()) throw new Error('Deleting Stripe customers is only available in the production deployment with live billing released.');
-  if (!stripe.subscriptions.list || !stripe.invoices || !stripe.charges) throw new Error('Customer cleanup needs subscription, invoice and charge lookups.');
-  const rows = await db.select({ id: reconciliationFindings.externalCustomerId }).from(reconciliationFindings).where(eq(reconciliationFindings.kind, 'unlinked_customer'));
-  // Only customers that are current unlinked-customer findings can ever be deleted, even when a caller names specific IDs.
-  const requested = onlyIds ? new Set(onlyIds) : null;
-  const ids = [...new Set(rows.flatMap((row) => (row.id && (!requested || requested.has(row.id)) ? [row.id] : [])))];
-  const since = Math.floor(now.getTime() / 1000) - CUSTOMER_RECENT_CHARGE_DAYS * 86_400;
-  const result: CustomerCleanupResult = { csv: '', deleted: [], failed: [], skipped: [] };
-  const lines = ['customer_id,email,name,created_utc,outcome'];
-  for (const id of ids) {
-    let outcome = 'deleted';
-    let email: string | null | undefined;
-    let name: string | null | undefined;
-    let created: number | undefined;
-    try {
-      if (await isLinked(id)) { result.skipped.push({ id, reason: 'now linked to an IDOC billing account' }); outcome = 'skipped: linked'; continue; }
-      const customer = await stripe.customers.retrieve(id);
-      ({ email, name, created } = customer);
-      if (customer.deleted) { outcome = 'skipped: already deleted'; result.skipped.push({ id, reason: 'already deleted' }); continue; }
-      const [subs, invoices, charges] = await Promise.all([
-        allSubscriptions(stripe, id),
-        stripe.invoices!.list({ customer: id, limit: 1, status: 'open' }),
-        stripe.charges!.list({ created: { gte: since }, customer: id, limit: 1 }),
-      ]);
-      const reason = subs.some((sub) => sub.status !== 'canceled' && sub.status !== 'incomplete_expired') ? 'has a live subscription'
-        : invoices.data.length ? 'has an open invoice' : charges.data.length ? `charged in the last ${CUSTOMER_RECENT_CHARGE_DAYS} days` : null;
-      if (reason) { outcome = `skipped: ${reason}`; result.skipped.push({ id, reason }); continue; }
-      // Re-check the link immediately before the irreversible call: a checkout recovery or import may have linked it since the scan.
-      if (await isLinked(id)) { result.skipped.push({ id, reason: 'now linked to an IDOC billing account' }); outcome = 'skipped: linked'; continue; }
-      await stripe.customers.del(id);
-      result.deleted.push(id);
-      // The deletion already happened: a failure to write its audit row must not turn it into a "failed" customer, so it is reported instead.
-      await db.insert(auditLog).values({ actorId, action: 'reconciliation.unlinked_customer_deleted', entityType: 'stripe_customer', entityId: id,
-        beforeJson: { created: created ?? null }, reason: 'No matching IDOC billing account; deleted from the Stripe Reconciliation page.' })
-        .catch(() => { logError('reconciliation_scan_failed'); });
-    } catch {
-      outcome = 'failed';
-      result.failed.push(id);
-    } finally {
-      lines.push([id, email, name, created ? new Date(created * 1000).toISOString() : '', outcome].map(csvCell).join(','));
-    }
-  }
-  if (result.deleted.length) await db.delete(reconciliationFindings).where(and(eq(reconciliationFindings.kind, 'unlinked_customer'), inArray(reconciliationFindings.externalCustomerId, result.deleted)));
-  result.csv = lines.join('\n');
-  return result;
-}
-
-/** Findings a person may close: Stripe-notification notices that stay until someone looks (the daily scan replaces the rest by itself, so
- * closing those would be meaningless). Scan-raised status and schedule findings carry their own `kind` inside `details`; notification-raised ones do not. */
-export function isClosableFinding(finding: { details: unknown; kind: string }): boolean {
+/** Notices raised by Stripe notifications that stay until someone closes them: nothing is re-detected by the scan, so closing them is simply deleting them. */
+export function isClosableNotice(finding: Pick<FindingRow, 'details' | 'kind'>): boolean {
   const details = finding.details && typeof finding.details === 'object' ? finding.details as Record<string, unknown> : {};
   if (['refund_conflict', 'dispute', 'chargeback', 'missing_refund'].includes(finding.kind)) return true;
   if (['status_conflict', 'pending_schedule_conflict'].includes(finding.kind)) return details.kind === undefined;
@@ -153,22 +28,42 @@ export function isClosableFinding(finding: { details: unknown; kind: string }): 
   return false;
 }
 
-/** Closes the named notices. Only closable findings are ever removed, whatever IDs are sent; each closure is audit-logged. */
-export async function markFindingsHandled(actorId: number, findingIds: number[]): Promise<number> {
+export function isIgnorableFinding(finding: Pick<FindingRow, 'details' | 'externalCustomerId' | 'externalSubscriptionId' | 'kind'>): boolean {
+  return ignoreSubjectKey(finding) !== null || isClosableNotice(finding);
+}
+
+/** Ignores the named findings: a scan-raised issue is remembered (the scan then leaves it out of the report and out of its automatic actions until it clears or is restored);
+ * a notification-raised notice is closed. Read, write and audit happen in one transaction; only ignorable findings are touched, whatever IDs are sent. */
+export async function ignoreFindings(actorId: number, findingIds: number[]): Promise<number> {
   if (findingIds.length === 0) return 0;
-  // One transaction: a failed audit insert rolls the deletion back, so a notice is never closed without its audit evidence.
   return db.transaction(async (tx) => {
-    const candidates = await tx.select({ id: reconciliationFindings.id, kind: reconciliationFindings.kind, summary: reconciliationFindings.summary, details: reconciliationFindings.details })
+    const rows = await tx.select({ details: reconciliationFindings.details, externalCustomerId: reconciliationFindings.externalCustomerId, externalSubscriptionId: reconciliationFindings.externalSubscriptionId,
+      id: reconciliationFindings.id, kind: reconciliationFindings.kind, summary: reconciliationFindings.summary })
       .from(reconciliationFindings).where(inArray(reconciliationFindings.id, findingIds)).for('update');
-    const closable = candidates.filter(isClosableFinding);
-    if (closable.length === 0) return 0;
-    const removed = await tx.delete(reconciliationFindings).where(inArray(reconciliationFindings.id, closable.map((finding) => finding.id))).returning({ id: reconciliationFindings.id });
-    const removedIds = new Set(removed.map((row) => row.id));
-    const done = closable.filter((finding) => removedIds.has(finding.id));
-    if (done.length) {
-      await tx.insert(auditLog).values(done.map((finding) => ({ actorId, action: 'reconciliation.finding_marked_handled', entityType: 'reconciliation_finding',
-        entityId: String(finding.id), beforeJson: { kind: finding.kind, summary: finding.summary, details: finding.details }, reason: 'Marked handled from the Stripe Reconciliation page.' })));
+    const ignorable = rows.filter(isIgnorableFinding);
+    if (ignorable.length === 0) return 0;
+    for (const finding of ignorable) {
+      const subject = ignoreSubjectKey(finding);
+      if (subject) {
+        await tx.insert(reconciliationIgnores).values({ ignoredByUserId: actorId, kind: finding.kind, subjectKey: subject, summary: finding.summary.slice(0, 500) })
+          .onConflictDoNothing({ target: [reconciliationIgnores.kind, reconciliationIgnores.subjectKey] });
+      }
     }
-    return done.length;
+    await tx.delete(reconciliationFindings).where(inArray(reconciliationFindings.id, ignorable.map((finding) => finding.id)));
+    await tx.insert(auditLog).values(ignorable.map((finding) => ({ actorId, action: ignoreSubjectKey(finding) ? 'reconciliation.finding_ignored' : 'reconciliation.finding_closed',
+      entityType: 'reconciliation_finding', entityId: String(finding.id), beforeJson: { kind: finding.kind, subject: ignoreSubjectKey(finding), summary: finding.summary },
+      reason: 'Ignored from the Stripe Reconciliation page.' })));
+    return ignorable.length;
+  });
+}
+
+/** Puts an ignored issue back under the scan's eye; it reappears in the report on the next scan if it still exists. */
+export async function restoreIgnoredIssue(actorId: number, ignoreId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const removed = await tx.delete(reconciliationIgnores).where(eq(reconciliationIgnores.id, ignoreId)).returning({ id: reconciliationIgnores.id, kind: reconciliationIgnores.kind, subjectKey: reconciliationIgnores.subjectKey });
+    if (!removed[0]) return false;
+    await tx.insert(auditLog).values({ actorId, action: 'reconciliation.ignore_restored', entityType: 'reconciliation_ignore', entityId: String(ignoreId),
+      beforeJson: { kind: removed[0].kind, subject: removed[0].subjectKey }, reason: 'Restored from the Stripe Reconciliation page.' });
+    return true;
   });
 }
