@@ -34,21 +34,33 @@ export async function syncSubscriptionStatuses(findings: ReconciliationFinding[]
     if (!stripe || stripe.status !== finding.stripeStatus || !LOCAL_SUBSCRIPTION_STATUSES.has(stripe.status)) continue;
     try {
       const item = stripe.items?.data?.[0];
-      const updated = await db.update(subscriptions).set({
-        status: stripe.status, updatedAt: new Date(),
-        ...(stripe.cancel_at_period_end === undefined ? {} : { cancelAtPeriodEnd: stripe.cancel_at_period_end }),
-        ...(item?.current_period_end ? { currentPeriodEnd: new Date(item.current_period_end * 1000).toISOString().slice(0, 10) } : {}),
-        ...(item?.price?.id ? { priceId: item.price.id } : {}),
-      }).where(and(eq(subscriptions.externalSubscriptionId, finding.externalSubscriptionId), eq(subscriptions.status, finding.localStatus)))
-        .returning({ profileId: subscriptions.profileId });
-      if (!updated[0]) continue; // changed since the scan read it (a notification arrived): leave it to the next scan
-      if (stripe.status === 'canceled') {
-        await db.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId: updated[0].profileId })
-          .onConflictDoUpdate({ target: renewalPreferences.profileId, set: { currentMode: 'non_recurring', effectiveOn: null, pendingMode: null, transitionState: 'current', updatedAt: new Date() } });
-      }
-      await db.insert(auditLog).values({ action: 'reconciliation.auto_subscription_status_synced', entityType: 'stripe_subscription', entityId: finding.externalSubscriptionId,
-        beforeJson: { status: finding.localStatus }, afterJson: { status: stripe.status }, reason: 'Stripe is authoritative for subscription state; IDOC entitlement unchanged.' });
-      fixed.push(finding.externalSubscriptionId);
+      const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000).toISOString().slice(0, 10) : null;
+      // One transaction: the status, the renewal preference and the audit row succeed or fail together, so a later failure can never leave
+      // the status fixed (and the finding gone) with the rest missing.
+      const synced = await db.transaction(async (tx) => {
+        const updated = await tx.update(subscriptions).set({
+          status: stripe.status, updatedAt: new Date(),
+          ...(stripe.cancel_at_period_end === undefined ? {} : { cancelAtPeriodEnd: stripe.cancel_at_period_end }),
+          ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
+          ...(item?.price?.id ? { priceId: item.price.id } : {}),
+        }).where(and(eq(subscriptions.externalSubscriptionId, finding.externalSubscriptionId), eq(subscriptions.status, finding.localStatus)))
+          .returning({ profileId: subscriptions.profileId });
+        if (!updated[0]) return false; // changed since the scan read it (a notification arrived): leave it to the next scan
+        const profileId = updated[0].profileId;
+        if (stripe.status === 'canceled') {
+          // As customer.subscription.deleted: recurring billing has ended.
+          await tx.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId })
+            .onConflictDoUpdate({ target: renewalPreferences.profileId, set: { currentMode: 'non_recurring', effectiveOn: null, pendingMode: null, transitionState: 'current', updatedAt: new Date() } });
+        } else if (stripe.cancel_at_period_end && periodEnd) {
+          // As customer.subscription.updated: the member has asked to stop renewing at the end of the period.
+          await tx.insert(renewalPreferences).values({ currentMode: 'recurring', effectiveOn: periodEnd, pendingMode: 'non_recurring', profileId, transitionState: 'cancel_pending' })
+            .onConflictDoUpdate({ target: renewalPreferences.profileId, set: { currentMode: 'recurring', effectiveOn: periodEnd, pendingMode: 'non_recurring', transitionState: 'cancel_pending', updatedAt: new Date() } });
+        }
+        await tx.insert(auditLog).values({ action: 'reconciliation.auto_subscription_status_synced', entityType: 'stripe_subscription', entityId: finding.externalSubscriptionId,
+          beforeJson: { status: finding.localStatus }, afterJson: { status: stripe.status }, reason: 'Stripe is authoritative for subscription state; IDOC entitlement unchanged.' });
+        return true;
+      });
+      if (synced) fixed.push(finding.externalSubscriptionId);
     } catch { /* leave the finding for a person */ }
   }
   return fixed;

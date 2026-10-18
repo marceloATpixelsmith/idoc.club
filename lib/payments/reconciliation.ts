@@ -122,3 +122,30 @@ export function planOrphanCancellations(orphans: OrphanSubscription[], previousl
   }
   return { cancel, deferred, tripped: false };
 }
+
+export type CheckoutOwnershipSession = {
+  amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; id: string;
+  metadata?: Record<string, string> | null; payment_intent: string | { id: string } | null; payment_status: string;
+};
+export type CheckoutOwnershipRegistration = {
+  customerId: string | null; expectedAmountCents: number | null; id: number; profileId: number | null; seminarId: number;
+  stripeCheckoutSessionId: string | null; stripePaymentIntentId: string | null;
+};
+
+/** The same ownership and session-to-PaymentIntent checks the checkout notification applies before crediting a seminar registration
+ * (webhook-handlers.ts handleSeminarCheckoutSessionCompleted): only a Checkout that provably belongs to this registration may be recorded as its payment. */
+export function checkoutBelongsToRegistration(session: CheckoutOwnershipSession, registration: CheckoutOwnershipRegistration): boolean {
+  const metadata = session.metadata ?? {};
+  const profileRaw = metadata.deliveryOwner === 'staging' ? metadata.seminarProfileId : metadata.profileId;
+  const metadataProfileId = profileRaw ? Number(profileRaw) : null;
+  if (metadataProfileId !== null && !Number.isInteger(metadataProfileId)) return false;
+  const intentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+  const expected = registration.expectedAmountCents;
+  return expected !== null && Boolean(intentId)
+    && Number(metadata.registrationId) === registration.id && Number(metadata.seminarId) === registration.seminarId
+    && metadataProfileId === registration.profileId && registration.stripeCheckoutSessionId === session.id
+    && (registration.stripePaymentIntentId === null || registration.stripePaymentIntentId === intentId)
+    && session.amount_total === expected && metadata.amountCents === String(expected) && metadata.currency === 'EUR'
+    && session.currency?.toLowerCase() === 'eur' && session.payment_status === 'paid' && customerId === registration.customerId;
+}

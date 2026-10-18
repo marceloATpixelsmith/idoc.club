@@ -27,7 +27,7 @@ function fakeStripeClient(data: {
   // so this fixture exercises the same nested-field read runReconciliationScan performs, catching
   // any regression back to a flat (wrong) shape.
   invoices?: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>;
-  subscriptions?: Array<{ created?: number; customer: string; id: string; status: string }>;
+  subscriptions?: Array<{ cancel_at_period_end?: boolean; created?: number; customer: string; id: string; items?: { data: Array<{ current_period_end?: number; price?: { id: string } }> }; status: string }>;
 }): ReconciliationStripeClient {
   return {
     customers: { list: async () => ({ data: data.customers ?? [], has_more: false }) },
@@ -423,4 +423,16 @@ test('only notification-raised notices can be marked handled, and each closure i
   const left = await sql`select summary from idoc.reconciliation_findings order by id`;
   assert.deepEqual(left.map((row) => row.summary), ['scan status', 'unlinked']);
   assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.finding_marked_handled'`).length, 2);
+});
+
+test('a status sync for a subscription set to cancel at period end also records the pending cancellation, as the notification would', async () => {
+  const profile = await createProfile((await createUser()).id);
+  await seedSubscription(profile.id, 'sub_cancel_pending', 'active');
+  const periodEnd = Math.floor(Date.now() / 1000) + 20 * 86_400;
+  const result = await runReconciliationScan(fakeStripeClient({
+    subscriptions: [{ cancel_at_period_end: true, customer: 'cus_x', id: 'sub_cancel_pending', items: { data: [{ current_period_end: periodEnd, price: { id: 'price_fixture' } }] }, status: 'past_due' }],
+  }));
+  assert.equal(result.findingsCount, 0);
+  const [preference] = await sql`select current_mode as mode, pending_mode as pending, transition_state as state from idoc.renewal_preferences where profile_id = ${profile.id}`;
+  assert.deepEqual(preference, { mode: 'recurring', pending: 'non_recurring', state: 'cancel_pending' });
 });

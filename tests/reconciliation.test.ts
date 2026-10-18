@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { computeReconciliationFindings, planOrphanCancellations, summarizeFinding } from '../lib/payments/reconciliation.ts';
+import { checkoutBelongsToRegistration, computeReconciliationFindings, planOrphanCancellations, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
   const findings = computeReconciliationFindings(
@@ -177,3 +177,26 @@ test('exactly five qualifying orphans are still cancelled', () => {
   assert.equal(plan.tripped, false);
   assert.equal(plan.cancel.length, 5);
 });
+
+const ownedSession = { amount_total: 4500, currency: 'eur', customer: null, id: 'cs_1', metadata: { amountCents: '4500', currency: 'EUR', profileId: '7', registrationId: '3', seminarId: '9' }, payment_intent: 'pi_1', payment_status: 'paid' };
+const ownedRegistration = { customerId: null, expectedAmountCents: 4500, id: 3, profileId: 7, seminarId: 9, stripeCheckoutSessionId: 'cs_1', stripePaymentIntentId: null };
+
+test('a Checkout that provably belongs to the registration passes the ownership check', () => {
+  assert.equal(checkoutBelongsToRegistration(ownedSession, ownedRegistration), true);
+});
+
+for (const [name, session, registration] of [
+  ['another profile', { ...ownedSession, metadata: { ...ownedSession.metadata, profileId: '8' } }, ownedRegistration],
+  ['another registration', { ...ownedSession, metadata: { ...ownedSession.metadata, registrationId: '4' } }, ownedRegistration],
+  ['another seminar', { ...ownedSession, metadata: { ...ownedSession.metadata, seminarId: '10' } }, ownedRegistration],
+  ['a session the registration did not create', { ...ownedSession, id: 'cs_other' }, ownedRegistration],
+  ['a different PaymentIntent than the one stored', ownedSession, { ...ownedRegistration, stripePaymentIntentId: 'pi_other' }],
+  ['a different Stripe customer', { ...ownedSession, customer: 'cus_other' }, ownedRegistration],
+  ['an unpaid session', { ...ownedSession, payment_status: 'unpaid' }, ownedRegistration],
+  ['metadata amount that disagrees', { ...ownedSession, metadata: { ...ownedSession.metadata, amountCents: '4000' } }, ownedRegistration],
+  ['a non-EUR currency', { ...ownedSession, currency: 'usd' }, ownedRegistration],
+] as const) {
+  test(`the ownership check rejects ${name}`, () => {
+    assert.equal(checkoutBelongsToRegistration(session, registration), false);
+  });
+}

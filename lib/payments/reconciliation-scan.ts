@@ -1,11 +1,11 @@
 import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { getRehearsalReadClient } from './rehearsal-read-client';
-import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
+import { checkoutBelongsToRegistration, computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
 import { recordAutoFixSummary, recordPaidSeminarRegistration, syncFinishedSchedules, syncSubscriptionStatuses, type AutoFixSummary, type StripeSubscriptionDetails } from './reconciliation-autofix';
 import { cancelOrphanedSubscriptions, type RemediationStripeClient } from './reconciliation-remediation';
 import { remediationAllowed } from './remediation-gate';
@@ -21,7 +21,7 @@ export type ReconciliationStripeClient = {
   // regress this back to reading a field that no longer exists.
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<StripeSubscriptionDetails & { created?: number; customer: string }>; has_more: boolean }> };
-  checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; metadata?: Record<string, string> | null }> } };
+  checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; metadata?: Record<string, string> | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
 };
@@ -90,12 +90,14 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       profileId: seminarRegistrations.profileId,
       paymentStatus: seminarRegistrations.paymentStatus,
       registrationStatus: seminarRegistrations.registrationStatus,
+      seminarId: seminarRegistrations.seminarId,
+      customerId: billingAccounts.externalCustomerId,
       stripeCheckoutSessionId: seminarRegistrations.stripeCheckoutSessionId,
       stripePaymentIntentId: seminarRegistrations.stripePaymentIntentId,
       expectedAmountCents: seminarRegistrations.expectedAmountCents,
       currency: seminarRegistrations.currency,
       checkoutStatus: seminarRegistrations.checkoutStatus,
-    }).from(seminarRegistrations).where(sql`${seminarRegistrations.paymentMethodCanonicalId} = 'online_stripe' and (${seminarRegistrations.stripeCheckoutSessionId} is not null or ${seminarRegistrations.stripePaymentIntentId} is not null)`);
+    }).from(seminarRegistrations).leftJoin(billingAccounts, eq(billingAccounts.profileId, seminarRegistrations.profileId)).where(sql`${seminarRegistrations.paymentMethodCanonicalId} = 'online_stripe' and (${seminarRegistrations.stripeCheckoutSessionId} is not null or ${seminarRegistrations.stripePaymentIntentId} is not null)`);
     const [stripeCustomers, stripeSubscriptions, stripeOpenInvoices, stripeSchedules] = await Promise.all([
       paginate((params) => stripe.customers.list(params)),
       paginate((params) => stripe.subscriptions.list({ ...params, status: 'all' })),
@@ -179,7 +181,8 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       // nothing else is wrong. Record it (as the checkout notification would have) instead of reporting it.
       const settled = intent?.amount_received ?? session?.amount_total;
       if (mismatches.length === 1 && isPaid && localAwaitingPayment && registration.registrationStatus === 'registered' && intentId
-        && registration.expectedAmountCents !== null && settled === registration.expectedAmountCents && intent?.status === 'succeeded') {
+        && registration.expectedAmountCents !== null && settled === registration.expectedAmountCents && intent?.status === 'succeeded'
+        && session && checkoutBelongsToRegistration(session, registration)) {
         try {
           if (await recordPaidSeminarRegistration({ amountCents: registration.expectedAmountCents, checkoutSessionId: session?.id ?? null,
             deliveryOwner: session?.metadata?.deliveryOwner, paymentIntentId: intentId, registrationId: registration.id })) {

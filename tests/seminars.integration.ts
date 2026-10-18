@@ -686,14 +686,18 @@ test('a Checkout created at a registration\'s own stored expected amount still c
   assert.equal((await sql`select payment_status from idoc.seminar_registrations where id=${registrationId}`)[0].payment_status, 'refunded');
 });
 
-function reconciliationClientForCheckout(options: { amount: number; currency?: string; paymentIntent: string; session: string }): ReconciliationStripeClient {
+function reconciliationClientForCheckout(options: { amount: number; currency?: string; metadata?: Record<string, string> | null; paymentIntent: string; session: string }): ReconciliationStripeClient {
   return {
-    checkout: { sessions: { retrieve: async (id: string) => ({ amount_total: options.amount, currency: options.currency ?? 'eur', id, metadata: null, payment_intent: options.paymentIntent, payment_status: 'paid', status: 'complete' }) } },
+    checkout: { sessions: { retrieve: async (id: string) => ({ amount_total: options.amount, currency: options.currency ?? 'eur', customer: null, id, metadata: options.metadata ?? null, payment_intent: options.paymentIntent, payment_status: 'paid', status: 'complete' }) } },
     customers: { list: async () => ({ data: [], has_more: false }) },
     invoices: { list: async () => ({ data: [], has_more: false }) },
     paymentIntents: { retrieve: async (id: string) => ({ amount_received: options.amount, currency: options.currency ?? 'eur', id, status: 'succeeded' }) },
     subscriptions: { list: async () => ({ data: [], has_more: false }) },
   };
+}
+
+function ownedCheckoutMetadata(registrationId: number, seminarId: number, profileId: number, amountCents: number) {
+  return { amountCents: String(amountCents), currency: 'EUR', profileId: String(profileId), registrationId: String(registrationId), seminarId: String(seminarId) };
 }
 
 test('the scan records a registration whose own Checkout Stripe confirms paid in full, instead of reporting it', async () => {
@@ -702,7 +706,7 @@ test('the scan records a registration whose own Checkout Stripe confirms paid in
   const { profile } = await paidMember();
   const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,stripe_checkout_session_id,checkout_status)
     values (${seminarId},${profile.id},'pending','online_stripe',4500,'cs_scan_paid','open') returning id`;
-  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4500, paymentIntent: 'pi_scan_paid', session: 'cs_scan_paid' }));
+  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4500, metadata: ownedCheckoutMetadata(row.id, seminarId, profile.id, 4500), paymentIntent: 'pi_scan_paid', session: 'cs_scan_paid' }));
   assert.equal(result.findingsCount, 0);
   const [registration] = await sql`select payment_status as status, stripe_payment_intent_id as pi from idoc.seminar_registrations where id = ${row.id}`;
   assert.deepEqual(registration, { status: 'paid', pi: 'pi_scan_paid' });
@@ -716,8 +720,21 @@ test('the scan reports, and does not record, a paid Checkout whose amount differ
   const { profile } = await paidMember();
   const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,stripe_checkout_session_id,checkout_status)
     values (${seminarId},${profile.id},'pending','online_stripe',4500,'cs_scan_short','open') returning id`;
-  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4000, paymentIntent: 'pi_scan_short', session: 'cs_scan_short' }));
+  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4000, metadata: ownedCheckoutMetadata(row.id, seminarId, profile.id, 4000), paymentIntent: 'pi_scan_short', session: 'cs_scan_short' }));
   assert.equal(result.findingsCount, 1);
   const [registration] = await sql`select payment_status as status from idoc.seminar_registrations where id = ${row.id}`;
   assert.equal(registration.status, 'pending');
+});
+
+test('the scan reports, and does not record, a paid Checkout whose metadata does not belong to the registration', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
+  const { profile } = await paidMember();
+  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,stripe_checkout_session_id,checkout_status)
+    values (${seminarId},${profile.id},'pending','online_stripe',4500,'cs_scan_foreign','open') returning id`;
+  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4500, metadata: ownedCheckoutMetadata(row.id, seminarId, profile.id + 999, 4500), paymentIntent: 'pi_scan_foreign', session: 'cs_scan_foreign' }));
+  assert.equal(result.findingsCount, 1);
+  const [registration] = await sql`select payment_status as status from idoc.seminar_registrations where id = ${row.id}`;
+  assert.equal(registration.status, 'pending');
+  assert.equal((await sql`select 1 from idoc.notification_outbox where dedupe_key = ${`seminar.registration_created:${row.id}:stripe-paid`}`).length, 0);
 });

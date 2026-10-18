@@ -156,16 +156,19 @@ export function isClosableFinding(finding: { details: unknown; kind: string }): 
 /** Closes the named notices. Only closable findings are ever removed, whatever IDs are sent; each closure is audit-logged. */
 export async function markFindingsHandled(actorId: number, findingIds: number[]): Promise<number> {
   if (findingIds.length === 0) return 0;
-  const candidates = await db.select({ id: reconciliationFindings.id, kind: reconciliationFindings.kind, summary: reconciliationFindings.summary, details: reconciliationFindings.details })
-    .from(reconciliationFindings).where(inArray(reconciliationFindings.id, findingIds));
-  const closable = candidates.filter(isClosableFinding);
-  if (closable.length === 0) return 0;
-  const removed = await db.delete(reconciliationFindings).where(inArray(reconciliationFindings.id, closable.map((finding) => finding.id))).returning({ id: reconciliationFindings.id });
-  const removedIds = new Set(removed.map((row) => row.id));
-  const done = closable.filter((finding) => removedIds.has(finding.id));
-  if (done.length) {
-    await db.insert(auditLog).values(done.map((finding) => ({ actorId, action: 'reconciliation.finding_marked_handled', entityType: 'reconciliation_finding',
-      entityId: String(finding.id), beforeJson: { kind: finding.kind, summary: finding.summary, details: finding.details }, reason: 'Marked handled from the Stripe Reconciliation page.' })));
-  }
-  return done.length;
+  // One transaction: a failed audit insert rolls the deletion back, so a notice is never closed without its audit evidence.
+  return db.transaction(async (tx) => {
+    const candidates = await tx.select({ id: reconciliationFindings.id, kind: reconciliationFindings.kind, summary: reconciliationFindings.summary, details: reconciliationFindings.details })
+      .from(reconciliationFindings).where(inArray(reconciliationFindings.id, findingIds)).for('update');
+    const closable = candidates.filter(isClosableFinding);
+    if (closable.length === 0) return 0;
+    const removed = await tx.delete(reconciliationFindings).where(inArray(reconciliationFindings.id, closable.map((finding) => finding.id))).returning({ id: reconciliationFindings.id });
+    const removedIds = new Set(removed.map((row) => row.id));
+    const done = closable.filter((finding) => removedIds.has(finding.id));
+    if (done.length) {
+      await tx.insert(auditLog).values(done.map((finding) => ({ actorId, action: 'reconciliation.finding_marked_handled', entityType: 'reconciliation_finding',
+        entityId: String(finding.id), beforeJson: { kind: finding.kind, summary: finding.summary, details: finding.details }, reason: 'Marked handled from the Stripe Reconciliation page.' })));
+    }
+    return done.length;
+  });
 }
