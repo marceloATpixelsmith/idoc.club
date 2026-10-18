@@ -1,20 +1,19 @@
 import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
-import { eq, sql } from 'drizzle-orm';
-import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { auditLog, billingAccounts, reconciliationFindings, reconciliationIgnores, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { getRehearsalReadClient } from './rehearsal-read-client';
 import { checkoutBelongsToRegistration, computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
-import { recordAutoFixSummary, recordPaidSeminarRegistration, syncFinishedSchedules, syncSubscriptionStatuses, type AutoFixSummary, type StripeSubscriptionDetails } from './reconciliation-autofix';
-import { cancelOrphanedSubscriptions, type RemediationStripeClient } from './reconciliation-remediation';
+import { markMissingSubscriptionsCanceled, newResolutionLog, summarizeResolution, recordPaidSeminarRegistration, resolveOrphanedSubscriptions, resolveRenewalSchedules, resolveUnlinkedCustomers, syncSubscriptionStatuses, type ResolverStripeClient, type StripeMode, type StripeSubscriptionDetails } from './reconciliation-resolver';
 import { remediationAllowed } from './remediation-gate';
 
 // Only the calls this module makes, and only the fields it actually reads back, so tests can
 // inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
 // lib/payments/stripe.ts's PortalStripeClient/CancellationStripeClient).
 export type ReconciliationStripeClient = {
-  customers: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string }>; has_more: boolean }> };
+  customers: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ created?: number; id: string }>; has_more: boolean }> };
   // Stripe API version 2025-04-30.basil moved an invoice's subscription off the top-level
   // `subscription` field onto `parent.subscription_details.subscription` — this narrows the type
   // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
@@ -63,7 +62,7 @@ function findingRow(finding: ReconciliationFinding) {
  * alerts. reconciliation_findings is left untouched on failure (the last known-good snapshot),
  * rather than wiped to empty, which would read as a false "all clear."
  */
-export async function runReconciliationScan(testStripeClient?: ReconciliationStripeClient, testOptions?: { now?: Date; remediationClient?: RemediationStripeClient }): Promise<{ findingsCount: number }> {
+export async function runReconciliationScan(testStripeClient?: ReconciliationStripeClient, testOptions?: { now?: Date; remediationClient?: ResolverStripeClient; stripeMode?: StripeMode }): Promise<{ findingsCount: number }> {
   if ((testStripeClient || testOptions) && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   try {
     // The real Stripe SDK's list responses are typed richer than this narrow interface (e.g.
@@ -84,6 +83,11 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       db.select({ externalSubscriptionScheduleId: renewalPreferences.externalSubscriptionScheduleId,
         profileId: renewalPreferences.profileId, transitionState: renewalPreferences.transitionState }).from(renewalPreferences),
     ]);
+    // Issues an administrator chose to stop seeing. They are left out of the report AND out of every automatic action; an ignore is dropped below
+    // once the issue it covers no longer exists, so a later recurrence is reported afresh.
+    const ignoredRows = await db.select({ id: reconciliationIgnores.id, kind: reconciliationIgnores.kind, subjectKey: reconciliationIgnores.subjectKey }).from(reconciliationIgnores);
+    const ignoredKeys = new Set(ignoredRows.map((row) => `${row.kind}:${row.subjectKey}`));
+    const presentKeys = new Set<string>();
     //SCAN ONLY STRIPE-ONLINE REGISTRATIONS WITH RECORDED CHECKOUT OR PAYMENT REFERENCES.
     const localSeminarRegistrations = rehearsal ? [] : await db.select({
       id: seminarRegistrations.id,
@@ -105,7 +109,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       stripe.subscriptionSchedules ? paginate((params) => stripe.subscriptionSchedules!.list(params)) : Promise.resolve([]),
     ]);
 
-    const findings = computeReconciliationFindings(
+    const rawFindings = computeReconciliationFindings(
       { billingAccounts: localBillingAccounts, renewalPreferences: localPreferences, subscriptions: localSubscriptions },
       {
         customers: stripeCustomers,
@@ -114,38 +118,37 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         subscriptions: stripeSubscriptions,
       },
       undefined,
-      { reportLocalMissingInStripe: Boolean(rehearsal) },
+      { reportLocalMissingInStripe: true },
     );
+    const subjectOf = (finding: ReconciliationFinding): string | null => ('externalSubscriptionId' in finding ? finding.externalSubscriptionId : 'externalCustomerId' in finding ? finding.externalCustomerId : null);
+    for (const finding of rawFindings) { const subject = subjectOf(finding); if (subject) presentKeys.add(`${finding.kind}:${subject}`); }
+    const findings = rawFindings.filter((finding) => { const subject = subjectOf(finding); return !(subject && ignoredKeys.has(`${finding.kind}:${subject}`)); });
 
-    // Fix what has a single correct answer BEFORE anything is recorded, so the report that follows lists only what still needs a person
-    // and nobody has to rescan. Rehearsal compares live Stripe with unrelated test data, so nothing is "fixed" from it.
-    const autoFix: AutoFixSummary = { schedulesSynced: 0, seminarPaymentsRecorded: 0, subscriptionsSynced: 0 };
-    if (!rehearsal) {
-      const synced = new Set(await syncSubscriptionStatuses(findings, stripeSubscriptions));
-      const finished = new Set(await syncFinishedSchedules(findings));
-      autoFix.subscriptionsSynced = synced.size;
-      autoFix.schedulesSynced = finished.size;
-      for (let index = findings.length - 1; index >= 0; index -= 1) {
-        const finding = findings[index];
-        if ((finding.kind === 'status_conflict' && synced.has(finding.externalSubscriptionId)) || (finding.kind === 'pending_schedule_conflict' && finished.has(finding.externalSubscriptionId))) findings.splice(index, 1);
-      }
-    }
-
-    // IDOC's database is the system of record, so an open Stripe subscription it has no record of is cancelled rather than
-    // left able to charge someone who was removed. Only in production against live Stripe, and with the guards in
-    // reconciliation.ts (age, previous-snapshot confirmation, circuit breaker); a cancelled one leaves this snapshot.
-    const orphanFindings = findings.filter((finding) => finding.kind === 'orphaned_subscription');
-    if (orphanFindings.length > 0 && !rehearsal && (testOptions?.remediationClient || remediationAllowed())) {
-      const createdById = new Map(stripeSubscriptions.map((subscription) => [subscription.id, subscription.created ?? null]));
-      const { cancelled } = await cancelOrphanedSubscriptions(
-        testOptions?.remediationClient ?? (stripe as unknown as RemediationStripeClient),
-        orphanFindings.map((finding) => ({ createdSeconds: createdById.get(finding.externalSubscriptionId) ?? null, customer: finding.externalCustomerId, id: finding.externalSubscriptionId, status: finding.stripeStatus })),
-        testOptions?.now,
-      );
-      for (let index = findings.length - 1; index >= 0; index -= 1) {
-        const finding = findings[index];
-        if (finding.kind === 'orphaned_subscription' && cancelled.includes(finding.externalSubscriptionId)) findings.splice(index, 1);
-      }
+    // Resolve everything with a known answer BEFORE anything is recorded, so the report lists only what needs a person and nobody has to rescan.
+    // Changes to IDOC's own database always happen; changes to Stripe happen only where this deployment may write to it and are otherwise
+    // SIMULATED (same checks, same effect on the report), so a staging scan shows what a production scan will do.
+    const stripeMode: StripeMode = testOptions
+      ? (testOptions.stripeMode ?? (testOptions.remediationClient ? 'apply' : 'simulate'))
+      : (!rehearsal && remediationAllowed() ? 'apply' : 'simulate');
+    const log = newResolutionLog(stripeMode);
+    const actionClient = (testOptions?.remediationClient ?? stripe) as unknown as ResolverStripeClient;
+    const nowSeconds = Math.floor((testOptions?.now ?? new Date()).getTime() / 1000);
+    const resolvedSubscriptions = new Set<string>();
+    const resolvedCustomers = new Set<string>();
+    const resolvedSchedules = new Set<string>();
+    for (const id of await syncSubscriptionStatuses(findings, stripeSubscriptions, log)) resolvedSubscriptions.add(id);
+    for (const id of await markMissingSubscriptionsCanceled(findings, localSubscriptions.length, log)) resolvedSubscriptions.add(id);
+    for (const id of await resolveRenewalSchedules(findings, log)) resolvedSchedules.add(id);
+    for (const id of await resolveOrphanedSubscriptions(findings, stripeSubscriptions, localSubscriptions.length, actionClient, nowSeconds, log)) resolvedSubscriptions.add(id);
+    // A customer whose orphaned subscription was just dealt with is left for the next scan rather than deleted in the same breath.
+    const customersWithOrphans = new Set(findings.flatMap((finding) => (finding.kind === 'orphaned_subscription' ? [finding.externalCustomerId] : [])));
+    for (const id of await resolveUnlinkedCustomers(findings, stripeCustomers, localBillingAccounts.length, customersWithOrphans, actionClient, nowSeconds, log)) resolvedCustomers.add(id);
+    for (let index = findings.length - 1; index >= 0; index -= 1) {
+      const finding = findings[index];
+      const resolved = (finding.kind === 'status_conflict' || finding.kind === 'orphaned_subscription') ? resolvedSubscriptions.has(finding.externalSubscriptionId)
+        : finding.kind === 'pending_schedule_conflict' ? resolvedSchedules.has(finding.externalSubscriptionId)
+          : finding.kind === 'unlinked_customer' ? resolvedCustomers.has(finding.externalCustomerId) : false;
+      if (resolved) findings.splice(index, 1);
     }
 
     //KEEP A FAILED STRIPE LOOKUP FROM PRODUCING A FALSE ALL-CLEAR RESULT.
@@ -177,6 +180,9 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         mismatches.push('Stripe payment currency differs from the registration currency');
       }
       if (!mismatches.length) continue;
+      presentKeys.add(`seminar_payment_conflict:registration:${registration.id}`);
+      // An ignored issue is left alone entirely: not reported and not resolved automatically.
+      if (ignoredKeys.has(`seminar_payment_conflict:registration:${registration.id}`)) continue;
       // The one fully predictable case: Stripe confirms this registration's own Checkout was paid in full, in the expected amount and currency, and
       // nothing else is wrong. Record it (as the checkout notification would have) instead of reporting it.
       const settled = intent?.amount_received ?? session?.amount_total;
@@ -185,10 +191,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         && session && checkoutBelongsToRegistration(session, registration)) {
         try {
           if (await recordPaidSeminarRegistration({ amountCents: registration.expectedAmountCents, checkoutSessionId: session?.id ?? null,
-            deliveryOwner: session?.metadata?.deliveryOwner, paymentIntentId: intentId, registrationId: registration.id })) {
-            autoFix.seminarPaymentsRecorded += 1;
-            continue;
-          }
+            deliveryOwner: session?.metadata?.deliveryOwner, paymentIntentId: intentId, registrationId: registration.id }, log)) continue;
         } catch { /* fall through: report it for a person */ }
       }
       seminarFindings.push({
@@ -210,9 +213,12 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       await tx.delete(reconciliationFindings).where(sql`kind in ('refund_conflict','dispute','chargeback') and details ->> 'paymentIntentId' is not null and not exists (select 1 from ${seminarRegistrations} where ${seminarRegistrations.stripePaymentIntentId} = details ->> 'paymentIntentId')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
       if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
+      // An ignore whose issue no longer exists is dropped, so a later recurrence is reported afresh. Seminar ignores are only judged when the seminar check ran.
+      const expired = ignoredRows.filter((row) => !presentKeys.has(`${row.kind}:${row.subjectKey}`) && (!rehearsal || row.kind !== 'seminar_payment_conflict')).map((row) => row.id);
+      if (expired.length > 0) await tx.delete(reconciliationIgnores).where(inArray(reconciliationIgnores.id, expired));
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });
+      await tx.insert(auditLog).values({ action: 'reconciliation.scan_resolution_summary', entityType: 'reconciliation', entityId: 'scan', afterJson: summarizeResolution(log) });
     });
-    await recordAutoFixSummary(autoFix).catch(() => undefined);
     return { findingsCount: findings.length + seminarFindings.length };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown reconciliation error.';

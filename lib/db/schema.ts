@@ -851,6 +851,21 @@ export const reconciliationFindings = idocSchema.table('reconciliation_findings'
   check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
 ]);
 
+/** Issues an administrator chose to stop seeing ("ignore") -- for example a member who has been contacted about repeated payment failures and will not or cannot update their
+ * card. The scan leaves a matching finding out of the report AND out of its automatic actions. An ignore is dropped by the scan as soon as the condition it covers no longer
+ * exists, so a later recurrence is reported afresh; an administrator can also restore one by hand. */
+export const reconciliationIgnores = idocSchema.table('reconciliation_ignores', {
+  id: serial('id').primaryKey(),
+  kind: varchar('kind', { length: 30 }).notNull(),
+  /** The Stripe subscription/customer ID, or `registration:<id>`, that identifies the issue within its kind. */
+  subjectKey: varchar('subject_key', { length: 255 }).notNull(),
+  summary: text('summary'),
+  ignoredByUserId: integer('ignored_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  ignoredAt: timestamp('ignored_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('reconciliation_ignores_kind_subject_unique').on(table.kind, table.subjectKey),
+]);
+
 /** Append-only heartbeat log, one row per cron execution, so a failed run doesn't read as a silent "all clear." */
 export const reconciliationRuns = idocSchema.table('reconciliation_runs', {
   id: serial('id').primaryKey(),

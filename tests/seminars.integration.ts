@@ -738,3 +738,17 @@ test('the scan reports, and does not record, a paid Checkout whose metadata does
   assert.equal(registration.status, 'pending');
   assert.equal((await sql`select 1 from idoc.notification_outbox where dedupe_key = ${`seminar.registration_created:${row.id}:stripe-paid`}`).length, 0);
 });
+
+test('an ignored seminar conflict is neither reported nor resolved automatically, even when it later becomes resolvable', async () => {
+  const admin = await adminUser();
+  const seminarId = await publishedSeminar(admin.id, { price: '45.00' });
+  const { profile } = await paidMember();
+  const [row] = await sql<{ id: number }[]>`insert into idoc.seminar_registrations (seminar_id,profile_id,payment_status,payment_method_canonical_id,expected_amount_cents,stripe_checkout_session_id,checkout_status)
+    values (${seminarId},${profile.id},'pending','online_stripe',4500,'cs_scan_ignored','open') returning id`;
+  await sql`insert into idoc.reconciliation_ignores(kind, subject_key, summary) values ('seminar_payment_conflict', ${`registration:${row.id}`}, 'ignored by an administrator')`;
+  const result = await runReconciliationScan(reconciliationClientForCheckout({ amount: 4500, metadata: ownedCheckoutMetadata(row.id, seminarId, profile.id, 4500), paymentIntent: 'pi_scan_ignored', session: 'cs_scan_ignored' }));
+  assert.equal(result.findingsCount, 0);
+  const [registration] = await sql`select payment_status as status from idoc.seminar_registrations where id = ${row.id}`;
+  assert.equal(registration.status, 'pending', 'the ignore stops the automatic payment recording');
+  assert.equal((await sql`select 1 from idoc.reconciliation_ignores`).length, 1, 'the issue still exists, so the ignore stays');
+});
