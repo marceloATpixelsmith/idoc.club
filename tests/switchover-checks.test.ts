@@ -4,7 +4,7 @@ import test from 'node:test';
 import { evaluateSwitchover, hostOf, type SwitchoverInputs } from '../lib/operations/switchover-checks-core.ts';
 
 const ready: SwitchoverInputs = {
-  baseUrlHost: 'idoc.club', counts: { legacyImports: 0, profiles: 0, subscriptions: 0, users: 0 }, googleRedirectHost: 'idoc.club', holdOn: true, ledgerApplied: 73, ledgerExpected: 73,
+  baseUrlHost: 'idoc.club', counts: { legacyImports: 0, profiles: 0, subscriptions: 0, users: 0 }, googleRedirectHost: 'idoc.club', holdOn: true, ledgerNewest: 1792350000000, journalNewest: 1792350000000, stagingNewest: 1792350000000,
   legacyImportEnabled: true, legacyKeyPresent: true, qstashHost: 'idoc.club', reconciliationLiveEnabled: false, schema: 'idoc_production', stripeKeyMode: 'live',
   webhook: { missingEvents: [], state: 'ok' }, webhookSecretPresent: true,
 };
@@ -25,8 +25,10 @@ test('today\'s production state shows what is left to do', () => {
 
 test('a test key, missing migrations, a released hold and the live-actions switch are flagged', () => {
   assert.equal(status({ ...ready, stripeKeyMode: 'test' }, 'stripe-key'), 'todo');
-  assert.equal(status({ ...ready, ledgerApplied: 70 }, 'migrations'), 'todo');
-  assert.equal(status({ ...ready, ledgerApplied: null }, 'migrations'), 'warn');
+  assert.equal(status({ ...ready, ledgerNewest: 1792340000000 }, 'migrations'), 'todo');
+  assert.equal(status({ ...ready, stagingNewest: 1792340000000 }, 'migrations'), 'todo');
+  assert.equal(status({ ...ready, ledgerNewest: 1792360000000, stagingNewest: undefined }, 'migrations'), 'warn');
+  assert.equal(status({ ...ready, ledgerNewest: null }, 'migrations'), 'warn');
   assert.equal(status({ ...ready, holdOn: false }, 'hold'), 'warn');
   assert.equal(status({ ...ready, reconciliationLiveEnabled: true }, 'safeguard'), 'warn');
 });
@@ -69,4 +71,12 @@ test('final verification reports every unfinished or risky item', () => {
   assert.equal(finalStatus({ ...done, keyMode: 'test' }, 'final-stripe'), 'todo');
   assert.equal(finalStatus({ ...done, webhookEventsLast24h: 0 }, 'final-stripe'), 'warn');
   assert.match(evaluateFinal({ ...done, openFindings: { orphaned_subscription: 3, refund_conflict: 1 } }).find((check) => check.id === 'final-findings')?.detail ?? '', /3 orphaned subscription, 1 refund conflict/);
+});
+
+test('after the import, absent import credentials are the finished state', () => {
+  const after = { ...ready, counts: { ...ready.counts, legacyImports: 1, users: 1500 }, legacyImportEnabled: false, legacyKeyPresent: false };
+  assert.equal(status(after, 'import-switch'), 'ok');
+  assert.equal(status(after, 'import-key'), 'ok');
+  assert.equal(status({ ...after, legacyKeyPresent: true }, 'import-key'), 'todo');
+  assert.equal(status({ ...ready, legacyImportEnabled: false }, 'import-switch'), 'todo');
 });

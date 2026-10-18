@@ -5,8 +5,10 @@ export type SwitchoverInputs = {
   counts: { legacyImports: number; profiles: number; subscriptions: number; users: number };
   googleRedirectHost: string | null;
   holdOn: boolean;
-  ledgerApplied: number | null;
-  ledgerExpected: number;
+  /** `created_at` of the newest row in this schema's migration ledger, the newest `when` in the code's journal, and the staging ledger's newest (null: unreadable; undefined: not applicable). */
+  ledgerNewest: number | null;
+  journalNewest: number;
+  stagingNewest?: number | null;
   legacyImportEnabled: boolean;
   legacyKeyPresent: boolean;
   qstashHost: string | null;
@@ -35,17 +37,23 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
     add('schema', 'Environment', 'warn', `This is ${input.schema}, not production. The checks below describe this environment, so run this page on production for the real answer.`);
   }
 
-  add('migrations', 'Database migrations', input.ledgerApplied === null ? 'warn' : input.ledgerApplied === input.ledgerExpected ? 'ok' : 'todo',
-    input.ledgerApplied === null ? 'The migration ledger could not be read.'
-      : input.ledgerApplied === input.ledgerExpected ? `All ${input.ledgerExpected} migrations are applied.`
-        : `${input.ledgerApplied} of ${input.ledgerExpected} migrations are applied. Approve the Auto-migrate Production Schema run in GitHub.`);
+  // Drizzle treats a migration as applied when the ledger's newest timestamp reaches its own, and a few historical entries were applied out of order, so the newest
+  // timestamp (not a row count) is the identity that matters. The production ledger must also match staging's newest (docs/07 production migration rules).
+  const ledgerState = input.ledgerNewest === null ? 'unreadable' : input.ledgerNewest < input.journalNewest ? 'behind' : input.ledgerNewest > input.journalNewest ? 'ahead' : 'current';
+  const stagingDiffers = input.stagingNewest !== undefined && input.stagingNewest !== null && input.ledgerNewest !== null && input.stagingNewest !== input.ledgerNewest;
+  add('migrations', 'Database migrations', ledgerState === 'current' && !stagingDiffers ? 'ok' : ledgerState === 'behind' || stagingDiffers ? 'todo' : 'warn',
+    ledgerState === 'unreadable' ? 'The migration ledger could not be read.'
+      : ledgerState === 'behind' ? 'The newest applied migration is older than the newest in the code. Approve the Auto-migrate Production Schema run in GitHub.'
+        : ledgerState === 'ahead' ? 'The ledger is ahead of this deployment\'s code. Deploy the matching code before continuing.'
+          : stagingDiffers ? 'The newest migration here differs from the staging schema\'s. Production must match staging before the switchover.'
+            : 'The newest applied migration matches the code' + (input.stagingNewest === undefined ? '.' : ' and the staging schema.'));
 
   const { users, profiles, subscriptions, legacyImports } = input.counts;
   const hasData = users + profiles + subscriptions > 0;
-  add('data', 'Test data cleared', legacyImports > 0 ? 'warn' : hasData ? 'todo' : 'ok',
+  add('data', 'Test data cleared (administrators not counted)', legacyImports > 0 ? 'warn' : hasData ? 'todo' : 'ok',
     legacyImports > 0 ? `A legacy import has already run here (${users} users, ${profiles} profiles, ${subscriptions} subscriptions now). A second import skips members already imported.`
-      : hasData ? `${users} users, ${profiles} profiles and ${subscriptions} subscriptions exist. If they are only test data, clear them before importing.`
-        : 'No members, profiles or subscriptions yet.');
+      : hasData ? `${users} non-administrator users, ${profiles} profiles and ${subscriptions} subscriptions exist. If they are only test data, clear them before importing.`
+        : 'No members, profiles or subscriptions beyond the administrator accounts.');
 
   add('stripe-key', 'Stripe key mode', input.stripeKeyMode === null ? 'todo' : input.stripeKeyMode === 'live' ? 'ok' : 'todo',
     input.stripeKeyMode === null ? 'No valid STRIPE_SECRET_KEY is set.' : input.stripeKeyMode === 'live' ? 'STRIPE_SECRET_KEY is a live-mode key.'
@@ -67,10 +75,14 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
     stale.length === 0 ? 'BASE_URL, GOOGLE_OAUTH_REDIRECT_URI and QSTASH_CALLBACK_BASE_URL all use the live domain.'
       : `Still not on idoc.club: ${stale.map(([name, , host]) => `${name} (${host ?? 'not set'})`).join(', ')}. Change them at the switch (docs/30 step B3).`);
 
-  add('import-switch', 'Legacy import switched on', input.legacyImportEnabled ? 'ok' : 'todo',
-    input.legacyImportEnabled ? 'LEGACY_IMPORT_ENABLED is on.' : 'LEGACY_IMPORT_ENABLED is off. Turn it on for the import (docs/30 step B3).');
-  add('import-key', 'Read-only Stripe key for the import', input.legacyKeyPresent ? 'ok' : 'todo',
-    input.legacyKeyPresent ? 'LEGACY_STRIPE_SECRET_KEY is set. Remove it and revoke the key after the import.' : 'LEGACY_STRIPE_SECRET_KEY is not set. The import needs it for the live Stripe comparison.');
+  // After an import has run, the temporary switch and key should be gone (docs/30 step B11), so absence is the finished state.
+  const imported = legacyImports > 0;
+  add('import-switch', 'Legacy import switched on', input.legacyImportEnabled ? (imported ? 'todo' : 'ok') : imported ? 'ok' : 'todo',
+    imported ? (input.legacyImportEnabled ? 'The import has run; remove LEGACY_IMPORT_ENABLED and redeploy (docs/30 step B11).' : 'The import has run and the switch is off.')
+      : input.legacyImportEnabled ? 'LEGACY_IMPORT_ENABLED is on.' : 'LEGACY_IMPORT_ENABLED is off. Turn it on for the import (docs/30 step B3).');
+  add('import-key', 'Read-only Stripe key for the import', input.legacyKeyPresent ? (imported ? 'todo' : 'ok') : imported ? 'ok' : 'todo',
+    imported ? (input.legacyKeyPresent ? 'The import has run; remove LEGACY_STRIPE_SECRET_KEY, redeploy and revoke the key in Stripe.' : 'The import has run and the key is removed from Vercel; confirm it is revoked in Stripe.')
+      : input.legacyKeyPresent ? 'LEGACY_STRIPE_SECRET_KEY is set. Remove it and revoke the key after the import.' : 'LEGACY_STRIPE_SECRET_KEY is not set. The import needs it for the live Stripe comparison.');
 
   add('hold', 'Member communications and billing hold', input.holdOn ? 'ok' : 'warn',
     input.holdOn ? 'The hold is on. Keep it on through the import; release it only at step B8.' : 'The hold is OFF: emails and live billing are active. Replay needs it off, the import needs it on.');

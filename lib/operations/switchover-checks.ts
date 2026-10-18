@@ -33,16 +33,21 @@ async function webhookState(baseUrl: string | undefined): Promise<SwitchoverInpu
 export async function runSwitchoverChecks(): Promise<SwitchoverCheck[]> {
   const env = process.env;
   const schema = getDatabaseSchemaName();
-  let ledgerApplied: number | null = null;
-  try { ledgerApplied = await count(sql`select count(*)::int as n from ${sql.identifier(schema)}.__drizzle_migrations`); } catch { /* reported as unreadable */ }
+  const newest = async (name: string): Promise<number | null> => {
+    try { return await count(sql`select coalesce(max(created_at), 0)::bigint::float8 as n from ${sql.identifier(name)}.__drizzle_migrations`); } catch { return null; }
+  };
+  const ledgerNewest = await newest(schema);
+  const stagingNewest = schema === 'idoc_production' ? await newest('idoc_staging') : undefined;
+  // Administrators are the operators of this page, so they are not test data.
+  const nonAdmin = (column: string) => sql.raw(`not exists (select 1 from application_roles r where r.user_id = ${column} and r.revoked_at is null and r.role in ('super_admin', 'administrator'))`);
   const [users, profiles, subscriptions, legacyImports] = await Promise.all([
-    count(sql`select count(*)::int as n from users`), count(sql`select count(*)::int as n from profiles`),
-    count(sql`select count(*)::int as n from subscriptions`), count(sql`select count(*)::int as n from audit_log where action = 'admin.legacy_import.import'`),
+    count(sql`select count(*)::int as n from users u where ${nonAdmin('u.id')}`), count(sql`select count(*)::int as n from profiles p where ${nonAdmin('p.user_id')}`),
+    count(sql`select count(*)::int as n from subscriptions s join profiles p on p.id = s.profile_id where ${nonAdmin('p.user_id')}`), count(sql`select count(*)::int as n from audit_log where action = 'admin.legacy_import.import'`),
   ]);
   const keyMode = /^(?:sk|rk)_(live|test)_/.exec(env.STRIPE_SECRET_KEY?.trim() ?? '')?.[1] as 'live' | 'test' | undefined;
   return evaluateSwitchover({
     baseUrlHost: hostOf(env.BASE_URL), counts: { legacyImports, profiles, subscriptions, users }, googleRedirectHost: hostOf(env.GOOGLE_OAUTH_REDIRECT_URI),
-    holdOn: memberCommunicationsDisabled(), ledgerApplied, ledgerExpected: journal.entries.length, legacyImportEnabled: legacyImportEnabled(),
+    holdOn: memberCommunicationsDisabled(), ledgerNewest, journalNewest: Math.max(...journal.entries.map((entry) => entry.when)), stagingNewest, legacyImportEnabled: legacyImportEnabled(),
     legacyKeyPresent: Boolean(env.LEGACY_STRIPE_SECRET_KEY?.trim()), qstashHost: hostOf(env.QSTASH_CALLBACK_BASE_URL),
     reconciliationLiveEnabled: env.RECONCILIATION_LIVE_STRIPE_ACTIONS === 'enabled', schema, stripeKeyMode: keyMode ?? null,
     webhook: await webhookState(env.BASE_URL), webhookSecretPresent: Boolean(env.STRIPE_WEBHOOK_SECRET?.trim()),
