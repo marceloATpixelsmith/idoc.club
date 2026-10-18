@@ -1,5 +1,21 @@
 import { client } from '@/lib/db/drizzle';
 
+type Sql = Parameters<Parameters<typeof client.begin>[1]>[0];
+
+/** Names the blocked accounts and what each created, and says what to do: an account that is already archived stays archived. */
+async function authoredRecordsMessage(sql: Sql, authored: { user_id: number; source: string }[]) {
+  const byUser = new Map<number, string[]>();
+  for (const row of authored) byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row.source]);
+  const ids = [...byUser.keys()];
+  const accounts = await sql<{ id: number; email: string; account_state: string }[]>`select id,email,account_state from users where id in ${sql(ids)}`;
+  const lines = accounts.map((account) => `• ${account.email} (${account.account_state === 'deleted' ? 'already archived' : 'not archived'}): ${byUser.get(account.id)!.join(', ')}`);
+  const allArchived = accounts.every((account) => account.account_state === 'deleted');
+  return `${accounts.length === 1 ? 'This account' : `${accounts.length} of the selected accounts`} cannot be permanently deleted because ${accounts.length === 1 ? 'it' : 'they'} created or edited content that must keep its author:\n${lines.join('\n')}\n` +
+    (allArchived
+      ? 'They are already archived, which is the right final state: they cannot sign in and stay on record. Select only the other members to delete.'
+      : 'Archive the ones that are not archived yet instead of deleting them, and select only members without created content to delete.');
+}
+
 export async function deleteMembers(ids: string[], actorId: number) {
   const numeric = ids.map(Number);
   return client.begin(async (sql) => {
@@ -10,15 +26,20 @@ export async function deleteMembers(ids: string[], actorId: number) {
     if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
     const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
     if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
-    const authored = await sql<{ source: string }[]>`
-      select 'news' source from news_articles where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
-      union all select 'seminars' from seminars where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
-      union all select 'pages' from content_pages where created_by_user_id in ${sql(numeric)} or updated_by_user_id in ${sql(numeric)}
-      union all select 'revisions' from content_page_revisions where created_by_user_id in ${sql(numeric)}
-      union all select 'defaults' from support_category_defaults where administrator_user_id in ${sql(numeric)} or updated_by in ${sql(numeric)}
-      union all select 'invitations' from invitations where invited_by in ${sql(numeric)}
-      limit 1`;
-    if (authored.length) throw new Error('Retained authored records reference this account. Archive it instead.');
+    const authored = await sql<{ user_id: number; source: string }[]>`
+      select distinct user_id, source from (
+        select created_by_user_id as user_id, 'news articles' as source from news_articles where created_by_user_id in ${sql(numeric)}
+        union all select updated_by_user_id, 'news articles' from news_articles where updated_by_user_id in ${sql(numeric)}
+        union all select created_by_user_id, 'seminars/courses' from seminars where created_by_user_id in ${sql(numeric)}
+        union all select updated_by_user_id, 'seminars/courses' from seminars where updated_by_user_id in ${sql(numeric)}
+        union all select created_by_user_id, 'pages' from content_pages where created_by_user_id in ${sql(numeric)}
+        union all select updated_by_user_id, 'pages' from content_pages where updated_by_user_id in ${sql(numeric)}
+        union all select created_by_user_id, 'page revisions' from content_page_revisions where created_by_user_id in ${sql(numeric)}
+        union all select administrator_user_id, 'support category defaults' from support_category_defaults where administrator_user_id in ${sql(numeric)}
+        union all select updated_by, 'support category defaults' from support_category_defaults where updated_by in ${sql(numeric)}
+        union all select invited_by, 'invitations sent' from invitations where invited_by in ${sql(numeric)}
+      ) authored where user_id is not null order by user_id, source`;
+    if (authored.length) throw new Error(await authoredRecordsMessage(sql, authored));
     const profileIds = rows.flatMap((row) => row.profile_id === null ? [] : [row.profile_id]);
     const activeSubscriptions = profileIds.length ? await sql<{ count: number }[]>`select count(*)::int as count from subscriptions where profile_id in ${sql(profileIds)} and status in ('active','trialing','past_due','incomplete')` : [{ count: 0 }];
     if (activeSubscriptions[0]?.count) throw new Error('Cancel active billing subscriptions before permanently deleting selected members.');
