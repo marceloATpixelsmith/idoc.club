@@ -455,7 +455,8 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   const price = lineItems.data[0]?.price;
   const productId = price ? (typeof price.product === 'string' ? price.product : price.product.id) : undefined;
   if (!price || productId !== stripeMembershipProductIdForServer()) return;
-  const paidAt = new Date();
+  // The provider's event time, not the processing time: a live delivery arrives seconds later, and a replayed event must keep its original payment date.
+  const paidAt = new Date(event.created * 1000);
   const [inserted] = await tx.insert(payments).values({
     amountCents: session.amount_total,
     currency: session.currency.toUpperCase(),
@@ -506,6 +507,9 @@ const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event, st
   'refund.failed': handleRefundEvent,
   'refund.updated': handleRefundEvent,
 };
+
+/** The Stripe event types this application handles, for the Super Admin event replay (lib/payments/stripe-event-replay.ts). */
+export const REPLAYABLE_EVENT_TYPES = Object.keys(handlers);
 
 export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'blocked' | 'duplicate' | 'ignored' | 'processed'> {
   stripe = guardStripeMutations(stripe, event.livemode);
