@@ -110,3 +110,27 @@ test('permanent deletion rolls back its complete purge when an unexpected foreig
   await assert.rejects(sql`delete from idoc.profile_change_history where profile_id=${profile.id}`);
   await assert.rejects(sql`update idoc.audit_log set actor_id=null where action='fixture.member_event' and entity_id=${String(user.id)}`);
 });
+
+test('permanent deletion explains which accounts created content and that archived ones stay archived', async () => {
+  const actor = await createUser();
+  const author = await createUser();
+  const plain = await createUser();
+  await sql`update idoc.users set account_state='deleted' where id=${author.id}`;
+  const [team] = await sql<{ id: number }[]>`insert into idoc.teams(name) values('Authored fixture') returning id`;
+  await sql`insert into idoc.invitations(team_id,email,role,invited_by) values(${team.id},'invitee@example.test','member',${author.id})`;
+
+  await assert.rejects(deleteMembers([String(author.id), String(plain.id)], actor.id), (error: unknown) => {
+    const message = (error as Error).message;
+    assert.match(message, new RegExp(`${author.email.replace(/[.+]/g, '\\$&')} \\(already archived\\): invitations sent`));
+    assert.doesNotMatch(message, new RegExp(plain.email.replace(/[.+]/g, '\\$&')));
+    assert.match(message, /already archived, which is the right final state/);
+    assert.doesNotMatch(message, /Archive the ones/);
+    return true;
+  });
+  // Nothing was deleted, including the member who had no content.
+  assert.equal((await sql`select count(*)::int as n from idoc.users where id in ${sql([author.id, plain.id])}`)[0].n, 2);
+
+  // A not-yet-archived author is told to archive it.
+  await sql`update idoc.users set account_state='active' where id=${author.id}`;
+  await assert.rejects(deleteMembers([String(author.id)], actor.id), /\(not archived\): invitations sent[\s\S]*Archive the ones that are not archived yet/);
+});
