@@ -348,3 +348,22 @@ test('the step-up dialog is mounted fresh for each challenge so an earlier verif
   const source = readFileSync(new URL('../components/auth/fresh-step-up-action.tsx', import.meta.url), 'utf8');
   assert.match(source, /challengeOpen\s*\?\s*<FreshStepUpDialog[^>]*key=\{challengeId\}/);
 });
+
+test('a completed payment whose reference is not a Stripe ID is imported as legacy history, not as a Stripe payment', () => {
+  const row = (id: number, user: number, ref: string, gateway: string) => [id, '80.00', '80.00', user, 2042, ref, 'complete', 'payment', gateway, 0, '2025-05-01 00:00:00', '2026-05-01 00:00:00'];
+  const user = (id: number) => [id, `u${id}`, 'x', `u${id}@example.com`, '2020-01-01 00:00:00', 0, 0, 0];
+  const dump = parseMysqlDump([
+    insert('wp_users', USER_COLUMNS, [user(1), user(2), user(3)]),
+    insert('wp_usermeta', META_COLUMNS, [[1, 1, 'first_name', 'Ada']]),
+    insert('wp_mepr_transactions', TX_COLUMNS, [row(1, 1, 'PAYID-ABC123XYZ', 'paypal'), row(2, 2, 'ch_1Abc2Def', 'stripe'), row(3, 3, 'in_1Abc2Def', 'stripe')]),
+    insert('wp_mepr_subscriptions', SUB_COLUMNS, [[1, 99, 2042, 'sub_x', 'cancelled', '2020-01-01 00:00:00']]),
+  ].join(''), isNeededLegacyTable);
+  const plan = planLegacyImport(dump, { asOf: '2026-01-01' });
+  const member = (id: string) => plan.members.find((m) => m.legacyUserId === id)!;
+  assert.equal(member('1').payments[0]?.source, 'manual');
+  assert.ok(member('1').notes.includes('non_stripe_payment_reference'));
+  assert.equal(member('2').payments[0]?.source, 'stripe');
+  assert.equal(member('3').payments[0]?.source, 'stripe');
+  assert.equal(member('2').notes.includes('non_stripe_payment_reference'), false);
+  assert.ok(summarizePlan(plan).expected.some((group) => group.key === 'non_stripe_payment_reference'));
+});

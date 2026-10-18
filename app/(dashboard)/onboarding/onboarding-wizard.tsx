@@ -388,7 +388,7 @@ export function OnboardingWizard({ initialClassification = null, prefill = null 
         <fieldset className="space-y-3 border-0 p-0">
           <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">CONSENT</legend>
           <ConsentCheckbox name="termsAccepted" required>
-            {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
+            {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> {prefill ? null : 'and I acknowledge that I am signing up for a recurring membership'} fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
           </ConsentCheckbox>
           <ConsentCheckbox name="privacyAccepted" required>
             {' '}This site collects names, emails and other user information. I consent to the terms set forth in the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/privacy" target="_blank">Privacy Policy</a>.
@@ -408,7 +408,7 @@ export function OnboardingWizard({ initialClassification = null, prefill = null 
         <div className="flex items-center gap-3">
           <button className="cursor-pointer bg-transparent text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
           <Button className="flex-1" disabled={pending || !detailsComplete} size="lg" type="submit">
-            {pending ? 'Saving…' : 'Continue to payment'}
+            {pending ? 'Saving…' : prefill ? 'Save and continue' : 'Continue to payment'}
           </Button>
         </div>
       </form>
