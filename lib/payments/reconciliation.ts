@@ -98,3 +98,27 @@ export function summarizeFinding(finding: ReconciliationFinding): string {
       return `Pending renewal schedule ${finding.externalSubscriptionId} is '${finding.stripeStatus}' in Stripe; inspect before changing local billing state.`;
   }
 }
+
+/** A Stripe subscription must have existed this long before an unlinked one may be cancelled automatically: a checkout can create it seconds before its webhook writes the local row. */
+export const ORPHAN_MIN_AGE_SECONDS = 24 * 60 * 60;
+/** The finding must also have been in the previous snapshot, taken at least this long ago, so one scan reading a transiently incomplete local table can never cancel anything. */
+export const ORPHAN_CONFIRMATION_MIN_GAP_MS = 6 * 60 * 60 * 1000;
+/** More orphans than this in one run looks like a wrong database or Stripe key, not abandoned subscriptions: cancel none and alert. */
+export const ORPHAN_CIRCUIT_BREAKER_LIMIT = 5;
+
+export type OrphanSubscription = { createdSeconds: number | null; customer: string; id: string; status: string };
+export type OrphanCancellationPlan = { cancel: OrphanSubscription[]; deferred: OrphanSubscription[]; tripped: boolean };
+
+/** Pure decision: which orphaned subscriptions may be cancelled this run. `previouslyFlagged` maps subscription ID to when the earlier snapshot recorded it. */
+export function planOrphanCancellations(orphans: OrphanSubscription[], previouslyFlagged: ReadonlyMap<string, Date>, now: Date): OrphanCancellationPlan {
+  if (orphans.length > ORPHAN_CIRCUIT_BREAKER_LIMIT) return { cancel: [], deferred: orphans, tripped: true };
+  const cancel: OrphanSubscription[] = [];
+  const deferred: OrphanSubscription[] = [];
+  for (const orphan of orphans) {
+    const flaggedAt = previouslyFlagged.get(orphan.id);
+    const oldEnough = orphan.createdSeconds !== null && now.getTime() / 1000 - orphan.createdSeconds >= ORPHAN_MIN_AGE_SECONDS;
+    const confirmed = flaggedAt !== undefined && now.getTime() - flaggedAt.getTime() >= ORPHAN_CONFIRMATION_MIN_GAP_MS;
+    (oldEnough && confirmed && OPEN_STRIPE_STATUSES.has(orphan.status) ? cancel : deferred).push(orphan);
+  }
+  return { cancel, deferred, tripped: false };
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { computeReconciliationFindings, summarizeFinding } from '../lib/payments/reconciliation.ts';
+import { computeReconciliationFindings, planOrphanCancellations, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
   const findings = computeReconciliationFindings(
@@ -130,4 +130,50 @@ test('local subscriptions missing from Stripe are reported only when the rehears
   const findings = computeReconciliationFindings(local, stripe, 2, { reportLocalMissingInStripe: true });
   assert.deepEqual(findings, [{ externalSubscriptionId: 'sub_gone', kind: 'status_conflict', localStatus: 'active', profileId: 1, stripeStatus: 'missing' }]);
   assert.match(summarizeFinding(findings[0]), /was not found in Stripe/);
+});
+
+const NOW = new Date('2026-10-20T12:00:00Z');
+const orphan = (id: string, ageHours: number | null, status = 'active') => ({ createdSeconds: ageHours === null ? null : NOW.getTime() / 1000 - ageHours * 3600, customer: 'cus_1', id, status });
+const flaggedHoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3600 * 1000);
+
+test('an orphan older than a day that the previous snapshot already flagged is cancelled', () => {
+  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map([['sub_old', flaggedHoursAgo(24)]]), NOW);
+  assert.deepEqual(plan.cancel.map((entry) => entry.id), ['sub_old']);
+  assert.equal(plan.tripped, false);
+});
+
+test('a first-time orphan is deferred, however old: it must be seen in two snapshots', () => {
+  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map(), NOW);
+  assert.deepEqual(plan.cancel, []);
+  assert.deepEqual(plan.deferred.map((entry) => entry.id), ['sub_old']);
+});
+
+test('an orphan flagged only minutes ago (back-to-back manual scans) is deferred', () => {
+  const plan = planOrphanCancellations([orphan('sub_old', 48)], new Map([['sub_old', flaggedHoursAgo(0.2)]]), NOW);
+  assert.deepEqual(plan.cancel, []);
+});
+
+test('a subscription younger than 24 hours is never cancelled, even if flagged before', () => {
+  const plan = planOrphanCancellations([orphan('sub_new', 3)], new Map([['sub_new', flaggedHoursAgo(24)]]), NOW);
+  assert.deepEqual(plan.cancel, []);
+});
+
+test('an orphan with no known creation time is not cancelled', () => {
+  const plan = planOrphanCancellations([orphan('sub_unknown', null)], new Map([['sub_unknown', flaggedHoursAgo(24)]]), NOW);
+  assert.deepEqual(plan.cancel, []);
+});
+
+test('more than five orphans in one run trips the circuit breaker and cancels none', () => {
+  const orphans = Array.from({ length: 6 }, (_, index) => orphan(`sub_${index}`, 72));
+  const plan = planOrphanCancellations(orphans, new Map(orphans.map((entry) => [entry.id, flaggedHoursAgo(24)])), NOW);
+  assert.equal(plan.tripped, true);
+  assert.deepEqual(plan.cancel, []);
+  assert.equal(plan.deferred.length, 6);
+});
+
+test('exactly five qualifying orphans are still cancelled', () => {
+  const orphans = Array.from({ length: 5 }, (_, index) => orphan(`sub_${index}`, 72));
+  const plan = planOrphanCancellations(orphans, new Map(orphans.map((entry) => [entry.id, flaggedHoursAgo(24)])), NOW);
+  assert.equal(plan.tripped, false);
+  assert.equal(plan.cancel.length, 5);
 });

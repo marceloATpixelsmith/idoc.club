@@ -415,3 +415,13 @@ test('verified setup Checkout creates one future €80 schedule without changing
   assert.equal(preference.external_subscription_schedule_id, 'sub_sched_setup_fixture');
   assert.deepEqual(calls, { prices: 1, schedules: 1 });
 });
+
+test('a refund on a payment that is not a seminar registration creates no seminar finding', async () => {
+  await processStripeEvent(fixtureEvent('refund.created', { amount: 8000, id: 're_legacy', object: 'refund', payment_intent: 'pi_legacy_payment', status: 'succeeded' }) as never, {} as never);
+  assert.equal((await sql`select 1 from idoc.reconciliation_findings`).length, 0);
+});
+
+test('a dispute on a payment that is not a seminar registration creates no seminar finding', async () => {
+  await processStripeEvent(fixtureEvent('charge.dispute.created', { id: 'dp_legacy', object: 'dispute', payment_intent: 'pi_legacy_payment', status: 'needs_response' }) as never, {} as never);
+  assert.equal((await sql`select 1 from idoc.reconciliation_findings`).length, 0);
+});
