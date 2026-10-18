@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import postgres from 'postgres';
 import { E2E_TOTP_SECRET } from './global-setup';
 
@@ -21,7 +21,9 @@ function totp(secret: string, steps = 0) {
   return String(binary % 1_000_000).padStart(6, '0');
 }
 
-async function seedMember(sql: postgres.Sql, first: string, state = 'active') {
+// Names and emails are unique per call so a CI retry (which reuses the database) never collides with fixtures a failed attempt left behind.
+async function seedMember(sql: postgres.Sql, base: string, state = 'active') {
+  const first = `${base}${[...randomBytes(5)].map((byte) => String.fromCharCode(97 + (byte % 26))).join('')}`;
   const email = `${first.toLowerCase()}@dialogs.example.test`;
   const [user] = await sql<{ id: number }[]>`insert into idoc.users(email,password_hash,password_set_at,email_verified_at,account_state)
     values(${email},'synthetic-not-a-usable-password',now(),now(),${state}) returning id`;
@@ -29,7 +31,7 @@ async function seedMember(sql: postgres.Sql, first: string, state = 'active') {
     values(${user.id},${first},'Dialogfixture','1 Test Road','Test City','Test State','00000','DE') returning id`;
   await sql`insert into idoc.professional_roles(profile_id,role_type) values(${profile.id},'veterinarian')`;
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source) values(${profile.id},'active','2025-01-01','2099-12-31','migration')`;
-  return { id: user.id, email };
+  return { id: user.id, email, label: `Select ${first} Dialogfixture` };
 }
 
 test('archiving members needs no authenticator code and uses a branded dialog; deleting still asks for the code', async ({ browser }) => {
@@ -44,7 +46,7 @@ test('archiving members needs no authenticator code and uses a branded dialog; d
   page.on('dialog', async (dialog) => { nativeDialogs.push(dialog.message()); await dialog.dismiss(); });
 
   await page.goto('/admin/members');
-  const row = page.getByLabel('Select Zarchiveone Dialogfixture');
+  const row = page.getByLabel(keep.label);
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.check();
 
@@ -57,7 +59,7 @@ test('archiving members needs no authenticator code and uses a branded dialog; d
 
   // Delete: a branded confirmation, then the authenticator prompt.
   await page.reload();
-  const doomedRow = page.getByLabel('Select Zdeleteone Dialogfixture');
+  const doomedRow = page.getByLabel(doomed.label);
   await expect(doomedRow).toBeVisible({ timeout: 20_000 });
   await doomedRow.check();
   await page.getByRole('button', { name: 'Delete selected' }).click();
@@ -86,7 +88,7 @@ test('a refused delete explains itself in a branded dialog, not a browser alert'
   page.on('dialog', async (dialog) => { nativeDialogs.push(dialog.message()); await dialog.dismiss(); });
 
   await page.goto('/admin/members');
-  const row = page.getByLabel('Select Zauthorone Dialogfixture');
+  const row = page.getByLabel(author.label);
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.check();
   await page.getByRole('button', { name: 'Delete selected' }).click();
@@ -111,7 +113,7 @@ test('a confirmation dialog can always be left: Escape and Cancel both close it 
   const context = await browser.newContext({ storageState: '.security-e2e/administrator.json' });
   const page = await context.newPage();
   await page.goto('/admin/members');
-  await page.getByLabel('Select Zcancelone Dialogfixture').check();
+  await page.getByLabel(member.label).check();
 
   const heading = page.getByRole('heading', { name: 'Archive members' });
   await page.getByRole('button', { name: 'Archive selected' }).click();
