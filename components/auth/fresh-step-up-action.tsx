@@ -17,6 +17,7 @@ type Action<T extends StepUpActionState = StepUpActionState> = (state: T, formDa
 export function useFreshStepUpAction<T extends StepUpActionState>(action: Action<T>, initialState: T) {
   const [state, setState] = useState<T>(initialState);
   const [challengeOpen, setChallengeOpen] = useState(false);
+  const [challengeId, setChallengeId] = useState(0);
   const [pending, startTransition] = useTransition();
   const submitted = useRef<FormData | null>(null);
 
@@ -26,6 +27,7 @@ export function useFreshStepUpAction<T extends StepUpActionState>(action: Action
     startTransition(async () => {
       const result = await action(state, formData);
       if (result.stepUpRequired) {
+        setChallengeId((id) => id + 1);
         setChallengeOpen(true);
         setState({} as T);
       } else {
@@ -35,8 +37,12 @@ export function useFreshStepUpAction<T extends StepUpActionState>(action: Action
     });
   };
 
-  const challenge = <FreshStepUpDialog action={action as unknown as Action} formDataRef={submitted} onResult={(result) => setState(result as T)}
-    onOpenChange={(open) => { setChallengeOpen(open); if (!open) submitted.current = null; }} open={challengeOpen} />;
+  // Mounted only while a challenge is open, and keyed per challenge: the dialog keeps the previous verification's result in its own
+  // state, so a dialog that stayed mounted would treat the next challenge as already verified and disable itself.
+  const challenge = challengeOpen
+    ? <FreshStepUpDialog action={action as unknown as Action} formDataRef={submitted} key={challengeId} onResult={(result) => setState(result as T)}
+      onOpenChange={(open) => { setChallengeOpen(open); if (!open) submitted.current = null; }} open />
+    : null;
   return [state, run, pending || challengeOpen, challenge] as const;
 }
 
@@ -50,6 +56,7 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   const [resuming, startResume] = useTransition();
   const resumeStarted = useRef(false);
   const cancellationHandled = useRef(false);
+  const cancelForm = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -81,7 +88,9 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   }, [cancelState.cancelled, onOpenChange, onResult]);
 
   const busy = verifying || resuming || cancelling;
-  return <Dialog open={open}>
+  // Escape (or clicking away) cancels exactly like the Cancel button, so the dialog can never trap anyone; it is ignored only while a
+  // verification or the resumed action is already in flight.
+  return <Dialog onOpenChange={(next) => { if (!next && !busy) cancelForm.current?.requestSubmit(); }} open={open}>
     <DialogContent aria-describedby="fresh-step-up-description" showCloseButton={false}>
       <DialogHeader>
         <DialogTitle>Authenticator verification required</DialogTitle>
@@ -98,7 +107,7 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
         {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
         <Button className="w-full" disabled={busy} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
       </form>
-      <form action={cancel}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
+      <form action={cancel} ref={cancelForm}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
     </DialogContent>
   </Dialog>;
 }

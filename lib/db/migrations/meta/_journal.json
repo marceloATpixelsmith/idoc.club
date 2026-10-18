@@ -526,6 +526,27 @@
       "when": 1791670000000,
       "tag": "0074_maintenance_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792270000000,
+      "tag": "0075_legacy_import_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1792340000000,
+      "tag": "0076_reconciliation_ignores",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792350000000,
+      "tag": "0077_remove_missing_refund_kind",
+      "breakpoints": true
     }
   ]
 }

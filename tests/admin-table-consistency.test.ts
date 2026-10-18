@@ -92,3 +92,46 @@ test('News Access is a persisted multi-select filter with form-equivalent exclus
   assert.match(tablePreferences, /access: newsAccessFilter/);
   assert.match(newsArticles, /audience && \$\{audiences\}::varchar\[\]/);
 });
+
+test('the read-only report table supports extra value filters and the reconciliation table filters by Type', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /filterColumns\?: string\[\]/);
+  assert.match(table, /variant: 'multiSelect'/);
+  const findingsTable = readFileSync('app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'utf8');
+  assert.match(findingsTable, /filterColumns=\{\['kind'\]\}/);
+  assert.match(findingsTable, /statusColumn="category"/);
+});
+
+test('the one selection-bar action is Ignore: offered only for ignorable rows of a single Type, with a server-set flag', () => {
+  const ignore = readFileSync('app/(dashboard)/admin/reconciliation/ignore-findings.tsx', 'utf8');
+  assert.match(ignore, /row\.ignorable === 'yes'/);
+  assert.match(ignore, /types\.size > 1/);
+  assert.match(ignore, /event\.preventDefault\(\)/);
+  assert.match(ignore, /confirm\(/);
+  const findingsTable = readFileSync('app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'utf8');
+  assert.match(findingsTable, /^'use client'/);
+  assert.match(findingsTable, /IgnoreFindings/);
+  const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
+  assert.doesNotMatch(page, /bulkActions=/, 'a render callback cannot cross the server/client boundary');
+  assert.match(page, /ignoreAction=\{ignoreSelected\}/);
+  assert.match(page, /ignorable: isIgnorableFinding\(finding\)/);
+  assert.match(page, /Ignored issues/);
+  assert.match(page, /ignoredTotal/);
+  assert.match(page, /ignoredPage/);
+  assert.doesNotMatch(page, /\.limit\(200\)/, 'every ignored issue must stay restorable');
+  const panel = readFileSync('app/(dashboard)/admin/reconciliation/resolution-panel.tsx', 'utf8');
+  assert.match(panel, /counts\[`\$\{kind\}:applied`\]/, 'totals come from the exact counts, not the capped action list');
+});
+
+test('read-only report tables show the loading skeleton when a filter, search or sort changes, and reconciliation downloads name the member and the reason', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /loading=\{viewChanging\}/);
+  for (const handler of ['onColumnFiltersChange', 'onGlobalFilterChange', 'onSortingChange']) assert.match(table, new RegExp(`${handler}: \\(updater\\) => \\{ flashSkeleton\\(\\)`));
+  const exportRoute = readFileSync('app/api/admin/export/selected-reports/route.ts', 'utf8');
+  for (const column of ['memberFirstName', 'memberLastName', 'memberEmail', 'reasonForManualReview']) assert.match(exportRoute, new RegExp(column));
+  const cron = readFileSync('app/api/cron/reconciliation-scan/route.ts', 'utf8');
+  const panelSource = readFileSync('app/(dashboard)/admin/reconciliation/resolution-panel.tsx', 'utf8');
+  assert.match(panelSource, /simulatedBecause === 'safeguard'/);
+  assert.match(cron, /notifySuperAdminsOfScan\(\{ ok: true \}\)/);
+  assert.match(cron, /notifySuperAdminsOfScan\(\{ error/);
+});

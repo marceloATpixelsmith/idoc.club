@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 69, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0074, still apply once');
+    assert.equal(count, 72, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0077, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -356,7 +356,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0074_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0077_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
@@ -368,8 +368,14 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.support_conversations'] = currentSnapshot.tables['idoc.support_conversations'];
   // Migration 0072 added the stripe_manual payment source to the payments constraints.
   expectedSchema['idoc.payments'] = currentSnapshot.tables['idoc.payments'];
+  // Migration 0075 added the temporary legacy-import credential/ID columns and the legacy_import payment source.
+  expectedSchema['idoc.users'] = currentSnapshot.tables['idoc.users'];
   // Migration 0074 added the per-environment maintenance switch.
   expectedSchema['idoc.maintenance_mode'] = currentSnapshot.tables['idoc.maintenance_mode'];
+  // Migration 0076 added the administrator's ignored reconciliation issues.
+  expectedSchema['idoc.reconciliation_ignores'] = currentSnapshot.tables['idoc.reconciliation_ignores'];
+  // Migration 0077 removed the unused missing_refund reconciliation type from the kind constraint.
+  expectedSchema['idoc.reconciliation_findings'] = currentSnapshot.tables['idoc.reconciliation_findings'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables

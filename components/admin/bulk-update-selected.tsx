@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import { bulkCloseSupportRows, bulkSetNewsStatus, bulkSetSeminarStatus } from '@/app/(dashboard)/admin/bulk-actions';
 import { ActionBarItem } from '@/components/ui/action-bar';
 import { useDataTableMutation } from '@/components/data-table/data-table';
+import { useBrandedDialogs } from '@/components/ui/branded-dialogs';
 import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 
 function selectionFormData(ids: string[]) {
@@ -17,6 +18,7 @@ function selectionFormData(ids: string[]) {
 export function BulkCloseSupportSelected({ clearSelection, ids }: { clearSelection: () => void; ids: string[] }) {
   const [pending, startTransition] = useTransition();
   const mutation = useDataTableMutation();
+  const { alert, confirm, dialogs } = useBrandedDialogs();
 
   function closeSelected(event: Event) {
     event.preventDefault();
@@ -26,20 +28,23 @@ export function BulkCloseSupportSelected({ clearSelection, ids }: { clearSelecti
       try {
         const result = await bulkCloseSupportRows({}, selectionFormData(ids));
         mutation.finish(Boolean(result.success));
-        if (result.error) window.alert(result.error);
+        if (result.error) alert(result.error);
         if (result.success) clearSelection();
       } catch {
         mutation.finish(false);
-        window.alert('The selected support records could not be updated.');
+        alert('The selected support records could not be updated.');
       }
     });
   }
 
   return (
-    <ActionBarItem disabled={pending} onSelect={closeSelected}>
-      <CheckCircle2 aria-hidden="true" className="mr-2 size-4" />
-      {pending ? 'Closing…' : 'Close selected'}
-    </ActionBarItem>
+    <>
+      <ActionBarItem disabled={pending} onSelect={closeSelected}>
+        <CheckCircle2 aria-hidden="true" className="mr-2 size-4" />
+        {pending ? 'Closing…' : 'Close selected'}
+      </ActionBarItem>
+      {dialogs}
+    </>
   );
 }
 
@@ -47,6 +52,7 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
   const [status, setStatus] = useState('draft');
   const [pending, startTransition] = useTransition();
   const mutation = useDataTableMutation();
+  const { alert, confirm, dialogs } = useBrandedDialogs();
 
   function applyStatus(event: Event) {
     event.preventDefault();
@@ -58,11 +64,11 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
         formData.set('status', status);
         const result = await bulkSetNewsStatus({}, formData);
         mutation.finish(Boolean(result.success));
-        if (result.error) window.alert(result.error);
+        if (result.error) alert(result.error);
         if (result.success) clearSelection();
       } catch {
         mutation.finish(false);
-        window.alert('The selected News/Blog records could not be updated.');
+        alert('The selected News/Blog records could not be updated.');
       }
     });
   }
@@ -85,6 +91,7 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
         <RefreshCcw aria-hidden="true" className="mr-2 size-4" />
         {pending ? 'Applying…' : 'Apply status'}
       </ActionBarItem>
+      {dialogs}
     </>
   );
 }
@@ -92,11 +99,12 @@ export function BulkNewsStatusSelected({ clearSelection, ids }: { clearSelection
 export function BulkSeminarStatusSelected({ clearSelection, ids }: { clearSelection: () => void; ids: string[] }) {
   const [pending, startTransition] = useTransition();
   const mutation = useDataTableMutation();
+  const { alert, confirm, dialogs } = useBrandedDialogs();
 
-  function changeSelected(event: Event, status: 'canceled' | 'draft') {
+  async function changeSelected(event: Event, status: 'canceled' | 'draft') {
     event.preventDefault();
     if (!ids.length || pending) return;
-    if (status === 'canceled' && !window.confirm(`Cancel ${ids.length} selected seminar(s)? Active registrations will be canceled and the existing refund-resolution process will run.`)) return;
+    if (status === 'canceled' && !(await confirm({ title: 'Cancel selected seminars', message: `Cancel ${ids.length} selected seminar(s)? Active registrations will be canceled and the existing refund-resolution process will run.`, confirmLabel: 'Cancel seminars', cancelLabel: 'Keep them', destructive: true }))) return;
     mutation.begin();
     startTransition(async () => {
       try {
@@ -105,11 +113,11 @@ export function BulkSeminarStatusSelected({ clearSelection, ids }: { clearSelect
         formData.set('status', status);
         const result = await bulkSetSeminarStatus({}, formData);
         mutation.finish(Boolean(result.success));
-        if (result.error) window.alert(result.error);
+        if (result.error) alert(result.error);
         if (result.success) clearSelection();
       } catch {
         mutation.finish(false);
-        window.alert('The selected seminars could not be updated.');
+        alert('The selected seminars could not be updated.');
       }
     });
   }
@@ -123,6 +131,7 @@ export function BulkSeminarStatusSelected({ clearSelection, ids }: { clearSelect
         <RefreshCcw aria-hidden="true" className="mr-2 size-4" />
         {pending ? 'Updating…' : 'Set as Draft'}
       </ActionBarItem>
+      {dialogs}
     </>
   );
 }

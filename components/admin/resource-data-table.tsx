@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useBrandedDialogs } from '@/components/ui/branded-dialogs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useActionBarVisibility } from '@/hooks/use-action-bar-visibility';
 import { type DataTableLiveState, useDataTable } from '@/hooks/use-data-table';
@@ -94,6 +95,7 @@ function statusIcon(tableType: ResourceType, status: string) {
 
 function InlineStatusEditor({ id, status, tableType }: { id: number; status: string; tableType: ResourceType }) {
   const router = useRouter();
+  const { alert, dialogs } = useBrandedDialogs();
   const [value, setValue] = useState(status);
   const [pending, startTransition] = useTransition();
   const [savingTarget, setSavingTarget] = useState<string | null>(null);
@@ -121,14 +123,14 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
         if (result.error) {
           setValue(previous);
           setSavingTarget(null);
-          window.alert(result.error);
+          alert(result.error);
           return;
         }
         router.refresh();
       } catch {
         setValue(previous);
         setSavingTarget(null);
-        window.alert('Unable to save this status change. Please try again.');
+        alert('Unable to save this status change. Please try again.');
       }
     });
   }
@@ -147,6 +149,7 @@ function InlineStatusEditor({ id, status, tableType }: { id: number; status: str
       >
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
+      {dialogs}
     </div>
   );
 }
@@ -161,6 +164,7 @@ const ACCESS_OPTIONS = [
 
 function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
   const router = useRouter();
+  const { alert, dialogs } = useBrandedDialogs();
   const initial = access?.length ? access : ['public'];
   const [selected, setSelected] = useState<string[]>(initial);
   const [pending, startTransition] = useTransition();
@@ -198,19 +202,20 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
         if (result.error) {
           setSelected(previous);
           setSavingTarget(null);
-          window.alert(result.error);
+          alert(result.error);
           return;
         }
         router.refresh();
       } catch {
         setSelected(previous);
         setSavingTarget(null);
-        window.alert('Unable to save this access change. Please try again.');
+        alert('Unable to save this access change. Please try again.');
       }
     });
   }
 
   return (
+    <>
     <Popover>
       <PopoverTrigger asChild>
         <Button aria-busy={saving || undefined} aria-label="Edit News/Blog access" className="h-auto min-h-0 w-full justify-start gap-2 p-0 hover:bg-transparent" disabled={saving} variant="ghost">
@@ -235,12 +240,15 @@ function InlineAccessEditor({ access, id }: { access?: string[]; id: number }) {
         </div>
       </PopoverContent>
     </Popover>
+    {dialogs}
+    </>
   );
 }
 
 //KEEP THE TABLE BUSY UNTIL REFRESHED SERVER ROWS ARRIVE, NOT JUST UNTIL THE MUTATION RETURNS.
 function DuplicateRecordButton({ id, tableType }: { id: number; tableType: ResourceType }) {
   const router = useRouter();
+  const { alert, dialogs } = useBrandedDialogs();
   const [pending, setPending] = useState(false);
 
   async function duplicate() {
@@ -251,30 +259,33 @@ function DuplicateRecordButton({ id, tableType }: { id: number; tableType: Resou
       const result = await duplicateAdminRecord(tableType, id, readCsrfTokenFromDocumentCookie());
       if (result.error) {
         window.dispatchEvent(new Event('idoc:table-refresh-end'));
-        window.alert(result.error);
+        alert(result.error);
         return;
       }
       router.refresh();
     } catch {
       window.dispatchEvent(new Event('idoc:table-refresh-end'));
-      window.alert('Unable to duplicate this record. Please try again.');
+      alert('Unable to duplicate this record. Please try again.');
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Button
-      aria-label={`Copy ${tableType === 'news' ? 'article' : 'seminar'}`}
-      disabled={pending}
-      onClick={() => { void duplicate(); }}
-      size="icon-sm"
-      title="Copy as draft"
-      type="button"
-      variant="ghost"
-    >
-      {pending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Copy aria-hidden />}
-    </Button>
+    <>
+      <Button
+        aria-label={`Copy ${tableType === 'news' ? 'article' : 'seminar'}`}
+        disabled={pending}
+        onClick={() => { void duplicate(); }}
+        size="icon-sm"
+        title="Copy as draft"
+        type="button"
+        variant="ghost"
+      >
+        {pending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Copy aria-hidden />}
+      </Button>
+      {dialogs}
+    </>
   );
 }
 

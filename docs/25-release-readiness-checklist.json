@@ -191,8 +191,12 @@
       "id": "production-backup-restore",
       "description": "Production backup and restore confirmed",
       "classification": "manual",
-      "status": "unchecked",
-      "evidence": null
+      "status": "verified",
+      "evidence": {
+        "verifiedBy": "Super Admin (user #7), zangfuqi@gmail.com",
+        "verifiedAt": "2026-10-16T19:00:00Z",
+        "notes": "Restore drill PASS 2026-10-16: run #3 started by the operator from the Super Admin Backups page on redesign.idoc.club (run #2 from GitHub also PASS). Backup idoc/ayni_space/daily/20261016T171640Z-38938372947-1, checksum matched the manifest, 112 tables (56 per schema) restored, 0 row-count mismatches. Maintenance-mode switch also exercised on production: signed-out visitors received the branded 503 page, the Super Admin kept access, and switching it off restored the site. Live schema replacement (docs/16 Part 9B) has not been rehearsed."
+      }
     },
     {
       "id": "named-operator-approval",

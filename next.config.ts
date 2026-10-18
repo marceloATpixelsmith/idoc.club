@@ -11,6 +11,9 @@ const baseSecurityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The temporary Super Admin legacy-import dry run uploads two SQL dumps (about 3 MB together) through one Server Action. 4 MB stays under
+  // Vercel's 4.5 MB request limit; delete this setting with the importer.
+  experimental: { serverActions: { bodySizeLimit: '4mb' } },
   // The New Relic account ID is a public identifier already held in the shared team variable
   // NEW_RELIC_ACCOUNT_ID (server-only). Expose that same value to the browser bundle at build time
   // for the New Relic Browser agent (staging and production) instead of keeping a second, duplicate variable.

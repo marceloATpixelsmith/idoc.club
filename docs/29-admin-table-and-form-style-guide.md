@@ -10,6 +10,9 @@ This guide records how administrator tables, drawers and forms look and behave a
 ## 2. Tables
 
 - Every record table is the shared `DataTable`: server-backed search, facets, sort, page size 10/25/50/100, column visibility and order persisted per administrator, CSV export where the data is useful.
+- Read-only report tables (`AdminReadOnlyTable`) give the status/category column a multi-select filter through `statusColumn`, and any further column a multi-select value filter through `filterColumns` (the Stripe Reconciliation table filters by **Category** and **Type**). Filters combine, work with search and the date range, and clear with the Reset button.
+- `AdminReadOnlyTable` filters, searches and sorts in the browser, so it flashes the pulsing loading skeleton briefly (about 0.4 s, re-armed by each change) on every filter, search, sort or date-range change, keeping it consistent with server-backed tables. Reconciliation CSV exports always include the involved member's name and email and a reason for manual review.
+- Selection-bar actions added through `bulkActions` belong to one row Type and are enabled only while every selected row is that Type (otherwise disabled with the reason); they are re-checked on the server. The Stripe Reconciliation table's only such action is **Ignore** (docs/04 §9.1).
 - Row actions live in the Actions column (edit pencil, record-specific shortcuts). Seminars/Courses and News/Blog must also provide a Copy action that creates a separate draft with `(copy)` appended to the title, without copying registrations, payments, or analytics. Navigation, export and preview shortcuts are table-level, never inside a drawer.
 - Selection-based changes (close selected, apply status, delete) live in the table action bar and are server-authorized and audited.
 - Loading: tables, revenue summary cards, and other server-backed data views show pulsing skeletons as soon as a filter, sort, search, page change, refresh, or successful mutation begins. Skeletons remain visible until the new data is reflected in the view; do not remove the loading indication merely when a request is submitted. Drawer-close refreshes also show skeletons.
@@ -29,7 +32,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 - **Field width:** short, related fields share a row two to a row (`grid gap-4 sm:grid-cols-2`). A lone short control (a select, a date, a reference) is capped at half width (`max-w-sm`). Only content that benefits from width spans the row: titles, URLs, member lookup, long text, rich text.
 - Labels sit directly above their control with a consistent gap; help text is visually separated from both.
 - Booleans are the shared toggle (`FormToggle`), not checkboxes or Yes/No selects. Multi-value checklists and mutually exclusive status radios keep their own controls.
-- Inputs are **controlled** wherever the server can reject a submission: React resets uncontrolled fields after a form action, which wipes what the administrator typed. Keep typed values on error.
+- Inputs are **controlled** wherever the server can reject a submission: React resets uncontrolled fields after a form action, which wipes what the administrator typed. Keep typed values on error. File inputs cannot be controlled, so a form that must keep chosen files after a result (the temporary legacy import) submits by hand with `onSubmit` and `event.preventDefault()` instead of passing a React form action.
 - All single date-only fields in administrator **and member-facing** forms use the shared `SingleDatePicker` (`components/forms/us-date-input.tsx`): click anywhere on the date field to open its calendar, show `dd/mm/yyyy` in the trigger, do not render a separate calendar button, and submit ISO `yyyy-mm-dd`. This applies to publishing, payment, entitlement, and seminar deadline dates. Existing controlled payment date interactions must remain controlled; min/max bounds must be respected.
 - Seminar Start / End dates use one shared `DateRangePicker` (`components/forms/date-range-picker.tsx`) that selects both dates with one calendar and still submits `startDate` and `endDate` separately. Date range filters keep their own existing behavior and show `dd/mm/yyyy` endpoints. Neither form picker should use a locale-dependent native date input.
 - Required fields are marked required in the control and enforced again on the server.
@@ -39,6 +42,12 @@ This guide records how administrator tables, drawers and forms look and behave a
 - A payment recorded by an administrator always carries evidence, required and labelled for how it was paid: **Stripe Payment ID** (Stripe), **Bank Transfer Reference** (Bank Transfer), **Receipt ID** (Cash). A complimentary membership grant is not a payment and has none.
 - Seminar registrations offer the same three sources as the member form -- Cash, Bank Transfer, Stripe -- with the same labels (**Receipt ID**, **Bank Transfer Reference**, **Stripe Payment ID**), via `lib/seminars/payment-reference.ts`. The same rule applies to membership payments and to seminar registrations, whether the payment is recorded after the fact ("Record payment received" in the registration drawer) or when the registration is created as Paid.
 - The evidence field is cleared when the payment source or method changes, so evidence typed for one source cannot be submitted as another. Online (Stripe Checkout) seminar payments are recorded by the webhook and never go through this form.
+
+## 5a. Dialogs instead of browser pop-ups
+
+- No browser `alert()`, `confirm()` or `prompt()` is used anywhere; a test fails if one appears. Use `useBrandedDialogs()` (`components/ui/branded-dialogs.tsx`): `alert(message, title?)` for notices and `await confirm({ message, confirmLabel, destructive })` for confirmations. They use the same dialog look as the authenticator prompt and keep line breaks in long messages. Render the returned `dialogs` once in the component.
+- Every dialog can be left. Notices have OK; confirmations have Cancel and also close on Escape or a click away (counted as "no"); the authenticator prompt has Cancel and Escape cancels it. A dialog never traps someone behind a disabled button.
+- Archiving never asks for an authenticator code; permanent deletion does.
 
 ## 6. Where this is enforced
 

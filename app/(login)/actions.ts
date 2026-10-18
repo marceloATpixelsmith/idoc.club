@@ -7,7 +7,7 @@ import { communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/
 import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { users } from '@/lib/db/schema';
+import { auditLog, users } from '@/lib/db/schema';
 import { clearSession, comparePasswords, hashPassword, passwordHashNeedsUpgrade, rawCanonicalSessionId, rawCanonicalUserId, setSession } from '@/lib/auth/session';
 import { requireCsrfTokenOrPendingNonce, requireCsrfTokenValue } from '@/lib/security/csrf';
 import { redirect } from 'next/navigation';
@@ -29,6 +29,7 @@ import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/logi
 import { revokeAllUserSessions, revokeSessionWithSignOutAudit } from '@/lib/auth/session-registry';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
+import { verifyLegacyPassword } from '@/lib/auth/legacy-wordpress-hash';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 import { setUiFlash } from '@/lib/ui/flash-state';
 import { loadSessionGate } from '@/lib/membership/session-gate-loader';
@@ -65,8 +66,15 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const matchingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (matchingUsers.length === 0) return { error: 'Invalid email or password. Please try again.', email };
 
-  const foundUser = matchingUsers[0];
-  const isPasswordValid = await comparePasswords(password, foundUser.passwordHash);
+  let foundUser = matchingUsers[0];
+  let isPasswordValid = await comparePasswords(password, foundUser.passwordHash);
+  // A migrated member signs in once with their WordPress password (docs/03 section 11). Only a pending migrated account
+  // that still holds an exported hash in a supported format is ever checked against it.
+  let legacyHashChecked = false;
+  if (!isPasswordValid && foundUser.accountState === 'migrated_pending' && foundUser.legacyPasswordHash && foundUser.legacyPasswordFormat) {
+    isPasswordValid = await verifyLegacyPassword(password, foundUser.legacyPasswordHash, foundUser.legacyPasswordFormat);
+    legacyHashChecked = isPasswordValid;
+  }
 
   if (!isPasswordValid || !['active', 'onboarding', 'migrated_pending'].includes(foundUser.accountState)) {
     return { error: 'Invalid email or password. Please try again.', email };
@@ -78,6 +86,33 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const sessionGate = await loadSessionGate(foundUser.id);
   if (sessionGate.gate === 'ended') {
     return { error: `This membership has been canceled, so signing in is no longer available. Contact ${supportEmailForServer()} if you believe this is a mistake.`, email };
+  }
+
+  if (legacyHashChecked && foundUser.legacyPasswordHash) {
+    const breach = await checkPasswordBreached(password);
+    if (breach.breached) {
+      // Nothing is signed in. The member sets a new password through the existing activation link, which applies the breach check too.
+      await requestAccountLink(email, 'migration_activation', await requestOrigin());
+      return { error: 'That password appears in a known data breach, so it cannot be used any more. If this email has an account, we have sent a link to choose a new password.', email };
+    }
+    if (!breach.checked) {
+      await db.insert(auditLog).values({ action: 'auth.legacy_password.breach_check_unavailable', actorId: foundUser.id, entityId: String(foundUser.id), entityType: 'user' });
+    }
+    const now = new Date();
+    const upgraded = await hashPassword(password);
+    // Replace the exported hash with a current hash atomically; the old hash is cleared in the same statement that saves the new one,
+    // and only if nobody else upgraded it first.
+    const [claimed] = await db.update(users)
+      .set({ passwordHash: upgraded, passwordSetAt: now, legacyPasswordHash: null, legacyPasswordFormat: null, updatedAt: now })
+      .where(and(eq(users.id, foundUser.id), eq(users.legacyPasswordHash, foundUser.legacyPasswordHash)))
+      .returning({ id: users.id });
+    if (claimed) {
+      foundUser = { ...foundUser, passwordHash: upgraded, passwordSetAt: now, legacyPasswordHash: null, legacyPasswordFormat: null };
+    } else {
+      const [current] = await db.select().from(users).where(eq(users.id, foundUser.id)).limit(1);
+      if (!current || !(await comparePasswords(password, current.passwordHash))) return { error: 'Invalid email or password. Please try again.', email };
+      foundUser = current;
+    }
   }
 
   if (passwordHashNeedsUpgrade(foundUser.passwordHash)) {

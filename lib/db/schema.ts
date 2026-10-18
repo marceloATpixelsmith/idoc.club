@@ -39,6 +39,10 @@ export const users = idocSchema.table('users', {
   // creating a first password while disconnecting Google (app/(dashboard)/dashboard/security/actions.ts).
   // Existing rows are backfilled by this column's own migration.
   passwordSetAt: timestamp('password_set_at'),
+  // TEMPORARY legacy import: the member's WordPress password hash exactly as exported, kept only until their first
+  // successful sign-in replaces it with a current hash (docs/03 section 11). Never read except by that verification.
+  legacyPasswordHash: text('legacy_password_hash'),
+  legacyPasswordFormat: varchar('legacy_password_format', { length: 20 }),
   accountState: varchar('account_state', { length: 30 }).notNull().default('unverified'),
   sessionVersion: integer('session_version').notNull().default(0),
   role: varchar('role', { length: 20 }).notNull().default('member'),
@@ -48,6 +52,8 @@ export const users = idocSchema.table('users', {
   deletedAt: timestamp('deleted_at'),
 }, (table) => [
   uniqueIndex('users_normalized_email_unique').on(sql`lower(${table.email})`),
+  check('users_legacy_password_format_check', sql`${table.legacyPasswordFormat} is null or ${table.legacyPasswordFormat} in ('phpass', 'wp_bcrypt')`),
+  check('users_legacy_password_pair_check', sql`(${table.legacyPasswordHash} is null) = (${table.legacyPasswordFormat} is null)`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
 ]);
 
@@ -212,6 +218,8 @@ export const applicationRoles = idocSchema.table('application_roles', {
 export const profiles = idocSchema.table('profiles', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().unique().references(() => users.id),
+  // WordPress user ID for members created by the legacy import (docs/03 section 4); null for everyone else.
+  legacyWpUserId: integer('legacy_wp_user_id').unique(),
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
   phone: varchar('phone', { length: 20 }),
@@ -793,12 +801,12 @@ export const payments = idocSchema.table('payments', {
   reason: text('reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('payments_source_check', sql`${table.source} in ('stripe_recurring', 'stripe_one_time', 'stripe_manual', 'bank_transfer', 'cash', 'complimentary')`),
+  check('payments_source_check', sql`${table.source} in ('stripe_recurring', 'stripe_one_time', 'stripe_manual', 'bank_transfer', 'cash', 'complimentary', 'legacy_import')`),
   check('payments_amount_check', sql`${table.amountCents} > 0`),
   check(
     'payments_evidence_check',
     sql`(${table.source} in ('stripe_recurring', 'stripe_one_time') and ${table.externalPaymentId} is not null)
-      or (${table.source} in ('stripe_manual', 'bank_transfer', 'cash', 'complimentary') and ${table.administratorId} is not null)`,
+      or (${table.source} in ('stripe_manual', 'bank_transfer', 'cash', 'complimentary', 'legacy_import') and ${table.administratorId} is not null)`,
   ),
 ]);
 
@@ -840,7 +848,22 @@ export const reconciliationFindings = idocSchema.table('reconciliation_findings'
   details: jsonb('details'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
+  check('reconciliation_findings_kind_check', sql`${table.kind} in ('status_conflict', 'orphaned_subscription', 'repeated_failure', 'unlinked_customer', 'pending_schedule_conflict', 'refund_conflict', 'dispute', 'chargeback', 'seminar_payment_conflict')`),
+]);
+
+/** Issues an administrator chose to stop seeing ("ignore") -- for example a member who has been contacted about repeated payment failures and will not or cannot update their
+ * card. The scan leaves a matching finding out of the report AND out of its automatic actions. An ignore is dropped by the scan as soon as the condition it covers no longer
+ * exists, so a later recurrence is reported afresh; an administrator can also restore one by hand. */
+export const reconciliationIgnores = idocSchema.table('reconciliation_ignores', {
+  id: serial('id').primaryKey(),
+  kind: varchar('kind', { length: 30 }).notNull(),
+  /** The Stripe subscription/customer ID, or `registration:<id>`, that identifies the issue within its kind. */
+  subjectKey: varchar('subject_key', { length: 255 }).notNull(),
+  summary: text('summary'),
+  ignoredByUserId: integer('ignored_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  ignoredAt: timestamp('ignored_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('reconciliation_ignores_kind_subject_unique').on(table.kind, table.subjectKey),
 ]);
 
 /** Append-only heartbeat log, one row per cron execution, so a failed run doesn't read as a silent "all clear." */

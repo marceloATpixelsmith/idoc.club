@@ -402,7 +402,7 @@ Methodology note: docs/21 uses its own AUTH-* numbering scheme that does **not**
 
 ### Stage 6 summary of the most consequential gaps (do not soften)
 
-1. **AUTH-STORAGE-008 (backups) — fixed later.** Render backup behavior and a restore/reconciliation procedure are documented in docs/07. A real restore drill remains external/manual evidence; this historical item is not a current repository gap.
+1. **AUTH-STORAGE-008 (backups) — fixed later.** Render backup behavior and a restore/reconciliation procedure are documented in docs/07. A real restore drill passed on 2026-10-16 and is recorded in docs/25 (`production-backup-restore`); this historical item is not a current repository gap.
 2. **AUTH-EMAIL-007 (bounce/complaint handling) — fixed later.** The Brevo webhook route (migrated from Mandrill) and behavioral route tests now exist. A live provider test remains external/manual evidence.
 3. **AUTH-OPERATIONS-006 (alerting) — partially fixed later.** A tested severity taxonomy covers current alerts; correlation/anomaly detection remains partial.
 4. **AUTH-STORAGE-007 (physical cleanup) — fixed later.** The scheduled retention purge and real-Postgres behavioral tests now cover the named expiring tables.

@@ -13,7 +13,7 @@ import { IDOC_REGION_BY_COUNTRY } from '@/lib/membership/idoc-regions-by-country
 import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { CsrfField } from '@/components/security/csrf-field';
 import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
-import type { MemberClassification } from '@/lib/membership/classification';
+import type { MemberClassification, OnboardingPrefill } from '@/lib/membership/classification';
 import { completeOnboarding } from './actions';
 
 type Classification = MemberClassification;
@@ -55,25 +55,25 @@ function isDetailsFormComplete(form: HTMLFormElement, classification: Classifica
   return true;
 }
 
-export function OnboardingWizard({ initialClassification = null }: { initialClassification?: Classification | null }) {
+export function OnboardingWizard({ initialClassification = null, prefill = null }: { initialClassification?: Classification | null; prefill?: OnboardingPrefill | null }) {
   const [state, action, pending] = useActionState<{ error?: string }, FormData>(completeOnboarding, {});
-  const [step, setStep] = useState<'type' | 'details'>('type');
-  const [classification, setClassification] = useState<Classification | null>(initialClassification);
+  const [step, setStep] = useState<'type' | 'details'>(prefill?.classification ? 'details' : 'type');
+  const [classification, setClassification] = useState<Classification | null>(prefill?.classification ?? initialClassification);
   const [detailsComplete, setDetailsComplete] = useState(false);
   const detailsFormRef = useRef<HTMLFormElement>(null);
 
   const [phone, setPhone] = useState('');
-  const [countryCode, setCountryCode] = useState('');
-  const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState('');
-  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(false);
-  const [idocRegion, setIdocRegion] = useState('');
-  const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(false);
-  const [address1, setAddress1] = useState('');
-  const [address2, setAddress2] = useState('');
+  const [countryCode, setCountryCode] = useState(prefill?.countryCode ?? '');
+  const [nationalFederationCountryCode, setNationalFederationCountryCode] = useState(prefill?.nationalFederationCountryCode ?? '');
+  const [federationWasManuallyEdited, setFederationWasManuallyEdited] = useState(Boolean(prefill?.nationalFederationCountryCode));
+  const [idocRegion, setIdocRegion] = useState(prefill?.idocRegion ?? '');
+  const [regionWasManuallyEdited, setRegionWasManuallyEdited] = useState(Boolean(prefill?.idocRegion));
+  const [address1, setAddress1] = useState(prefill?.address1 ?? '');
+  const [address2, setAddress2] = useState(prefill?.address2 ?? '');
   const [address2WasManuallyEdited, setAddress2WasManuallyEdited] = useState(false);
-  const [city, setCity] = useState('');
-  const [stateProvince, setStateProvince] = useState('');
-  const [postalCode, setPostalCode] = useState('');
+  const [city, setCity] = useState(prefill?.city ?? '');
+  const [stateProvince, setStateProvince] = useState(prefill?.stateProvince ?? '');
+  const [postalCode, setPostalCode] = useState(prefill?.postalCode ?? '');
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [autocompleteAvailable, setAutocompleteAvailable] = useState(true);
   const [selectedAddressValue, setSelectedAddressValue] = useState('');
@@ -246,11 +246,11 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="firstName">First name</Label>
-            <Input id="firstName" maxLength={100} name="firstName" required />
+            <Input defaultValue={prefill?.firstName} id="firstName" maxLength={100} name="firstName" required />
           </div>
           <div>
             <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="lastName">Last name</Label>
-            <Input id="lastName" maxLength={100} name="lastName" required />
+            <Input defaultValue={prefill?.lastName} id="lastName" maxLength={100} name="lastName" required />
           </div>
         </div>
 
@@ -364,15 +364,15 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
               </div>
               <div className="sm:col-span-2">
                 <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="feiId">FEI Number (optional)</Label>
-                <Input id="feiId" name="feiId" />
+                <Input defaultValue={prefill?.feiId} id="feiId" name="feiId" />
               </div>
             </div>
             {classification === 'judge' || classification === 'judge_steward' ? (
               <>
-                <CheckboxGroup label="Official status as Judge" name="judgeStatus" values={JUDGE_STATUSES} />
+                <CheckboxGroup checked={prefill?.judgeStatuses} label="Official status as Judge" name="judgeStatus" values={JUDGE_STATUSES} />
                 <div>
                   <Label className="mb-1.5 block text-sm font-bold text-foreground" htmlFor="isTechnicalDelegate">Are you a Technical Delegate?</Label>
-                  <select className="flex h-9 w-full rounded-md border border-input bg-surface px-3 py-1 text-sm sm:w-48" id="isTechnicalDelegate" name="isTechnicalDelegate">
+                  <select className="flex h-9 w-full rounded-md border border-input bg-surface px-3 py-1 text-sm sm:w-48" defaultValue={prefill?.isTechnicalDelegate ? 'yes' : 'no'} id="isTechnicalDelegate" name="isTechnicalDelegate">
                     <option value="no">No</option>
                     <option value="yes">Yes</option>
                   </select>
@@ -380,7 +380,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
               </>
             ) : null}
             {classification === 'steward' || classification === 'judge_steward' ? (
-              <CheckboxGroup label="Official status as Steward" name="stewardStatus" values={STEWARD_STATUSES} />
+              <CheckboxGroup checked={prefill?.stewardStatuses} label="Official status as Steward" name="stewardStatus" values={STEWARD_STATUSES} />
             ) : null}
           </fieldset>
         ) : null}
@@ -388,7 +388,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         <fieldset className="space-y-3 border-0 p-0">
           <legend className="mb-4 block w-full text-sm font-bold uppercase tracking-wider text-gold">CONSENT</legend>
           <ConsentCheckbox name="termsAccepted" required>
-            {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time).
+            {' '}I have read and agree to the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/terms" target="_blank">Terms Of Service</a> {prefill ? null : ' and I acknowledge that I am signing up for a recurring membership fee that will be automatically charged to this card every year (until I specifically ask to terminate my account in time)'}.
           </ConsentCheckbox>
           <ConsentCheckbox name="privacyAccepted" required>
             {' '}This site collects names, emails and other user information. I consent to the terms set forth in the <a className="text-primary underline underline-offset-4 hover:opacity-80" href="/privacy" target="_blank">Privacy Policy</a>.
@@ -408,7 +408,7 @@ export function OnboardingWizard({ initialClassification = null }: { initialClas
         <div className="flex items-center gap-3">
           <button className="cursor-pointer bg-transparent text-sm text-muted-foreground underline" onClick={() => { setDetailsComplete(false); setStep('type'); }} type="button">Back</button>
           <Button className="flex-1" disabled={pending || !detailsComplete} size="lg" type="submit">
-            {pending ? 'Saving…' : 'Continue to payment'}
+            {pending ? 'Saving…' : prefill ? 'Save and continue' : 'Continue to payment'}
           </Button>
         </div>
       </form>
@@ -442,14 +442,14 @@ function CountrySelect({
   );
 }
 
-function CheckboxGroup({ label, name, values }: { label: string; name: string; values: readonly string[] }) {
+function CheckboxGroup({ checked = [], label, name, values }: { checked?: readonly string[]; label: string; name: string; values: readonly string[] }) {
   return (
     <fieldset>
       <legend className="mb-1.5 block text-sm font-bold text-foreground">{label}</legend>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {values.map((value) => (
           <label className="flex items-center gap-2 text-sm text-foreground" key={value}>
-            <input name={name} type="checkbox" value={value} />
+            <input defaultChecked={checked.includes(value)} name={name} type="checkbox" value={value} />
             {value}
           </label>
         ))}
