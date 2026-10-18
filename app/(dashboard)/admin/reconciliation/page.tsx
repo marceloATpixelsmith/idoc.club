@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
@@ -15,6 +14,7 @@ import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { ReconciliationTabs } from './reconciliation-tabs';
 import { CleanupCustomersForm, type CleanupCustomersState } from './cleanup-customers-form';
+import { ReconciliationFindingsTable } from './reconciliation-findings-table';
 import { RunScanForm, type RunScanState } from './run-scan-form';
 
 const PATH = '/admin/reconciliation';
@@ -64,7 +64,9 @@ async function cleanupCustomers(_state: CleanupCustomersState, formData: FormDat
     requireSuperAdmin(actor);
     const stepUp = await requireFreshStepUp(actor, 'change-security-settings', PATH);
     if (stepUp.required) return { stepUpRequired: true };
-    const result = await deleteUnlinkedCustomers(actor.id);
+    const selectedIds = formData.getAll('customerId').filter((value): value is string => typeof value === 'string' && /^cus_[A-Za-z0-9]+$/.test(value));
+    if (formData.has('customerId') && selectedIds.length === 0) return { error: 'No valid Stripe customers were selected.' };
+    const result = await deleteUnlinkedCustomers(actor.id, undefined, undefined, false, formData.has('customerId') ? selectedIds : undefined);
     revalidatePath(PATH);
     const skipped = result.skipped.length ? ` ${result.skipped.length.toLocaleString('en-GB')} skipped for safety.` : '';
     const failed = result.failed.length ? ` ${result.failed.length.toLocaleString('en-GB')} could not be deleted; run it again.` : '';
@@ -124,22 +126,25 @@ export default async function AdminReconciliationPage() {
       </section>
     ) : null}
 
+    {!cleanupAvailable && unlinkedCount > 0 ? (
+      <p className="mt-6 max-w-2xl rounded-lg border p-4 text-sm text-muted-foreground" role="note">
+        {isSuperAdmin
+          ? 'Unlinked Stripe customers can be deleted from this page only in the live production deployment once billing has been released. Here the list is for information.'
+          : 'Only a Super Admin can delete unlinked Stripe customers, and only in the live production deployment.'}
+      </p>
+    ) : null}
+
     <section className="mt-8">
       <ReconciliationTabs
         findingsTable={
-          <AdminReadOnlyTable
-            columns={[{ id: 'category', label: 'Category' }, { id: 'kind', label: 'Type' }, { id: 'summary', label: 'Summary' }, { id: 'stripeId', label: 'Stripe ID' }, { id: 'member', label: 'Member' }, { id: 'detected', label: 'Detected' }]}
-            dateColumn="detected"
-            empty="No findings from the last run."
+          <ReconciliationFindingsTable
+            cleanupAction={cleanupAvailable ? cleanupCustomers : undefined}
             rows={findings.map((finding) => ({
               id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
               summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
               link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
               detected: finding.createdAt.toISOString(),
             }))}
-            searchLabel="Search reconciliation findings"
-            statusColumn="category"
-            tableType="reconciliation"
           />
         }
         scanState={!lastRun ? 'never' : lastRun.status === 'completed' ? 'ok' : 'failed'}
