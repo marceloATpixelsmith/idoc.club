@@ -19,7 +19,10 @@ export function DeleteSelectedCustomers({ action, clearSelection, selected }: { 
   const formRef = useRef<HTMLFormElement>(null);
   const { alert, confirm, dialogs } = useBrandedDialogs();
   const [state, run, pending, challenge] = useFreshStepUpAction<CleanupCustomersState>(action, {});
-  const customerIds = selected.filter((row) => row.kind === UNLINKED_CUSTOMER_LABEL && row.stripeId).map((row) => row.stripeId as string);
+  // A bulk action belongs to one row Type: it is offered only while every selected row is that Type, never applied to a mixed selection.
+  const matching = selected.filter((row) => row.kind === UNLINKED_CUSTOMER_LABEL && row.stripeId);
+  const mixedSelection = matching.length !== selected.length;
+  const customerIds = matching.map((row) => row.stripeId as string);
 
   useEffect(() => {
     if (state.success) { alert(state.success); clearSelection(); router.refresh(); }
@@ -29,7 +32,7 @@ export function DeleteSelectedCustomers({ action, clearSelection, selected }: { 
 
   if (customerIds.length === 0) return null;
   const onSelect = async () => {
-    if (pending || !formRef.current) return;
+    if (pending || mixedSelection || !formRef.current) return;
     const accepted = await confirm({
       confirmLabel: 'Delete customers', destructive: true, title: 'Delete selected Stripe customers?',
       message: `This permanently deletes ${customerIds.length.toLocaleString('en-GB')} customer record(s) in Stripe that IDOC has no record of.\n\nAny with a live subscription, an open invoice or a charge in the last 90 days are skipped automatically.\n\nThis cannot be undone.`,
@@ -43,7 +46,7 @@ export function DeleteSelectedCustomers({ action, clearSelection, selected }: { 
   return (
     <>
       <form ref={formRef}><CsrfField /></form>
-      <ActionBarItem disabled={pending} onSelect={onSelect}>{pending ? 'Deleting…' : `Delete ${customerIds.length.toLocaleString('en-GB')} selected Stripe customer${customerIds.length === 1 ? '' : 's'}`}</ActionBarItem>
+      <ActionBarItem disabled={pending || mixedSelection} onSelect={onSelect} title={mixedSelection ? 'Select only Unlinked Stripe Customer rows to delete them' : undefined}>{pending ? 'Deleting…' : mixedSelection ? 'Delete Stripe customers (select only Unlinked Stripe Customer rows)' : `Delete ${customerIds.length.toLocaleString('en-GB')} selected Stripe customer${customerIds.length === 1 ? '' : 's'}`}</ActionBarItem>
       {challenge}
       {dialogs}
     </>

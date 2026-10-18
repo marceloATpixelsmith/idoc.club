@@ -112,4 +112,6 @@ test('unlinked Stripe customers can be deleted from the table selection bar and 
   const bulk = readFileSync('app/(dashboard)/admin/reconciliation/delete-selected-customers.tsx', 'utf8');
   assert.match(bulk, /useFreshStepUpAction/);
   assert.match(bulk, /confirm\(/);
+  assert.match(bulk, /mixedSelection/);
+  assert.match(bulk, /disabled=\{pending \|\| mixedSelection\}/);
 });
