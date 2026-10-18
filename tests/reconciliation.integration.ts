@@ -336,3 +336,13 @@ test('cleanup refuses to run without the production gate', async () => {
   await assert.rejects(deleteUnlinkedCustomers(admin.id, client), /only available in the production deployment/);
   assert.deepEqual(deleted, []);
 });
+
+test('cleanup of selected customers acts only on those that are current findings', async () => {
+  const admin = await adminUser();
+  await seedUnlinked('cus_a', 'cus_b');
+  const { client, deleted } = cleanupClient();
+  await deleteUnlinkedCustomers(admin.id, client, new Date(), true, ['cus_a', 'cus_not_a_finding']);
+  assert.deepEqual(deleted, ['cus_a']);
+  const remaining = await sql`select external_customer_id as id from idoc.reconciliation_findings where kind = 'unlinked_customer'`;
+  assert.deepEqual(remaining.map((row) => row.id), ['cus_b']);
+});

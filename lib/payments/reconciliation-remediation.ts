@@ -94,12 +94,14 @@ function csvCell(value: string | number | null | undefined) {
 }
 
 /** Deletes Stripe customers the last scan reported as having no IDOC billing account, after re-checking each one. */
-export async function deleteUnlinkedCustomers(actorId: number, stripe: RemediationStripeClient = getStripeServerClient() as unknown as RemediationStripeClient, now: Date = new Date(), testBypassGate = false): Promise<CustomerCleanupResult> {
+export async function deleteUnlinkedCustomers(actorId: number, stripe: RemediationStripeClient = getStripeServerClient() as unknown as RemediationStripeClient, now: Date = new Date(), testBypassGate = false, onlyIds?: string[]): Promise<CustomerCleanupResult> {
   if (testBypassGate && process.env.NODE_ENV !== 'test') throw new Error('Gate overrides are test-only.');
   if (!testBypassGate && !remediationAllowed()) throw new Error('Deleting Stripe customers is only available in the production deployment with live billing released.');
   if (!stripe.subscriptions.list || !stripe.invoices || !stripe.charges) throw new Error('Customer cleanup needs subscription, invoice and charge lookups.');
   const rows = await db.select({ id: reconciliationFindings.externalCustomerId }).from(reconciliationFindings).where(eq(reconciliationFindings.kind, 'unlinked_customer'));
-  const ids = [...new Set(rows.flatMap((row) => (row.id ? [row.id] : [])))];
+  // Only customers that are current unlinked-customer findings can ever be deleted, even when a caller names specific IDs.
+  const requested = onlyIds ? new Set(onlyIds) : null;
+  const ids = [...new Set(rows.flatMap((row) => (row.id && (!requested || requested.has(row.id)) ? [row.id] : [])))];
   const since = Math.floor(now.getTime() / 1000) - CUSTOMER_RECENT_CHARGE_DAYS * 86_400;
   const result: CustomerCleanupResult = { csv: '', deleted: [], failed: [], skipped: [] };
   const lines = ['customer_id,email,name,created_utc,outcome'];

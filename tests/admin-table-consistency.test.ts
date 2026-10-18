@@ -92,3 +92,24 @@ test('News Access is a persisted multi-select filter with form-equivalent exclus
   assert.match(tablePreferences, /access: newsAccessFilter/);
   assert.match(newsArticles, /audience && \$\{audiences\}::varchar\[\]/);
 });
+
+test('the read-only report table supports extra value filters and the reconciliation table filters by Type', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /filterColumns\?: string\[\]/);
+  assert.match(table, /variant: 'select'/);
+  const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
+  assert.match(page, /filterColumns=\{\['kind'\]\}/);
+  assert.match(page, /statusColumn="category"/);
+});
+
+test('unlinked Stripe customers can be deleted from the table selection bar and the page explains when it cannot', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /bulkActions\?\.\(/);
+  const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
+  assert.match(page, /bulkActions=\{cleanupAvailable/);
+  assert.match(page, /formData\.getAll\('customerId'\)/);
+  assert.match(page, /only in the live production deployment/);
+  const bulk = readFileSync('app/(dashboard)/admin/reconciliation/delete-selected-customers.tsx', 'utf8');
+  assert.match(bulk, /useFreshStepUpAction/);
+  assert.match(bulk, /confirm\(/);
+});

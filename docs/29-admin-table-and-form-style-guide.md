@@ -10,6 +10,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 ## 2. Tables
 
 - Every record table is the shared `DataTable`: server-backed search, facets, sort, page size 10/25/50/100, column visibility and order persisted per administrator, CSV export where the data is useful.
+- Read-only report tables (`AdminReadOnlyTable`) give the status/category column a multi-select filter through `statusColumn`, and any further column a multi-select value filter through `filterColumns` (the Stripe Reconciliation table filters by **Category** and **Type**). Filters combine, work with search and the date range, and clear with the Reset button.
 - Row actions live in the Actions column (edit pencil, record-specific shortcuts). Seminars/Courses and News/Blog must also provide a Copy action that creates a separate draft with `(copy)` appended to the title, without copying registrations, payments, or analytics. Navigation, export and preview shortcuts are table-level, never inside a drawer.
 - Selection-based changes (close selected, apply status, delete) live in the table action bar and are server-authorized and audited.
 - Loading: tables, revenue summary cards, and other server-backed data views show pulsing skeletons as soon as a filter, sort, search, page change, refresh, or successful mutation begins. Skeletons remain visible until the new data is reflected in the view; do not remove the loading indication merely when a request is submitted. Drawer-close refreshes also show skeletons.
