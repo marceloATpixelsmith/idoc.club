@@ -507,6 +507,9 @@ const handlers: Partial<Record<string, (tx: Transaction, event: Stripe.Event, st
   'refund.updated': handleRefundEvent,
 };
 
+/** The Stripe event types this application handles, for the Super Admin event replay (lib/payments/stripe-event-replay.ts). */
+export const REPLAYABLE_EVENT_TYPES = Object.keys(handlers);
+
 export async function processStripeEvent(event: Stripe.Event, stripe: WebhookStripeClient): Promise<'blocked' | 'duplicate' | 'ignored' | 'processed'> {
   stripe = guardStripeMutations(stripe, event.livemode);
   const checkoutSession = event.type === 'checkout.session.completed' ? event.data.object as Stripe.Checkout.Session : null;
