@@ -18,7 +18,7 @@ export function parseReplaySince(input: string, now: Date = new Date()): Date {
   return since;
 }
 
-export type ReplayEventStatus = 'new' | 'blocked_earlier' | 'already_processed';
+export type ReplayEventStatus = 'new' | 'blocked_earlier' | 'already_processed' | 'superseded';
 
 /** `new`: this site never received it (the webhook endpoint did not exist yet, or DNS pointed elsewhere). `blocked_earlier`: it arrived while the launch hold was on and was
  * consumed without being applied (the hold recorded a finding naming it). `already_processed`: applied before; replaying would do nothing. */
@@ -43,3 +43,19 @@ export function describeReplayEvent(event: EventLike): { amountCents: number | n
 }
 
 export const replayConfirmationPhrase = (count: number) => `REPLAY ${count} EVENTS`;
+
+/** State-changing events. A payment (`invoice.paid`) is never superseded: money received still has to be recorded however late it is found, and recording it is
+ * additive. The others describe a state at a moment, so an older one must never overwrite what a newer, already applied event for the same customer set. */
+const STATE_EVENT_TYPES = new Set(['invoice.payment_failed', 'invoice.payment_action_required', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted']);
+const ORDERING_EVENT_TYPES = new Set([...STATE_EVENT_TYPES, 'invoice.paid']);
+
+/** Ids of replayable events that a newer, already applied event for the same customer has overtaken (for example a missed `invoice.payment_failed` when the
+ * customer's later `invoice.paid` was delivered normally). They are listed but not replayed. */
+export function supersededEventIds(events: Array<{ created: number; customerId: string | null; id: string; status: ReplayEventStatus; type: string }>): Set<string> {
+  const superseded = new Set<string>();
+  for (const event of events) {
+    if (event.status === 'already_processed' || !STATE_EVENT_TYPES.has(event.type) || !event.customerId) continue;
+    if (events.some((other) => other.status === 'already_processed' && other.customerId === event.customerId && other.created > event.created && ORDERING_EVENT_TYPES.has(other.type))) superseded.add(event.id);
+  }
+  return superseded;
+}

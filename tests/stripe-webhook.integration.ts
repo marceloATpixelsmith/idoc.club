@@ -275,6 +275,19 @@ test('checkout.session.completed in payment mode records a one-time payment and 
   assert.equal(after.status, 'active');
 });
 
+test('a replayed one-time membership checkout keeps the original payment time, not the time it was processed', async () => {
+  const profile = await billedProfile('cus_checkout_replay');
+  await createMembership(profile.id);
+  const twentyDaysAgo = Math.floor(Date.now() / 1000) - 20 * 86_400;
+  const event = { ...fixtureEvent('checkout.session.completed', {
+    amount_total: 8000, currency: 'eur', customer: 'cus_checkout_replay', id: 'cs_replay',
+    metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: 'pi_replay', payment_status: 'paid',
+  }), created: twentyDaysAgo };
+  assert.equal(await processStripeEvent(event as any, fakeLineItemsClient('prod_membership_fixture')), 'processed');
+  const [payment] = await sql<{ paidAt: number }[]>`select extract(epoch from paid_at)::bigint::float8 as "paidAt" from idoc.payments where external_payment_id='pi_replay'`;
+  assert.equal(Number(payment.paidAt), twentyDaysAgo);
+});
+
 test('checkout.session.completed whose line item was priced against a different Stripe Product is rejected even when the amount and currency match', async () => {
   const profile = await billedProfile('cus_checkout_wrong_product');
   await createMembership(profile.id);

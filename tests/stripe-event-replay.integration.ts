@@ -25,7 +25,7 @@ test('the preview separates new events, events the launch hold consumed, and eve
   await sql`insert into idoc.stripe_events(external_event_id,event_type,processed_at) values ('evt_done','test.unhandled',now()),('evt_held','test.unhandled',now())`;
   await sql`insert into idoc.reconciliation_findings(kind,summary,details) values ('status_conflict','held',${JSON.stringify({ eventId: 'evt_held', reason: 'member_launch_hold' })}::jsonb)`;
   const preview = await previewReplay(fakeStripe([fakeEvent('evt_done', 40), fakeEvent('evt_held', 30), fakeEvent('evt_new', 20)]), SINCE, NOW);
-  assert.deepEqual(preview.counts, { already_processed: 1, blocked_earlier: 1, new: 1 });
+  assert.deepEqual(preview.counts, { already_processed: 1, blocked_earlier: 1, new: 1, superseded: 0 });
   assert.equal(preview.replayable, 2);
   assert.deepEqual(preview.events.map((event) => [event.id, event.status]), [['evt_held', 'blocked_earlier'], ['evt_new', 'new']]);
 });
@@ -57,4 +57,22 @@ test('a replay applies new events and re-applies events the hold consumed, oldes
   assert.equal((await sql`select 1 from idoc.stripe_events where external_event_id in ('evt_held','evt_new') and processed_at is not null`).length, 2);
   const [audit] = await sql<{ after_json: { ignored: number } }[]>`select after_json from idoc.audit_log where action='admin.stripe_event_replay.applied'`;
   assert.equal(audit.after_json.ignored, 2);
+});
+
+test('a missed state event that a newer, already applied event for the same customer has overtaken is listed but not replayed', async () => {
+  const admin = await adminUser();
+  await sql`insert into idoc.stripe_events(external_event_id,event_type,processed_at) values ('evt_paid_later','invoice.paid',now())`;
+  const failed = { ...fakeEvent('evt_failed_old', 40), type: 'invoice.payment_failed' } as unknown as Stripe.Event;
+  const paidLater = { ...fakeEvent('evt_paid_later', 20), type: 'invoice.paid' } as unknown as Stripe.Event;
+  const missed = fakeEvent('evt_missed', 10);
+  const stripe = fakeStripe([failed, paidLater, missed]);
+  const preview = await previewReplay(stripe, SINCE, NOW);
+  assert.deepEqual(preview.counts, { already_processed: 1, blocked_earlier: 0, new: 1, superseded: 1 });
+  assert.equal(preview.replayable, 1);
+  assert.deepEqual(preview.events.map((event) => [event.id, event.status]), [['evt_failed_old', 'superseded'], ['evt_missed', 'new']]);
+  await withHold('false', async () => {
+    const result = await applyReplay({ actorId: admin.id, confirmation: 'REPLAY 1 EVENTS', expected: 1, now: NOW, since: SINCE, stripe });
+    assert.equal(result.ignored, 1);
+  });
+  assert.equal((await sql`select 1 from idoc.stripe_events where external_event_id='evt_failed_old'`).length, 0, 'the overtaken event was not applied');
 });

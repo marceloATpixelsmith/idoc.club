@@ -7,7 +7,7 @@ import { auditLog, reconciliationFindings, stripeEvents } from '@/lib/db/schema'
 import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 import { REPLAYABLE_EVENT_TYPES, processStripeEvent, type WebhookStripeClient } from './webhook-handlers';
 import {
-  REPLAY_MAX_EVENTS, ReplayInputError, classifyReplayEvent, describeReplayEvent, parseReplaySince, replayConfirmationPhrase, type ReplayEventStatus,
+  REPLAY_MAX_EVENTS, ReplayInputError, classifyReplayEvent, describeReplayEvent, parseReplaySince, replayConfirmationPhrase, supersededEventIds, type ReplayEventStatus,
 } from './stripe-event-replay-core';
 
 // Replays Stripe events this site missed (the webhook endpoint did not exist yet, DNS pointed at the old site, or the launch hold consumed them without applying
@@ -52,7 +52,10 @@ async function statusOf(events: Stripe.Event[]): Promise<Map<string, ReplayEvent
       .where(and(eq(reconciliationFindings.kind, 'status_conflict'), sql`${reconciliationFindings.details} ->> 'reason' = 'member_launch_hold'`, sql`${reconciliationFindings.details} ->> 'eventId' in ${ids}`));
     for (const row of findings) blocked.add(row.eventId);
   }
-  return new Map(events.map((event) => [event.id, classifyReplayEvent(event.id, received, blocked)]));
+  const statuses = new Map(events.map((event) => [event.id, classifyReplayEvent(event.id, received, blocked)]));
+  const superseded = supersededEventIds(events.map((event) => ({ created: event.created, customerId: describeReplayEvent(event).customerId, id: event.id, status: statuses.get(event.id) ?? 'new', type: event.type })));
+  for (const id of superseded) statuses.set(id, 'superseded');
+  return statuses;
 }
 
 /** Read-only: what a replay from `sinceInput` (UTC) would do. Also the "payments Stripe has that IDOC does not" check. */
@@ -60,12 +63,12 @@ export async function previewReplay(stripe: ReplayStripeClient, sinceInput: stri
   const since = parseReplaySince(sinceInput, now);
   const events = await listEvents(stripe, since);
   const statuses = await statusOf(events);
-  const counts: Record<ReplayEventStatus, number> = { already_processed: 0, blocked_earlier: 0, new: 0 };
+  const counts: Record<ReplayEventStatus, number> = { already_processed: 0, blocked_earlier: 0, new: 0, superseded: 0 };
   const byType: Record<string, number> = {};
   const rows: ReplayEventRow[] = events.map((event) => {
     const status = statuses.get(event.id) ?? 'new';
     counts[status] += 1;
-    if (status !== 'already_processed') byType[event.type] = (byType[event.type] ?? 0) + 1;
+    if (status === 'new' || status === 'blocked_earlier') byType[event.type] = (byType[event.type] ?? 0) + 1;
     return { ...describeReplayEvent(event), createdAt: new Date(event.created * 1000).toISOString(), id: event.id, status, type: event.type };
   });
   const interesting = rows.filter((row) => row.status !== 'already_processed');
@@ -79,7 +82,7 @@ export async function applyReplay(input: { actorId: number; confirmation: string
   const since = parseReplaySince(input.since, input.now);
   const events = await listEvents(input.stripe, since);
   const statuses = await statusOf(events);
-  const todo = events.filter((event) => statuses.get(event.id) !== 'already_processed');
+  const todo = events.filter((event) => ['new', 'blocked_earlier'].includes(statuses.get(event.id) ?? ''));
   if (todo.length !== input.expected) throw new ReplayBlockedError(`The number of events to replay is now ${todo.length}, not the ${input.expected} you reviewed. Run the preview again.`);
   if (input.confirmation.trim() !== replayConfirmationPhrase(todo.length)) throw new ReplayBlockedError('The confirmation text does not match.');
 

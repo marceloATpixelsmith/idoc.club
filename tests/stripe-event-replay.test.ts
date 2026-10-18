@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifyReplayEvent, describeReplayEvent, parseReplaySince, replayConfirmationPhrase, ReplayInputError } from '../lib/payments/stripe-event-replay-core.ts';
+import { classifyReplayEvent, describeReplayEvent, parseReplaySince, replayConfirmationPhrase, ReplayInputError, supersededEventIds } from '../lib/payments/stripe-event-replay-core.ts';
 
 const NOW = new Date('2026-10-22T12:00:00Z');
 
@@ -26,4 +26,18 @@ test('an event is described by amount, currency, customer and object ID', () => 
   assert.deepEqual(describeReplayEvent({ created: 1, data: { object: { customer: { id: 'cus_2' }, id: 'sub_1' } }, id: 'evt_2', type: 'customer.subscription.updated' }),
     { amountCents: null, currency: null, customerId: 'cus_2', objectId: 'sub_1' });
   assert.equal(replayConfirmationPhrase(7), 'REPLAY 7 EVENTS');
+});
+
+test('an older state event is superseded by a newer already applied event for the same customer, but a missed payment never is', () => {
+  const event = (id: string, type: string, created: number, status: 'new' | 'already_processed', customerId: string | null = 'cus_1') => ({ created, customerId, id, status, type });
+  const superseded = supersededEventIds([
+    event('failed_old', 'invoice.payment_failed', 100, 'new'),
+    event('paid_missed', 'invoice.paid', 110, 'new'),
+    event('paid_later', 'invoice.paid', 200, 'already_processed'),
+    event('updated_old', 'customer.subscription.updated', 120, 'new'),
+    event('other_customer_failed', 'invoice.payment_failed', 100, 'new', 'cus_2'),
+    event('no_customer', 'invoice.payment_failed', 100, 'new', null),
+    event('failed_newest', 'invoice.payment_failed', 300, 'new'),
+  ]);
+  assert.deepEqual([...superseded].sort(), ['failed_old', 'updated_old']);
 });
