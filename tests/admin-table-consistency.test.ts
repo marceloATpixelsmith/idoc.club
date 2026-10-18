@@ -122,3 +122,14 @@ test('the one selection-bar action is Ignore: offered only for ignorable rows of
   const panel = readFileSync('app/(dashboard)/admin/reconciliation/resolution-panel.tsx', 'utf8');
   assert.match(panel, /counts\[`\$\{kind\}:applied`\]/, 'totals come from the exact counts, not the capped action list');
 });
+
+test('read-only report tables show the loading skeleton when a filter, search or sort changes, and reconciliation downloads name the member and the reason', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /loading=\{viewChanging\}/);
+  for (const handler of ['onColumnFiltersChange', 'onGlobalFilterChange', 'onSortingChange']) assert.match(table, new RegExp(`${handler}: \\(updater\\) => \\{ flashSkeleton\\(\\)`));
+  const exportRoute = readFileSync('app/api/admin/export/selected-reports/route.ts', 'utf8');
+  for (const column of ['memberFirstName', 'memberLastName', 'memberEmail', 'reasonForManualReview']) assert.match(exportRoute, new RegExp(column));
+  const cron = readFileSync('app/api/cron/reconciliation-scan/route.ts', 'utf8');
+  assert.match(cron, /notifySuperAdminsOfScan\(\{ ok: true \}\)/);
+  assert.match(cron, /notifySuperAdminsOfScan\(\{ error/);
+});

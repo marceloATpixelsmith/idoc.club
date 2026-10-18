@@ -1,13 +1,13 @@
 'use client';
 
 import {
-  type ColumnDef, type ColumnFiltersState, type ColumnOrderState, type VisibilityState,
+  type ColumnDef, type ColumnFiltersState, type ColumnOrderState, type SortingState, type VisibilityState,
   getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable,
 } from '@tanstack/react-table';
 import { X } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
@@ -23,6 +23,7 @@ import { formatTableDate } from '@/lib/format';
 
 export type ReadOnlyRow = { id: string; link?: string; [key: string]: string | undefined };
 type DateFilterValue = { from?: string; to?: string };
+const VIEW_CHANGE_SKELETON_MS = 400;
 
 // Any ISO timestamp cell (created/sent/detected...) is shown as dd/mm/yyyy; the raw value stays in
 // the row for filtering, sorting, and export.
@@ -51,10 +52,21 @@ export function AdminReadOnlyTable({
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
   const [exportNotice, setExportNotice] = useState('');
   const [dateDraftActive, setDateDraftActive] = useState(false);
   const [dateResetSignal, setDateResetSignal] = useState(0);
+  // Filtering, searching and sorting here happen in the browser, so there is no request to wait for; the pulsing skeleton is still shown briefly so every table
+  // reacts to a filter the same way (docs/29). It is re-armed by each change and clears shortly after the last one.
+  const [viewChanging, setViewChanging] = useState(false);
+  const viewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const flashSkeleton = useCallback(() => {
+    setViewChanging(true);
+    clearTimeout(viewTimer.current);
+    viewTimer.current = setTimeout(() => setViewChanging(false), VIEW_CHANGE_SKELETON_MS);
+  }, []);
+  useEffect(() => () => clearTimeout(viewTimer.current), []);
   const filterIds = useMemo(() => [...new Set([statusColumn, ...(filterColumns ?? [])].filter((id): id is string => Boolean(id)))], [statusColumn, filterColumns]);
   const optionsById = useMemo(() => Object.fromEntries(filterIds.map((id) => [id, [...new Set(rows.map((row) => row[id]).filter((value): value is string => Boolean(value)))].sort().map((value) => ({ label: value, value }))])), [rows, filterIds]);
   const columns = useMemo<ColumnDef<ReadOnlyRow>[]>(() => {
@@ -93,11 +105,12 @@ export function AdminReadOnlyTable({
     getPaginationRowModel: getPaginationRowModel(), getSortedRowModel: getSortedRowModel(),
     globalFilterFn: (row, _id, value) => definitions.some(({ id }) => String(row.original[id] ?? '').toLowerCase().includes(String(value).toLowerCase())),
     initialState: { pagination: { pageIndex: 0, pageSize: 25 } },
-    onColumnFiltersChange: setColumnFilters,
+    onColumnFiltersChange: (updater) => { flashSkeleton(); setColumnFilters(updater); },
     onColumnOrderChange: setColumnOrder,
     onColumnVisibilityChange: setColumnVisibility,
-    onGlobalFilterChange: setSearch,
-    state: { columnFilters, columnOrder, columnVisibility, globalFilter: search },
+    onGlobalFilterChange: (updater) => { flashSkeleton(); setSearch(updater); },
+    onSortingChange: (updater) => { flashSkeleton(); setSorting(updater); },
+    state: { columnFilters, columnOrder, columnVisibility, globalFilter: search, sorting },
   });
   const selected = table.getSelectedRowModel().rows.map(({ original }) => original);
   const actionBarVisibility = useActionBarVisibility(selected.length);
@@ -115,13 +128,14 @@ export function AdminReadOnlyTable({
     anchor.click();
   }
   function onSearchChange(value: string) {
+    flashSkeleton();
     setSearch(value);
     table.setPageIndex(0);
     table.resetRowSelection();
   }
   const dateFilterValue = dateColumn ? (table.getColumn(dateColumn)?.getFilterValue() as DateFilterValue | undefined) : undefined;
   const dateColumnLabel = definitions.find(({ id }) => id === dateColumn)?.label ?? dateColumn ?? '';
-  return <DataTable table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem>{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+  return <DataTable loading={viewChanging} table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem>{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
     <DataTableToolbar
       className="mt-4 rounded-xl border bg-background p-3"
       table={table}
@@ -134,6 +148,7 @@ export function AdminReadOnlyTable({
             from={dateFilterValue?.from}
             label={dateColumnLabel}
             onChange={(from, to) => {
+              flashSkeleton();
               table.getColumn(dateColumn)?.setFilterValue(from || to ? { from, to } : undefined);
               table.setPageIndex(0);
               table.resetRowSelection();

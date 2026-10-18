@@ -552,3 +552,45 @@ test('a customer that becomes linked while its Stripe checks run is never delete
   await runReconciliationScan(fakeStripeClient({ customers: [...known, { created: hoursBefore(300), id: 'cus_racing' }] }), { now: NOW, remediationClient: client });
   assert.deepEqual(deleted, []);
 });
+
+test('Super Admins are emailed a counts-only summary after a scheduled scan, and a held or failing send never fails the scan', async () => {
+  const superAdmin = await createUser();
+  const revoked = await createUser();
+  const deleted = await createUser('deleted');
+  await sql`insert into idoc.application_roles(user_id,role) values (${deleted.id},'super_admin')`;
+  await sql`insert into idoc.application_roles(user_id,role) values (${superAdmin.id},'super_admin')`;
+  await sql`insert into idoc.application_roles(user_id,role,revoked_at) values (${revoked.id},'super_admin',now())`;
+  const memberUser = await createUser();
+  const profile = await createProfile(memberUser.id);
+  await sql`insert into idoc.reconciliation_findings(kind,profile_id,summary,details) values ('repeated_failure',${profile.id},'Subscription sub_x has an open invoice with 3 failed payment attempts.','{"kind":"repeated_failure","attemptCount":3}'::jsonb)`;
+  const { notifySuperAdminsOfScan } = await import('../lib/payments/reconciliation-notice.ts');
+  const originalFetch = globalThis.fetch;
+  const sent: Array<{ html: string; subject: string; to: string }> = [];
+  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+    const body = JSON.parse(String(init?.body));
+    sent.push({ html: body.htmlContent, subject: body.subject, to: body.to[0].email });
+    return new Response(JSON.stringify({ messageId: 'm' }), { status: 201 });
+  }) as typeof fetch;
+  const previous = { hold: process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING, key: process.env.BREVO_API_KEY, from: process.env.BREVO_FROM_EMAIL };
+  try {
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
+    assert.equal(await notifySuperAdminsOfScan({ ok: true }), 0, 'the launch hold blocks the email without throwing');
+    process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
+    process.env.BREVO_API_KEY = 'integration-only-brevo-key';
+    process.env.BREVO_FROM_EMAIL = 'accounts@example.test';
+    assert.equal(await notifySuperAdminsOfScan({ ok: true }), 1);
+    assert.equal(await notifySuperAdminsOfScan({ ok: true }), 0, 'the other scheduler\'s copy of the same run does not email again');
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent.map((message) => message.to), [superAdmin.email], 'revoked and deleted Super Admins are not emailed');
+    assert.match(sent[0]?.subject ?? '', /1 item\(s\) need follow-up/);
+    assert.match(sent[0]?.html ?? '', /Repeated payment failures/);
+    assert.doesNotMatch(sent[0]?.html ?? '', new RegExp(memberUser.email), 'counts only, no member details');
+    assert.equal(await notifySuperAdminsOfScan({ error: 'boom', ok: false }), 1);
+    assert.match(sent[1]?.subject ?? '', /FAILED/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of [['DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING', previous.hold], ['BREVO_API_KEY', previous.key], ['BREVO_FROM_EMAIL', previous.from]] as const) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
