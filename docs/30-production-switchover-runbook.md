@@ -25,6 +25,7 @@ Single linear checklist for the day production replaces the WordPress site on `i
 9. **Replay missed Stripe events.** `/admin/operations/event-replay`: enter the export time as "since", preview, check the counts, apply. This recovers payments and renewals that happened after the export.
 10. **Reconciliation.** `/admin/reconciliation`: run a scan and work the findings. Stripe-changing actions stay simulated until `RECONCILIATION_LIVE_STRIPE_ACTIONS=enabled` is set; set it only after the import and replay are verified.
 11. **Clean up.** Remove `LEGACY_STRIPE_SECRET_KEY` and `LEGACY_IMPORT_ENABLED`, redeploy production (the running deployment keeps the old values until then), and revoke the restricted key in Stripe (procedure in docs/07, legacy import section). Confirm the scheduled reconciliation scan emails Super Admins.
+12. **Final verification.** Reload `/admin/operations/switchover` and read the Final verification section; every line should be Ready, or a Check you have consciously accepted.
 
 ## C. Rollback points
 
@@ -33,5 +34,3 @@ Single linear checklist for the day production replaces the WordPress site on `i
 - After B6: the import is all-or-nothing; a failed import writes nothing. A completed import cannot be re-run as a delta (already-imported members are skipped).
 
 **Status page.** `/admin/operations/switchover` (Super Admin only, read-only) shows the state of everything above for the environment you are viewing: migrations applied, test data present, Stripe key mode, webhook endpoint (enabled, all handled event types), the three domain settings, the import switch and key, the launch hold and the live-actions safeguard. Below it, a Final verification section is the last step (B12): run it after the import, replay and first scan; it reports the import and member counts, the import switch and key, the launch hold, Stripe live mode and webhook traffic, events still waiting for replay, the replay and scan records, open reconciliation findings, the live-actions switch and failed queue jobs. Settings are read by presence and domain only, never value. Reload it after each step; settings change only after a redeploy.
-
-12. **Final verification.** Reload `/admin/operations/switchover` and read the Final verification section; every line should be Ready, or a Check you have consciously accepted.
