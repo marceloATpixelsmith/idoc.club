@@ -29,6 +29,7 @@ test('a test key, missing migrations, a released hold and the live-actions switc
   assert.equal(status({ ...ready, stagingNewest: 1792340000000 }, 'migrations'), 'todo');
   assert.equal(status({ ...ready, ledgerNewest: 1792360000000, stagingNewest: undefined }, 'migrations'), 'warn');
   assert.equal(status({ ...ready, ledgerNewest: null }, 'migrations'), 'warn');
+  assert.equal(status({ ...ready, stagingNewest: null }, 'migrations'), 'warn');
   assert.equal(status({ ...ready, holdOn: false }, 'hold'), 'warn');
   assert.equal(status({ ...ready, reconciliationLiveEnabled: true }, 'safeguard'), 'warn');
 });

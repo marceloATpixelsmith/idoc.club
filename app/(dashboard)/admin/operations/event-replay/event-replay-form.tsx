@@ -4,8 +4,10 @@ import { useState } from 'react';
 
 import { useFreshStepUpAction, type StepUpActionState } from '@/components/auth/fresh-step-up-action';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
+import { DateTimePicker } from '@/components/forms/date-time-picker';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
+import { lastDaysRange } from '@/lib/forms/local-moment';
 import type { ReplayPreview, ReplayResult } from '@/lib/payments/stripe-event-replay';
 
 export type EventReplayActionState = StepUpActionState & { error?: string; preview?: ReplayPreview; result?: ReplayResult };
@@ -13,7 +15,7 @@ type Action = (state: EventReplayActionState, formData: FormData) => Promise<Eve
 
 const STATUS_TEXT: Record<string, string> = {
   already_processed: 'already applied',
-  blocked_earlier: 'received earlier but blocked by the launch hold',
+  blocked_earlier: 'received earlier but not applied (launch hold, or the member did not exist yet)',
   new: 'never received',
   superseded: 'skipped: a newer event for the same customer was already applied',
 };
@@ -31,17 +33,17 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
       <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(new FormData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter)); }}>
         <CsrfField />
         <AdminFormSection description="Choose where to start, preview what Stripe has that this site does not, then confirm." title="Replay window">
-        <label className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
-          Replay events created since (UTC, format YYYY-MM-DDTHH:MM, within the last 29 days; use the moment the WordPress export was taken)
-          <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="since" required type="text" />
-        </label>
+        <div className="flex max-w-xl flex-col gap-2 text-sm font-medium text-foreground">
+          <label htmlFor="replay-since">Replay events created since (within the last 29 days; use the moment the WordPress export was taken)</label>
+          <DateTimePicker id="replay-since" name="since" {...lastDaysRange(29)} />
+        </div>
         <Button disabled={pending} formNoValidate name="intent" type="submit" value="preview">{pending ? 'Working…' : 'Preview (changes nothing)'}</Button>
         </AdminFormSection>
         {shown ? (
           <AdminFormSection title="Preview result">
           <div className="space-y-3 text-sm" data-testid="event-replay-preview">
             <p className="text-foreground">
-              Since {shown.since}: {shown.total} handled events in Stripe → <strong>{shown.replayable} to replay</strong> ({shown.counts.new} never received, {shown.counts.blocked_earlier} blocked by the launch hold), {shown.counts.already_processed} already applied, {shown.counts.superseded} skipped as out of date.
+              Since {shown.since}: {shown.total} handled events in Stripe → <strong>{shown.replayable} to replay</strong> ({shown.counts.new} never received, {shown.counts.blocked_earlier} received earlier but not applied), {shown.counts.already_processed} already applied, {shown.counts.superseded} skipped as out of date.
             </p>
             {shown.events.length > 0 ? (
               <ul className="max-h-80 space-y-1 overflow-auto text-muted-foreground">
