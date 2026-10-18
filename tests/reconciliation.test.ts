@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { manualReviewReason, RECONCILIATION_KIND_LABELS } from '../lib/payments/reconciliation-report.ts';
+import { manualReviewReason, RECONCILIATION_KIND_LABELS, stripeContactDetails } from '../lib/payments/reconciliation-report.ts';
 import { checkoutBelongsToRegistration, computeReconciliationFindings, ratioBreakerTripped, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
@@ -176,4 +176,18 @@ test('every reconciliation Type has a label and its own reason for manual review
   assert.match(manualReviewReason({ details: { attemptCount: 3, kind: 'repeated_failure' }, kind: 'repeated_failure' }), /failed 3 times/);
   assert.match(manualReviewReason({ details: { kind: 'status_conflict', localStatus: 'active', stripeStatus: 'paused' }, kind: 'status_conflict' }), /'active'.*'paused'/);
   assert.notEqual(manualReviewReason({ details: {}, kind: 'status_conflict' }), manualReviewReason({ details: { kind: 'status_conflict', stripeStatus: 'paused' }, kind: 'status_conflict' }));
+});
+
+test('a repeated failure on a subscription IDOC does not know keeps the contact details Stripe holds', () => {
+  const findings = computeReconciliationFindings(
+    { billingAccounts: [], subscriptions: [] },
+    { customers: [], openInvoices: [{ attemptCount: 5, customerEmail: 'legacy@example.test', customerName: 'Legacy Member', subscription: 'sub_legacy' }, { attemptCount: 3, subscription: 'sub_bare' }], subscriptions: [] },
+  );
+  assert.deepEqual(findings, [
+    { attemptCount: 5, customerEmail: 'legacy@example.test', customerName: 'Legacy Member', externalSubscriptionId: 'sub_legacy', kind: 'repeated_failure', profileId: null },
+    { attemptCount: 3, externalSubscriptionId: 'sub_bare', kind: 'repeated_failure', profileId: null },
+  ]);
+  assert.deepEqual(stripeContactDetails(findings[0]), { email: 'legacy@example.test', name: 'Legacy Member' });
+  assert.deepEqual(stripeContactDetails(findings[1]), { email: '', name: '' });
+  assert.match(manualReviewReason({ details: findings[0], kind: 'repeated_failure' }), /no record of/);
 });

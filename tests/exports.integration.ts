@@ -178,6 +178,18 @@ test('selected report export re-fetches rows, enforces administration, and audit
   assert.deepEqual(audit.after_json, { resultCount: 1, selectedCount: 1, table: 'reconciliation' });
 });
 
+test('a repeated payment failure with no IDOC member exports the contact details Stripe held', async () => {
+  const admin = await adminUser();
+  const [finding] = await sql<{ id: number }[]>`insert into idoc.reconciliation_findings (kind,external_subscription_id,summary,details)
+    values ('repeated_failure','sub_legacy','Subscription sub_legacy has an open invoice with 5 failed payment attempts.',
+    ${JSON.stringify({ attemptCount: 5, customerEmail: 'legacy@example.test', customerName: 'Legacy Member', externalSubscriptionId: 'sub_legacy', kind: 'repeated_failure', profileId: null })}::jsonb) returning id`;
+  const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(`https://idoc.club/api/admin/export/selected-reports?table=reconciliation&id=${finding.id}`)));
+  const body = await response.text();
+  assert.match(body, /Repeated payment failures,Legacy Member,,legacy@example\.test,sub_legacy/);
+  assert.match(body, /Not an IDOC member/);
+  assert.match(body, /no record of/);
+});
+
 test('the payments export route succeeds for an Administrator', async () => {
   const admin = await adminUser();
   const member = await createUser();

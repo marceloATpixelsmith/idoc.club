@@ -1,7 +1,7 @@
 import { OPEN_SUBSCRIPTION_STATUSES } from './pricing.ts';
 
 export type ReconciliationFinding =
-  | { attemptCount: number; externalSubscriptionId: string; kind: 'repeated_failure'; profileId: number | null }
+  | { attemptCount: number; customerEmail?: string; customerName?: string; externalSubscriptionId: string; kind: 'repeated_failure'; profileId: number | null }
   | { externalCustomerId: string; externalSubscriptionId: string; kind: 'orphaned_subscription'; stripeStatus: string }
   | { externalCustomerId: string; kind: 'unlinked_customer' }
   | { externalSubscriptionId: string; kind: 'pending_schedule_conflict'; profileId: number; stripeStatus: string }
@@ -15,7 +15,8 @@ type LocalSnapshot = {
 
 type StripeSnapshot = {
   customers: Array<{ id: string }>;
-  openInvoices: Array<{ attemptCount: number; subscription: string | null }>;
+  /** `customerEmail`/`customerName` are the contact details Stripe holds on the invoice, kept so a failure for a subscription IDOC does not know can still be followed up. */
+  openInvoices: Array<{ attemptCount: number; customerEmail?: string | null; customerName?: string | null; subscription: string | null }>;
   subscriptions: Array<{ customer: string; id: string; status: string }>;
   schedules?: Array<{ id: string; status: string }>;
 };
@@ -65,8 +66,8 @@ export function computeReconciliationFindings(local: LocalSnapshot, stripe: Stri
     if (!invoice.subscription || invoice.attemptCount < failureThreshold) continue;
     const localSubscription = localSubscriptionsById.get(invoice.subscription);
     findings.push({
-      attemptCount: invoice.attemptCount, externalSubscriptionId: invoice.subscription,
-      kind: 'repeated_failure', profileId: localSubscription?.profileId ?? null,
+      attemptCount: invoice.attemptCount, ...(invoice.customerEmail ? { customerEmail: invoice.customerEmail } : {}), ...(invoice.customerName ? { customerName: invoice.customerName } : {}),
+      externalSubscriptionId: invoice.subscription, kind: 'repeated_failure', profileId: localSubscription?.profileId ?? null,
     });
   }
 
