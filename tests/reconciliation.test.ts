@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { manualReviewReason, RECONCILIATION_KIND_LABELS } from '../lib/payments/reconciliation-report.ts';
 import { checkoutBelongsToRegistration, computeReconciliationFindings, ratioBreakerTripped, summarizeFinding } from '../lib/payments/reconciliation.ts';
 
 test('a matching local subscription with the same Stripe status produces no finding', () => {
@@ -163,3 +164,16 @@ for (const [name, session, registration] of [
     assert.equal(checkoutBelongsToRegistration(session, registration), false);
   });
 }
+
+test('every reconciliation Type has a label and its own reason for manual review', () => {
+  const reasons = new Set<string>();
+  for (const kind of Object.keys(RECONCILIATION_KIND_LABELS)) {
+    const reason = manualReviewReason({ details: { kind }, kind });
+    assert.ok(reason.length > 40, kind);
+    reasons.add(reason);
+  }
+  assert.equal(reasons.size, Object.keys(RECONCILIATION_KIND_LABELS).length);
+  assert.match(manualReviewReason({ details: { attemptCount: 3, kind: 'repeated_failure' }, kind: 'repeated_failure' }), /failed 3 times/);
+  assert.match(manualReviewReason({ details: { kind: 'status_conflict', localStatus: 'active', stripeStatus: 'paused' }, kind: 'status_conflict' }), /'active'.*'paused'/);
+  assert.notEqual(manualReviewReason({ details: {}, kind: 'status_conflict' }), manualReviewReason({ details: { kind: 'status_conflict', stripeStatus: 'paused' }, kind: 'status_conflict' }));
+});

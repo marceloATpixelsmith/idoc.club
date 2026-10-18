@@ -8,6 +8,7 @@ import { getLastReconciliationRun, listReconciliationFindings, requireAccountAcc
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 import { ignoreFindings, isIgnorableFinding, restoreIgnoredIssue } from '@/lib/payments/reconciliation-remediation';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
+import { RECONCILIATION_KIND_LABELS } from '@/lib/payments/reconciliation-report';
 import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
 import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -21,18 +22,7 @@ import { RunScanForm, type RunScanState } from './run-scan-form';
 
 const PATH = '/admin/reconciliation';
 
-const KIND_LABELS: Record<string, string> = {
-  orphaned_subscription: 'Orphaned active Stripe subscription',
-  repeated_failure: 'Repeated payment failures',
-  status_conflict: 'Subscription status conflict',
-  unlinked_customer: 'Unlinked Stripe Customer',
-  pending_schedule_conflict: 'Pending renewal schedule conflict',
-  seminar_payment_conflict: 'Seminar payment conflict',
-  refund_conflict: 'Refund conflict',
-  missing_refund: 'Missing refund',
-  dispute: 'Payment dispute',
-  chargeback: 'Chargeback',
-};
+const KIND_LABELS = RECONCILIATION_KIND_LABELS;
 
 function formatUtc(date: Date) {
   const iso = date.toISOString();

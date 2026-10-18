@@ -75,6 +75,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security', sentry: true },
   reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: true },
   reconciliation_orphan_cancel_paused: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: true },
+  reconciliation_scan_notice_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: false },
   seminar_cancellation_resolution_failed: { attribution: 'system', category: 'operational', resource: 'seminar-cancellation-resolution', retentionClass: 'operational', sentry: true },
   renewal_notice_delivery_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-delivery', retentionClass: 'operational', sentry: true },
   renewal_notice_scan_failed: { attribution: 'system', category: 'operational', resource: 'renewal-notice-scan', retentionClass: 'operational', sentry: true },
