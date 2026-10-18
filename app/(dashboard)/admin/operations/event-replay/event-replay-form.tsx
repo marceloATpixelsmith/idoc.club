@@ -35,7 +35,7 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
           Replay events created since (UTC, format YYYY-MM-DDTHH:MM, within the last 29 days; use the moment the WordPress export was taken)
           <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="since" required type="text" />
         </label>
-        <Button disabled={pending} name="intent" type="submit" value="preview">{pending ? 'Working…' : 'Preview (changes nothing)'}</Button>
+        <Button disabled={pending} formNoValidate name="intent" type="submit" value="preview">{pending ? 'Working…' : 'Preview (changes nothing)'}</Button>
         </AdminFormSection>
         {shown ? (
           <AdminFormSection title="Preview result">
@@ -54,7 +54,7 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
               <>
                 <label className="flex max-w-xl flex-col gap-2 font-medium text-foreground">
                   Type <code>{phrase}</code> to confirm
-                  <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="confirmPhrase" type="text" />
+                  <input autoComplete="off" className="rounded-md border border-border bg-background px-3 py-2 text-sm" name="confirmPhrase" required type="text" />
                 </label>
                 <input name="expected" type="hidden" value={shown.replayable} />
                 <Button disabled={pending} name="intent" type="submit" value="apply" variant="destructive">{pending ? 'Working…' : 'Replay events now'}</Button>
