@@ -15,7 +15,7 @@ type Action = (state: EventReplayActionState, formData: FormData) => Promise<Eve
 
 const STATUS_TEXT: Record<string, string> = {
   already_processed: 'already applied',
-  blocked_earlier: 'received earlier but blocked by the launch hold',
+  blocked_earlier: 'received earlier but not applied (launch hold, or the member did not exist yet)',
   new: 'never received',
   superseded: 'skipped: a newer event for the same customer was already applied',
 };
@@ -43,7 +43,7 @@ export function EventReplayForm({ action, holdOn }: { action: Action; holdOn: bo
           <AdminFormSection title="Preview result">
           <div className="space-y-3 text-sm" data-testid="event-replay-preview">
             <p className="text-foreground">
-              Since {shown.since}: {shown.total} handled events in Stripe → <strong>{shown.replayable} to replay</strong> ({shown.counts.new} never received, {shown.counts.blocked_earlier} blocked by the launch hold), {shown.counts.already_processed} already applied, {shown.counts.superseded} skipped as out of date.
+              Since {shown.since}: {shown.total} handled events in Stripe → <strong>{shown.replayable} to replay</strong> ({shown.counts.new} never received, {shown.counts.blocked_earlier} received earlier but not applied), {shown.counts.already_processed} already applied, {shown.counts.superseded} skipped as out of date.
             </p>
             {shown.events.length > 0 ? (
               <ul className="max-h-80 space-y-1 overflow-auto text-muted-foreground">
