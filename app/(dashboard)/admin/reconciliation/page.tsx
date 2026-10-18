@@ -6,12 +6,20 @@ import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
+import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
+import { deleteUnlinkedCustomers } from '@/lib/payments/reconciliation-remediation';
+import { remediationAllowed } from '@/lib/payments/remediation-gate';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
 import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
 import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { ReconciliationTabs } from './reconciliation-tabs';
+import { CleanupCustomersForm, type CleanupCustomersState } from './cleanup-customers-form';
 import { RunScanForm, type RunScanState } from './run-scan-form';
+
+const PATH = '/admin/reconciliation';
+// Deleting a few hundred customers makes several Stripe calls each.
+export const maxDuration = 300;
 
 const KIND_LABELS: Record<string, string> = {
   orphaned_subscription: 'Orphaned active Stripe subscription',
@@ -48,12 +56,34 @@ async function runScanNow(_state: RunScanState, formData: FormData): Promise<Run
   }
 }
 
+async function cleanupCustomers(_state: CleanupCustomersState, formData: FormData): Promise<CleanupCustomersState> {
+  'use server';
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireSuperAdmin(actor);
+    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', PATH);
+    if (stepUp.required) return { stepUpRequired: true };
+    const result = await deleteUnlinkedCustomers(actor.id);
+    revalidatePath(PATH);
+    const skipped = result.skipped.length ? ` ${result.skipped.length.toLocaleString('en-GB')} skipped for safety.` : '';
+    const failed = result.failed.length ? ` ${result.failed.length.toLocaleString('en-GB')} could not be deleted; run it again.` : '';
+    return { csv: result.csv, success: `Deleted ${result.deleted.length.toLocaleString('en-GB')} customer(s) in Stripe.${skipped}${failed}` };
+  } catch (error) {
+    if (error instanceof AuthorizationError || (error instanceof Error && error.name === 'CsrfError')) return { error: error.message };
+    return { error: error instanceof Error && error.message.startsWith('Deleting Stripe customers') ? error.message : 'The cleanup could not be completed safely. Nothing further was deleted.' };
+  }
+}
+
 export default async function AdminReconciliationPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const [lastRun, findings] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings()]);
   let isSuperAdmin = true;
   try { requireSuperAdmin(actor); } catch { isSuperAdmin = false; }
+  let cleanupAvailable = false;
+  try { cleanupAvailable = isSuperAdmin && remediationAllowed(); } catch { cleanupAvailable = false; }
+  const unlinkedCount = findings.filter((finding) => finding.kind === 'unlinked_customer').length;
   let rehearsal = false;
   try { rehearsal = rehearsalReadStatus().active; } catch { rehearsal = false; }
 
@@ -84,6 +114,14 @@ export default async function AdminReconciliationPage() {
       <p className="mt-4 max-w-3xl rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="note">
         Rehearsal mode is on in this environment: the scan compares your real, live Stripe account with the data in this environment. Live customers and subscriptions that have not been imported here show up as findings, so a long list before the legacy import is expected, and it shrinks once the import is done and the scan runs again. Items from the sandbox test members appear as "not found in Stripe". Seminar checks are skipped in this mode.
       </p>
+    ) : null}
+
+    {cleanupAvailable && unlinkedCount > 0 ? (
+      <section className="mt-6 max-w-2xl rounded-lg border p-4">
+        <h2 className="font-medium text-foreground">Clean up unlinked Stripe customers</h2>
+        <p className="mt-2 text-sm text-foreground">IDOC is the record of members, so a Stripe customer it has no record of is safe to remove. Customers with a live subscription, an open invoice or a recent charge are skipped, and each deletion is logged.</p>
+        <CleanupCustomersForm action={cleanupCustomers} count={unlinkedCount} />
+      </section>
     ) : null}
 
     <section className="mt-8">

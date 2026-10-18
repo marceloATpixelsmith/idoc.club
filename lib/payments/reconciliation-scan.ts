@@ -6,6 +6,8 @@ import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPre
 import { getStripeServerClient } from './stripe-client';
 import { getRehearsalReadClient } from './rehearsal-read-client';
 import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
+import { cancelOrphanedSubscriptions, type RemediationStripeClient } from './reconciliation-remediation';
+import { remediationAllowed } from './remediation-gate';
 
 // Only the calls this module makes, and only the fields it actually reads back, so tests can
 // inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
@@ -17,7 +19,7 @@ export type ReconciliationStripeClient = {
   // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
   // regress this back to reading a field that no longer exists.
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
-  subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ customer: string; id: string; status: string }>; has_more: boolean }> };
+  subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ created?: number; customer: string; id: string; status: string }>; has_more: boolean }> };
   checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
@@ -60,8 +62,8 @@ function findingRow(finding: ReconciliationFinding) {
  * alerts. reconciliation_findings is left untouched on failure (the last known-good snapshot),
  * rather than wiped to empty, which would read as a false "all clear."
  */
-export async function runReconciliationScan(testStripeClient?: ReconciliationStripeClient): Promise<{ findingsCount: number }> {
-  if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
+export async function runReconciliationScan(testStripeClient?: ReconciliationStripeClient, testOptions?: { now?: Date; remediationClient?: RemediationStripeClient }): Promise<{ findingsCount: number }> {
+  if ((testStripeClient || testOptions) && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
   try {
     // The real Stripe SDK's list responses are typed richer than this narrow interface (e.g.
     // `customer`/`subscription` as `string | Customer | ...` to account for the optional `expand`
@@ -111,6 +113,23 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       { reportLocalMissingInStripe: Boolean(rehearsal) },
     );
 
+    // IDOC's database is the system of record, so an open Stripe subscription it has no record of is cancelled rather than
+    // left able to charge someone who was removed. Only in production against live Stripe, and with the guards in
+    // reconciliation.ts (age, previous-snapshot confirmation, circuit breaker); a cancelled one leaves this snapshot.
+    const orphanFindings = findings.filter((finding) => finding.kind === 'orphaned_subscription');
+    if (orphanFindings.length > 0 && !rehearsal && (testOptions?.remediationClient || remediationAllowed())) {
+      const createdById = new Map(stripeSubscriptions.map((subscription) => [subscription.id, subscription.created ?? null]));
+      const { cancelled } = await cancelOrphanedSubscriptions(
+        testOptions?.remediationClient ?? (stripe as unknown as RemediationStripeClient),
+        orphanFindings.map((finding) => ({ createdSeconds: createdById.get(finding.externalSubscriptionId) ?? null, customer: finding.externalCustomerId, id: finding.externalSubscriptionId, status: finding.stripeStatus })),
+        testOptions?.now,
+      );
+      for (let index = findings.length - 1; index >= 0; index -= 1) {
+        const finding = findings[index];
+        if (finding.kind === 'orphaned_subscription' && cancelled.includes(finding.externalSubscriptionId)) findings.splice(index, 1);
+      }
+    }
+
     //KEEP A FAILED STRIPE LOOKUP FROM PRODUCING A FALSE ALL-CLEAR RESULT.
     const seminarFindings: Array<{ kind: 'seminar_payment_conflict'; profileId: number | null; summary: string; details: Record<string, unknown> }> = [];
     if (localSeminarRegistrations.length && (!stripe.checkout || !stripe.paymentIntents)) {
@@ -153,6 +172,9 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       await tx.delete(reconciliationFindings).where(rehearsal
         ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`
         : sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+      // Refunds and disputes are kept as seminar evidence only when they belong to a real seminar registration. Earlier versions also
+      // recorded refunds Stripe sent for unrelated payments (for example the legacy site) as "Seminar" conflicts; remove those.
+      await tx.delete(reconciliationFindings).where(sql`kind in ('refund_conflict','dispute','chargeback') and details ->> 'paymentIntentId' is not null and not exists (select 1 from ${seminarRegistrations} where ${seminarRegistrations.stripePaymentIntentId} = details ->> 'paymentIntentId')`);
       if (findings.length > 0) await tx.insert(reconciliationFindings).values(findings.map(findingRow));
       if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });

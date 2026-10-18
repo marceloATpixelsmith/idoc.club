@@ -43,9 +43,10 @@ export const FINDING_GUIDE: FindingGuide[] = [
       'Search that email on the Members page. Is there a member, and is their membership active?',
     ],
     resolve: [
-      'They should still be a member: make sure the member exists and has the right paid-through date (Members page, correct entitlement). If the subscription ID itself is missing here, ask a developer to link it; there is no admin screen for that.',
-      'They should not be billed any more: cancel the subscription in Stripe (a separate, deliberate step) and refund anything that was charged in error.',
-      'Do this first; it is the only type where someone may be charged for something IDOC does not know about.',
+      'Production cancels these automatically: an open Stripe subscription that IDOC has no record of is cancelled once it is more than a day old and has appeared on two scans in a row, and each cancellation is recorded in the audit log. Nothing needs doing for those.',
+      'If more than five turn up in one scan, nothing is cancelled and an alert is raised, because that usually means the wrong database or Stripe account is being compared. Check the environment before doing anything else.',
+      'They should still be a member: make sure the member exists and has the right paid-through date (Members page, correct entitlement), and ask a developer to link the subscription ID before the next scans, or it will be cancelled.',
+      'On staging nothing is cancelled; the finding is for information only.',
     ],
   },
   {
@@ -104,9 +105,9 @@ export const FINDING_GUIDE: FindingGuide[] = [
       'Search the email on the Members page.',
     ],
     resolve: [
-      'No active subscription and not a member here: nothing to do.',
+      'In production a Super Admin can delete them all with the Delete unlinked customers button on this page. Customers with a live subscription, an open invoice or a charge in the last 90 days are skipped automatically, every deletion is logged, and a CSV of what was processed can be downloaded.',
       'Active subscription: it will also appear as an orphaned subscription; handle it there.',
-      'They are a member here but the link is missing: ask a developer to link the customer; there is no admin screen for that.',
+      'They are a member here but the link is missing: ask a developer to link the customer before deleting anything; there is no admin screen for that.',
     ],
   },
   {
@@ -154,8 +155,8 @@ export const FINDING_GUIDE: FindingGuide[] = [
     label: 'Refund conflict',
     area: 'Seminar',
     severity: 'act',
-    plain: 'A refund exists in Stripe that IDOC cannot match to a seminar payment, or it is a partial refund IDOC policy does not allow.',
-    why: ['Someone issued a refund directly in the Stripe Dashboard instead of through IDOC.', 'A refund was made for a payment IDOC has no record of.'],
+    plain: 'A refund was issued in Stripe for a real seminar payment outside IDOC, or it is a partial refund IDOC policy does not allow.',
+    why: ['Someone issued a refund directly in the Stripe Dashboard instead of through IDOC.', 'Refunds for payments that are not seminar registrations (for example from the old site) are deliberately not listed here.'],
     investigate: ['In Stripe, open the refund and the payment it belongs to; find the registrant from the payment details.', 'Open that registration and check its payment status.'],
     resolve: ['Update the registration so it shows the refund (so money and records agree).', 'If the refund was a mistake, contact the registrant and take the appropriate step in Stripe.'],
   },

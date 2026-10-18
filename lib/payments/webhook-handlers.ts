@@ -316,11 +316,10 @@ async function handleRefundChanged(tx: Transaction, refund: Stripe.Refund, strip
     memberPriceCents: seminars.memberPriceCents, profileId: seminarRegistrations.profileId })
     .from(seminarRegistrations).innerJoin(seminars, eq(seminars.id, seminarRegistrations.seminarId))
     .where(eq(seminarRegistrations.stripePaymentIntentId, paymentIntentId)).limit(1);
-  if (!registration) {
-    await tx.insert(reconciliationFindings).values({ kind: 'refund_conflict', summary: 'Stripe reported a refund without a matching local seminar payment.',
-      details: { paymentIntentId, refundId: refund.id, status: refund.status } });
-    return;
-  }
+  // Stripe sends every refund on the account, including payments IDOC never took (the legacy site, payment links, dashboard
+  // charges). A refund is a seminar matter only when its PaymentIntent belongs to a seminar registration, so any other refund
+  // is not recorded as a seminar finding.
+  if (!registration) return;
   // Classify against the amount actually charged for this registration (the amount recorded when the registration was created).
   const priceCents = registration.expectedAmountCents ?? registration.memberPriceCents;
   const amount = refund.amount;
@@ -363,10 +362,12 @@ async function handleDispute(tx: Transaction, event: Stripe.Event) {
   const [registration] = paymentIntentId ? await tx.select({ id: seminarRegistrations.id, profileId: seminarRegistrations.profileId })
     .from(seminarRegistrations).where(eq(seminarRegistrations.stripePaymentIntentId, paymentIntentId)).limit(1) : [];
   const chargeback = event.type === 'charge.dispute.closed' && dispute.status === 'lost';
-  await tx.insert(reconciliationFindings).values({ kind: chargeback ? 'chargeback' : 'dispute', profileId: registration?.profileId,
+  // Same rule as refunds: a dispute is a seminar finding only for a real seminar registration's payment.
+  if (!registration) return;
+  await tx.insert(reconciliationFindings).values({ kind: chargeback ? 'chargeback' : 'dispute', profileId: registration.profileId,
     summary: chargeback ? 'A Stripe seminar chargeback requires operational review.' : 'A Stripe dispute requires operational review.',
     details: { disputeId: dispute.id, paymentIntentId, status: dispute.status } });
-  if (registration) await tx.update(seminarRegistrations).set({ chargebackAt: chargeback ? new Date() : undefined,
+  await tx.update(seminarRegistrations).set({ chargebackAt: chargeback ? new Date() : undefined,
     disputedAt: new Date(), paymentStatus: chargeback ? 'chargeback' : 'disputed', paymentStatusUpdatedAt: new Date(), updatedAt: new Date() })
     .where(eq(seminarRegistrations.id, registration.id));
 }
