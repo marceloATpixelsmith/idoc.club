@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { getLastReconciliationRun, listReconciliationFindings } from '../lib/membership/data-access.ts';
+import { deleteUnlinkedCustomers } from '../lib/payments/reconciliation-remediation.ts';
 import { runReconciliationScan, type ReconciliationStripeClient } from '../lib/payments/reconciliation-scan.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { GET as reconciliationScanCron } from '../app/api/cron/reconciliation-scan/route.ts';
@@ -269,4 +270,69 @@ test('stale refund findings for payments that are not seminar registrations are 
   await runReconciliationScan(fakeStripeClient({}));
   const remaining = await sql`select details ->> 'refundId' as "refundId" from idoc.reconciliation_findings where kind = 'refund_conflict'`;
   assert.deepEqual(remaining.map((row) => row.refundId), ['re_2']);
+});
+
+// --- Unlinked customer cleanup -----------------------------------------------------------------------------------------------
+
+function cleanupClient(options: { charges?: string[]; invoices?: string[]; subscriptions?: Record<string, Array<{ id: string; status: string }>>; onRetrieve?: (id: string) => Promise<void> } = {}) {
+  const deleted: string[] = [];
+  const client = {
+    charges: { list: async (params: { customer: string }) => ({ data: options.charges?.includes(params.customer) ? [{ id: 'ch_1' }] : [] }) },
+    customers: { del: async (id: string) => { deleted.push(id); return {}; }, retrieve: async (id: string) => { await options.onRetrieve?.(id); return { created: 1_700_000_000, email: `${id}@example.test`, id, name: id }; } },
+    invoices: { list: async (params: { customer: string }) => ({ data: options.invoices?.includes(params.customer) ? [{ id: 'in_1' }] : [] }) },
+    subscriptions: {
+      cancel: async () => ({}),
+      list: async (params: { customer: string; starting_after?: string }) => {
+        const all = options.subscriptions?.[params.customer] ?? [];
+        const start = params.starting_after ? all.findIndex((entry) => entry.id === params.starting_after) + 1 : 0;
+        const data = all.slice(start, start + 2);
+        return { data, has_more: start + 2 < all.length };
+      },
+      retrieve: async (id: string) => ({ id, status: 'active' }),
+    },
+  };
+  return { client, deleted };
+}
+
+async function seedUnlinked(...ids: string[]) {
+  for (const id of ids) await sql`insert into idoc.reconciliation_findings(kind, external_customer_id, summary) values ('unlinked_customer', ${id}, 'seeded')`;
+}
+
+test('cleanup deletes clean unlinked customers and skips those with live subscriptions (even on a later page), open invoices or recent charges', async () => {
+  const admin = await adminUser();
+  await seedUnlinked('cus_clean', 'cus_live_late', 'cus_invoice', 'cus_charged');
+  const { client, deleted } = cleanupClient({
+    charges: ['cus_charged'], invoices: ['cus_invoice'],
+    subscriptions: { cus_live_late: [{ id: 's1', status: 'canceled' }, { id: 's2', status: 'canceled' }, { id: 's3', status: 'active' }] },
+  });
+  const result = await deleteUnlinkedCustomers(admin.id, client, new Date(), true);
+  assert.deepEqual(deleted, ['cus_clean']);
+  assert.deepEqual(result.skipped.map((entry) => entry.id).sort(), ['cus_charged', 'cus_invoice', 'cus_live_late']);
+  assert.match(result.csv, /cus_clean.*deleted/);
+  const audit = await sql`select entity_id as "entityId" from idoc.audit_log where action = 'reconciliation.unlinked_customer_deleted'`;
+  assert.deepEqual(audit.map((row) => row.entityId), ['cus_clean']);
+  const remaining = await sql`select external_customer_id as id from idoc.reconciliation_findings where kind = 'unlinked_customer' order by 1`;
+  assert.deepEqual(remaining.map((row) => row.id), ['cus_charged', 'cus_invoice', 'cus_live_late']);
+});
+
+test('cleanup skips a customer that became linked after the batch started', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await seedUnlinked('cus_first', 'cus_late_link');
+  const { client, deleted } = cleanupClient({
+    onRetrieve: async (id) => {
+      if (id === 'cus_first') await sql`insert into idoc.billing_accounts(profile_id, external_customer_id) values (${profile.id}, 'cus_late_link')`;
+    },
+  });
+  await deleteUnlinkedCustomers(admin.id, client, new Date(), true);
+  assert.deepEqual(deleted, ['cus_first']);
+});
+
+test('cleanup refuses to run without the production gate', async () => {
+  const admin = await adminUser();
+  await seedUnlinked('cus_clean');
+  const { client, deleted } = cleanupClient();
+  await assert.rejects(deleteUnlinkedCustomers(admin.id, client), /only available in the production deployment/);
+  assert.deepEqual(deleted, []);
 });

@@ -21,7 +21,7 @@ export type RemediationStripeClient = {
   invoices?: { list: (params: { customer: string; limit: number; status: 'open' }) => Promise<{ data: Array<{ id: string }> }> };
   subscriptions: {
     cancel: (id: string, params?: Record<string, never>, options?: { idempotencyKey: string }) => Promise<unknown>;
-    list?: (params: { customer: string; limit: number; status: 'all' }) => Promise<{ data: Array<{ id: string; status: string }> }>;
+    list?: (params: { customer: string; limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ id: string; status: string }>; has_more?: boolean }>;
     retrieve: (id: string) => Promise<{ id: string; status: string }>;
   };
 };
@@ -70,6 +70,23 @@ export type CustomerCleanupResult = {
   skipped: Array<{ id: string; reason: string }>;
 };
 
+async function isLinked(customerId: string) {
+  const [row] = await db.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.externalCustomerId, customerId)).limit(1);
+  return Boolean(row);
+}
+
+/** Every subscription of the customer, following Stripe's pagination, so a live one on a later page can never be missed. */
+async function allSubscriptions(stripe: RemediationStripeClient, customer: string) {
+  const all: Array<{ id: string; status: string }> = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await stripe.subscriptions.list!({ customer, limit: 100, status: 'all', ...(cursor ? { starting_after: cursor } : {}) });
+    all.push(...page.data);
+    cursor = page.data.at(-1)?.id;
+    if (!page.has_more || !cursor) return all;
+  }
+}
+
 function csvCell(value: string | number | null | undefined) {
   const text = value === null || value === undefined ? '' : String(value);
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
@@ -77,12 +94,12 @@ function csvCell(value: string | number | null | undefined) {
 }
 
 /** Deletes Stripe customers the last scan reported as having no IDOC billing account, after re-checking each one. */
-export async function deleteUnlinkedCustomers(actorId: number, stripe: RemediationStripeClient = getStripeServerClient() as unknown as RemediationStripeClient, now: Date = new Date()): Promise<CustomerCleanupResult> {
-  if (!remediationAllowed()) throw new Error('Deleting Stripe customers is only available in the production deployment with live billing released.');
+export async function deleteUnlinkedCustomers(actorId: number, stripe: RemediationStripeClient = getStripeServerClient() as unknown as RemediationStripeClient, now: Date = new Date(), testBypassGate = false): Promise<CustomerCleanupResult> {
+  if (testBypassGate && process.env.NODE_ENV !== 'test') throw new Error('Gate overrides are test-only.');
+  if (!testBypassGate && !remediationAllowed()) throw new Error('Deleting Stripe customers is only available in the production deployment with live billing released.');
   if (!stripe.subscriptions.list || !stripe.invoices || !stripe.charges) throw new Error('Customer cleanup needs subscription, invoice and charge lookups.');
   const rows = await db.select({ id: reconciliationFindings.externalCustomerId }).from(reconciliationFindings).where(eq(reconciliationFindings.kind, 'unlinked_customer'));
   const ids = [...new Set(rows.flatMap((row) => (row.id ? [row.id] : [])))];
-  const linked = new Set((await db.select({ id: billingAccounts.externalCustomerId }).from(billingAccounts)).map((row) => row.id));
   const since = Math.floor(now.getTime() / 1000) - CUSTOMER_RECENT_CHARGE_DAYS * 86_400;
   const result: CustomerCleanupResult = { csv: '', deleted: [], failed: [], skipped: [] };
   const lines = ['customer_id,email,name,created_utc,outcome'];
@@ -92,22 +109,26 @@ export async function deleteUnlinkedCustomers(actorId: number, stripe: Remediati
     let name: string | null | undefined;
     let created: number | undefined;
     try {
-      if (linked.has(id)) { result.skipped.push({ id, reason: 'now linked to an IDOC billing account' }); outcome = 'skipped: linked'; continue; }
+      if (await isLinked(id)) { result.skipped.push({ id, reason: 'now linked to an IDOC billing account' }); outcome = 'skipped: linked'; continue; }
       const customer = await stripe.customers.retrieve(id);
       ({ email, name, created } = customer);
       if (customer.deleted) { outcome = 'skipped: already deleted'; result.skipped.push({ id, reason: 'already deleted' }); continue; }
       const [subs, invoices, charges] = await Promise.all([
-        stripe.subscriptions.list!({ customer: id, limit: 100, status: 'all' }),
+        allSubscriptions(stripe, id),
         stripe.invoices!.list({ customer: id, limit: 1, status: 'open' }),
         stripe.charges!.list({ created: { gte: since }, customer: id, limit: 1 }),
       ]);
-      const reason = subs.data.some((sub) => sub.status !== 'canceled' && sub.status !== 'incomplete_expired') ? 'has a live subscription'
+      const reason = subs.some((sub) => sub.status !== 'canceled' && sub.status !== 'incomplete_expired') ? 'has a live subscription'
         : invoices.data.length ? 'has an open invoice' : charges.data.length ? `charged in the last ${CUSTOMER_RECENT_CHARGE_DAYS} days` : null;
       if (reason) { outcome = `skipped: ${reason}`; result.skipped.push({ id, reason }); continue; }
+      // Re-check the link immediately before the irreversible call: a checkout recovery or import may have linked it since the scan.
+      if (await isLinked(id)) { result.skipped.push({ id, reason: 'now linked to an IDOC billing account' }); outcome = 'skipped: linked'; continue; }
       await stripe.customers.del(id);
-      await db.insert(auditLog).values({ actorId, action: 'reconciliation.unlinked_customer_deleted', entityType: 'stripe_customer', entityId: id,
-        beforeJson: { created: created ?? null }, reason: 'No matching IDOC billing account; deleted from the Stripe Reconciliation page.' });
       result.deleted.push(id);
+      // The deletion already happened: a failure to write its audit row must not turn it into a "failed" customer, so it is reported instead.
+      await db.insert(auditLog).values({ actorId, action: 'reconciliation.unlinked_customer_deleted', entityType: 'stripe_customer', entityId: id,
+        beforeJson: { created: created ?? null }, reason: 'No matching IDOC billing account; deleted from the Stripe Reconciliation page.' })
+        .catch(() => { logError('reconciliation_scan_failed'); });
     } catch {
       outcome = 'failed';
       result.failed.push(id);
