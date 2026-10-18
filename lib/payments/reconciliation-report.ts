@@ -24,6 +24,7 @@ export function manualReviewReason(finding: FindingLike): string {
   const raisedByNotification = details.kind === undefined && details.source !== 'daily_seminar_scan';
   switch (finding.kind) {
     case 'repeated_failure':
+      if (asRecord(finding.details).profileId === null || asRecord(finding.details).profileId === undefined) return `A renewal invoice has failed ${typeof details.attemptCount === 'number' ? `${details.attemptCount} times` : 'repeatedly'} on a Stripe subscription that IDOC has no record of (usually a legacy member who has not been imported). Stripe keeps retrying; contact them using the Stripe details in this row, and import or link them if they should be members. If they will not or cannot pay, Ignore the row.`;
       return `A renewal invoice has failed ${typeof details.attemptCount === 'number' ? `${details.attemptCount} times` : 'repeatedly'}. Stripe keeps retrying, but only the member can fix a declining card, so someone needs to contact them. If you have, and they cannot or will not update their payment, Ignore the row.`;
     case 'orphaned_subscription':
       return 'Stripe has an open subscription that IDOC has no record of, and the scan did not cancel it: it is less than a day old, could not be verified, the cancellation failed, or the scan paused because it looks like the wrong database or Stripe account. Decide whether it belongs to a real member before it charges anyone.';
@@ -53,4 +54,10 @@ export function manualReviewReason(finding: FindingLike): string {
     default:
       return 'This finding needs a person to look at it.';
   }
+}
+
+/** Contact details Stripe held for the finding when the scan ran (repeated payment failures carry them), for items with no IDOC member. */
+export function stripeContactDetails(details: unknown): { email: string; name: string } {
+  const record = asRecord(details);
+  return { email: typeof record.customerEmail === 'string' ? record.customerEmail : '', name: typeof record.customerName === 'string' ? record.customerName : '' };
 }

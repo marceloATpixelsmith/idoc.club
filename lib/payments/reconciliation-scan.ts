@@ -18,7 +18,7 @@ export type ReconciliationStripeClient = {
   // `subscription` field onto `parent.subscription_details.subscription` — this narrows the type
   // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
   // regress this back to reading a field that no longer exists.
-  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
+  invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; customer_email?: string | null; customer_name?: string | null; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<StripeSubscriptionDetails & { created?: number; customer: string }>; has_more: boolean }> };
   checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; metadata?: Record<string, string> | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
@@ -113,7 +113,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       { billingAccounts: localBillingAccounts, renewalPreferences: localPreferences, subscriptions: localSubscriptions },
       {
         customers: stripeCustomers,
-        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
+        openInvoices: stripeOpenInvoices.map((invoice) => ({ attemptCount: invoice.attempt_count, customerEmail: invoice.customer_email, customerName: invoice.customer_name, subscription: invoice.parent?.subscription_details?.subscription ?? null })),
         schedules: stripeSchedules,
         subscriptions: stripeSubscriptions,
       },
