@@ -94,17 +94,24 @@ async function handleSubscriptionDeleted(tx: Transaction, event: Stripe.Event, _
       effectiveOn: null, pendingMode: null, transitionState: 'current', updatedAt: new Date() } });
 }
 
+/** Whether a paid invoice is a membership payment for this profile: it carries the configured membership product, or a price of one of the profile's own (legacy) subscriptions.
+ * Shared with the event replay so its notion of "a payment this site should have recorded" is exactly the handler's. */
+export async function isMembershipInvoice(tx: Pick<Transaction, 'select'>, invoice: Stripe.Invoice, profileId: number): Promise<boolean> {
+  if (invoice.amount_paid !== MEMBERSHIP_FEE_CENTS || invoice.currency.toLowerCase() !== MEMBERSHIP_CURRENCY) return false;
+  const expectedProduct = stripeMembershipProductIdForServer();
+  const invoicePrices = invoice.lines.data.flatMap((line) => line.pricing?.price_details?.price ? [line.pricing.price_details.price] : []);
+  if (invoice.lines.data.some((line) => line.pricing?.price_details?.product === expectedProduct)) return true;
+  const [legacySubscription] = invoicePrices.length > 0 ? await tx.select({ id: subscriptions.id }).from(subscriptions)
+    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.priceId, invoicePrices))).limit(1) : [];
+  return Boolean(legacySubscription);
+}
+
 async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: WebhookStripeClient) {
   const invoice = event.data.object as Stripe.Invoice;
   if (invoice.amount_paid !== MEMBERSHIP_FEE_CENTS || invoice.currency.toLowerCase() !== MEMBERSHIP_CURRENCY) return;
   const profileId = await resolveProfileId(tx, resolvedCustomerId(invoice.customer));
   if (!profileId) return;
-  const expectedProduct = stripeMembershipProductIdForServer();
-  const invoicePrices = invoice.lines.data.flatMap((line) => line.pricing?.price_details?.price ? [line.pricing.price_details.price] : []);
-  const hasExpectedProduct = invoice.lines.data.some((line) => line.pricing?.price_details?.product === expectedProduct);
-  const [legacySubscription] = invoicePrices.length > 0 ? await tx.select({ id: subscriptions.id }).from(subscriptions)
-    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.priceId, invoicePrices))).limit(1) : [];
-  if (!hasExpectedProduct && !legacySubscription) return;
+  if (!await isMembershipInvoice(tx, invoice, profileId)) return;
   const paidAt = invoice.status_transitions.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : new Date();
   const [inserted] = await tx.insert(payments).values({
     amountCents: invoice.amount_paid,

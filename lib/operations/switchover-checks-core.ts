@@ -67,7 +67,7 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
     webhook.state === 'ok' ? 'An enabled endpoint for this site listens to every handled event type.'
       : webhook.state === 'unavailable' ? 'Stripe could not be read with the current key, so the endpoint could not be checked. Look in the Stripe dashboard.'
         : webhook.state === 'missing' ? 'No webhook endpoint points at this site\'s /api/stripe/webhook. Create it in the Stripe dashboard (keep it disabled until the switch).'
-          : webhook.state === 'disabled' ? 'The endpoint exists but is disabled. Enable it at the switch (docs/30 step B5).'
+          : webhook.state === 'disabled' ? 'The endpoint exists but is disabled. Enable it after the import (docs/30 step B7).'
             : `The endpoint is missing these event types: ${webhook.missingEvents.join(', ')}.`);
   add('webhook-secret', 'Webhook signing secret', input.webhookSecretPresent ? 'ok' : 'todo', input.webhookSecretPresent ? 'STRIPE_WEBHOOK_SECRET is set.' : 'STRIPE_WEBHOOK_SECRET is not set.');
 

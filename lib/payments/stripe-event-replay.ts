@@ -4,9 +4,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, payments, reconciliationFindings, stripeEvents } from '@/lib/db/schema';
-import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
 import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
-import { REPLAYABLE_EVENT_TYPES, processStripeEvent, type WebhookStripeClient } from './webhook-handlers';
+import { REPLAYABLE_EVENT_TYPES, isMembershipInvoice, processStripeEvent, type WebhookStripeClient } from './webhook-handlers';
 import {
   REPLAY_MAX_EVENTS, ReplayInputError, classifyReplayEvent, describeReplayEvent, parseReplaySince, replayConfirmationPhrase, supersededEventIds, type ReplayEventStatus,
 } from './stripe-event-replay-core';
@@ -55,17 +54,22 @@ async function statusOf(events: Stripe.Event[]): Promise<Map<string, ReplayEvent
   }
   const statuses = new Map(events.map((event) => [event.id, classifyReplayEvent(event.id, received, blocked)]));
   // A membership payment event that reached this site before the member existed (for example the webhook was enabled before the legacy import) is recorded as received
-  // but its handler found no profile and applied nothing. It still has to be replayed: when the member exists now and no payment is recorded for the invoice, treat it as
-  // consumed-but-not-applied. A payment is unique by invoice, so replaying one that was in fact applied does nothing.
-  const unapplied = events.filter((event) => event.type === 'invoice.paid' && statuses.get(event.id) === 'already_processed').flatMap((event) => {
-    const { amountCents, currency, customerId, objectId } = describeReplayEvent(event);
-    return amountCents === MEMBERSHIP_FEE_CENTS && currency?.toLowerCase() === MEMBERSHIP_CURRENCY && customerId && objectId ? [{ customerId, id: event.id, invoiceId: objectId }] : [];
+  // but its handler found no profile and applied nothing. It still has to be replayed: when the member exists now, the invoice is a membership payment by the handler's own
+  // test, and no payment is recorded for it, treat it as consumed-but-not-applied. A payment is unique by invoice, so replaying one that was in fact applied does nothing.
+  const candidates = events.filter((event) => event.type === 'invoice.paid' && statuses.get(event.id) === 'already_processed').flatMap((event) => {
+    const invoice = event.data.object as Stripe.Invoice;
+    const { customerId } = describeReplayEvent(event);
+    return customerId && invoice.id ? [{ customerId, id: event.id, invoice }] : [];
   });
-  for (let index = 0; index < unapplied.length; index += CHUNK) {
-    const chunk = unapplied.slice(index, index + CHUNK);
-    const paid = new Set((await db.select({ id: payments.externalPaymentId }).from(payments).where(inArray(payments.externalPaymentId, chunk.map((item) => item.invoiceId)))).map((row) => row.id));
-    const members = new Set((await db.select({ id: billingAccounts.externalCustomerId }).from(billingAccounts).where(inArray(billingAccounts.externalCustomerId, chunk.map((item) => item.customerId)))).map((row) => row.id));
-    for (const item of chunk) if (!paid.has(item.invoiceId) && members.has(item.customerId)) statuses.set(item.id, 'blocked_earlier');
+  for (let index = 0; index < candidates.length; index += CHUNK) {
+    const chunk = candidates.slice(index, index + CHUNK);
+    const paid = new Set((await db.select({ id: payments.externalPaymentId }).from(payments).where(inArray(payments.externalPaymentId, chunk.map((item) => item.invoice.id as string)))).map((row) => row.id));
+    const members = new Map((await db.select({ customer: billingAccounts.externalCustomerId, profileId: billingAccounts.profileId }).from(billingAccounts)
+      .where(inArray(billingAccounts.externalCustomerId, chunk.map((item) => item.customerId)))).map((row) => [row.customer, row.profileId]));
+    for (const item of chunk) {
+      const profileId = members.get(item.customerId);
+      if (profileId !== undefined && !paid.has(item.invoice.id as string) && await isMembershipInvoice(db, item.invoice, profileId)) statuses.set(item.id, 'blocked_earlier');
+    }
   }
   const superseded = supersededEventIds(events.map((event) => ({ created: event.created, customerId: describeReplayEvent(event).customerId, id: event.id, status: statuses.get(event.id) ?? 'new', type: event.type })));
   for (const id of superseded) statuses.set(id, 'superseded');
