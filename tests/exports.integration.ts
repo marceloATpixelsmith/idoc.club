@@ -168,8 +168,11 @@ test('selected report export re-fetches rows, enforces administration, and audit
   const response = await asAdministration(admin.id, () => exportSelectedReports(new Request(url)));
   assert.equal(response.status, 200);
   const body = await response.text();
-  assert.match(body, /^kind,summary,createdAt\r?\n/);
+  assert.match(body, /^type,memberFirstName,memberLastName,memberEmail,stripeId,summary,reasonForManualReview,note,detected\r?\n/);
+  assert.match(body, /Subscription status conflict/);
+  assert.match(body, new RegExp(`Test,Member,${member.email}`), 'names the involved member');
   assert.match(body, /Example mismatch/);
+  assert.match(body, /could not be applied to a membership automatically/, 'says why it needs a person');
   assert.doesNotMatch(body, /Other mismatch/);
   const [audit] = await sql<{ after_json: { resultCount: number; table: string } }[]>`select after_json from idoc.audit_log where action='admin.selected_report.exported' order by id desc limit 1`;
   assert.deepEqual(audit.after_json, { resultCount: 1, selectedCount: 1, table: 'reconciliation' });
