@@ -21,8 +21,8 @@ export interface FindingGuide {
 
 export const LIFECYCLE_NOTE: Record<FindingGuide['lifecycle'], string> = {
   replaced: 'The next daily scan replaces this list, so it disappears by itself once the problem is fixed.',
-  kept: 'Raised by a Stripe notification and kept after you fix it: the daily scan does not remove it and there is no close button yet. Note what you did and treat it as handled; a developer can clear it.',
-  mixed: 'Some of these come from the daily check and disappear once fixed; the ones raised by Stripe notifications are kept after you fix them (no close button yet), so treat those as handled once dealt with.',
+  kept: 'Raised by a Stripe notification and kept until someone closes it: the daily scan does not remove it. IDOC has already updated the registration, so after looking, select the row and use Mark handled in the table\'s selection bar.',
+  mixed: 'Some of these come from the daily check and disappear once fixed; the ones raised by Stripe notifications are kept until someone closes them.',
 };
 
 export const FINDING_GUIDE: FindingGuide[] = [
@@ -68,23 +68,26 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'status_conflict',
-    lifecycle: 'replaced',
+    lifecycle: 'mixed',
     label: 'Subscription status conflict',
     area: 'Membership',
     severity: 'check',
-    plain: "IDOC and Stripe disagree about a subscription: one says it is active and the other says it is not (or it cannot be found).",
+    plain: 'A subscription in IDOC and in Stripe do not agree. The scan fixes the ordinary mismatches itself, so what is left here needs a decision.',
     why: [
-      'Stripe changed the subscription (cancelled, past due, paused) and the update has not reached IDOC, or was blocked on purpose.',
-      'A payment arrived for a membership that an administrator had suspended or cancelled: the payment is recorded but access is deliberately not restored.',
-      "Reported as \"not found in Stripe\": the subscription ID stored here does not exist in the Stripe account being checked. On staging this is expected for sandbox test members; for an imported member it means the imported ID is wrong.",
+      'IDOC keeps its own copy of each Stripe subscription\'s status. The daily scan compares it with Stripe and, when they differ, updates IDOC to match Stripe (Stripe is authoritative for subscription state). Membership access is never changed by this: it follows the paid-through date. Those fixed mismatches never appear here; the Last run box says how many were fixed.',
+      'Still listed: Stripe uses a status IDOC cannot store, or the subscription changed while the scan was running, or the update failed. Look at the summary: it names the IDOC status and the Stripe status.',
+      'A payment arrived for a membership that an administrator suspended or the member cancelled. The payment is recorded but access is deliberately not restored. This needs a decision.',
+      'A Stripe notification was held back by the member communications and billing hold and never replayed. This needs a manual check.',
+      '"Not found in Stripe" (staging rehearsal only): the subscription ID stored here does not exist in the Stripe account being checked.',
     ],
     investigate: [
-      "Open the member (View member) and look at their Payment tab: the subscription ID, status and paid-through date.",
+      'Open the member (View member) and look at their Payment tab: the subscription ID, status and paid-through date.',
       'Look the same subscription up in Stripe and compare the status.',
     ],
     resolve: [
-      'Stripe is the authority for billing. If Stripe says cancelled or ended and IDOC says active, suspend the member or correct their paid-through date on the Members page.',
-      'If a payment came in for a suspended or cancelled member, decide whether to reinstate them (Members page) or refund the payment in Stripe.',
+      'Payment arrived for a suspended or cancelled member: either reinstate them on the Members page, or refund the payment in Stripe.',
+      'Blocked by the billing hold: once the hold is released, find the event in Stripe (Developers, Events) and correct the member by hand.',
+      'Still a plain status mismatch: check the paid-through date is right and suspend the member if they should not have access; a developer can look into why the update failed.',
       '"Not found in Stripe" for an imported member: note the member and ID and ask a developer to check the imported ID against the legacy export.',
     ],
   },
@@ -112,12 +115,15 @@ export const FINDING_GUIDE: FindingGuide[] = [
   },
   {
     kind: 'pending_schedule_conflict',
-    lifecycle: 'replaced',
+    lifecycle: 'mixed',
     label: 'Pending renewal schedule conflict',
     area: 'Membership',
     severity: 'check',
-    plain: "A member's chosen change for their next renewal (such as a different plan) is not set up correctly in Stripe, so it may not happen.",
-    why: ["The renewal change was scheduled in Stripe and the schedule has since been cancelled, completed early, or cannot be found."],
+    plain: "A member's chosen change for their next renewal (such as switching to automatic renewal) is not set up correctly in Stripe, so it may not happen.",
+    why: [
+      "A schedule that finished running is recorded as done by the scan itself, so those never appear here.",
+      "Still listed: the schedule was cancelled or cannot be found in Stripe, so the change will not happen; or setting up the schedule failed; or the member's paid-through date changed while they were setting it up.",
+    ],
     investigate: [
       'Open the member and check what renewal option they chose.',
       "In Stripe, open the subscription schedule ID in the finding and see its status.",
@@ -144,7 +150,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
       'In Stripe, open the payment (payment ID or Checkout session) and compare amount, currency and status.',
     ],
     resolve: [
-      'Stripe says paid, registration unpaid: record the payment on the registration with the Stripe Payment ID as evidence.',
+      'Stripe says paid but the amount or currency differs, or the registration was cancelled: decide whether to refund, and record the outcome on the registration.',
       'Registration says paid, Stripe says it failed: contact the registrant; correct the registration once you know the truth.',
       'Wrong amount: decide whether to collect the difference or refund the excess in Stripe, then note it on the registration.',
     ],

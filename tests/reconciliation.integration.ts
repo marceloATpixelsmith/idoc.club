@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { getLastReconciliationRun, listReconciliationFindings } from '../lib/membership/data-access.ts';
-import { deleteUnlinkedCustomers } from '../lib/payments/reconciliation-remediation.ts';
+import { deleteUnlinkedCustomers, markFindingsHandled } from '../lib/payments/reconciliation-remediation.ts';
 import { runReconciliationScan, type ReconciliationStripeClient } from '../lib/payments/reconciliation-scan.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { GET as reconciliationScanCron } from '../app/api/cron/reconciliation-scan/route.ts';
@@ -145,7 +145,7 @@ test('a status_conflict finding resolves the member profile via the local subscr
   await sql`insert into idoc.subscriptions(profile_id, external_subscription_id, price_id, status, current_period_end, cancel_at_period_end)
     values (${profile.id}, 'sub_conflict', 'price_fixture', 'active', current_date + 30, false)`;
 
-  await runReconciliationScan(fakeStripeClient({ subscriptions: [{ customer: 'cus_x', id: 'sub_conflict', status: 'canceled' }] }));
+  await runReconciliationScan(fakeStripeClient({ subscriptions: [{ customer: 'cus_x', id: 'sub_conflict', status: 'paused' }] }));
 
   const findings = await asAdmin(admin.id, () => listReconciliationFindings());
   assert.equal(findings.length, 1);
@@ -345,4 +345,82 @@ test('cleanup of selected customers acts only on those that are current findings
   assert.deepEqual(deleted, ['cus_a']);
   const remaining = await sql`select external_customer_id as id from idoc.reconciliation_findings where kind = 'unlinked_customer'`;
   assert.deepEqual(remaining.map((row) => row.id), ['cus_b']);
+});
+
+// --- Automatic fixes run before findings are recorded --------------------------------------------------------------------------
+
+async function seedSubscription(profileId: number, id: string, status: string) {
+  await sql`insert into idoc.subscriptions(profile_id, external_subscription_id, price_id, status, current_period_end, cancel_at_period_end)
+    values (${profileId}, ${id}, 'price_fixture', ${status}, current_date + 30, false)`;
+}
+
+test('a subscription whose saved status differs from Stripe is updated to match Stripe before findings are recorded', async () => {
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await seedSubscription(profile.id, 'sub_stale', 'active');
+  const result = await runReconciliationScan(fakeStripeClient({ subscriptions: [{ customer: 'cus_x', id: 'sub_stale', status: 'canceled' }] }));
+  assert.equal(result.findingsCount, 0, 'the fixed conflict must not be reported');
+  const [row] = await sql`select status from idoc.subscriptions where external_subscription_id = 'sub_stale'`;
+  assert.equal(row.status, 'canceled');
+  const [preference] = await sql`select current_mode as "currentMode" from idoc.renewal_preferences where profile_id = ${profile.id}`;
+  assert.equal(preference.currentMode, 'non_recurring');
+  assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.auto_subscription_status_synced' and entity_id = 'sub_stale'`).length, 1);
+  assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.auto_fix_summary'`).length, 1);
+});
+
+test('a status the local table cannot hold is reported, not forced', async () => {
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await seedSubscription(profile.id, 'sub_paused', 'active');
+  const result = await runReconciliationScan(fakeStripeClient({ subscriptions: [{ customer: 'cus_x', id: 'sub_paused', status: 'paused' }] }));
+  assert.equal(result.findingsCount, 1);
+  const [row] = await sql`select status from idoc.subscriptions where external_subscription_id = 'sub_paused'`;
+  assert.equal(row.status, 'active');
+});
+
+test('a renewal change whose Stripe schedule has finished is marked complete; one with a cancelled schedule is reported', async () => {
+  const done = await createProfile((await createUser()).id);
+  const cancelled = await createProfile((await createUser()).id);
+  await seedSubscription(done.id, 'sub_done', 'active');
+  await seedSubscription(cancelled.id, 'sub_cancelled_schedule', 'active');
+  for (const [profile, schedule] of [[done, 'sub_sched_done'], [cancelled, 'sub_sched_cancelled']] as const) {
+    await sql`insert into idoc.renewal_preferences(profile_id, current_mode, pending_mode, effective_on, expected_charge_cents, transition_state, external_subscription_schedule_id)
+      values (${profile.id}, 'non_recurring', 'recurring', current_date + 10, 8000, 'pending_activation', ${schedule})`;
+  }
+  const client = fakeStripeClient({ subscriptions: [{ customer: 'cus_x', id: 'sub_done', status: 'active' }, { customer: 'cus_y', id: 'sub_cancelled_schedule', status: 'active' }] });
+  client.subscriptionSchedules = { list: async () => ({ data: [{ id: 'sub_sched_done', status: 'completed' }, { id: 'sub_sched_cancelled', status: 'canceled' }], has_more: false }) };
+  const result = await runReconciliationScan(client);
+  assert.equal(result.findingsCount, 1);
+  const [doneRow] = await sql`select current_mode as mode, transition_state as state from idoc.renewal_preferences where profile_id = ${done.id}`;
+  assert.deepEqual(doneRow, { mode: 'recurring', state: 'current' });
+  const [cancelledRow] = await sql`select transition_state as state from idoc.renewal_preferences where profile_id = ${cancelled.id}`;
+  assert.equal(cancelledRow.state, 'pending_activation');
+  const findings = await sql`select kind from idoc.reconciliation_findings`;
+  assert.deepEqual(findings.map((row) => row.kind), ['pending_schedule_conflict']);
+});
+
+test('findings raised by Stripe notifications survive a scan; the scan replaces only its own', async () => {
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await sql`insert into idoc.reconciliation_findings(kind, profile_id, summary, details) values
+    ('status_conflict', ${profile.id}, 'Stripe reported a successful renewal payment for a membership that is currently suspended or canceled', '{"invoiceId":"in_1"}'),
+    ('status_conflict', ${profile.id}, 'scan-raised and stale', '{"kind":"status_conflict","externalSubscriptionId":"sub_gone"}')`;
+  await runReconciliationScan(fakeStripeClient({}));
+  const left = await sql`select summary from idoc.reconciliation_findings`;
+  assert.equal(left.length, 1);
+  assert.match(left[0].summary, /successful renewal payment/);
+});
+
+test('only notification-raised notices can be marked handled, and each closure is audited', async () => {
+  const admin = await adminUser();
+  const rows = await sql`insert into idoc.reconciliation_findings(kind, summary, details) values
+    ('refund_conflict', 'refund notice', '{"refundId":"re_1"}'),
+    ('status_conflict', 'notification status', '{"invoiceId":"in_1"}'),
+    ('status_conflict', 'scan status', '{"kind":"status_conflict"}'),
+    ('unlinked_customer', 'unlinked', '{"kind":"unlinked_customer"}') returning id`;
+  const closed = await markFindingsHandled(admin.id, rows.map((row) => row.id));
+  assert.equal(closed, 2);
+  const left = await sql`select summary from idoc.reconciliation_findings order by id`;
+  assert.deepEqual(left.map((row) => row.summary), ['scan status', 'unlinked']);
+  assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.finding_marked_handled'`).length, 2);
 });
