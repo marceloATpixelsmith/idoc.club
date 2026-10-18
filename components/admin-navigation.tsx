@@ -38,6 +38,7 @@ const SHARED_ITEMS = [
 const SUPER_ADMIN_ITEMS = [
   { href: '/admin/operations/data-promotion', icon: ArrowUpFromLine, label: 'Data promotion' },
   { href: '/admin/operations/backups', icon: DatabaseBackup, label: 'Backups & restore' },
+  { href: '/admin/operations/event-replay', icon: WalletCards, label: 'Replay Stripe events' },
   { href: '/admin/operations/legacy-import', icon: FileDown, label: 'Legacy import (temporary)' },
   { href: '/admin/organization', icon: Building2, label: 'Organization settings' },
   { href: '/admin/support/defaults', icon: Settings, label: 'Support defaults' },
