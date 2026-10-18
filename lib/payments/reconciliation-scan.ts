@@ -21,7 +21,7 @@ export type ReconciliationStripeClient = {
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; customer?: string | null; customer_email?: string | null; customer_name?: string | null; id: string; next_payment_attempt?: number | null; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
   subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<StripeSubscriptionDetails & { created?: number; customer: string }>; has_more: boolean }> };
   /** Used only to read why the latest payment for a repeated failure was declined. */
-  charges?: { list: (params: { customer: string; limit: number }) => Promise<{ data: Array<{ failure_code?: string | null; failure_message?: string | null; outcome?: { seller_message?: string | null } | null }> }> };
+  charges?: { list: (params: { customer: string; limit: number }) => Promise<{ data: Array<{ failure_code?: string | null; failure_message?: string | null; invoice?: string | { id: string } | null; outcome?: { seller_message?: string | null } | null; status?: string }> }> };
   checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; metadata?: Record<string, string> | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
@@ -125,14 +125,16 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     );
     const subjectOf = (finding: ReconciliationFinding): string | null => ('externalSubscriptionId' in finding ? finding.externalSubscriptionId : 'externalCustomerId' in finding ? finding.externalCustomerId : null);
     // A repeated failure is for a person to follow up, so record why the card was declined. Best effort and bounded: one lookup per failing customer.
-    const customerBySubscription = new Map(stripeOpenInvoices.flatMap((invoice) => (invoice.parent?.subscription_details?.subscription && invoice.customer ? [[invoice.parent.subscription_details.subscription, invoice.customer] as const] : [])));
+    const invoiceBySubscription = new Map(stripeOpenInvoices.flatMap((invoice) => (invoice.parent?.subscription_details?.subscription && invoice.customer ? [[invoice.parent.subscription_details.subscription, { customer: invoice.customer, id: invoice.id }] as const] : [])));
     let declineLookups = 0;
     for (const finding of rawFindings) {
-      const customerId = finding.kind === 'repeated_failure' ? customerBySubscription.get(finding.externalSubscriptionId) : undefined;
-      if (!customerId || !stripe.charges || declineLookups >= DECLINE_LOOKUP_LIMIT) continue;
+      const invoice = finding.kind === 'repeated_failure' ? invoiceBySubscription.get(finding.externalSubscriptionId) : undefined;
+      if (!invoice || !stripe.charges || declineLookups >= DECLINE_LOOKUP_LIMIT) continue;
       declineLookups += 1;
       try {
-        const charge = (await stripe.charges.list({ customer: customerId, limit: 5 })).data.find((candidate) => candidate.failure_message || candidate.outcome?.seller_message || candidate.failure_code);
+        // Only a charge that actually failed counts (a successful charge's seller message is not a decline reason); prefer the one for the failing invoice itself.
+        const failed = (await stripe.charges.list({ customer: invoice.customer, limit: 20 })).data.filter((candidate) => candidate.status === 'failed' || candidate.failure_message || candidate.failure_code);
+        const charge = failed.find((candidate) => (typeof candidate.invoice === 'string' ? candidate.invoice : candidate.invoice?.id) === invoice.id) ?? failed[0];
         const reason = charge?.failure_message ?? charge?.outcome?.seller_message ?? charge?.failure_code;
         if (reason) (finding as { declineReason?: string }).declineReason = reason.slice(0, 200);
       } catch { /* the reason is a convenience; the finding stands without it */ }

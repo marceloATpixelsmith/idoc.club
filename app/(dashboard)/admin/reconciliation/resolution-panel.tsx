@@ -23,7 +23,9 @@ export function ResolutionPanel({ summary }: { summary: ResolutionSummary }) {
   const kinds = (Object.keys(LABEL) as ActionKind[]).filter((kind) => (['applied', 'simulated', 'failed'] as ActionOutcome[]).some((outcome) => (counts[`${kind}:${outcome}`] ?? 0) > 0));
   const simulated = summary.stripeMode === 'simulate';
   if (kinds.length === 0 && !(summary.paused?.length)) {
-    return <p className="mt-1 text-sm text-muted-foreground">Nothing needed resolving automatically on that run.</p>;
+    return <p className="mt-1 text-sm text-muted-foreground">
+      Nothing needed resolving automatically on that run.{summary.simulatedBecause === 'safeguard' ? ' Changes to Stripe are switched off until the import-verified safeguard (RECONCILIATION_LIVE_STRIPE_ACTIONS) is enabled.' : ''}
+    </p>;
   }
   return (
     <div className="mt-3 border-t pt-3">

@@ -578,12 +578,16 @@ test('Super Admins are emailed a counts-only summary after a scheduled scan, and
     process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'false';
     process.env.BREVO_API_KEY = 'integration-only-brevo-key';
     process.env.BREVO_FROM_EMAIL = 'accounts@example.test';
+    await sql`insert into idoc.audit_log(action,entity_type,entity_id,after_json) values ('reconciliation.scan_resolution_summary','reconciliation','scan',${JSON.stringify({ counts: { 'orphan_subscription_canceled:simulated': 2, 'subscription_status_synced:applied': 3 }, simulatedBecause: 'safeguard', stripeMode: 'simulate' })}::jsonb)`;
     assert.equal(await notifySuperAdminsOfScan({ ok: true }), 1);
     assert.equal(await notifySuperAdminsOfScan({ ok: true }), 0, 'the other scheduler\'s copy of the same run does not email again');
     assert.equal(sent.length, 1);
     assert.deepEqual(sent.map((message) => message.to), [superAdmin.email], 'revoked and deleted Super Admins are not emailed');
     assert.match(sent[0]?.subject ?? '', /1 item\(s\) need follow-up/);
     assert.match(sent[0]?.html ?? '', /Repeated payment failures/);
+    assert.match(sent[0]?.html ?? '', /Subscription status copied from Stripe: <b>3<\/b>/, 'applied actions are counted');
+    assert.match(sent[0]?.html ?? '', /Orphaned Stripe subscriptions cancelled \(simulated\): <b>2<\/b>/);
+    assert.match(sent[0]?.html ?? '', /RECONCILIATION_LIVE_STRIPE_ACTIONS/, 'the safeguard state is reported');
     assert.doesNotMatch(sent[0]?.html ?? '', new RegExp(memberUser.email), 'counts only, no member details');
     assert.equal(await notifySuperAdminsOfScan({ error: 'boom', ok: false }), 1);
     assert.match(sent[1]?.subject ?? '', /FAILED/);
@@ -601,11 +605,15 @@ test('a repeated failure records why the card was declined and when Stripe retri
       customers: [{ created: 1, email: 'legacy@example.test', id: 'cus_legacy', name: 'Legacy Member' }],
       invoices: [{ ...invoiceFixture('in_declined', 5, 'sub_legacy'), customer: 'cus_legacy', customer_email: 'legacy@example.test', customer_name: 'Legacy Member', next_payment_attempt: Math.floor(Date.UTC(2099, 0, 5) / 1000) }],
     }),
-    charges: { list: async () => ({ data: [{ failure_code: null, failure_message: null, outcome: null }, { failure_code: 'card_declined', failure_message: 'Your card was declined.', outcome: null }] }) },
+    charges: { list: async () => ({ data: [
+      { failure_code: null, failure_message: null, outcome: { seller_message: 'Payment complete.' }, status: 'succeeded' },
+      { failure_code: 'expired_card', failure_message: 'Your card has expired.', invoice: 'in_other', outcome: null, status: 'failed' },
+      { failure_code: 'card_declined', failure_message: 'Your card was declined.', invoice: 'in_declined', outcome: null, status: 'failed' },
+    ] }) },
   } as unknown as ReconciliationStripeClient;
   await runReconciliationScan(stripe, { now: new Date('2026-01-01T00:00:00Z'), stripeMode: 'simulate' });
   const [failure] = await sql<{ details: Record<string, unknown>; summary: string }[]>`select details, summary from idoc.reconciliation_findings where kind='repeated_failure'`;
-  assert.equal(failure.details.declineReason, 'Your card was declined.');
+  assert.equal(failure.details.declineReason, 'Your card was declined.', 'a successful charge is skipped and the failed charge for this invoice wins');
   assert.equal(failure.details.nextRetryAt, '2099-01-05T00:00:00.000Z');
   assert.match(failure.summary, /Last decline: Your card was declined\. Next retry: 2099-01-05\./);
   // The customer is only a day old at most in this fixture's clock, so it stays listed with its contact details.
