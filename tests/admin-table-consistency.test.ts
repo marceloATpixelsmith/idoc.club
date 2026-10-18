@@ -119,3 +119,13 @@ test('unlinked Stripe customers can be deleted from the table selection bar and 
   assert.match(bulk, /downloadCsv\(state\.csv\)/);
   assert.match(bulk, /disabled=\{pending \|\| mixedSelection\}/);
 });
+
+test('notification-raised notices can be closed from the selection bar only when the server marks them closable', () => {
+  const handled = readFileSync('app/(dashboard)/admin/reconciliation/mark-findings-handled.tsx', 'utf8');
+  assert.match(handled, /row\.closable === 'yes'/);
+  assert.match(handled, /event\.preventDefault\(\)/);
+  assert.match(handled, /mixedSelection/);
+  const page = readFileSync('app/(dashboard)/admin/reconciliation/page.tsx', 'utf8');
+  assert.match(page, /closable: isClosableFinding\(finding\)/);
+  assert.match(page, /handledAction=\{markHandled\}/);
+});

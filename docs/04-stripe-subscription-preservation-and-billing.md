@@ -136,6 +136,16 @@ IDOC's database is the system of record, so the reconciliation scan is no longer
 
 Seminar findings are tied to seminars only through a real registration: a Stripe refund or dispute whose PaymentIntent does not belong to a seminar registration (legacy site payments, payment links, other Dashboard activity) is ignored by the webhook handlers and is not recorded as a "Seminar" finding. The scan also removes older refund, dispute and chargeback findings whose PaymentIntent matches no registration.
 
+## 9.2 Automatic fixes before reporting
+
+The scan fixes the cases with a single correct answer **before** it records its findings, so the report lists only what still needs a person and nobody has to rescan. Each fix is conditional on what the scan read (it is skipped if the row changed meanwhile), is audit-logged, and never changes membership entitlement. They do not run in staging rehearsal mode, which compares live Stripe with unrelated test data. The Last run box on `/admin/reconciliation` states how many were fixed (audit action `reconciliation.auto_fix_summary`).
+
+- **Subscription status.** IDOC's saved copy of a subscription (status, period end, cancel-at-period-end flag, price) is updated to match Stripe, which is authoritative for subscription state, exactly as the `customer.subscription.updated`/`deleted` handlers would have done; a cancelled subscription also returns the renewal preference to non-recurring. A Stripe status the table cannot store (for example `paused`) is reported instead. Audit action `reconciliation.auto_subscription_status_synced`.
+- **Renewal schedule.** A pending renewal change whose Stripe schedule has finished running (completed or released), with an open subscription in IDOC, is marked complete. A cancelled or missing schedule is reported, because the member's change will not happen and they may need telling. Audit action `reconciliation.auto_renewal_schedule_completed`.
+- **Seminar payment.** A registration still awaiting payment whose own stored Checkout and PaymentIntent Stripe confirms paid in full, in the registration's expected amount and in EUR, is recorded as paid and its confirmation is queued with the same dedupe key as the checkout notification, so the two can never double-send. Any other mismatch (amount, currency, a cancelled registration, an unsuccessful payment recorded as paid) is reported. Audit action `reconciliation.auto_seminar_payment_recorded`.
+
+Findings raised by Stripe notifications (refund, dispute and chargeback notices, a payment for a suspended or cancelled membership, a webhook blocked by the launch hold, a failed schedule setup) are not replaced by the scan: they stay until an administrator closes them with **Mark handled** in the table's selection bar (audit action `reconciliation.finding_marked_handled`). The action is offered only while every selected row is such a notice; the server re-checks each finding and never closes a finding the scan owns.
+
 # 10. Official references
 
 - Stripe: Using webhooks with subscriptions - [<u>https://docs.stripe.com/billing/subscriptions/webhooks</u>](https://docs.stripe.com/billing/subscriptions/webhooks)

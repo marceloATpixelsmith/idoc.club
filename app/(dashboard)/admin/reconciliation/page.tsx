@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
-import { deleteUnlinkedCustomers } from '@/lib/payments/reconciliation-remediation';
+import { deleteUnlinkedCustomers, isClosableFinding, markFindingsHandled } from '@/lib/payments/reconciliation-remediation';
 import { remediationAllowed } from '@/lib/payments/remediation-gate';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
 import { stripeIdForFinding, summarizeFindings } from '@/lib/payments/reconciliation-guide';
@@ -14,6 +15,7 @@ import { runReconciliationScan } from '@/lib/payments/reconciliation-scan';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { ReconciliationTabs } from './reconciliation-tabs';
 import { CleanupCustomersForm, type CleanupCustomersState } from './cleanup-customers-form';
+import type { MarkHandledState } from './mark-findings-handled';
 import { ReconciliationFindingsTable } from './reconciliation-findings-table';
 import { RunScanForm, type RunScanState } from './run-scan-form';
 
@@ -77,10 +79,37 @@ async function cleanupCustomers(_state: CleanupCustomersState, formData: FormDat
   }
 }
 
+async function markHandled(_state: MarkHandledState, formData: FormData): Promise<MarkHandledState> {
+  'use server';
+  try {
+    await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
+    const actor = await requireAccountAccess('administration');
+    requireAdministrator(actor);
+    const ids = formData.getAll('findingId').flatMap((value) => (typeof value === 'string' && /^\d+$/.test(value) ? [Number(value)] : []));
+    if (ids.length === 0) return { error: 'No notices were selected.' };
+    const closed = await markFindingsHandled(actor.id, ids);
+    revalidatePath(PATH);
+    return { success: `Marked ${closed.toLocaleString('en-GB')} notice(s) handled.` };
+  } catch (error) {
+    if (error instanceof AuthorizationError || (error instanceof Error && error.name === 'CsrfError')) return { error: error.message };
+    return { error: 'The notices could not be marked handled.' };
+  }
+}
+
 export default async function AdminReconciliationPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const [lastRun, findings] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings()]);
+  // What the last scan fixed by itself before reporting (the summary is written just after the run row, so allow a short window either side).
+  const [autoFix] = lastRun ? await db.select({ afterJson: auditLog.afterJson, createdAt: auditLog.createdAt }).from(auditLog)
+    .where(eq(auditLog.action, 'reconciliation.auto_fix_summary')).orderBy(desc(auditLog.createdAt)).limit(1) : [];
+  const fixedCounts = autoFix && lastRun && Math.abs(autoFix.createdAt.getTime() - lastRun.ranAt.getTime()) < 120_000
+    ? autoFix.afterJson as { schedulesSynced?: number; seminarPaymentsRecorded?: number; subscriptionsSynced?: number } : null;
+  const fixedParts = fixedCounts ? [
+    fixedCounts.subscriptionsSynced ? `${fixedCounts.subscriptionsSynced} subscription status${fixedCounts.subscriptionsSynced === 1 ? '' : 'es'} updated to match Stripe` : '',
+    fixedCounts.schedulesSynced ? `${fixedCounts.schedulesSynced} completed renewal change${fixedCounts.schedulesSynced === 1 ? '' : 's'} recorded` : '',
+    fixedCounts.seminarPaymentsRecorded ? `${fixedCounts.seminarPaymentsRecorded} seminar payment${fixedCounts.seminarPaymentsRecorded === 1 ? '' : 's'} recorded` : '',
+  ].filter(Boolean) : [];
   let isSuperAdmin = true;
   try { requireSuperAdmin(actor); } catch { isSuperAdmin = false; }
   let cleanupAvailable = false;
@@ -104,6 +133,7 @@ export default async function AdminReconciliationPage() {
           <p className="mt-1 text-sm text-foreground">Status: {lastRun.status === 'completed' ? 'Completed' : 'Failed'}</p>
           {lastRun.status === 'failed' && <p className="mt-1 text-sm text-red-400">Error: {lastRun.errorMessage}</p>}
           <p className="mt-1 text-sm text-foreground">Findings on that run: {lastRun.findingsCount}</p>
+          {fixedParts.length > 0 ? <p className="mt-1 text-sm text-emerald-200" role="status">Fixed automatically before reporting: {fixedParts.join('; ')}. The findings below are only what still needs a person.</p> : null}
         </>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">No reconciliation run has completed yet.</p>
@@ -139,11 +169,12 @@ export default async function AdminReconciliationPage() {
         findingsTable={
           <ReconciliationFindingsTable
             cleanupAction={cleanupAvailable ? cleanupCustomers : undefined}
+            handledAction={markHandled}
             rows={findings.map((finding) => ({
               id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'missing_refund', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: KIND_LABELS[finding.kind] ?? finding.kind,
               summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',
               link: finding.profileId ? `/admin/members?profileId=${finding.profileId}` : undefined,
-              detected: finding.createdAt.toISOString(),
+              detected: finding.createdAt.toISOString(), closable: isClosableFinding(finding) ? 'yes' : 'no',
             }))}
           />
         }

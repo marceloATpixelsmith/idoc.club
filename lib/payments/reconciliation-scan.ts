@@ -1,11 +1,12 @@
 import 'server-only';
 
 import { db } from '@/lib/db/drizzle';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { billingAccounts, reconciliationFindings, reconciliationRuns, renewalPreferences, seminarRegistrations, subscriptions } from '@/lib/db/schema';
 import { getStripeServerClient } from './stripe-client';
 import { getRehearsalReadClient } from './rehearsal-read-client';
-import { computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
+import { checkoutBelongsToRegistration, computeReconciliationFindings, summarizeFinding, type ReconciliationFinding } from './reconciliation';
+import { recordAutoFixSummary, recordPaidSeminarRegistration, syncFinishedSchedules, syncSubscriptionStatuses, type AutoFixSummary, type StripeSubscriptionDetails } from './reconciliation-autofix';
 import { cancelOrphanedSubscriptions, type RemediationStripeClient } from './reconciliation-remediation';
 import { remediationAllowed } from './remediation-gate';
 
@@ -19,8 +20,8 @@ export type ReconciliationStripeClient = {
   // to that real shape rather than a flat field, so a future SDK/API-version bump can't silently
   // regress this back to reading a field that no longer exists.
   invoices: { list: (params: { limit: number; starting_after?: string; status: 'open' }) => Promise<{ data: Array<{ attempt_count: number; id: string; parent: { subscription_details: { subscription: string } | null } | null }>; has_more: boolean }> };
-  subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<{ created?: number; customer: string; id: string; status: string }>; has_more: boolean }> };
-  checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null }> } };
+  subscriptions: { list: (params: { limit: number; starting_after?: string; status: 'all' }) => Promise<{ data: Array<StripeSubscriptionDetails & { created?: number; customer: string }>; has_more: boolean }> };
+  checkout?: { sessions: { retrieve: (id: string) => Promise<{ id: string; payment_status: string; status: string | null; payment_intent: string | { id: string } | null; amount_total: number | null; currency: string | null; customer?: string | { id: string } | null; metadata?: Record<string, string> | null }> } };
   paymentIntents?: { retrieve: (id: string) => Promise<{ id: string; status: string; amount_received: number; currency: string }> };
   subscriptionSchedules?: { list: (params: { limit: number; starting_after?: string }) => Promise<{ data: Array<{ id: string; status: string }>; has_more: boolean }> };
 };
@@ -88,12 +89,15 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       id: seminarRegistrations.id,
       profileId: seminarRegistrations.profileId,
       paymentStatus: seminarRegistrations.paymentStatus,
+      registrationStatus: seminarRegistrations.registrationStatus,
+      seminarId: seminarRegistrations.seminarId,
+      customerId: billingAccounts.externalCustomerId,
       stripeCheckoutSessionId: seminarRegistrations.stripeCheckoutSessionId,
       stripePaymentIntentId: seminarRegistrations.stripePaymentIntentId,
       expectedAmountCents: seminarRegistrations.expectedAmountCents,
       currency: seminarRegistrations.currency,
       checkoutStatus: seminarRegistrations.checkoutStatus,
-    }).from(seminarRegistrations).where(sql`${seminarRegistrations.paymentMethodCanonicalId} = 'online_stripe' and (${seminarRegistrations.stripeCheckoutSessionId} is not null or ${seminarRegistrations.stripePaymentIntentId} is not null)`);
+    }).from(seminarRegistrations).leftJoin(billingAccounts, eq(billingAccounts.profileId, seminarRegistrations.profileId)).where(sql`${seminarRegistrations.paymentMethodCanonicalId} = 'online_stripe' and (${seminarRegistrations.stripeCheckoutSessionId} is not null or ${seminarRegistrations.stripePaymentIntentId} is not null)`);
     const [stripeCustomers, stripeSubscriptions, stripeOpenInvoices, stripeSchedules] = await Promise.all([
       paginate((params) => stripe.customers.list(params)),
       paginate((params) => stripe.subscriptions.list({ ...params, status: 'all' })),
@@ -112,6 +116,20 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       undefined,
       { reportLocalMissingInStripe: Boolean(rehearsal) },
     );
+
+    // Fix what has a single correct answer BEFORE anything is recorded, so the report that follows lists only what still needs a person
+    // and nobody has to rescan. Rehearsal compares live Stripe with unrelated test data, so nothing is "fixed" from it.
+    const autoFix: AutoFixSummary = { schedulesSynced: 0, seminarPaymentsRecorded: 0, subscriptionsSynced: 0 };
+    if (!rehearsal) {
+      const synced = new Set(await syncSubscriptionStatuses(findings, stripeSubscriptions));
+      const finished = new Set(await syncFinishedSchedules(findings));
+      autoFix.subscriptionsSynced = synced.size;
+      autoFix.schedulesSynced = finished.size;
+      for (let index = findings.length - 1; index >= 0; index -= 1) {
+        const finding = findings[index];
+        if ((finding.kind === 'status_conflict' && synced.has(finding.externalSubscriptionId)) || (finding.kind === 'pending_schedule_conflict' && finished.has(finding.externalSubscriptionId))) findings.splice(index, 1);
+      }
+    }
 
     // IDOC's database is the system of record, so an open Stripe subscription it has no record of is cancelled rather than
     // left able to charge someone who was removed. Only in production against live Stripe, and with the guards in
@@ -159,6 +177,20 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
         mismatches.push('Stripe payment currency differs from the registration currency');
       }
       if (!mismatches.length) continue;
+      // The one fully predictable case: Stripe confirms this registration's own Checkout was paid in full, in the expected amount and currency, and
+      // nothing else is wrong. Record it (as the checkout notification would have) instead of reporting it.
+      const settled = intent?.amount_received ?? session?.amount_total;
+      if (mismatches.length === 1 && isPaid && localAwaitingPayment && registration.registrationStatus === 'registered' && intentId
+        && registration.expectedAmountCents !== null && settled === registration.expectedAmountCents && intent?.status === 'succeeded'
+        && session && checkoutBelongsToRegistration(session, registration)) {
+        try {
+          if (await recordPaidSeminarRegistration({ amountCents: registration.expectedAmountCents, checkoutSessionId: session?.id ?? null,
+            deliveryOwner: session?.metadata?.deliveryOwner, paymentIntentId: intentId, registrationId: registration.id })) {
+            autoFix.seminarPaymentsRecorded += 1;
+            continue;
+          }
+        } catch { /* fall through: report it for a person */ }
+      }
       seminarFindings.push({
         kind: 'seminar_payment_conflict',
         profileId: registration.profileId,
@@ -170,8 +202,9 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
     await db.transaction(async (tx) => {
       // Rehearsal skips the seminar checks, so it must also leave the previous seminar findings in place.
       await tx.delete(reconciliationFindings).where(rehearsal
-        ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict')`
-        : sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+        ? sql`kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)`
+        : sql`(kind not in ('refund_conflict','missing_refund','dispute','chargeback','seminar_payment_conflict') and not (kind in ('status_conflict','pending_schedule_conflict') and details ->> 'kind' is null)) or (kind = 'seminar_payment_conflict' and details ->> 'source' = 'daily_seminar_scan')`);
+      // Findings raised by Stripe notifications (no `kind` inside details) stay until a person closes them; the scan replaces only its own.
       // Refunds and disputes are kept as seminar evidence only when they belong to a real seminar registration. Earlier versions also
       // recorded refunds Stripe sent for unrelated payments (for example the legacy site) as "Seminar" conflicts; remove those.
       await tx.delete(reconciliationFindings).where(sql`kind in ('refund_conflict','dispute','chargeback') and details ->> 'paymentIntentId' is not null and not exists (select 1 from ${seminarRegistrations} where ${seminarRegistrations.stripePaymentIntentId} = details ->> 'paymentIntentId')`);
@@ -179,6 +212,7 @@ export async function runReconciliationScan(testStripeClient?: ReconciliationStr
       if (seminarFindings.length > 0) await tx.insert(reconciliationFindings).values(seminarFindings);
       await tx.insert(reconciliationRuns).values({ findingsCount: findings.length + seminarFindings.length, status: 'completed' });
     });
+    await recordAutoFixSummary(autoFix).catch(() => undefined);
     return { findingsCount: findings.length + seminarFindings.length };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown reconciliation error.';
