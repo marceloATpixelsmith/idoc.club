@@ -32,4 +32,4 @@ Single linear checklist for the day production replaces the WordPress site on `i
 - After B4: point DNS back at WordPress (TTL bounds the delay). Members created on the new site in the interim would need a manual export.
 - After B6: the import is all-or-nothing; a failed import writes nothing. A completed import cannot be re-run as a delta (already-imported members are skipped).
 
-Open items for later: wizard status checks and a guided page for this sequence (see docs/08).
+**Status page.** `/admin/operations/switchover` (Super Admin only, read-only) shows the state of everything above for the environment you are viewing: migrations applied, test data present, Stripe key mode, webhook endpoint (enabled, all handled event types), the three domain settings, the import switch and key, the launch hold and the live-actions safeguard. Settings are read by presence and domain only, never value. Reload it after each step; settings change only after a redeploy.
