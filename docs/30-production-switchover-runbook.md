@@ -15,7 +15,7 @@ Single linear checklist for the day production replaces the WordPress site on `i
 ## B. Switchover day, in this order
 
 1. **Freeze WordPress.** Enable the maintenance message on the old site so no one signs up or pays between the export and the DNS change.
-2. **Export.** In phpMyAdmin export the WordPress users tables and the MemberPress tables as SQL. Note the UTC time of the export; it is the "since" time for event replay.
+2. **Export.** In phpMyAdmin export the WordPress users tables and the MemberPress tables as SQL. Note the date and time you start the export, in your own local time; it is the "since" time for event replay (the replay page takes local time and shows the UTC equivalent itself, so no conversion is needed).
 3. **Switch production to the domain.** Set `BASE_URL`, `GOOGLE_OAUTH_REDIRECT_URI` and `QSTASH_CALLBACK_BASE_URL` to `https://idoc.club` (production scope), confirm production already holds the live-mode `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (from the live webhook endpoint) and live membership Product/Price values (the runtime rejects a test key once the base URL is `https://idoc.club`; staging must keep its own test values), set `LEGACY_IMPORT_ENABLED=true` and a temporary restricted read-only `LEGACY_STRIPE_SECRET_KEY` (production scope), and redeploy production.
 4. **DNS.** At GoDaddy point the apex A records and the `www` CNAME to the values Vercel shows for the project. Wait until Vercel shows both domains as valid and `https://idoc.club` serves the new site.
 5. **Enable the live webhook endpoint** in Stripe. Events delivered from now on are consumed by the launch hold (recorded, not applied); they are replayed in step B8.
