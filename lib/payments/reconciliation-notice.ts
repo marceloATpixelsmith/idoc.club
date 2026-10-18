@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { getDatabaseSchemaName } from '@/lib/db/schema-name';
 import { applicationRoles, auditLog, reconciliationFindings, users } from '@/lib/db/schema';
@@ -10,6 +10,8 @@ import { logWarn } from '@/lib/observability/logger';
 import { RECONCILIATION_KIND_LABELS } from './reconciliation-report';
 
 const SEND_TIMEOUT_MS = 5_000;
+/** A second invocation within this window is the other scheduler's copy of the same daily run. */
+const NOTICE_DEDUPE_MS = 30 * 60 * 1000;
 const ENVIRONMENT_LABELS: Record<string, string> = { idoc: 'Development', idoc_staging: 'Staging', idoc_production: 'Production' };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -26,8 +28,23 @@ const ACTION_LABELS: Record<string, string> = {
 async function superAdminEmails(): Promise<string[]> {
   const rows = await db.select({ email: users.email, emailDisplay: users.emailDisplay }).from(applicationRoles)
     .innerJoin(users, eq(users.id, applicationRoles.userId))
-    .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt)));
+    .where(and(eq(applicationRoles.role, 'super_admin'), isNull(applicationRoles.revokedAt), isNull(users.deletedAt), inArray(users.accountState, ['active', 'onboarding'])));
   return [...new Set(rows.map((row) => (row.emailDisplay ?? row.email).trim()).filter(Boolean))];
+}
+
+/** During the QStash cutover the same scan can be triggered by both schedulers a moment apart. Sending happens under an advisory lock, and a sent notice leaves an
+ * audit row, so whichever invocation gets the lock first sends and the other finds the row and skips. Nothing is recorded when nothing was delivered (hold, no mail
+ * configuration, provider error), so a later invocation can still send. */
+async function sendOnce(ok: boolean, send: () => Promise<number>): Promise<number> {
+  const action = ok ? 'reconciliation.scan_notice_sent' : 'reconciliation.scan_failure_notice_sent';
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${action}))`);
+    const [recent] = await tx.select({ id: auditLog.id }).from(auditLog).where(and(eq(auditLog.action, action), gt(auditLog.createdAt, new Date(Date.now() - NOTICE_DEDUPE_MS)))).limit(1);
+    if (recent) return 0;
+    const sent = await send();
+    if (sent > 0) await tx.insert(auditLog).values({ action, afterJson: { recipients: sent }, entityType: 'reconciliation', entityId: 'scan' });
+    return sent;
+  });
 }
 
 /** Emails every Super Admin after a scheduled reconciliation scan: what is waiting for a person, and what the scan resolved by itself. Best effort: a missing
@@ -58,16 +75,18 @@ export async function notifySuperAdminsOfScan(outcome: { error?: string; ok: boo
       bodyHtml = `<p>The scheduled Stripe reconciliation scan has finished for <b>${escapeHtml(environment)}</b>.</p>${emailNoticeCard('Needs follow-up', waiting)}${emailNoticeCard('Resolved by the scan', done)}${emailButton(link, 'Open reconciliation')}`;
     }
     const html = renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC reconciliation monitoring. Sent to Super Admins after each scheduled scan; contains counts only.', heading: 'Stripe reconciliation' });
-    let sent = 0;
-    for (const to of recipients) {
-      try {
-        await sendTransactionalEmail({ html, subject, to }, { signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
-        sent += 1;
-      } catch {
-        await logWarn('reconciliation_scan_notice_failed');
+    return await sendOnce(outcome.ok, async () => {
+      let sent = 0;
+      for (const to of recipients) {
+        try {
+          await sendTransactionalEmail({ html, subject, to }, { signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+          sent += 1;
+        } catch {
+          await logWarn('reconciliation_scan_notice_failed');
+        }
       }
-    }
-    return sent;
+      return sent;
+    });
   } catch {
     await logWarn('reconciliation_scan_notice_failed');
     return 0;

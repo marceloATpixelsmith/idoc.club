@@ -556,6 +556,8 @@ test('a customer that becomes linked while its Stripe checks run is never delete
 test('Super Admins are emailed a counts-only summary after a scheduled scan, and a held or failing send never fails the scan', async () => {
   const superAdmin = await createUser();
   const revoked = await createUser();
+  const deleted = await createUser('deleted');
+  await sql`insert into idoc.application_roles(user_id,role) values (${deleted.id},'super_admin')`;
   await sql`insert into idoc.application_roles(user_id,role) values (${superAdmin.id},'super_admin')`;
   await sql`insert into idoc.application_roles(user_id,role,revoked_at) values (${revoked.id},'super_admin',now())`;
   const memberUser = await createUser();
@@ -577,8 +579,9 @@ test('Super Admins are emailed a counts-only summary after a scheduled scan, and
     process.env.BREVO_API_KEY = 'integration-only-brevo-key';
     process.env.BREVO_FROM_EMAIL = 'accounts@example.test';
     assert.equal(await notifySuperAdminsOfScan({ ok: true }), 1);
+    assert.equal(await notifySuperAdminsOfScan({ ok: true }), 0, 'the other scheduler\'s copy of the same run does not email again');
     assert.equal(sent.length, 1);
-    assert.equal(sent[0]?.to, superAdmin.email);
+    assert.deepEqual(sent.map((message) => message.to), [superAdmin.email], 'revoked and deleted Super Admins are not emailed');
     assert.match(sent[0]?.subject ?? '', /1 item\(s\) need follow-up/);
     assert.match(sent[0]?.html ?? '', /Repeated payment failures/);
     assert.doesNotMatch(sent[0]?.html ?? '', new RegExp(memberUser.email), 'counts only, no member details');
