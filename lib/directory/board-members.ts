@@ -56,7 +56,7 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
       and p.board_title is not null
       and p.board_photo_url is not null
       and u.deleted_at is null
-    order by lower(p.board_title), lower(p.last_name), lower(p.first_name)
+    order by p.board_sort_order asc nulls last, lower(p.board_title), lower(p.last_name), lower(p.first_name)
   `);
 
   return rows.map((row) => ({

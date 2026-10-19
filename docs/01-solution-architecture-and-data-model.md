@@ -170,6 +170,8 @@ Migration `0049` completes durable payment lifecycle evidence. Seminar registrat
 
 ## Member phone normalization
 
+Migration `0078` adds nullable `profiles.board_sort_order integer` (display position on the public board page). The page lists board members by it ascending, with unset values last, then by board title, last name and first name; administrators set it in the Board section of the member profile drawer (0–9999, lowest first, optional).
+
 Migration `0060` adds nullable `profiles.phone varchar(20)` for normalized international member phone values. New-member onboarding requires a country-aware phone entry and stores the submitted value in E.164 form; the column remains nullable so profiles created before this requirement remain valid until edited. Legacy guest seminar registrations keep their phone in `seminar_registrations.guest_phone`; no new guest registrations are created. Client validation is convenience only: member onboarding repeats phone validation at the server boundary before persistence.
 
 ## Member communications and billing launch hold

@@ -103,6 +103,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           <div className={isBoardMember ? 'grid gap-4 md:grid-cols-2' : 'hidden'}>
             <Field label="Board Title" maxLength={120} name="boardTitle" required={isBoardMember} value={String(member.profile.boardTitle ?? '')} />
             <Field label="Board Subtitle (optional)" maxLength={160} name="boardSubtitle" value={String(member.profile.boardSubtitle ?? '')} />
+            <Field inputMode="numeric" label="Display order (optional, lowest first)" maxLength={4} name="boardSortOrder" value={String(member.profile.boardSortOrder ?? '')} />
             <div className="md:col-span-2">
               <Field label="Facebook URL (optional)" maxLength={500} name="boardFacebookUrl" value={String(member.profile.boardFacebookUrl ?? '')} />
             </div>
@@ -123,10 +124,10 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
   </form>;
 }
 
-function Field({ className, label, maxLength, name, required, value }: { className?: string; label: string; maxLength?: number; name: string; required?: boolean; value: string }) {
+function Field({ className, inputMode, label, maxLength, name, required, value }: { className?: string; inputMode?: 'numeric'; label: string; maxLength?: number; name: string; required?: boolean; value: string }) {
   return <div className={cnField(className)}>
     <Label htmlFor={name}>{label}</Label>
-    <Input defaultValue={value} id={name} maxLength={maxLength} name={name} required={required} />
+    <Input defaultValue={value} id={name} inputMode={inputMode} maxLength={maxLength} name={name} required={required} />
   </div>;
 }
 
