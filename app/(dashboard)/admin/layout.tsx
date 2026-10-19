@@ -25,7 +25,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div data-idoc-admin-root className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
-      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} unreadCount={unreadCount} />
+      {/* Data promotion only runs from the staging application (lib/admin/data-promotion.ts), so production does not list it. */}
+      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} showDataPromotion={process.env.DB_SCHEMA === 'idoc_staging'} unreadCount={unreadCount} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

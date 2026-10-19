@@ -1383,6 +1383,8 @@ Configure these as encrypted, server-only variables for the **staging branch dep
 - `DATA_PROMOTION_DATABASE_URL`: PostgreSQL URL for the dedicated `idoc_data_promoter` role connecting to database `ayni_space`. It is not the staging application `POSTGRES_URL`, not the Production application URL and not a schema-owner credential.
 - `DATA_PROMOTION_PLAN_SECRET`: an independent random secret of at least 32 bytes used only to HMAC-sign five-minute promotion plans. Generate it in the approved password/secrets manager; do not reuse an auth, CSRF, Stripe, database or MFA key.
 
+The promotion connection requires TLS like the application connection: if `DATA_PROMOTION_DATABASE_URL` has no `sslmode`, the module adds `sslmode=require` for any non-local host (Render refuses unencrypted connections with `SSL/TLS required`). The Super Admin navigation lists "Data promotion" only when `DB_SCHEMA` is `idoc_staging`; Production does not show it.
+
 In Vercel Project Settings, add each variable to the branch-scoped staging environment/override, confirm it is unavailable to arbitrary Preview branches, then redeploy the `staging` branch. The runtime deliberately refuses promotion when the Vercel git ref is not `staging`.
 
 Before executing migration 0071, use the dedicated [manual migration workflow rollout procedure](15-manual-promotion-migration-rollout.md). It requires an independently verified backup, GitHub maintenance-environment protection and a temporary schema-owner credential; neither the migration nor the subsequent Production data-promotion operation runs automatically.
