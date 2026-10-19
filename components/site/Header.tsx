@@ -41,7 +41,7 @@ function isAboutItemActive(pathname: string, href: string) {
 }
 
 function navClassName(active: boolean) {
-  return `text-[0.8rem] font-medium uppercase tracking-[0.14em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
+  return `text-[0.8125rem] font-medium uppercase tracking-[0.14em] transition-colors ${active ? 'text-gold' : 'text-muted-foreground hover:text-foreground'}`;
 }
 
 /** Shared hover/click dropdown shell for a top-level nav item with subpages -- used for both "About
@@ -138,7 +138,7 @@ export function Header({
         <>
           <div className="hidden items-center gap-10 lg:flex">
             {isAdminArea ? (
-              <div className="flex items-center gap-2 text-[0.8rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="flex items-center gap-2 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 <UserCog aria-hidden="true" className="size-4 text-gold" />
                 <span>Admin Mode</span>
               </div>
