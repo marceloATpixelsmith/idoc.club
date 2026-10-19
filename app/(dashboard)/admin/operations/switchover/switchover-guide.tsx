@@ -18,7 +18,7 @@ function readTicks(): Set<string> {
 
 /** Inline `code` spans in the step text. */
 function Rich({ text }: { text: string }) {
-  return <>{text.split(/(`[^`]+`)/g).map((part, index) => part.startsWith('`') ? <code className="rounded bg-muted px-1 text-[0.85em]" key={index}>{part.slice(1, -1)}</code> : part)}</>;
+  return <>{text.split(/(`[^`]+`)/g).map((part, index) => part.startsWith('`') ? <code className="rounded bg-muted px-1 text-[max(13px,0.85em)]" key={index}>{part.slice(1, -1)}</code> : part)}</>;
 }
 
 export function SwitchoverGuide({ steps }: { steps: GuideStep[] }) {

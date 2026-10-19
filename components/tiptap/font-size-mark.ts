@@ -1,6 +1,6 @@
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-export const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36] as const;
+export const FONT_SIZES = [13, 14, 16, 18, 20, 24, 28, 32, 36] as const;
 export const DEFAULT_FONT_SIZE = 16;
 
 export function nearestFontSize(value: unknown): number {

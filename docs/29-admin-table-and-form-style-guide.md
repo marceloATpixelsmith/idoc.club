@@ -28,6 +28,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 
 ## 4. Forms
 
+- **Minimum text size:** no text in any admin table, drawer or form is smaller than 13px (`text-xs` is already 13px). Do not add `text-[11px]`/`text-[12px]`-style overrides; `tests/minimum-text-size.test.ts` enforces this sitewide.
 - Forms are carded sections with a small uppercase gold heading (`AdminFormSection` / `FormSection`). Group related fields; do not produce one long vertical list.
 - **Field width:** short, related fields share a row two to a row (`grid gap-4 sm:grid-cols-2`). A lone short control (a select, a date, a reference) is capped at half width (`max-w-sm`). Only content that benefits from width spans the row: titles, URLs, member lookup, long text, rich text.
 - Labels sit directly above their control with a consistent gap; help text is visually separated from both.
