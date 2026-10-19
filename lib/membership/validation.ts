@@ -90,8 +90,11 @@ export const adminBoardProfileSchema = z.object({
     .transform((value) => value || null),
   boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null(), z.undefined()])
     .transform((value) => value || null),
-  boardSortOrder: z.union([z.coerce.number().int().min(0).max(9999), z.literal(''), z.null(), z.undefined()])
-    .transform((value) => (value === '' || value === undefined ? null : value)),
+  // Blank/absent must stay null (sorts last); z.coerce.number() would turn '' and null into 0.
+  boardSortOrder: z.preprocess(
+    (value) => (value === '' || value === null || value === undefined ? null : typeof value === 'string' ? value.trim() || null : value),
+    z.union([z.null(), z.coerce.number().int().min(0).max(9999)]),
+  ),
   isBoardMember: z.boolean(),
 }).superRefine((value, context) => {
   if (value.isBoardMember && !value.boardTitle) {
