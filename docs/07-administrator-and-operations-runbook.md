@@ -1347,11 +1347,11 @@ GRANT INSERT (promotion_key, slug, title, subtitle, content_html, article_type, 
   publication_date, published_at, archived_at, updated_by_user_id, updated_at)
 ON idoc_production.news_articles TO idoc_data_promoter;
 
-GRANT INSERT (promotion_key, title, description, start_date, end_date, start_time, end_time, timezone, location,
+GRANT INSERT (promotion_key, title, description, start_date, end_date, location,
   language, course_directors, participant_profile, course_venue_information,
   application, accommodation_information, capacity, member_price_cents,
   registration_deadline, status, is_fei, levels, created_by_user_id, updated_by_user_id),
-  UPDATE (title, description, start_date, end_date, start_time, end_time, timezone, location, language,
+  UPDATE (title, description, start_date, end_date, location, language,
   course_directors, participant_profile, course_venue_information, application,
   accommodation_information, capacity, member_price_cents, registration_deadline,
   status, is_fei, levels, updated_by_user_id, updated_at)

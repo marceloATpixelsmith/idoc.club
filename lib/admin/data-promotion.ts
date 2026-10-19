@@ -57,7 +57,7 @@ const EXPECTED_DATABASE = 'ayni_space';
 const EXPECTED_ROLE = 'idoc_data_promoter';
 const NEWS_FIELDS = ['slug', 'title', 'subtitle', 'content_html', 'article_type', 'audience', 'thumbnail_url',
   'external_url', 'status', 'publication_date', 'published_at', 'archived_at'] as const;
-const SEMINAR_FIELDS = ['title', 'description', 'start_date', 'end_date', 'start_time', 'end_time', 'timezone',
+const SEMINAR_FIELDS = ['title', 'description', 'start_date', 'end_date',
   'location', 'language', 'course_directors', 'participant_profile',
   'course_venue_information', 'application', 'accommodation_information', 'capacity', 'member_price_cents',
   'registration_deadline', 'status', 'is_fei', 'levels'] as const;
@@ -238,7 +238,7 @@ async function sourceRow(sql: PromotionSql, dataset: PromotionDataset, sourceId:
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
+      'select id,promotion_key,title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_staging.seminars where id=$1 limit 1',
       [Number(sourceId)]);
     return result[0] ?? null;
   }
@@ -257,7 +257,7 @@ async function targetRow(sql: PromotionSql, dataset: PromotionDataset, source: R
   }
   if (dataset === 'seminar') {
     const result = await rows(sql,
-      'select id,promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1' +
+      'select id,promotion_key,title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels from idoc_production.seminars where promotion_key=$1::uuid limit 1' +
         (lock ? ' for update' : ''),
       [String(source.promotion_key)]);
     return result[0] ?? null;
@@ -462,9 +462,9 @@ async function applyNews(tx: PromotionSql, source: Row, target: Row | null, acto
 async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, actorId: number) {
   if (!target) {
     const result = await rows<{ id: number }>(tx,
-      'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,start_time,end_time,timezone,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$22) returning id',
+      'insert into idoc_production.seminars (promotion_key,title,description,start_date,end_date,location,language,course_directors,participant_profile,course_venue_information,application,accommodation_information,capacity,member_price_cents,registration_deadline,status,is_fei,levels,created_by_user_id,updated_by_user_id) values ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19) returning id',
       [String(source.promotion_key), String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date),
-        canonicalValue(source.end_date), source.start_time, source.end_time, source.timezone, String(source.location),
+        canonicalValue(source.end_date), String(source.location),
         String(source.language), sanitizeArticleContent(String(source.course_directors)),
         sanitizeArticleContent(String(source.participant_profile)), sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)),
         sanitizeArticleContent(String(source.accommodation_information)), Number(source.capacity), Number(source.member_price_cents),
@@ -478,9 +478,9 @@ async function applySeminar(tx: PromotionSql, source: Row, target: Row | null, a
     throw new DataPromotionError('The Production seminar gained registration activity after preview. Promotion was rejected.');
   }
   await rows(tx,
-    'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,start_time=$5,end_time=$6,timezone=$7,location=$8,language=$9,course_directors=$10,participant_profile=$11,course_venue_information=$12,application=$13,accommodation_information=$14,capacity=$15,member_price_cents=$16,registration_deadline=$17,status=$18,is_fei=$19,levels=$20,updated_by_user_id=$21,updated_at=now() where id=$22 returning id',
+    'update idoc_production.seminars set title=$1,description=$2,start_date=$3,end_date=$4,location=$5,language=$6,course_directors=$7,participant_profile=$8,course_venue_information=$9,application=$10,accommodation_information=$11,capacity=$12,member_price_cents=$13,registration_deadline=$14,status=$15,is_fei=$16,levels=$17,updated_by_user_id=$18,updated_at=now() where id=$19 returning id',
     [String(source.title), sanitizeArticleContent(String(source.description)), canonicalValue(source.start_date), canonicalValue(source.end_date),
-      source.start_time, source.end_time, source.timezone, String(source.location), String(source.language),
+      String(source.location), String(source.language),
       sanitizeArticleContent(String(source.course_directors)), sanitizeArticleContent(String(source.participant_profile)),
       sanitizeArticleContent(String(source.course_venue_information)), sanitizeArticleContent(String(source.application)), sanitizeArticleContent(String(source.accommodation_information)),
       Number(source.capacity), Number(source.member_price_cents),
