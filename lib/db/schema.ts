@@ -234,6 +234,8 @@ export const profiles = idocSchema.table('profiles', {
   boardSubtitle: varchar('board_subtitle', { length: 160 }),
   boardFacebookUrl: varchar('board_facebook_url', { length: 500 }),
   boardPhotoUrl: text('board_photo_url'),
+  // Display position on the public board page (lowest first); null sorts last, then title/name.
+  boardSortOrder: integer('board_sort_order'),
   // Opt-in (default no): the member's email appears in the paid member directory only when true.
   directoryEmailOptIn: boolean('directory_email_opt_in').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

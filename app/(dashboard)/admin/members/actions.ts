@@ -59,6 +59,7 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
     const board = adminBoardProfileSchema.parse({
       boardFacebookUrl: formData.get('boardFacebookUrl'),
       boardPhotoUrl,
+      boardSortOrder: formData.get('boardSortOrder'),
       boardSubtitle: formData.get('boardSubtitle'),
       boardTitle: formData.get('boardTitle'),
       isBoardMember: formData.get('isBoardMember') === '1',
