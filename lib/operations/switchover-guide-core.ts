@@ -24,6 +24,9 @@ const onLiveDomain = (host: string | null) => host !== null && LIVE_HOSTS.includ
 /** A replay audit only counts when it was written after the current import and no event failed; an earlier rehearsal does not recover payments made during the cutover. */
 const replayedAfterImport = (final: FinalInputs) => final.replayRun !== null && final.replayRun.failed === 0 && final.importRun !== null && final.replayRun.at > final.importRun.at;
 
+/** The reconciliation scan only counts when it ran after the successful replay, because the replay changes membership and payment state. */
+const scannedAfterReplay = (final: FinalInputs) => replayedAfterImport(final) && final.scanAt !== null && final.replayRun !== null && final.scanAt > final.replayRun.at;
+
 export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
   const imported = inputs.counts.legacyImports > 0;
   const domainsLive = [inputs.baseUrlHost, inputs.googleRedirectHost, inputs.qstashHost].every(onLiveDomain);
@@ -188,7 +191,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
         'Run a scan and work through the findings.',
         'Stripe-changing actions stay simulated. Only after the import and replay are verified, optionally add `RECONCILIATION_LIVE_STRIPE_ACTIONS=enabled` (Production) and redeploy.',
       ],
-      auto: true, autoDone: final.scanAt !== null && final.replayRun !== null && final.scanAt > final.replayRun.at && replayedAfterImport(final),
+      auto: true, autoDone: scannedAfterReplay(final),
       env: [{ action: 'optional, later: add enabled', name: 'RECONCILIATION_LIVE_STRIPE_ACTIONS', scope: 'Production' }],
       id: 'B11', link: { href: '/admin/reconciliation', label: 'Open reconciliation' }, phase: 'B', title: 'Run reconciliation and work the findings', where: 'Reconciliation page',
     }),
@@ -203,7 +206,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
     }),
     step({
       actions: ['Reload and read the Final verification section below: every line should be Ready, or a Check you have consciously accepted.'],
-      auto: true, autoDone: imported && final.hold === false && final.heldEventsPending === 0 && replayedAfterImport(final) && final.scanAt !== null && !final.legacyImportEnabled && !final.legacyKeyPresent && final.keyMode === 'live',
+      auto: true, autoDone: imported && final.hold === false && final.heldEventsPending === 0 && scannedAfterReplay(final) && !final.legacyImportEnabled && !final.legacyKeyPresent && final.keyMode === 'live',
       env: [], id: 'B13', phase: 'B', title: 'Final verification', where: 'This page',
     }),
   ];

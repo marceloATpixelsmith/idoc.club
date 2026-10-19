@@ -79,6 +79,7 @@ test('import, webhook, hold, replay, scan and clean-up are each detected from th
 test('the final step needs everything finished', () => {
   const imported = { counts: { legacyImports: 1, profiles: 1, subscriptions: 1, users: 1 }, holdOn: false };
   const done = { hold: false, importRun: { at: 'a', imported: 1, payments: 1, subscriptions: 1 }, keyMode: 'live' as const, replayRun: { at: 'b', failed: 0, processed: 1 }, scanAt: 'c' };
+  assert.equal(byId(guide(imported, { ...done, scanAt: 'a1' }), 'B13').autoDone, false);
   assert.equal(byId(guide(imported, done), 'B13').autoDone, true);
   assert.equal(byId(guide(imported, { ...done, heldEventsPending: 2 }), 'B13').autoDone, false);
   assert.equal(byId(guide(imported, { ...done, keyMode: 'test' }), 'B13').autoDone, false);
