@@ -138,7 +138,7 @@
 
 .idoc-auth-label {
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.18em;
@@ -263,7 +263,7 @@
 .idoc-auth-recovery-codes__copy-status {
   margin: 0;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
   color: var(--auth-primary-color);
@@ -343,7 +343,7 @@
   justify-content: center;
   border-radius: 10px;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
   font-weight: 700;
   text-transform: uppercase;
@@ -650,7 +650,7 @@
 .idoc-auth-shell__legal {
   margin: 0;
   font-family: var(--font-sans), 'Barlow', Arial, Helvetica, sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.6;
   color: var(--auth-terms-color);
