@@ -90,6 +90,8 @@ export const adminBoardProfileSchema = z.object({
     .transform((value) => value || null),
   boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null(), z.undefined()])
     .transform((value) => value || null),
+  boardSortOrder: z.union([z.coerce.number().int().min(0).max(9999), z.literal(''), z.null(), z.undefined()])
+    .transform((value) => (value === '' || value === undefined ? null : value)),
   isBoardMember: z.boolean(),
 }).superRefine((value, context) => {
   if (value.isBoardMember && !value.boardTitle) {
